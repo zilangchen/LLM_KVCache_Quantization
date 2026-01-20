@@ -1,0 +1,132 @@
+# Experiment matrix for KV cache quantization thesis project.
+# This file is designed for scripts/run_experiments.py
+#
+# Conventions:
+# - kv_mode: fp16 | int8_baseline | int8_ours | int4 | mixed
+# - quant_bits: 16/8/4 (for bookkeeping)
+# - clip_percentile: null (disabled) or e.g. 99.9
+# - group_size: null (disabled) or one of [16, 32, 64]
+# - seq_len: prompt/context length budget (tokens)
+# - gen_len: max_new_tokens
+# - batch: inference batch size (start with 1 for correctness)
+
+project:
+  name: kv-cache-quant-qwen2p5-1p5b
+  model_id: Qwen/Qwen2.5-1.5B-Instruct
+  # Optionally pin model revision for strict reproducibility.
+  # model_revision: <commit_hash_or_tag>
+
+runtime:
+  seed: 1234
+  device: cuda
+  dtype: fp16
+  # Greedy decoding for reproducibility.
+  decoding:
+    temperature: 0.0
+    top_p: 1.0
+    top_k: 0
+
+calibration:
+  enabled: true
+  # Calibration script will generate artifacts/kv_calib.json
+  output_path: artifacts/kv_calib.json
+  # A small prompt set is enough; scripts can sample from ShareGPT or local prompts.
+  num_prompts: 256
+  max_prompt_tokens: 1024
+  # Candidate clipping percentiles to evaluate.
+  clip_percentiles: [99.9, 99.95, 99.99]
+  # Candidate group sizes (head_dim grouping).
+  group_sizes: [16, 32, 64]
+
+experiments:
+  # --- Core Baselines (must run) ---
+  - name: fp16_kv_baseline
+    kv_mode: fp16
+    quant_bits: 16
+    clip_percentile: null
+    group_size: null
+    seq_lens: [4096, 8192, 16384, 32768]
+    gen_len: 256
+    batch: 1
+    tasks: [profile_latency, profile_memory, eval_needle, eval_ppl]
+
+  - name: int8_kv_baseline
+    kv_mode: int8_baseline
+    quant_bits: 8
+    clip_percentile: null
+    group_size: null
+    seq_lens: [4096, 8192, 16384, 32768]
+    gen_len: 256
+    batch: 1
+    tasks: [profile_latency, profile_memory, eval_needle, eval_ppl]
+
+  # --- Mainline (ours): clipping + per-head/group-wise scaling ---
+  - name: int8_ours_clip99p9_group32
+    kv_mode: int8_ours
+    quant_bits: 8
+    clip_percentile: 99.9
+    group_size: 32
+    seq_lens: [4096, 8192, 16384, 32768]
+    gen_len: 256
+    batch: 1
+    tasks: [profile_latency, profile_memory, eval_needle, eval_ppl]
+
+  # --- Ablations (recommended) ---
+  - name: int8_ours_no_clip_group32
+    kv_mode: int8_ours
+    quant_bits: 8
+    clip_percentile: null
+    group_size: 32
+    seq_lens: [8192, 16384]
+    gen_len: 256
+    batch: 1
+    tasks: [eval_needle, eval_ppl]
+
+  - name: int8_ours_clip99p9_group16
+    kv_mode: int8_ours
+    quant_bits: 8
+    clip_percentile: 99.9
+    group_size: 16
+    seq_lens: [8192, 16384]
+    gen_len: 256
+    batch: 1
+    tasks: [eval_needle, eval_ppl]
+
+  - name: int8_ours_clip99p9_group64
+    kv_mode: int8_ours
+    quant_bits: 8
+    clip_percentile: 99.9
+    group_size: 64
+    seq_lens: [8192, 16384]
+    gen_len: 256
+    batch: 1
+    tasks: [eval_needle, eval_ppl]
+
+  # --- Optional Extensions (run only after mainline works) ---
+  - name: int4_kv_optional
+    enabled: false
+    kv_mode: int4
+    quant_bits: 4
+    clip_percentile: 99.9
+    group_size: 32
+    seq_lens: [4096, 8192, 16384]
+    gen_len: 256
+    batch: 1
+    tasks: [profile_latency, profile_memory, eval_needle, eval_ppl]
+
+  - name: mixed_precision_optional
+    enabled: false
+    kv_mode: mixed
+    quant_bits: 0
+    clip_percentile: 99.9
+    group_size: 32
+    # Example policy; scripts must define how this is interpreted.
+    mixed_policy:
+      # Layers listed here use int8; remaining layers use int4.
+      int8_layers: [0, 1, 2, 3]
+      default_bits: 4
+    seq_lens: [8192, 16384]
+    gen_len: 256
+    batch: 1
+    tasks: [profile_latency, profile_memory, eval_needle, eval_ppl]
+

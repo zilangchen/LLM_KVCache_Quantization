@@ -1,0 +1,23 @@
+# Minimal dependencies for the research path.
+#
+# NOTE:
+# - We intentionally do NOT pin versions yet. After the first successful run,
+#   generate `env/requirements_freeze.txt` via `pip freeze`.
+
+torch
+transformers
+triton
+accelerate
+
+numpy
+pandas
+matplotlib
+
+pyyaml
+pynvml
+
+fastapi
+uvicorn
+
+pytest
+

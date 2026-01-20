@@ -1,0 +1,24 @@
+.DS_Store
+.idea/
+.vscode/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Virtual envs
+.venv/
+venv/
+env/.venv/
+
+# Office / WPS temporary files
+~$*
+.~*
+
+# Experiment outputs (do not commit)
+results/
+artifacts/
+
+# Local logs
+logs/
+*.log
+

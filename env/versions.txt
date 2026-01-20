@@ -1,0 +1,17 @@
+# Record environment versions for reproducibility.
+#
+# Fill this after setting up the environment:
+# - OS / kernel
+# - GPU model(s)
+# - NVIDIA driver
+# - CUDA toolkit version
+# - cuDNN version (if relevant)
+# - Python version
+# - torch.__version__ / torch.version.cuda
+# - transformers.__version__
+# - triton.__version__
+#
+# Suggested commands:
+# - nvidia-smi
+# - python -c "import torch, transformers, triton; print(torch.__version__, torch.version.cuda, transformers.__version__, triton.__version__)"
+
