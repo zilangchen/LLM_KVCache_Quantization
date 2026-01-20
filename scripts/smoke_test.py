@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+"""
+Smoke test: Minimal inference script to verify model loading and generation.
+
+This script verifies:
+1. Model can be loaded
+2. Greedy decoding works
+3. Output is non-empty
+4. Metadata (git commit, hardware) is recorded
+
+Usage:
+    python scripts/smoke_test.py
+    python scripts/smoke_test.py --prompt "Your custom prompt"
+    python scripts/smoke_test.py --max_new_tokens 64
+
+Output:
+    Prints generated text and metadata to stdout.
+    Optionally writes structured output to results/runs/smoke_test_<timestamp>.json
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from datetime import datetime
+from pathlib import Path
+
+
+def get_git_commit() -> str:
+    """Get current git commit hash."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip()[:8]
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "unknown"
+
+
+def get_hardware_info() -> dict:
+    """Get hardware information."""
+    info = {"gpu": "N/A", "gpu_memory": "N/A"}
+    try:
+        import torch
+        if torch.cuda.is_available():
+            info["gpu"] = torch.cuda.get_device_name(0)
+            props = torch.cuda.get_device_properties(0)
+            info["gpu_memory"] = f"{props.total_memory / 1e9:.1f} GB"
+    except Exception:
+        pass
+    return info
+
+
+def main():
+    """Main smoke test function."""
+    parser = argparse.ArgumentParser(description="Smoke test for model inference")
+    parser.add_argument(
+        "--prompt",
+        type=str,
+        default="Hello, I am a language model. My purpose is",
+        help="Input prompt for generation",
+    )
+    parser.add_argument(
+        "--max_new_tokens",
+        type=int,
+        default=32,
+        help="Maximum number of tokens to generate",
+    )
+    parser.add_argument(
+        "--model_id",
+        type=str,
+        default="Qwen/Qwen2.5-1.5B-Instruct",
+        help="HuggingFace model ID",
+    )
+    parser.add_argument(
+        "--save_output",
+        action="store_true",
+        help="Save structured output to results/runs/",
+    )
+    args = parser.parse_args()
+
+    print("=" * 60)
+    print("SMOKE TEST: Model Loading and Generation")
+    print("=" * 60)
+
+    # Step 1: Import dependencies
+    print("\n[1/4] Importing dependencies...")
+    try:
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+        print(f"  ✓ torch {torch.__version__}")
+        print(f"  ✓ CUDA available: {torch.cuda.is_available()}")
+        if torch.cuda.is_available():
+            print(f"  ✓ GPU: {torch.cuda.get_device_name(0)}")
+    except ImportError as e:
+        print(f"  ✗ Import failed: {e}")
+        print("  Please run: pip install -r requirements.txt")
+        sys.exit(1)
+
+    # Check CUDA availability
+    if not torch.cuda.is_available():
+        print("\n⚠️  WARNING: CUDA is not available!")
+        print("  This script requires a GPU to run.")
+        print("  If you're developing locally, the code structure is correct.")
+        print("  Please run on a GPU-enabled server for actual verification.")
+        sys.exit(0)
+
+    # Step 2: Load model and tokenizer
+    print(f"\n[2/4] Loading model: {args.model_id}...")
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(
+            args.model_id,
+            trust_remote_code=True,
+        )
+        print("  ✓ Tokenizer loaded")
+
+        model = AutoModelForCausalLM.from_pretrained(
+            args.model_id,
+            torch_dtype=torch.float16,
+            device_map="auto",
+            trust_remote_code=True,
+        )
+        print("  ✓ Model loaded")
+        print(f"  ✓ Model dtype: {model.dtype}")
+        print(f"  ✓ Device: {model.device}")
+    except Exception as e:
+        print(f"  ✗ Model loading failed: {e}")
+        print("\n  Possible causes:")
+        print("  - Network issue (cannot download model)")
+        print("  - Insufficient GPU memory (OOM)")
+        print("  - Model ID incorrect")
+        sys.exit(1)
+
+    # Step 3: Generate with greedy decoding
+    print(f"\n[3/4] Generating text (greedy, max_new_tokens={args.max_new_tokens})...")
+    print(f"  Prompt: {args.prompt[:50]}...")
+    try:
+        # Tokenize input
+        inputs = tokenizer(args.prompt, return_tensors="pt").to(model.device)
+
+        # Set seed for reproducibility
+        torch.manual_seed(1234)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(1234)
+
+        # Generate with greedy decoding (aligned with configs/exp_matrix.yaml)
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=args.max_new_tokens,
+                do_sample=False,  # greedy
+                temperature=None,  # Not used with do_sample=False
+                top_p=None,
+                top_k=None,
+                pad_token_id=tokenizer.eos_token_id,
+            )
+
+        # Decode output
+        generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        new_text = generated_text[len(args.prompt):]
+        print("  ✓ Generation complete")
+    except torch.cuda.OutOfMemoryError:
+        print("  ✗ Out of GPU memory!")
+        print("  Try reducing --max_new_tokens or using a smaller model")
+        sys.exit(1)
+    except Exception as e:
+        print(f"  ✗ Generation failed: {e}")
+        sys.exit(1)
+
+    # Step 4: Display results
+    print("\n[4/4] Results")
+    print("-" * 60)
+    print(f"Input:  {args.prompt}")
+    print(f"Output: {new_text.strip()}")
+    print("-" * 60)
+
+    # Metadata
+    git_commit = get_git_commit()
+    hardware = get_hardware_info()
+    timestamp = datetime.now().isoformat()
+
+    result = {
+        "run_id": f"smoke_test_{timestamp.replace(':', '-')}",
+        "model_id": args.model_id,
+        "prompt": args.prompt,
+        "generated_text": new_text.strip(),
+        "max_new_tokens": args.max_new_tokens,
+        "git_commit": git_commit,
+        "hardware": hardware,
+        "timestamp": timestamp,
+        "status": "success" if new_text.strip() else "empty_output",
+    }
+
+    print(f"\nMetadata:")
+    print(f"  Git commit: {git_commit}")
+    print(f"  GPU: {hardware['gpu']}")
+    print(f"  Timestamp: {timestamp}")
+
+    # Verify non-empty output
+    if not new_text.strip():
+        print("\n⚠️  WARNING: Generated text is empty!")
+        result["status"] = "empty_output"
+    else:
+        print("\n✓ SMOKE TEST PASSED")
+
+    # Optionally save output
+    if args.save_output:
+        script_dir = Path(__file__).resolve().parent
+        project_root = script_dir.parent
+        runs_dir = project_root / "results" / "runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+
+        output_file = runs_dir / f"smoke_test_{timestamp.replace(':', '-')}.json"
+        with open(output_file, "w") as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+        print(f"\n✓ Output saved to {output_file}")
+
+    return 0 if result["status"] == "success" else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

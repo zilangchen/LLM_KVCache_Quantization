@@ -1,3 +1,20 @@
+# <Antigravity 2026-01-21 07:29:15>
+## 修改目的
+完成 Milestone A Phase 1 (本地开发)：创建 smoke_test.py 和 collect_env.py
+
+## 修改内容摘要
+- 新增 `scripts/collect_env.py`：环境信息收集脚本，自动填充 env/versions.txt 和 requirements_freeze.txt
+- 新增 `scripts/smoke_test.py`：最小推理验证脚本，支持 greedy 解码和元数据记录
+- 两个脚本都包含完整的异常处理（OOM/CUDA/网络失败）
+
+## 影响范围
+- 新增文件：`scripts/collect_env.py`、`scripts/smoke_test.py`
+- 验收状态：语法检查通过，需在 AutoDL 服务器实际运行验证
+
+## 技术细节
+- smoke_test.py 参数对齐 configs/exp_matrix.yaml：greedy 解码、seed=1234
+- 支持 --save_output 将结果写入 results/runs/*.json
+
 # <Cursor-AI 2026-01-21 03:18:31>
 ## 修改目的
 强化协作与过程记录规范：确保每推进一个步骤，都同步更新 `lang.md` 的进度追踪与更新记录，避免“开发推进了但项目总览不更新”。

@@ -202,6 +202,12 @@ agent 的输出应包含：
 
 （从这里开始追加）
 
+- **2026-01-21 07:29:15**：Milestone A Phase 1 完成（本地开发）
+  - 完成步骤/子任务：创建 `scripts/collect_env.py` 和 `scripts/smoke_test.py`
+  - 运行命令：`python3 -m py_compile scripts/*.py`（语法验证通过）
+  - 产出物路径：`scripts/collect_env.py`、`scripts/smoke_test.py`
+  - 关键摘要：两个脚本包含完整异常处理、参数对齐 exp_matrix.yaml；等待服务器验证
+
 - **2026-01-21 07:06:35**：仓库结构整理与归档
   - 完成步骤/子任务：删除重复(1)文件；迁移学校材料到 `docs/school/`；迁移提示词模板到 `docs/prompt_templates.md`；建立目录骨架；统一入口为 `configs/exp_matrix.yaml`
   - 运行命令：`date '+%Y-%m-%d %H:%M:%S'`
