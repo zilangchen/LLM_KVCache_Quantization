@@ -117,9 +117,9 @@
   - 待落实：`model_revision` 的具体值（首次下载后解析 resolved revision，
     写入运行记录，并回填到 `configs/exp_matrix.yaml`）
 - **评测定义（口径必须固定）**
-  - TTFT/TPOT 的测量点与同步规则（是否 `torch.cuda.synchronize()`）
-  - PPL 数据集选择与切分（以及是否允许下载）
-  - needle 任务定义与判定规则（命中判定、容错、随机种子）
+  - 已确认：TTFT/TPOT 的关键计时点前后都做 GPU 同步（优先 `torch.cuda.synchronize()`；也可用 CUDA events），保证计时可信
+  - 已确认：PPL 数据集使用 `wikitext-2-raw-v1`（允许联网下载）
+  - 已确认：needle 采用方案 A（合成 needle-in-a-haystack + 字符串命中评分；固定 seed）
   - 吞吐负载：ShareGPT（或本地 prompts）来源与采样策略（固定 seed）
 - **实验可行性（显存预算）**
   - 已确认：先以 `seq_lens` 最大 32768 为主线目标

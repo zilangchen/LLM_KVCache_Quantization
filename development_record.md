@@ -72,6 +72,20 @@
 ## 技术细节
 - `model_revision` 采用“首次下载解析 resolved revision → 写入运行记录并回填配置”的策略，保证严格复现同时减少手工出错。
 
+# <Cursor-AI 2026-01-21 06:10:30>
+## 修改目的
+固化评测口径选择：明确 PPL 数据集、needle 方案与 TTFT/TPOT 的计时同步规则，确保后续实现与论文实验口径一致且可复现。
+
+## 修改内容摘要
+- 更新 `objective.md` 的“评测定义”：PPL 选择 `wikitext-2-raw-v1`；needle 选择方案 A（合成 needle + 字符串命中评分）；TTFT/TPOT 关键计时点前后做 GPU 同步（`torch.cuda.synchronize()` 或 CUDA events）。
+
+## 影响范围
+- 文档：`objective.md`
+- 实验口径：后续 `eval_ppl.py`、`eval_needle.py`、`profile_latency.py` 的实现需严格遵守上述定义。
+
+## 技术细节
+- TTFT/TPOT 计时默认采用同步策略避免 CUDA 异步导致的低估与不稳定；needle 采用可控合成任务以降低数据依赖并提高复现性。
+
 # <Cursor-AI 2026-01-21 03:04:58>
 ## 修改目的
 新增面向新手的项目协作指南，明确“如何分阶段推进 + 如何驱动 agent 写代码”，并提供可持续更新的进度追踪模板，降低后续开发沟通成本。
