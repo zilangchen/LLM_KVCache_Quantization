@@ -35,28 +35,30 @@
 - **RQ1：长上下文下 INT8 KV 的误差累积与稳定性**  
   假设：KV 的量化误差会随解码步数/上下文长度累积，导致长上下文任务（needle）
   更易出现检索失败或语义漂移。
-- **RQ2：percentile clipping 与（per-head / group-wise）scaling 的作用机理**  
-  假设：通过 percentile clipping 控制异常值，
-  再用 per-head 或 group-wise scaling 进行更细粒度的动态范围匹配，
-  能在相同显存预算下显著改善质量与稳定性。
-- **RQ3：Triton kernel 能否避免“省显存但速度没了”**  
-  假设：将关键的 dequant（及可选融合）放到 Triton kernel，
-  可降低 CPU/GPU 调度与 memory-bound 开销，使量化方案在端到端吞吐/延迟上不退化。
+- **RQ2：KL 行为对齐校准 + per-head temperature 能否稳定长上下文**  
+  假设：量化会改变 attention logits 的尖锐度与分布形态；
+  通过对齐 attention weights 的 KL（而非仅数值误差）选择 scale/clipping，
+  并引入每层每头 `inv_tau` 进行温度校正，能显著提升长上下文 needle 稳定性。
+- **RQ3：Triton 融合 decode-attn（q_len=1）能否避免“省显存但速度没了”**  
+  假设：在 decode 阶段避免“全量反量化 → 独立 attention”路径，
+  用单个融合 kernel 完成“读 int8 K/V → group-wise 反量化 → logits/softmax → 输出累加”，
+  可减少内存带宽与 kernel 调度开销，使端到端 TPOT 不退化并有机会提升。
 
 ---
 
 ## 创新点与贡献（避免“只开关对比”）
 
 - **方法层（Algorithm）**
-  - 离线校准：percentile clipping 的候选值搜索与推荐区间
-  - 量化策略：per-head / group-wise scaling（含消融：不开 clipping、不同 group_size）
-  - 输出：可复现的推荐配置与适用边界（对应 `artifacts/kv_calib.json`）
+  - 行为对齐校准（KL）：对齐 attention weights 分布（不是仅数值误差），输出静态
+    `k_scale/v_scale` 与 `inv_tau[layer, head]`
+  - 量化策略：INT8 对称量化 + group-wise scale（静态 per-layer/per-head/per-group）
+  - 输出：可复现的校准产物（`artifacts/kv_calib_kl.json`）与消融开关
 - **系统层（System/Analysis）**
   - 固定口径下给出 **显存/吞吐/延迟/质量/needle** 随序列长度变化的曲线
   - 解释：同显存预算下可支持的最大上下文与并发的变化趋势与原因
 - **工程层（Engineering）**
-  - 至少 1 个 Triton kernel 真正集成到真实 decode 路径（最低：dequant；
-    加分：融合 q_len=1 的 decode-attn 关键路径）
+  - decode 阶段（q_len=1）强制走 Triton 融合 kernel：在一个 kernel 内完成
+    读取量化 K/V → 组尺度反量化 → logits/softmax → 加权求和输出（并融合 `inv_tau`）
 
 ---
 
@@ -185,7 +187,7 @@
   - `results/tables/`：论文表格
   - `results/plots/`：论文图
   - `results/logs/`：脚本运行日志（如有）
-- `artifacts/`：校准与中间产物（例如 `artifacts/kv_calib.json`）
+- `artifacts/`：校准与中间产物（例如 `artifacts/kv_calib_kl.json`）
 
 ### 结构化结果字段（CSV schema）
 
@@ -339,34 +341,40 @@ agent 输出必须包含：
     - 验收标准：`kv_mode=int8_baseline` 可端到端跑通
 - **与矩阵对齐点**：kv_mode=int8_baseline，quant_bits=8
 
-### Milestone F：INT8-ours（clipping + group-wise / per-head scaling）
+### Milestone F：INT8-ours（KL 行为对齐校准 + per-head temperature + group-wise INT8）
 
-- **目标**：实现论文主线，并提供消融开关与推荐配置产物。
+- **目标**：实现论文主线：KL 行为对齐校准 + per-head temperature + group-wise INT8。
 - **子任务**
-  - **F1 校准脚本**
-    - 产出物：`scripts/calibrate_kv.py` → `artifacts/kv_calib.json`
-    - 与矩阵对齐点：`calibration.*`
-  - **F2 clipping**
-    - 产出物：`src/quant/clipping.py`
-    - 与矩阵对齐点：`clip_percentile`
-  - **F3 group-wise scaling**
-    - 产出物：`src/quant/groupwise.py`
-    - 与矩阵对齐点：`group_size`
-  - **F4 kv_mode=int8_ours**
-    - 验收标准：needle 或 PPL 趋势上不劣于 baseline（至少在长上下文设置）
+  - **F1 行为对齐校准脚本（KL）**
+    - 产出物：`scripts/calibrate_behavior.py` → `artifacts/kv_calib_kl.json`
+    - 实现方法要点：对齐对象为 attention weights；对 key 位置抽样；
+      对 `inv_tau` 做 per-layer/per-head 网格搜索
+    - 与矩阵对齐点：`calib_strategy=kl_attn`、`calib_file=artifacts/kv_calib_kl.json`
+  - **F2 group-wise INT8 量化与裁剪**
+    - 产出物：`src/quant/groupwise.py`、`src/quant/clipping.py`
+    - 与矩阵对齐点：`group_size_{k,v}`、`clip_percentile_{k,v}`
+  - **F3 per-head temperature（一致作用于 prefill 与 decode）**
+    - 产出物：`src/quant/temperature.py`
+    - 实现方法要点：prefill 侧通过缩放 Q 实现等价 logits 缩放；decode 侧由 fused kernel 使用
+    - 与矩阵对齐点：`use_attn_temperature=true/false`
+  - **F4 kv_mode=int8_ours 接入**
+    - 验收标准：needle 或 PPL 趋势上不劣于 baseline（尤其长上下文）
 
-### Milestone G：Triton kernel（至少 1 个进真实 decode）
+### Milestone G：Triton 主线（融合 quantized decode attention，q_len=1，必做）
 
-- **目标**：至少实现 `triton_dequant` 并在真实 decode 路径调用，保证正确性与性能不退化。
+- **目标**：实现 decode 侧 Triton 融合量化 attention（q_len=1）并接入真实 decode 路径。
 - **子任务**
-  - **G1 triton_dequant**
-    - 产出物：`src/kernels/triton_dequant.py`
-  - **G2 集成到 decode**
-    - 产出物：engine/attention 路径调用；提供计数/日志证明
-  - **G3 正确性测试**
-    - 产出物：`tests/` 下的数值一致性测试（误差阈值）
-  - **G4 性能对比**
-    - 产出物：profiling CSV（对比 torch 实现）
+  - **G1 融合 decode kernel**
+    - 产出物：`src/kernels/triton_decode_attn_int8.py`
+    - 实现方法要点：读 int8 K/V + group-wise scale 反量化；online softmax；
+      融合 `inv_tau[layer, q_head]`；支持 GQA 映射
+    - 与矩阵对齐点：`decode_attn_impl=triton_fused`
+  - **G2 集成到 decode（强制）**
+    - 产出物：在 `kv_mode=int8_ours` 且 `q_len==1` 时强制走 fused kernel
+  - **G3 Torch reference 与单测对齐**
+    - 产出物：torch ref：dequant→matmul→softmax→matmul；固定 seed 误差阈值
+  - **G4 性能与回归检查**
+    - 产出物：TTFT/TPOT/吞吐 CSV，长上下文下至少不退化（最好有提升）
 
 ### Milestone H（可选）：INT4 / Mixed Precision
 

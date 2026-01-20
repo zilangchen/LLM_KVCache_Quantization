@@ -1,14 +1,20 @@
-# Experiment matrix for KV cache quantization thesis project.
-# This file is designed for scripts/run_experiments.py
+# Experiment matrix (v2) — includes KL calibration + per-head temperature and fused decode attention kernel.
+# Used by scripts/run_experiments.py
 #
 # Conventions:
 # - kv_mode: fp16 | int8_baseline | int8_ours | int4 | mixed
-# - quant_bits: 16/8/4 (for bookkeeping)
-# - clip_percentile: null (disabled) or e.g. 99.9
-# - group_size: null (disabled) or one of [16, 32, 64]
-# - seq_len: prompt/context length budget (tokens)
+# - calib_strategy: none | percentile | kl_attn
+# - decode_attn_impl: torch_ref | triton_fused
+# - use_attn_temperature: true/false (per-head inv_tau from calib file)
+# - clip_percentile_{k,v}: used during calibration or as fixed percentile in percentile mode
+# - group_size_{k,v}: grouping along head_dim (e.g., 32 for head_dim=128)
+# - seq_len: context length budget (tokens)
 # - gen_len: max_new_tokens
-# - batch: inference batch size (start with 1 for correctness)
+#
+# NOTE (repo policy):
+# - PPL dataset is fixed in objective.md: wikitext-2-raw-v1
+# - Needle eval uses synthetic needle-in-a-haystack (方案 A)
+# - TTFT/TPOT timings synchronize around CUDA points for reliability
 
 project:
   name: kv-cache-quant-qwen2p5-1p5b
@@ -20,113 +26,112 @@ runtime:
   seed: 1234
   device: cuda
   dtype: fp16
-  # Greedy decoding for reproducibility.
   decoding:
     temperature: 0.0
     top_p: 1.0
     top_k: 0
+  # Shared defaults for all runs unless overridden below.
+  quant_defaults:
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl.json
+    use_attn_temperature: true
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+  kernel_defaults:
+    decode_attn_impl: triton_fused
 
-calibration:
-  enabled: true
-  # Calibration script will generate artifacts/kv_calib.json
-  output_path: artifacts/kv_calib.json
-  # A small prompt set is enough; scripts can sample from ShareGPT or local prompts.
-  num_prompts: 256
-  max_prompt_tokens: 1024
-  # Candidate clipping percentiles to evaluate.
-  clip_percentiles: [99.9, 99.95, 99.99]
-  # Candidate group sizes (head_dim grouping).
-  group_sizes: [16, 32, 64]
-
-experiments:
-  # --- Core Baselines (must run) ---
-  - name: fp16_kv_baseline
+matrix:
+  # Baselines
+  - run_name: fp16_kv_torch
     kv_mode: fp16
     quant_bits: 16
-    clip_percentile: null
-    group_size: null
-    seq_lens: [4096, 8192, 16384, 32768]
+    calib_strategy: none
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 4096
     gen_len: 256
     batch: 1
-    tasks: [profile_latency, profile_memory, eval_needle, eval_ppl]
 
-  - name: int8_kv_baseline
+  - run_name: int8_baseline_torch
     kv_mode: int8_baseline
     quant_bits: 8
-    clip_percentile: null
-    group_size: null
-    seq_lens: [4096, 8192, 16384, 32768]
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 128
+    group_size_v: 128
+    decode_attn_impl: torch_ref
+    seq_len: 4096
     gen_len: 256
     batch: 1
-    tasks: [profile_latency, profile_memory, eval_needle, eval_ppl]
 
-  # --- Mainline (ours): clipping + per-head/group-wise scaling ---
-  - name: int8_ours_clip99p9_group32
+  # Ours mainline: KL calibration + per-head temperature + group-wise + fused decode kernel
+  - run_name: int8_ours_kl_temp_fused
     kv_mode: int8_ours
     quant_bits: 8
-    clip_percentile: 99.9
-    group_size: 32
-    seq_lens: [4096, 8192, 16384, 32768]
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl.json
+    use_attn_temperature: true
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 4096
     gen_len: 256
     batch: 1
-    tasks: [profile_latency, profile_memory, eval_needle, eval_ppl]
 
-  # --- Ablations (recommended) ---
-  - name: int8_ours_no_clip_group32
+  # Ablations (recommended)
+  - run_name: int8_ours_kl_no_temp_fused
     kv_mode: int8_ours
     quant_bits: 8
-    clip_percentile: null
-    group_size: 32
-    seq_lens: [8192, 16384]
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl.json
+    use_attn_temperature: false
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 4096
     gen_len: 256
     batch: 1
-    tasks: [eval_needle, eval_ppl]
 
-  - name: int8_ours_clip99p9_group16
+  - run_name: int8_ours_percentile_temp_fused
     kv_mode: int8_ours
     quant_bits: 8
-    clip_percentile: 99.9
-    group_size: 16
-    seq_lens: [8192, 16384]
+    calib_strategy: percentile
+    use_attn_temperature: true
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 4096
     gen_len: 256
     batch: 1
-    tasks: [eval_needle, eval_ppl]
 
-  - name: int8_ours_clip99p9_group64
+  # Long-context stress runs (use smaller gen_len to reduce cost)
+  - run_name: fp16_kv_long
+    kv_mode: fp16
+    quant_bits: 16
+    calib_strategy: none
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 32768
+    gen_len: 64
+    batch: 1
+
+  - run_name: int8_ours_long_fused
     kv_mode: int8_ours
     quant_bits: 8
-    clip_percentile: 99.9
-    group_size: 64
-    seq_lens: [8192, 16384]
-    gen_len: 256
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl.json
+    use_attn_temperature: true
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 32768
+    gen_len: 64
     batch: 1
-    tasks: [eval_needle, eval_ppl]
-
-  # --- Optional Extensions (run only after mainline works) ---
-  - name: int4_kv_optional
-    enabled: false
-    kv_mode: int4
-    quant_bits: 4
-    clip_percentile: 99.9
-    group_size: 32
-    seq_lens: [4096, 8192, 16384]
-    gen_len: 256
-    batch: 1
-    tasks: [profile_latency, profile_memory, eval_needle, eval_ppl]
-
-  - name: mixed_precision_optional
-    enabled: false
-    kv_mode: mixed
-    quant_bits: 0
-    clip_percentile: 99.9
-    group_size: 32
-    # Example policy; scripts must define how this is interpreted.
-    mixed_policy:
-      # Layers listed here use int8; remaining layers use int4.
-      int8_layers: [0, 1, 2, 3]
-      default_bits: 4
-    seq_lens: [8192, 16384]
-    gen_len: 256
-    batch: 1
-    tasks: [profile_latency, profile_memory, eval_needle, eval_ppl]
 

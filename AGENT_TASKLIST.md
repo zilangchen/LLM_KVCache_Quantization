@@ -2,7 +2,7 @@
 
 > **Project**: Graduation Thesis — 面向高效推理的大语言模型键值缓存量化方法
 >
-> **Primary goal**: Build an end-to-end inference pipeline (Python + PyTorch) for **Qwen/Qwen2.5-1.5B-Instruct**, implement **KV cache INT8 quantization** with **percentile clipping** and **per-head / group-wise scaling**, and evaluate across **memory / speed / quality / long-context stability**. Use **Triton/CUDA** to optimize at least one critical kernel.
+> **Primary goal**: Build an end-to-end inference pipeline (Python + PyTorch) for **Qwen/Qwen2.5-1.5B-Instruct**, implement **KV cache INT8 quantization** with **group-wise quantization**, and evaluate across **memory / speed / quality / long-context stability**. Use **Triton/CUDA** to implement a **fused quantized decode-attention kernel (q_len=1)** and a **behavior-aligned (KL) calibration + per-head temperature** pipeline.
 >
 > **Non-negotiables**: reproducibility, clear ablations, structured outputs (CSV/JSON), and an execution matrix that can be rerun with one command.
 
@@ -149,32 +149,63 @@ Acceptance:
 - `kv_mode=int8_baseline` runs without crashing.
 - Quality degradation is within acceptable range on small eval.
 
-### Milestone F — Ours: Clipping + Per-head / Group-wise Scaling
-**Goal**: Implement the thesis mainline.
+### Milestone F — Ours: Behavior-aligned Calibration (KL) + Per-head Temperature + Group-wise Quant
+**Goal**: Make INT8 KV quantization *stable on long context* by calibrating for behavior similarity, not just value ranges.
+
+Core idea (must implement):
+- Use **behavior-aligned calibration**: choose clipping/scales to minimize divergence between FP16 and quantized attention behavior.
+- Add **per-head temperature correction** (per layer, per query head) to re-align attention sharpness after quantization.
 
 Deliverables:
-- `scripts/calibrate_kv.py` producing `artifacts/kv_calib.json`
-- `src/quant/clipping.py`
-- `src/quant/groupwise.py` (head_dim grouping)
-- New `kv_mode=int8_ours`
+- `scripts/calibrate_behavior.py`
+  - Inputs: a small prompt set (e.g., ShareGPT subset), `seq_len` targets (4k/8k), candidate percentiles + group sizes.
+  - Outputs: `artifacts/kv_calib_kl.json` containing:
+    - static `k_scale[layer, kv_head, group]`, `v_scale[layer, kv_head, group]`
+    - `inv_tau[layer, q_head]` (per-head attention temperature, stored as 1/tau)
+    - chosen `clip_percentile_k`, `clip_percentile_v`, `group_size_k`, `group_size_v`
+- `src/quant/clipping.py` (apply calibrated clipping thresholds or implied by scales)
+- `src/quant/groupwise.py` (INT8 group-wise quant/dequant; head_dim grouping)
+- `src/quant/temperature.py` (apply per-head temperature in both prefill and decode)
+- New `kv_mode=int8_ours` that loads `kv_calib_kl.json` and uses these parameters
+
+Calibration objective (implementation spec):
+- Align **attention weight distributions** head-wise at decode-like positions.
+- For each (layer, head), compute:
+  - `p_ref = softmax(logits_fp16)`
+  - `p_quant(tau) = softmax(logits_quant * inv_tau)`
+  - minimize `KL(p_ref || p_quant)` over tau (grid search is OK).
+- Choose clipping percentile / group size by minimizing average KL across layers/heads on the calibration set.
 
 Acceptance:
-- `int8_ours` quality >= `int8_baseline` on needle or PPL trend (at least on long-context settings).
-- Ablation toggles exist (clipping on/off, group_size variants).
+- `int8_ours` quality >= `int8_baseline` on **needle-in-a-haystack** accuracy trend and/or PPL trend (especially at long context).
+- Ablations exist: temperature on/off; KL-calibrated vs fixed-percentile; group_size variants.
+- Calibration output is deterministic given a fixed seed and prompt set.
 
-### Milestone G — Triton Optimization (At Least One Real Kernel)
-**Goal**: Use Triton to speed up a real bottleneck.
+### Milestone G — Triton Mainline: Fused Quantized Decode Attention Kernel (Required)
+**Goal**: Make quantized KV not only smaller but also *fast* by avoiding full dequant + separate attention ops during decode.
 
-Minimum requirement:
-- `src/kernels/triton_dequant.py` implementing int8 -> fp16 dequantization with scale.
-- Engine calls Triton dequant during decode (not just a demo).
+Minimum requirement (must):
+- `src/kernels/triton_decode_attn_int8.py`
+  - Implements a **q_len=1** decode attention kernel that:
+    - reads **INT8 quantized K/V** cache
+    - dequantizes **on-the-fly** (group-wise scales)
+    - applies **per-head inv_tau** inside the logits before softmax
+    - computes softmax + output accumulation in one kernel (online softmax)
+  - Output: FP16/BF16 `attn_out[b, q_head, d]`
+- Engine uses this Triton kernel for decode when `kv_mode=int8_ours` (and optionally `int8_baseline`).
 
-Stretch:
-- `src/kernels/triton_decode_attn.py` for q_len=1 fused dequant + attention.
+Stepping-stone (recommended but not sufficient alone):
+- `src/kernels/triton_dequant.py` for fast block dequantization (used for debugging / fallback), but the **fused decode kernel** is the main deliverable.
+
+Kernel integration spec:
+- Prefill can stay on torch SDPA/FlashAttention; apply temperature by scaling `Q` per head (broadcast) before SDPA.
+- Decode must route to Triton fused kernel when `q_len==1`.
+- Must support **GQA** mapping (`n_q_heads` vs `n_kv_heads`) by mapping query head -> kv head in-kernel or via pointer math.
 
 Acceptance:
-- Triton kernel passes numerical checks against torch implementation.
-- Profiling shows speedup or at least no regression while reducing CPU overhead.
+- Numerical check vs a torch reference decode attention (dequant + matmul + softmax) passes within tolerance.
+- End-to-end decode latency (TTFT/TPOT) shows improvement or at least no regression compared with non-fused dequant+attention at long context.
+- Kernel is actually used in real inference runs (not a demo script only).
 
 ### Milestone H — INT4 + Mixed Precision (Optional, Only After Mainline Works)
 **Goal**: Add research depth.

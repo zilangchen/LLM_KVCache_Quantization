@@ -86,6 +86,42 @@
 ## 技术细节
 - TTFT/TPOT 计时默认采用同步策略避免 CUDA 异步导致的低估与不稳定；needle 采用可控合成任务以降低数据依赖并提高复现性。
 
+# <Cursor-AI 2026-01-21 06:44:34>
+## 修改目的
+根据“新两条主线工程规格”更新项目目标与规划：把融合 decode-attn kernel（q_len=1）与 KL 行为对齐校准 + per-head temperature 升级为主线必做，并同步更新实验矩阵 schema，确保仓库内不存在冲突口径。
+
+## 修改内容摘要
+- 更新 `AGENT_TASKLIST.md`：将主线升级为（1）KL 校准 + per-head temperature（Milestone F）与（2）Triton 融合 decode attention（Milestone G，Required）。
+- 更新 `configs/exp_matrix.yaml`：切换到 v2 schema（`calib_strategy/decode_attn_impl/use_attn_temperature`），并保留本仓库既定口径（greedy、seed、seq_len 上限 32768）。
+- 更新 `objective.md`：将研究问题/贡献/路线图的 F/G 里程碑调整为新主线术语与产物（`kv_calib_kl.json`、`triton_decode_attn_int8.py`）。
+- 标注 `exp_matrix.yaml`（根目录）为 deprecated，避免被误用造成口径漂移。
+- 更新 `lang.md` 阶段任务描述，使其与新主线一致（仅更新描述，不提前勾选完成）。
+
+## 影响范围
+- 规划与文档：`AGENT_TASKLIST.md`、`objective.md`、`lang.md`
+- 实验入口与口径：`configs/exp_matrix.yaml`（唯一入口）与根目录 `exp_matrix.yaml`（仅参考）
+
+## 技术细节
+- 采用“以更新版为主 + 保留本仓库已确认口径”的合并策略：Python 3.12、PPL=wikitext-2-raw-v1、needle=方案A、计时同步、seq_len=32768 仍保持为硬约束；新矩阵字段仅用于实现/消融组织。
+
+# <Cursor-AI 2026-01-21 07:06:35>
+## 修改目的
+整理仓库结构，消除重复文件与入口歧义，归档学校材料，并将规划/文档口径对齐到“两条主线必做”，为后续实现阶段提供稳定的目录与单一事实来源。
+
+## 修改内容摘要
+- 删除重复导入文件：`AGENT_TASKLIST (1).md`、`exp_matrix (1).yaml`。
+- 统一实验入口：仅使用 `configs/exp_matrix.yaml`；根目录 `exp_matrix.yaml` 保留为 deprecated 参考。
+- 迁移学校材料到 `docs/school/`；迁移提示词模板到 `docs/prompt_templates.md` 并在 `README.md` 增加指向。
+- 创建未来目录骨架：`docs/`、`logs/`、`temp/`、`debug_history/`、`development_history/`、`backup/` 等。
+- 更新 `lang.md` 顶部“主线方法”描述，与 KL 校准 + fused decode-attn 主线一致。
+
+## 影响范围
+- 仓库结构与文档：`docs/`、`README.md`、`lang.md`、学校材料路径
+- 版本控制：删除重复文件；新增目录（部分为空目录将仅在本地存在，除非后续添加占位文件）
+
+## 技术细节
+- 本次不调整 `.gitignore` 与 `.gitkeep`（按用户指示），后续如需在 git 中追踪空目录，可再补充占位文件策略。
+
 # <Cursor-AI 2026-01-21 03:04:58>
 ## 修改目的
 新增面向新手的项目协作指南，明确“如何分阶段推进 + 如何驱动 agent 写代码”，并提供可持续更新的进度追踪模板，降低后续开发沟通成本。

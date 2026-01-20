@@ -10,8 +10,9 @@
 你只需要记住 4 句话：
 
 - **研究对象**：`Qwen/Qwen2.5-1.5B-Instruct`
-- **主线方法**：KV Cache **INT8** 量化 + **percentile clipping**
-  + **per-head / group-wise scaling**
+- **主线方法**：KV Cache **INT8** 量化（静态 group-wise scale）
+  + **KL 行为对齐校准** + **per-head temperature（inv_tau）**
+  + decode（q_len=1）使用 **Triton 融合量化 attention kernel**
 - **评测闭环**：同口径对比 **显存** / **吞吐&延迟** / **生成质量** /
   **长上下文稳定性（needle）**
 - **工程硬指标**：至少 **1 个 Triton kernel** 真正接入 **decode 路径**
@@ -85,37 +86,41 @@
   - agent 要做：在 cache 写入时量化、读取时反量化
   - 验收：显存下降明显；生成不崩；能完整跑完一段生成
 
-- [ ] **C2. percentile clipping（全局 or per-layer）**
-  - agent 要做：实现 percentile 估计与裁剪策略（可先离线统计）
-  - 验收：相比 naive，质量/稳定性提升（至少不更差）
+- [ ] **C2. baseline 量化口径固定（percentile + group_size=128）**
+  - agent 要做：实现 percentile 裁剪 + group-wise（但用 group_size=128 退化为 per-head_dim）
+  - 验收：作为 baseline 可复现跑通，并能与 ours 做清晰对照
 
 ---
 
-### 阶段 D：ours（per-head / group-wise scaling）
+### 阶段 D：ours（KL 行为对齐校准 + per-head temperature + group-wise INT8）
 
-- [ ] **D1. per-head scaling**
-  - agent 要做：每个 head 独立 scale/zero-point（或对称量化）
-  - 验收：对长上下文更稳，或质量提升
+- [ ] **D1. KL 行为对齐校准脚本**
+  - agent 要做：实现 `scripts/calibrate_behavior.py`，输出 `artifacts/kv_calib_kl.json`
+  - 验收：固定 seed 下可复现；包含 `k_scale/v_scale` 与 `inv_tau[layer, head]`
 
-- [ ] **D2. group-wise scaling**
-  - agent 要做：按 group（例如 hidden_dim 分组）做缩放，权衡开销
-  - 验收：更好的精度/性能折中；并在结果里体现
+- [ ] **D2. 温度校正（prefill + decode 一致生效）**
+  - agent 要做：实现 `src/quant/temperature.py` 并接入 prefill（缩放 Q）与 decode（供 fused kernel 使用）
+  - 验收：打开/关闭温度开关的消融可跑，且结果字段可追踪
+
+- [ ] **D3. group-wise INT8 量化实现与接入**
+  - agent 要做：实现 `src/quant/groupwise.py` 与 `src/quant/clipping.py`，并在 `kv_mode=int8_ours` 加载校准文件
+  - 验收：`int8_ours` 可跑通，needle/PPL 趋势不劣于 baseline（尤其长上下文）
 
 ---
 
-### 阶段 E：Triton kernel 接入真实 decode（硬指标）
+### 阶段 E：Triton 融合 decode attention（q_len=1，硬指标）
 
-- [ ] **E1. 选一个必须加速的点（最小闭环）**
-  - 常见选择：attention 中的某个 matmul/融合操作、dequant + gemm 融合等
-  - 验收：kernel 确实在 decode path 被调用（可用日志/计数证明）
+- [ ] **E1. 实现 fused kernel**
+  - agent 要做：实现 `src/kernels/triton_decode_attn_int8.py`（读 int8 K/V + group-wise scale + online softmax + 输出累加，并融合 `inv_tau`）
+  - 验收：数值对齐 torch reference（固定 seed，误差阈值可控）
 
 - [ ] **E2. 正确性验证**
-  - agent 要做：对齐 PyTorch 版本输出（允许小误差），并提供误差统计
+  - agent 要做：补齐测试用例（GQA 映射、mask、不同 seq_len），并提供误差统计
   - 验收：误差在可控阈值内，且不出现 NaN/Inf
 
 - [ ] **E3. 性能对比**
-  - agent 要做：与 torch/naive 实现对比，记录加速比
-  - 验收：吞吐提升或延迟降低，且结果可复现
+  - agent 要做：与 `decode_attn_impl=torch_ref` 对比 TPOT（长上下文）
+  - 验收：至少不退化；最好有提升；结果可复现
 
 ---
 
@@ -196,6 +201,18 @@ agent 的输出应包含：
 ### 4.2 更新记录（按时间倒序追加）
 
 （从这里开始追加）
+
+- **2026-01-21 07:06:35**：仓库结构整理与归档
+  - 完成步骤/子任务：删除重复(1)文件；迁移学校材料到 `docs/school/`；迁移提示词模板到 `docs/prompt_templates.md`；建立目录骨架；统一入口为 `configs/exp_matrix.yaml`
+  - 运行命令：`date '+%Y-%m-%d %H:%M:%S'`
+  - 产出物路径：`docs/`、`README.md`、`lang.md`、`development_record.md`
+  - 关键摘要：根目录不再堆放学校材料；规划/入口清晰，避免后续口径冲突
+
+- **2026-01-21 06:44:34**：项目目标升级为“两条主线必做”（KL 校准 + fused decode kernel）
+  - 完成步骤/子任务：同步更新 `AGENT_TASKLIST.md`、`configs/exp_matrix.yaml`、`objective.md`、`lang.md`，消除与新主线规格的口径冲突
+  - 运行命令：`date '+%Y-%m-%d %H:%M:%S'`
+  - 产出物路径：`AGENT_TASKLIST.md`、`configs/exp_matrix.yaml`、`objective.md`、`lang.md`
+  - 关键摘要：Milestone F=KL 行为对齐校准 + per-head temperature；Milestone G=triton_fused decode-attn（q_len=1）
 
 - **2026-01-21 06:10:30**：锁定评测口径（PPL/needle/计时同步）
   - 完成步骤/子任务：PPL 选择 `wikitext-2-raw-v1`；needle 选择方案 A；TTFT/TPOT 关键计时点前后 GPU 同步

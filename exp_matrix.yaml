@@ -1,5 +1,14 @@
-# Experiment matrix for KV cache quantization thesis project.
-# This file is designed for scripts/run_experiments.py
+# DEPRECATED: This root-level matrix is kept for reference only.
+# DO NOT USE for running experiments.
+# Use `configs/exp_matrix.yaml` as the single source of truth.
+#
+# (Reason) This repo enforces a single entrypoint to avoid schema drift and
+# conflicting experiment definitions.
+#
+# ---
+#
+# Experiment matrix for KV cache quantization thesis project (legacy schema).
+# This file is kept only for historical reference; do not use it.
 #
 # Conventions:
 # - kv_mode: fp16 | int8_baseline | int8_ours | int4 | mixed
@@ -28,7 +37,7 @@ runtime:
 
 calibration:
   enabled: true
-  # Calibration script will generate artifacts/kv_calib.json
+  # Legacy calibration output (obsolete): artifacts/kv_calib.json
   output_path: artifacts/kv_calib.json
   # A small prompt set is enough; scripts can sample from ShareGPT or local prompts.
   num_prompts: 256
