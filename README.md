@@ -5,7 +5,7 @@
 
 ## 固定约束（不要改）
 - 模型：`Qwen/Qwen2.5-1.5B-Instruct`
-- Python：3.10
+- Python：3.12（以 AutoDL 镜像为准）
 - 评测：以 `configs/exp_matrix.yaml` 为唯一实验入口（跑矩阵→产出 CSV/图表）
 
 ## 目录结构

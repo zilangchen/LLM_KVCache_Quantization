@@ -14,7 +14,7 @@
 - HuggingFace model: `Qwen/Qwen2.5-1.5B-Instruct`
 
 ### 0.2 Core Stack
-- Python 3.10
+- Python 3.12 (AutoDL image baseline)
 - PyTorch (CUDA)
 - Transformers
 - Triton

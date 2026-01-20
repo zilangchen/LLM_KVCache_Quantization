@@ -197,6 +197,18 @@ agent 的输出应包含：
 
 （从这里开始追加）
 
+- **2026-01-21 05:55:33**：确认 AutoDL 环境并统一目标栈为 Python 3.12
+  - 完成步骤/子任务：在 `objective.md` 写入 H20 96GB/联网/Pin/seq_len=32768 等门禁决策，并统一仓库文档的 Python 版本口径
+  - 运行命令：`date '+%Y-%m-%d %H:%M:%S'`
+  - 产出物路径：`objective.md`、`AGENT_TASKLIST.md`、`README.md`
+  - 关键摘要：以镜像为准（Python 3.12 + Torch 2.8.0 + CUDA 12.8 runtime），后续实现按此口径推进
+
+- **2026-01-21 05:31:34**：细化 `objective.md` 为可执行路线图（A–J）
+  - 完成步骤/子任务：新增 Stable APIs、复现口径、agent 指令模板、Milestone A–J 路线图骨架
+  - 运行命令：`date '+%Y-%m-%d %H:%M:%S'`
+  - 产出物路径：`objective.md`
+  - 关键摘要：objective=权威规范；lang=进度板；后续按里程碑逐章细化并推进实现
+
 - **2026-01-21 05:11:35**：准备仓库初始化全量提交
   - 完成步骤/子任务：补充 `.gitignore`（忽略 Office/WPS 临时文件），并将剩余仓库骨架/配置/资料纳入版本控制
   - 运行命令：`date '+%Y-%m-%d %H:%M:%S'`

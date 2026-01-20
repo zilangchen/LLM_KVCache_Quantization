@@ -42,6 +42,36 @@
 ## 技术细节
 - 通过忽略规则避免把 `. ~*` 之类的锁/临时文件纳入版本历史，降低后续冲突与噪声。
 
+# <Cursor-AI 2026-01-21 05:31:34>
+## 修改目的
+在正式写代码前，把 `objective.md` 细化为“可执行路线图”，将项目推进拆成按里程碑顺序可逐条验收的任务清单，并固化 agent 协作模板与复现口径。
+
+## 修改内容摘要
+- 扩展 `objective.md`：新增“稳定接口（Stable APIs）”、“结果与复现口径（单一事实来源）”、“如何驱动 agent 做每一步（统一指令模板）”、“项目执行路线图（Milestone A–J）骨架”。
+- 将 A–J 里程碑的每一步明确：子任务顺序、产出物路径、验收命令占位、与 `configs/exp_matrix.yaml` 的对齐点。
+
+## 影响范围
+- 文档：`objective.md`
+- 开发流程：后续实现需严格按里程碑顺序推进，并以 objective 的模板驱动 agent，避免口径漂移与返工。
+
+## 技术细节
+- Stable APIs 直接对齐 `AGENT_TASKLIST.md` 的接口约束；复现口径以 `configs/exp_matrix.yaml` 为唯一入口，并固化 CSV schema 与 run 元信息最小集合。
+
+# <Cursor-AI 2026-01-21 05:55:33>
+## 修改目的
+根据 AutoDL 运行环境门禁确认结果，统一项目“目标栈”口径为 Python 3.12（镜像基线），并在 `objective.md` 固化联网/pin/最大 seq_len 等关键决策，避免后续实现阶段返工。
+
+## 修改内容摘要
+- 更新 `objective.md`：将核心技术栈改为 Python 3.12（AutoDL 镜像）与 PyTorch 2.8.0（CUDA 12.8 runtime），并把 H20 96GB/允许联网/需要 pin/seq_len=32768 等门禁决策写入。
+- 更新 `AGENT_TASKLIST.md` 与 `README.md`：将 Python 3.10 的描述统一为 Python 3.12。
+
+## 影响范围
+- 文档：`objective.md`、`AGENT_TASKLIST.md`、`README.md`
+- 项目口径：后续所有实现、实验与复现记录以 AutoDL 镜像栈为准。
+
+## 技术细节
+- `model_revision` 采用“首次下载解析 resolved revision → 写入运行记录并回填配置”的策略，保证严格复现同时减少手工出错。
+
 # <Cursor-AI 2026-01-21 03:04:58>
 ## 修改目的
 新增面向新手的项目协作指南，明确“如何分阶段推进 + 如何驱动 agent 写代码”，并提供可持续更新的进度追踪模板，降低后续开发沟通成本。
