@@ -155,12 +155,35 @@ def main() -> int:
             "decode_attn_impl", kernel_defaults.get("decode_attn_impl")
         )
 
+        calib_file_path = None
+        calib_file = calib_params.get("calib_file")
+        if calib_file:
+            calib_file_path = Path(calib_file)
+            if not calib_file_path.is_absolute():
+                calib_file_path = project_root / calib_file_path
+
+        if not args.dry_run and kv_mode == "int8_ours":
+            needs_calib = (
+                calib_params.get("calib_strategy") == "kl_attn"
+                or calib_params.get("use_attn_temperature") is True
+            )
+            if needs_calib and (calib_file_path is None or not calib_file_path.exists()):
+                print(
+                    f"Error: kv_mode=int8_ours requires calibration file but it was not found: {calib_file_path}."
+                )
+                print(
+                    "Run scripts/calibrate_behavior.py to generate it, or switch calib_strategy to 'percentile' and "
+                    "disable use_attn_temperature."
+                )
+                return 2
+
         run_id = f"{run_name}_{timestamp}"
         out_dir = Path(args.out_dir)
         if not out_dir.is_absolute():
-            out_dir = Path.cwd() / out_dir
+            out_dir = project_root / out_dir
         run_dir = out_dir / run_id
-        run_dir.mkdir(parents=True, exist_ok=True)
+        if not args.dry_run:
+            run_dir.mkdir(parents=True, exist_ok=True)
 
         if build_config_snapshot and write_config_snapshot:
             snapshot = build_config_snapshot(
@@ -204,8 +227,8 @@ def main() -> int:
                 "--out_dir",
                 str(run_dir),
             ]
-            if calib_params.get("calib_file"):
-                cmd.extend(["--calib_file", str(calib_params["calib_file"])])
+            if kv_mode == "int8_ours" and calib_file_path:
+                cmd.extend(["--calib_file", str(calib_file_path)])
             if calib_params.get("calib_strategy"):
                 cmd.extend(["--calib_strategy", str(calib_params["calib_strategy"])])
             if calib_params.get("use_attn_temperature") is False:
@@ -221,7 +244,10 @@ def main() -> int:
             if task == "eval_needle" and args.needle_context_len:
                 cmd.extend(["--context_len", str(args.needle_context_len)])
 
-            log_path = Path(args.logs_dir) / run_id / f"{task}.log"
+            logs_dir = Path(args.logs_dir)
+            if not logs_dir.is_absolute():
+                logs_dir = project_root / logs_dir
+            log_path = logs_dir / run_id / f"{task}.log"
 
             if args.dry_run:
                 print("DRY RUN:", " ".join(cmd))
