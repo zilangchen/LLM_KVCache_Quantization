@@ -22,3 +22,6 @@ artifacts/
 logs/
 *.log
 
+# Sensitive server credentials
+docs/autodl_server.md
+

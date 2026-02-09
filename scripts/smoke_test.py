@@ -26,6 +26,12 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+script_dir = Path(__file__).resolve().parent
+project_root = script_dir.parent
+sys.path.insert(0, str(project_root))
+
+from src.utils.repro import set_seed
+
 
 def get_git_commit() -> str:
     """Get current git commit hash."""
@@ -80,6 +86,18 @@ def main():
         "--save_output",
         action="store_true",
         help="Save structured output to results/runs/",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=1234,
+        help="Random seed (default: 1234)",
+    )
+    parser.add_argument(
+        "--out_dir",
+        type=str,
+        default="results/runs",
+        help="Output directory for JSON (default: results/runs)",
     )
     args = parser.parse_args()
 
@@ -143,9 +161,7 @@ def main():
         inputs = tokenizer(args.prompt, return_tensors="pt").to(model.device)
 
         # Set seed for reproducibility
-        torch.manual_seed(1234)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed(1234)
+        set_seed(seed=args.seed, deterministic=True)
 
         # Generate with greedy decoding (aligned with configs/exp_matrix.yaml)
         with torch.no_grad():
@@ -211,7 +227,9 @@ def main():
     if args.save_output:
         script_dir = Path(__file__).resolve().parent
         project_root = script_dir.parent
-        runs_dir = project_root / "results" / "runs"
+        runs_dir = Path(args.out_dir)
+        if not runs_dir.is_absolute():
+            runs_dir = project_root / runs_dir
         runs_dir.mkdir(parents=True, exist_ok=True)
 
         output_file = runs_dir / f"smoke_test_{timestamp.replace(':', '-')}.json"

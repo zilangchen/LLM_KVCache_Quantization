@@ -2,7 +2,7 @@
 # Used by scripts/run_experiments.py
 #
 # Conventions:
-# - kv_mode: fp16 | int8_baseline | int8_ours | int4 | mixed
+# - kv_mode: fp16 | int8_baseline | int8_ours | int4_baseline | mixed
 # - calib_strategy: none | percentile | kl_attn
 # - decode_attn_impl: torch_ref | triton_fused
 # - use_attn_temperature: true/false (per-head inv_tau from calib file)
@@ -134,4 +134,3 @@ matrix:
     seq_len: 32768
     gen_len: 64
     batch: 1
-

@@ -12,6 +12,8 @@ accelerate
 numpy
 pandas
 matplotlib
+tqdm
+datasets
 
 pyyaml
 pynvml
@@ -20,4 +22,3 @@ fastapi
 uvicorn
 
 pytest
-

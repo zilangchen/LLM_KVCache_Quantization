@@ -1,17 +1,22 @@
-# Record environment versions for reproducibility.
-#
-# Fill this after setting up the environment:
-# - OS / kernel
-# - GPU model(s)
-# - NVIDIA driver
-# - CUDA toolkit version
-# - cuDNN version (if relevant)
-# - Python version
-# - torch.__version__ / torch.version.cuda
-# - transformers.__version__
-# - triton.__version__
-#
-# Suggested commands:
-# - nvidia-smi
-# - python -c "import torch, transformers, triton; print(torch.__version__, torch.version.cuda, transformers.__version__, triton.__version__)"
+# Environment versions for reproducibility
+# Collected at: 2026-01-21 14:05:01
+# Git commit: fa6ab125
 
+## System
+Python: 3.12.3 | packaged by Anaconda, Inc. | (main, May  6 2024, 19:46:43) [GCC 11.2.0]
+Platform: linux
+
+## GPU / CUDA
+GPU: NVIDIA H20, 97871 MiB
+CUDA (nvcc): nvcc not available
+
+## Python Packages
+torch: 2.8.0+cu128
+torch.cuda: 12.8
+torch.cuda.available: True
+torch.cuda.device_name: NVIDIA H20
+transformers: 4.57.6
+triton: 3.4.0
+accelerate: 1.12.0
+numpy: 2.3.2
+pandas: not installed

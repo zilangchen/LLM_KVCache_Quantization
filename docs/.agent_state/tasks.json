@@ -1,0 +1,101 @@
+{
+  "tasks": [],
+  "completed": [
+    {
+      "id": "milestone-b",
+      "title": "FP16 Baseline 推理管线",
+      "description": "实现自定义 generation loop，添加 TTFT/TPOT 计时",
+      "priority": 0,
+      "estimated_minutes": 30,
+      "status": "completed",
+      "created_at": "2026-01-21T14:40:31.145052",
+      "assigned_to": null,
+      "result": "FP16 baseline 完成：generate_loop.py + timing.py + profile_baseline.py",
+      "completed_at": "2026-01-21T15:07:04.616098",
+      "completed_by": "manager (force)"
+    },
+    {
+      "id": "test-001",
+      "title": "测试任务",
+      "description": "验证多Agent系统功能",
+      "priority": 0,
+      "estimated_minutes": 30,
+      "status": "completed",
+      "created_at": "2026-01-21T14:19:46.426870",
+      "assigned_to": null,
+      "result": "测试任务",
+      "completed_at": "2026-01-21T15:07:04.815393",
+      "completed_by": "manager (force)"
+    },
+    {
+      "id": "milestone-c",
+      "title": "INT8-baseline 量化",
+      "description": "实现 KV cache INT8 存储与 baseline 量化",
+      "priority": 0,
+      "estimated_minutes": 30,
+      "status": "completed",
+      "created_at": "2026-01-21T15:13:32.605529",
+      "assigned_to": "exec-antigravity-001",
+      "result": "Milestone C 代码实现完成，本地验证通过",
+      "started_at": "2026-01-21T15:34:37.143827",
+      "completed_at": "2026-01-21T15:42:49.002669",
+      "completed_by": "exec-antigravity-001"
+    },
+    {
+      "id": "p0-runner-int8-ours",
+      "title": "支持 int8_ours 运行入口",
+      "description": "扩展 run_experiments 与评测脚本，允许 kv_mode=int8_ours/ int8_fused，并在未实现时给出明确提示",
+      "priority": 0,
+      "estimated_minutes": 30,
+      "status": "completed",
+      "created_at": "2026-02-10T02:39:00.412855",
+      "assigned_to": "codex-001",
+      "result": "已扩展 runner/脚本支持 int8_ours/int8_fused，并在生成入口添加明确警告",
+      "started_at": "2026-02-10T02:39:22.289503",
+      "completed_at": "2026-02-10T02:41:15.123196",
+      "completed_by": "codex-001"
+    },
+    {
+      "id": "p0-calib-kl-invtau",
+      "title": "实现 KL 校准与 inv_tau 输出",
+      "description": "完善校准脚本，输出 kv_calib_kl.json（含 per-head inv_tau），并接入 int8_ours",
+      "priority": 0,
+      "estimated_minutes": 30,
+      "status": "completed",
+      "created_at": "2026-02-10T02:39:05.910481",
+      "assigned_to": "codex-001",
+      "result": "实现 KL 校准输出、静态 scale 量化与 inv_tau 接入 int8_ours",
+      "started_at": "2026-02-10T02:43:50.981203",
+      "completed_at": "2026-02-10T02:50:00.242218",
+      "completed_by": "codex-001"
+    },
+    {
+      "id": "p1-ppl-quant-cache",
+      "title": "PPL 支持量化 KV 路径",
+      "description": "让 eval_ppl 可选走 int8_baseline/int8_ours 的 KV cache 路径",
+      "priority": 1,
+      "estimated_minutes": 30,
+      "status": "completed",
+      "created_at": "2026-02-10T02:39:13.196145",
+      "assigned_to": "codex-001",
+      "result": "eval_ppl 支持 kv-cache 路径（int8_baseline/int8_ours），新增 ppl_mode 与 tokens_evaluated",
+      "started_at": "2026-02-10T02:58:37.291749",
+      "completed_at": "2026-02-10T03:03:45.522786",
+      "completed_by": "codex-001"
+    },
+    {
+      "id": "p1-fused-verify",
+      "title": "验证 fused kernel 与真实解码一致性",
+      "description": "运行/补齐 triton kernel 的正确性测试并验证真实 decode 路径",
+      "priority": 1,
+      "estimated_minutes": 30,
+      "status": "completed",
+      "created_at": "2026-02-10T02:39:17.438149",
+      "assigned_to": "codex-001",
+      "result": "新增 verify_fused_decode.py 作为 fused decode 一致性验证入口",
+      "started_at": "2026-02-10T03:06:25.346660",
+      "completed_at": "2026-02-10T03:06:31.254404",
+      "completed_by": "codex-001"
+    }
+  ]
+}

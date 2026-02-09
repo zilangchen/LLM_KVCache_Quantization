@@ -1,2 +1,15 @@
-"""KV cache implementations (fp16/int8/etc)."""
+"""
+KV Cache implementations for LLM inference.
+
+Available caches:
+- FP16KVCache: Standard FP16 KV cache
+- INT8KVCache: INT8 quantized KV cache with group-wise scaling
+- INT4KVCache: INT4 quantized KV cache (more aggressive compression)
+"""
+
+from src.cache.fp16_cache import FP16KVCache
+from src.cache.int8_cache import INT8KVCache
+from src.cache.int4_cache import INT4KVCache
+
+__all__ = ["FP16KVCache", "INT8KVCache", "INT4KVCache"]
 

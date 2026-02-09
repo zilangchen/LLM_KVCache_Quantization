@@ -11,6 +11,9 @@
 ## 目录结构
 参见 `AGENT_TASKLIST.md` 的 “Repository Layout”。
 
+## 当前进展
+进度追踪以 `lang.md` 为准；历史记录见 `development_record.md`。
+
 ## 文档与模板
 - 提示词模板：`docs/prompt_templates.md`
 - 学校材料归档：`docs/school/`
@@ -20,4 +23,3 @@
 - 依赖安装（`requirements.txt`）
 - `scripts/smoke_test.py`、`scripts/run_experiments.py`
 - `env/versions.txt` 与 `env/requirements_freeze.txt` 的生成方式
-

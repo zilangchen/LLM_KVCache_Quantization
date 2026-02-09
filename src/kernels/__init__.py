@@ -1,2 +1,1 @@
-"""Triton kernels and wrappers."""
-
+from .triton_decode_attn_int8 import decode_attn_int8
