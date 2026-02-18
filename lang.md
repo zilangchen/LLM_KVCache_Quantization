@@ -236,6 +236,16 @@ agent 的输出应包含：
 
 （从这里开始追加）
 
+- **2026-02-19 04:15:37**：完成“激进归档清理（第一轮）”✅
+  - 归档目录：`development_history/archive_20260219_041537/`
+  - 归档清单：`development_history/archive_20260219_041537/MANIFEST.md`
+  - 执行内容：
+    - `results/` 仅保留 `final_thesis_20260214_094156` 与 `int4_fused_round_20260219_0315`
+    - 迁移 `logs/remote_review_*`、`env/remote_review_*`、`env/review_fix_*`
+    - 迁移过时文档 `docs/review_report_remote_20260210.md`
+    - 迁移废弃入口 `exp_matrix.yaml`（根目录）
+  - 当前约束：实验入口唯一为 `configs/exp_matrix.yaml`
+
 - **2026-02-12 23:48:34**：完成“final matrix → 出表出图 → 文档收口”✅
   - 关键修复：
     - 修复 `scripts/eval_needle.py` 在 `depth=100%` 时 needle 被截断导致“必失败”的评测 bug（旧的 66.67% 结论已作废）

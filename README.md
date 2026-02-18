@@ -18,7 +18,7 @@
 - 提示词模板：`docs/prompt_templates.md`
 - 学校材料归档：`docs/school/`
 
-## 快速开始（占位）
+## 快速开始
 本项目的 GPU 实验默认在远端 AutoDL(H20) 上运行（见 `AGENTS.md`）。
 
 ### 1) 远端最小验证（Smoke Test）
@@ -40,3 +40,11 @@ cd /root/autodl-tmp/LLM_KVCache_Quantization
 - Runner：`scripts/run_experiments.py`
 - 聚合出图：`scripts/aggregate_results.py`
 - 导出 LaTeX 表：`scripts/export_tables_latex.py`
+
+## 工作区整理与历史归档
+- 当前保留的活跃结果目录：
+  - `results/final_thesis_20260214_094156/`
+  - `results/int4_fused_round_20260219_0315/`
+- 历史实验与过时材料已归档到：
+  - `development_history/archive_20260219_041537/`
+  - 归档清单：`development_history/archive_20260219_041537/MANIFEST.md`

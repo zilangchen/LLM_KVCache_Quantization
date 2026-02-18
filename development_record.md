@@ -1,3 +1,24 @@
+# <Antigravity 2026-02-19 04:15:37>
+## 修改目的
+执行“论文冲优与仓库收口”中的激进清理阶段：将过时实验结果、远端评审遗留材料与废弃入口配置归档，收敛工作区结构并保留完整可追溯记录。
+
+## 修改内容摘要
+- 新增归档目录：`development_history/archive_20260219_041537/`
+- 新增归档清单：`development_history/archive_20260219_041537/MANIFEST.md`
+- 结果目录整理：
+  - `results/` 仅保留 `final_thesis_20260214_094156/`、`int4_fused_round_20260219_0315/`
+  - 其余历史目录统一迁移至 `development_history/archive_20260219_041537/results/`
+- 历史材料迁移：
+  - `logs/remote_review_*`、`logs/review_fix_*` -> `.../logs/`
+  - `env/remote_review_*`、`env/review_fix_*` -> `.../env/`
+  - `docs/review_report_remote_20260210.md` -> `.../docs/`
+  - 废弃入口 `exp_matrix.yaml` -> `.../configs/exp_matrix.yaml`
+
+## 影响范围
+- 工作区可读性提升：根目录只保留活跃入口与活跃结果目录。
+- 可追溯性保留：全部移动操作在 `MANIFEST.md` 逐条记录，可随时回溯。
+- 入口规范收敛：实验矩阵唯一入口保持为 `configs/exp_matrix.yaml`。
+
 # <Antigravity 2026-02-14 10:40:26>
 ## 修改目的
 完成毕业论文验收所需的“最终版闭环”：在同一个 `final_thesis_*` 目录内同时产出 **Gates 证据**、**质量(Needle/PPL)**、**性能/显存曲线**、**吞吐(batch 扩展)**、**聚合表图** 与 **LaTeX 表格**，并同步回本地供论文统一引用。

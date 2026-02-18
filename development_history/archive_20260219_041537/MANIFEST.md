@@ -1,0 +1,43 @@
+# Archive Manifest
+
+- Archived at: 2026-02-18T20:15:37Z
+- Operator: Codex
+- Reason: aggressive cleanup and archive legacy artifacts
+
+## Moves
+- `results/bench_block128` -> `development_history/archive_20260219_041537/results/bench_block128` (legacy result folder)
+- `results/bench_block64` -> `development_history/archive_20260219_041537/results/bench_block64` (legacy result folder)
+- `results/bench_block_compare128` -> `development_history/archive_20260219_041537/results/bench_block_compare128` (legacy result folder)
+- `results/bench_block_compare64` -> `development_history/archive_20260219_041537/results/bench_block_compare64` (legacy result folder)
+- `results/calibration` -> `development_history/archive_20260219_041537/results/calibration` (legacy result folder)
+- `results/calibration_long8192` -> `development_history/archive_20260219_041537/results/calibration_long8192` (legacy result folder)
+- `results/final_20260212_230755` -> `development_history/archive_20260219_041537/results/final_20260212_230755` (legacy result folder)
+- `results/final_stable_20260213` -> `development_history/archive_20260219_041537/results/final_stable_20260213` (legacy result folder)
+- `results/iter_loop3` -> `development_history/archive_20260219_041537/results/iter_loop3` (legacy result folder)
+- `results/iter_loop3_matrix` -> `development_history/archive_20260219_041537/results/iter_loop3_matrix` (legacy result folder)
+- `results/iter_loop4_adaptive` -> `development_history/archive_20260219_041537/results/iter_loop4_adaptive` (legacy result folder)
+- `results/iter_loop4_adaptive_recheck` -> `development_history/archive_20260219_041537/results/iter_loop4_adaptive_recheck` (legacy result folder)
+- `results/iter_loop5_core` -> `development_history/archive_20260219_041537/results/iter_loop5_core` (legacy result folder)
+- `results/iter_loop6_combo_20260212_220336` -> `development_history/archive_20260219_041537/results/iter_loop6_combo_20260212_220336` (legacy result folder)
+- `results/iter_loop6_combo_20260212_220401` -> `development_history/archive_20260219_041537/results/iter_loop6_combo_20260212_220401` (legacy result folder)
+- `results/iter_loop6_kvsplit` -> `development_history/archive_20260219_041537/results/iter_loop6_kvsplit` (legacy result folder)
+- `results/iter_loop6_ppl` -> `development_history/archive_20260219_041537/results/iter_loop6_ppl` (legacy result folder)
+- `results/logs` -> `development_history/archive_20260219_041537/results/logs` (legacy result folder)
+- `results/milestone_c` -> `development_history/archive_20260219_041537/results/milestone_c` (legacy result folder)
+- `results/needle_fix_test` -> `development_history/archive_20260219_041537/results/needle_fix_test` (legacy result folder)
+- `results/needle_len64_compare` -> `development_history/archive_20260219_041537/results/needle_len64_compare` (legacy result folder)
+- `results/needle_len64_compare_gs32` -> `development_history/archive_20260219_041537/results/needle_len64_compare_gs32` (legacy result folder)
+- `results/needle_long_calib8192` -> `development_history/archive_20260219_041537/results/needle_long_calib8192` (legacy result folder)
+- `results/plots` -> `development_history/archive_20260219_041537/results/plots` (legacy result folder)
+- `results/plots_fast` -> `development_history/archive_20260219_041537/results/plots_fast` (legacy result folder)
+- `results/remote_review_20260210` -> `development_history/archive_20260219_041537/results/remote_review_20260210` (legacy result folder)
+- `results/remote_review_fix_20260211_173829` -> `development_history/archive_20260219_041537/results/remote_review_fix_20260211_173829` (legacy result folder)
+- `results/runs` -> `development_history/archive_20260219_041537/results/runs` (legacy result folder)
+- `results/tables` -> `development_history/archive_20260219_041537/results/tables` (legacy result folder)
+- `results/tables_fast` -> `development_history/archive_20260219_041537/results/tables_fast` (legacy result folder)
+- `logs/remote_review_20260210` -> `development_history/archive_20260219_041537/logs/remote_review_20260210` (legacy log folder)
+- `logs/review_fix_20260211_173829` -> `development_history/archive_20260219_041537/logs/review_fix_20260211_173829` (legacy log folder)
+- `env/remote_review_20260210` -> `development_history/archive_20260219_041537/env/remote_review_20260210` (legacy env snapshot)
+- `env/review_fix_20260211_173829` -> `development_history/archive_20260219_041537/env/review_fix_20260211_173829` (legacy env snapshot)
+- `docs/review_report_remote_20260210.md` -> `development_history/archive_20260219_041537/docs/review_report_remote_20260210.md` (outdated review doc)
+- `exp_matrix.yaml` -> `development_history/archive_20260219_041537/configs/exp_matrix.yaml` (deprecated root matrix entrypoint)
