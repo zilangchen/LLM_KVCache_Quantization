@@ -112,6 +112,15 @@ def main():
         default=64,
         help="Maximum tokens to generate for the answer span.",
     )
+    parser.add_argument(
+        "--report_exact_match",
+        action="store_true",
+        default=False,
+        help=(
+            "Also compute exact-match stats (generated_text.strip()==needle) for appendix; "
+            "main pass criterion remains contains."
+        ),
+    )
     # NOTE: scripts/run_experiments.py passes --seq_len/--gen_len for all tasks. Needle eval uses
     # --context_len and a fixed generation length; accept these args for compatibility.
     parser.add_argument(
@@ -130,7 +139,16 @@ def main():
         "--kv_mode",
         type=str,
         default="fp16",
-        choices=["fp16", "int8_baseline", "int8_fused", "int8_ours", "int4_baseline", "int4_fused"],
+        choices=[
+            "fp16",
+            "int8_baseline",
+            "int8_fused",
+            "int8_ours",
+            "int4_baseline",
+            "int4_fused",
+            "int4_ours",
+            "int4_ours_mixed",
+        ],
     )
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
     parser.add_argument(
@@ -264,6 +282,7 @@ def main():
     print(f"Running Needle Test (Context: {args.context_len}, Depths: {args.num_depths})...")
 
     pass_count = 0
+    exact_pass_count = 0
     rng = np.random.default_rng(args.seed)
     depth_batch = max(int(args.depth_batch), 1)
 
@@ -346,8 +365,11 @@ def main():
             needle = batch_needles[j]
             depth = batch_depths[j]
             passed = needle in generated_text
+            exact_match = generated_text.strip() == needle
             if passed:
                 pass_count += 1
+            if exact_match:
+                exact_pass_count += 1
 
             print(
                 f"Depth {depth:.1f}%: {'PASS' if passed else 'FAIL'} "
@@ -358,13 +380,17 @@ def main():
                 {
                     "depth": depth,
                     "passed": int(passed),
+                    "exact_match": int(exact_match),
                     "needle": needle,
                     "generated_text": generated_text.strip(),
                 }
             )
 
     pass_rate = (pass_count / len(depths)) * 100
+    exact_match_rate = (exact_pass_count / len(depths)) * 100 if len(depths) > 0 else 0.0
     print(f"\nFinal Pass Rate: {pass_rate:.2f}%")
+    if args.report_exact_match:
+        print(f"Exact Match Rate: {exact_match_rate:.2f}%")
 
     if args.save_csv:
         out_dir = Path(args.out_dir)
@@ -392,13 +418,19 @@ def main():
             "gpu_mem_peak_mb": 0,
             "timestamp": timestamp,
             "git_commit": git_commit,
-            "needle_pass_rate": pass_rate
+            "needle_pass_rate": pass_rate,
+            "needle_exact_match_rate": exact_match_rate,
         }
         
         fields = [
             "run_id", "model_id", "kv_mode", "quant_bits", "clip_percentile", "group_size", 
             "dtype", "hardware", "seq_len", "gen_len", "batch", "ttft_ms", "tpot_ms",
-            "tok_per_s", "gpu_mem_peak_mb", "timestamp", "git_commit", "needle_pass_rate"
+            "tok_per_s",
+            "gpu_mem_peak_mb",
+            "timestamp",
+            "git_commit",
+            "needle_pass_rate",
+            "needle_exact_match_rate",
         ]
         
         with open(path, "w", newline="") as f:
@@ -413,6 +445,7 @@ def main():
             "context_len",
             "depth",
             "passed",
+            "exact_match",
             "needle",
             "generated_text",
         ]
@@ -427,6 +460,7 @@ def main():
                         "context_len": args.context_len,
                         "depth": r["depth"],
                         "passed": r["passed"],
+                        "exact_match": r["exact_match"],
                         "needle": r["needle"],
                         "generated_text": r["generated_text"],
                     }

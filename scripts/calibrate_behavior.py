@@ -90,13 +90,14 @@ def dequantize_with_scale(
     k: torch.Tensor,
     scale: torch.Tensor,
     group_size: int,
+    qmax: int = 127,
 ) -> torch.Tensor:
     # k: [seq, head_dim], scale: [num_groups]
     head_dim = k.shape[-1]
     num_groups = head_dim // group_size
     k_view = k.view(-1, num_groups, group_size)
     scale_view = scale.view(1, num_groups, 1)
-    q = torch.round(k_view / scale_view).clamp(-127, 127)
+    q = torch.round(k_view / scale_view).clamp(-int(qmax), int(qmax))
     k_deq = q * scale_view
     return k_deq.view(-1, head_dim)
 
@@ -105,6 +106,8 @@ def quantize_dequantize_with_clip_stats(
     tensor: torch.Tensor,
     scale: torch.Tensor,
     group_size: int,
+    qmax: int = 127,
+    outlier_rescue_ratio: float = 0.0,
 ) -> Tuple[torch.Tensor, int, int]:
     """
     Quantize/dequantize with int8 range and return clipping stats.
@@ -115,11 +118,29 @@ def quantize_dequantize_with_clip_stats(
     head_dim = tensor.shape[-1]
     num_groups = head_dim // group_size
     tensor_view = tensor.view(-1, num_groups, group_size)
-    scale_view = scale.view(1, num_groups, 1)
+    scale_view = scale.view(1, num_groups, 1).expand(tensor_view.shape[0], -1, -1)
+
+    if outlier_rescue_ratio > 0.0:
+        # Promote top-ratio largest group magnitudes to dynamic scale (absmax/qmax).
+        dynamic_absmax = tensor_view.abs().amax(dim=-1)  # [N, G]
+        dynamic_scale = (dynamic_absmax.clamp(min=1e-5) / float(qmax)).unsqueeze(-1)
+        if outlier_rescue_ratio >= 1.0:
+            scale_view = torch.maximum(scale_view, dynamic_scale)
+        else:
+            threshold = torch.quantile(
+                dynamic_absmax.float().reshape(-1),
+                max(0.0, min(1.0, 1.0 - outlier_rescue_ratio)),
+            ).to(dynamic_absmax.dtype)
+            rescue_mask = (dynamic_absmax >= threshold).unsqueeze(-1)
+            scale_view = torch.where(
+                rescue_mask,
+                torch.maximum(scale_view, dynamic_scale),
+                scale_view,
+            )
 
     normalized = tensor_view / scale_view
-    clip_mask = normalized.abs() > 127.0
-    q = torch.round(normalized).clamp(-127, 127)
+    clip_mask = normalized.abs() > float(qmax)
+    q = torch.round(normalized).clamp(-float(qmax), float(qmax))
     deq = q * scale_view
 
     clipped_count = int(clip_mask.sum().item())
@@ -136,6 +157,7 @@ def compute_inv_tau(
     head_dim: int,
     group_size: int,
     inv_tau_candidates: List[float],
+    qmax: int,
 ) -> torch.Tensor:
     sm_scale = 1.0 / (head_dim ** 0.5)
     inv_tau_tensor = torch.ones((len(k_scales), num_heads), dtype=torch.float32)
@@ -157,7 +179,12 @@ def compute_inv_tau(
                 logits_fp16 = (q @ k.T) * sm_scale
                 p_ref = torch.softmax(logits_fp16, dim=-1)
 
-                k_deq = dequantize_with_scale(k, scale_layer[kv_head].float(), group_size)
+                k_deq = dequantize_with_scale(
+                    k,
+                    scale_layer[kv_head].float(),
+                    group_size,
+                    qmax=qmax,
+                )
                 logits_quant = (q @ k_deq.T) * sm_scale
 
                 logits_scaled = logits_quant.unsqueeze(0) * inv_tau_candidates_t[:, None]
@@ -185,6 +212,9 @@ def evaluate_quant_candidate(
     head_dim: int,
     group_size_k: int,
     group_size_v: int,
+    qmax: int,
+    outlier_rescue_ratio: float = 0.0,
+    mixed_rescue: bool = False,
 ) -> Dict[str, float]:
     """
     Evaluate one candidate quantization setting.
@@ -215,7 +245,11 @@ def evaluate_quant_candidate(
                 # K clipping/dequant stats
                 k = k_samples[sample_idx][layer_idx][kv_head].float()  # [S, D]
                 k_deq, k_clip_local, k_total_local = quantize_dequantize_with_clip_stats(
-                    k, k_scale_layer[kv_head].float(), group_size_k
+                    k,
+                    k_scale_layer[kv_head].float(),
+                    group_size_k,
+                    qmax=qmax,
+                    outlier_rescue_ratio=outlier_rescue_ratio,
                 )
                 k_deq_for_sample.append(k_deq)
                 k_clip_count += k_clip_local
@@ -224,7 +258,11 @@ def evaluate_quant_candidate(
                 # V clipping/dequant stats + relative L2
                 v = v_samples[sample_idx][layer_idx][kv_head].float()  # [S, D]
                 v_deq, v_clip_local, v_total_local = quantize_dequantize_with_clip_stats(
-                    v, v_scale_layer[kv_head].float(), group_size_v
+                    v,
+                    v_scale_layer[kv_head].float(),
+                    group_size_v,
+                    qmax=qmax,
+                    outlier_rescue_ratio=outlier_rescue_ratio if mixed_rescue else 0.0,
                 )
                 v_clip_count += v_clip_local
                 v_total_count += v_total_local
@@ -367,13 +405,14 @@ def collect_absmax_samples(
 def scales_from_absmax_samples(
     absmax_samples: List[List[torch.Tensor]],
     clip_percentile: float,
+    qmax: int,
 ) -> List[torch.Tensor]:
     scales: List[torch.Tensor] = []
     for layer_idx in range(len(absmax_samples)):
         # torch.quantile requires float32/float64
         stack = torch.stack(absmax_samples[layer_idx], dim=0).float()
         absmax = torch.quantile(stack, clip_percentile / 100.0, dim=0)
-        scales.append(absmax.clamp(min=1e-5) / 127.0)
+        scales.append(absmax.clamp(min=1e-5) / float(qmax))
     return scales
 
 
@@ -402,6 +441,34 @@ def main():
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--run_name", type=str, default=None)
     parser.add_argument("--seed", type=int, default=1234)
+    parser.add_argument(
+        "--quant_bits",
+        type=int,
+        default=8,
+        choices=[4, 8],
+        help="Quantization bits for calibration scale generation.",
+    )
+    parser.add_argument(
+        "--int4_search",
+        action="store_true",
+        default=False,
+        help="Shortcut: enable INT4 calibration/search (equivalent to --quant_bits 4).",
+    )
+    parser.add_argument(
+        "--int4_outlier_ratio",
+        type=float,
+        default=0.0,
+        help=(
+            "Outlier-rescue ratio in [0,1]. Top-ratio largest group magnitudes use dynamic scale "
+            "during trial evaluation."
+        ),
+    )
+    parser.add_argument(
+        "--int4_mixed_rescue",
+        action="store_true",
+        default=False,
+        help="When enabled, also apply outlier rescue to V during candidate evaluation.",
+    )
     parser.add_argument("--clip_percentile_k", type=float, default=99.9)
     parser.add_argument("--clip_percentile_v", type=float, default=99.9)
     parser.add_argument("--group_size_k", type=int, default=32)
@@ -425,6 +492,15 @@ def main():
         type=str,
         default="99.0,99.5,99.9,100.0",
         help="Comma-separated clip_percentile candidates (applied to both K and V).",
+    )
+    parser.add_argument(
+        "--search_outlier_ratios",
+        type=str,
+        default="0,0.0025,0.005,0.01",
+        help=(
+            "Comma-separated outlier rescue ratios for INT4 search. "
+            "Ignored for INT8 search."
+        ),
     )
     parser.add_argument(
         "--search_objective",
@@ -454,6 +530,8 @@ def main():
         default="0.5,0.7,0.85,1.0,1.2,1.5,2.0",
     )
     args = parser.parse_args()
+    if args.int4_search:
+        args.quant_bits = 4
 
     if args.config and args.run_name:
         cfg = load_config(args.config)
@@ -474,6 +552,12 @@ def main():
             args.clip_percentile_v = clip_v
             args.group_size_k = group_k
             args.group_size_v = group_v
+
+    qmax = 127 if int(args.quant_bits) == 8 else 7
+    if args.int4_outlier_ratio < 0.0 or args.int4_outlier_ratio > 1.0:
+        raise ValueError(
+            f"--int4_outlier_ratio must be in [0,1], got {args.int4_outlier_ratio}"
+        )
 
     set_seed(seed=args.seed, deterministic=True)
 
@@ -546,8 +630,13 @@ def main():
     if args.search:
         group_candidates_raw = [int(x) for x in args.search_group_sizes.split(",") if x.strip()]
         clip_candidates = [float(x) for x in args.search_clip_percentiles.split(",") if x.strip()]
+        outlier_ratio_candidates = [float(x) for x in args.search_outlier_ratios.split(",") if x.strip()]
         if not group_candidates_raw or not clip_candidates:
             raise ValueError("Search candidates cannot be empty.")
+        if int(args.quant_bits) != 4:
+            outlier_ratio_candidates = [0.0]
+        if not outlier_ratio_candidates:
+            outlier_ratio_candidates = [float(args.int4_outlier_ratio)]
 
         # Filter invalid group sizes early for clearer diagnostics.
         group_candidates = []
@@ -584,37 +673,44 @@ def main():
             absmax_samples_k = k_absmax_cache[group_size]
             absmax_samples_v = v_absmax_cache[group_size]
             for clip_p in clip_candidates:
-                k_scales_candidate = scales_from_absmax_samples(absmax_samples_k, clip_p)
-                v_scales_candidate = scales_from_absmax_samples(absmax_samples_v, clip_p)
-                stats = evaluate_quant_candidate(
-                    q_samples=q_samples,
-                    k_samples=k_samples,
-                    v_samples=v_samples,
-                    k_scales=k_scales_candidate,
-                    v_scales=v_scales_candidate,
-                    num_heads=num_heads,
-                    num_kv_heads=num_kv_heads,
-                    head_dim=head_dim,
-                    group_size_k=group_size,
-                    group_size_v=group_size,
-                )
-                trial = {
-                    "group_size": group_size,
-                    "clip_percentile": clip_p,
-                    **stats,
-                }
-                trial["feasible"] = (
-                    trial["k_clip_rate"] <= args.search_max_k_clip_rate
-                    and trial["v_clip_rate"] <= args.search_max_v_clip_rate
-                )
-                trials.append(trial)
-                print(
-                    "  "
-                    f"group_size={group_size:>4} clip={clip_p:>5}: "
-                    f"mean_kl={trial['mean_kl']:.6f} p95_kl={trial['p95_kl']:.6f} "
-                    f"k_clip={trial['k_clip_rate']:.4f} v_clip={trial['v_clip_rate']:.4f} "
-                    f"v_rel_l2={trial['v_rel_l2_mean']:.6f}"
-                )
+                v_scales_candidate = scales_from_absmax_samples(absmax_samples_v, clip_p, qmax=qmax)
+                k_scales_candidate = scales_from_absmax_samples(absmax_samples_k, clip_p, qmax=qmax)
+                for outlier_ratio in outlier_ratio_candidates:
+                    stats = evaluate_quant_candidate(
+                        q_samples=q_samples,
+                        k_samples=k_samples,
+                        v_samples=v_samples,
+                        k_scales=k_scales_candidate,
+                        v_scales=v_scales_candidate,
+                        num_heads=num_heads,
+                        num_kv_heads=num_kv_heads,
+                        head_dim=head_dim,
+                        group_size_k=group_size,
+                        group_size_v=group_size,
+                        qmax=qmax,
+                        outlier_rescue_ratio=float(outlier_ratio),
+                        mixed_rescue=bool(args.int4_mixed_rescue),
+                    )
+                    trial = {
+                        "group_size": group_size,
+                        "clip_percentile": clip_p,
+                        "outlier_rescue_ratio": float(outlier_ratio),
+                        "mixed_rescue": int(bool(args.int4_mixed_rescue)),
+                        **stats,
+                    }
+                    trial["feasible"] = (
+                        trial["k_clip_rate"] <= args.search_max_k_clip_rate
+                        and trial["v_clip_rate"] <= args.search_max_v_clip_rate
+                    )
+                    trials.append(trial)
+                    print(
+                        "  "
+                        f"group_size={group_size:>4} clip={clip_p:>5} "
+                        f"outlier_ratio={outlier_ratio:.4f}: "
+                        f"mean_kl={trial['mean_kl']:.6f} p95_kl={trial['p95_kl']:.6f} "
+                        f"k_clip={trial['k_clip_rate']:.4f} v_clip={trial['v_clip_rate']:.4f} "
+                        f"v_rel_l2={trial['v_rel_l2_mean']:.6f}"
+                    )
 
         best, selection_meta = select_best_trial(
             trials=trials,
@@ -626,6 +722,8 @@ def main():
         args.group_size_v = int(best["group_size"])
         args.clip_percentile_k = float(best["clip_percentile"])
         args.clip_percentile_v = float(best["clip_percentile"])
+        args.int4_outlier_ratio = float(best.get("outlier_rescue_ratio", args.int4_outlier_ratio))
+        args.int4_mixed_rescue = bool(best.get("mixed_rescue", args.int4_mixed_rescue))
 
         trials_sorted = sorted(
             trials,
@@ -633,6 +731,7 @@ def main():
                 x["p95_kl"],
                 x["mean_kl"],
                 x["k_clip_rate"] + x["v_clip_rate"],
+                x.get("outlier_rescue_ratio", 0.0),
                 x["group_size"],
                 x["clip_percentile"],
             ),
@@ -643,12 +742,13 @@ def main():
         trials_csv_path = out_dir / "search_trials.csv"
         with open(trials_csv_path, "w") as f:
             f.write(
-                "rank,group_size,clip_percentile,mean_kl,p95_kl,max_kl,k_clip_rate,"
-                "v_clip_rate,v_rel_l2_mean,feasible\n"
+                "rank,group_size,clip_percentile,outlier_rescue_ratio,mixed_rescue,"
+                "mean_kl,p95_kl,max_kl,k_clip_rate,v_clip_rate,v_rel_l2_mean,feasible\n"
             )
             for t in trials_sorted:
                 f.write(
                     f"{t['rank']},{t['group_size']},{t['clip_percentile']},"
+                    f"{t.get('outlier_rescue_ratio', 0.0)},{t.get('mixed_rescue', 0)},"
                     f"{t['mean_kl']},{t['p95_kl']},{t['max_kl']},"
                     f"{t['k_clip_rate']},{t['v_clip_rate']},{t['v_rel_l2_mean']},"
                     f"{int(bool(t['feasible']))}\n"
@@ -664,10 +764,13 @@ def main():
             "candidates": {
                 "group_sizes": group_candidates,
                 "clip_percentiles": clip_candidates,
+                "outlier_rescue_ratios": outlier_ratio_candidates,
             },
             "best": {
                 "group_size": int(best["group_size"]),
                 "clip_percentile": float(best["clip_percentile"]),
+                "outlier_rescue_ratio": float(best.get("outlier_rescue_ratio", 0.0)),
+                "mixed_rescue": bool(best.get("mixed_rescue", 0)),
                 "mean_kl": float(best["mean_kl"]),
                 "p95_kl": float(best["p95_kl"]),
                 "max_kl": float(best["max_kl"]),
@@ -685,8 +788,8 @@ def main():
     print("Computing static scales...")
     k_absmax_samples = collect_absmax_samples(k_samples, args.group_size_k)
     v_absmax_samples = collect_absmax_samples(v_samples, args.group_size_v)
-    k_scales = scales_from_absmax_samples(k_absmax_samples, args.clip_percentile_k)
-    v_scales = scales_from_absmax_samples(v_absmax_samples, args.clip_percentile_v)
+    k_scales = scales_from_absmax_samples(k_absmax_samples, args.clip_percentile_k, qmax=qmax)
+    v_scales = scales_from_absmax_samples(v_absmax_samples, args.clip_percentile_v, qmax=qmax)
 
     # Compute inv_tau (KL minimization)
     print("Computing per-head inv_tau...")
@@ -700,6 +803,7 @@ def main():
         head_dim=head_dim,
         group_size=args.group_size_k,
         inv_tau_candidates=inv_tau_candidates,
+        qmax=qmax,
     )
 
     # Save calibration file
@@ -707,6 +811,8 @@ def main():
         "version": 1,
         "model_id": args.model_id,
         "generated_at": datetime.now().isoformat(),
+        "quant_bits": int(args.quant_bits),
+        "qmax": int(qmax),
         "num_layers": num_layers,
         "num_heads": num_heads,
         "num_kv_heads": num_kv_heads,
@@ -719,6 +825,8 @@ def main():
         "v_scale": [v.tolist() for v in v_scales],
         "inv_tau": inv_tau.tolist(),
         "inv_tau_candidates": inv_tau_candidates,
+        "int4_outlier_ratio": float(args.int4_outlier_ratio),
+        "int4_mixed_rescue": bool(args.int4_mixed_rescue),
     }
     if selection is not None:
         calib_payload["selection"] = selection

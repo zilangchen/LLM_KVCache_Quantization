@@ -15,6 +15,34 @@ import torch
 from torch import Tensor
 
 
+def _normalize_static_scale(
+    scale: Tensor,
+    batch: int,
+    heads: int,
+    seq_len: int,
+    num_groups: int,
+) -> Tensor:
+    """
+    Normalize static scale to shape [B, H, S, num_groups, 1].
+
+    Accepts scale in one of the following shapes:
+    - [H, num_groups]
+    - [B, H, S, num_groups]
+    - [B, H, S, num_groups, 1]
+    """
+    if scale.ndim == 2:
+        scale_view = scale[None, :, None, :, None]
+    elif scale.ndim == 4:
+        scale_view = scale[..., None]
+    elif scale.ndim == 5:
+        scale_view = scale
+    else:
+        raise ValueError(f"Unsupported scale shape: {scale.shape}")
+
+    scale_view = scale_view.expand(batch, heads, seq_len, num_groups, 1)
+    return scale_view
+
+
 def quantize_symmetric_int4(
     tensor: Tensor,
     percentile: float = 99.9,
@@ -87,6 +115,45 @@ def quantize_symmetric_int4(
     scale = scale.to(torch.float16).squeeze(-1)
     
     return quantized, scale
+
+
+def quantize_symmetric_int4_with_scale(
+    tensor: Tensor,
+    scale: Tensor,
+    group_size: int,
+) -> Tuple[Tensor, Tensor]:
+    """
+    Symmetric INT4 quantization using a provided static scale.
+
+    Args:
+        tensor: Input tensor [B, H, S, D]
+        scale: Static scale tensor (see _normalize_static_scale)
+        group_size: Group size for scaling
+
+    Returns:
+        quantized: INT8 tensor storing INT4 values in [-7, 7]
+        scale_expanded: Scale tensor expanded to [B, H, S, num_groups]
+    """
+    if not tensor.is_floating_point():
+        raise ValueError(f"Input tensor must be float, got {tensor.dtype}")
+
+    head_dim = tensor.shape[-1]
+    if group_size == -1:
+        group_size = head_dim
+    if head_dim % group_size != 0:
+        raise ValueError(f"head_dim {head_dim} must be divisible by group_size {group_size}")
+
+    batch, heads, seq_len, _ = tensor.shape
+    num_groups = head_dim // group_size
+    reshaped = tensor.view(batch, heads, seq_len, num_groups, group_size)
+
+    scale_expanded = _normalize_static_scale(scale, batch, heads, seq_len, num_groups)
+    scale_expanded = scale_expanded.to(tensor.dtype).clamp(min=1e-5)
+
+    quantized = torch.round(reshaped / scale_expanded).clamp(-7, 7).to(torch.int8)
+    quantized = quantized.view(batch, heads, seq_len, head_dim)
+
+    return quantized, scale_expanded.squeeze(-1)
 
 
 def dequantize_symmetric_int4(

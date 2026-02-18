@@ -88,7 +88,16 @@ def main():
         "--kv_mode",
         type=str,
         default="fp16",
-        choices=["fp16", "int8_baseline", "int8_fused", "int8_ours"],
+        choices=[
+            "fp16",
+            "int8_baseline",
+            "int8_fused",
+            "int8_ours",
+            "int4_baseline",
+            "int4_fused",
+            "int4_ours",
+            "int4_ours_mixed",
+        ],
         help="KV cache mode (default: fp16)",
     )
     parser.add_argument(
@@ -324,7 +333,7 @@ def main():
                 "run_id": f"profile_{args.kv_mode}_{timestamp}_{run_idx}",
                 "model_id": args.model_id,
                 "kv_mode": args.kv_mode,
-                "quant_bits": 8 if "int8" in args.kv_mode else 16,
+                "quant_bits": 4 if "int4" in args.kv_mode else (8 if "int8" in args.kv_mode else 16),
                 "clip_percentile": args.clip_percentile,
                 "group_size": args.group_size,
                 "hardware": f"{hardware['gpu']} ({hardware['gpu_memory']})",

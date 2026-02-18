@@ -1,6 +1,6 @@
 # 最终复现实验协议（KV Cache Quantization）
 
-> 目标：在远端 H20 环境一键复现 `fp16 / int8_baseline / int8_ours` 的质量（needle + PPL）与性能（latency + memory）曲线，并生成论文可直接引用的表格与图。
+> 目标：在远端 H20 环境一键复现 `fp16 / int8_baseline / int8_ours` 主线，并可扩展 `int4_fused / int4_ours` 作为论文冲优补充，产出可直接引用的表格与图。
 
 论文验收最终产物目录（本地已同步）：`results/final_thesis_20260214_094156/`（见 `docs/final_results_summary.md`）。
 
@@ -111,6 +111,20 @@ cd /root/autodl-tmp/LLM_KVCache_Quantization
   --calib_out artifacts/kv_calib_kl_selected_v3_quick.json
 ```
 
+INT4 校准（论文冲优扩展）：
+```bash
+cd /root/autodl-tmp/LLM_KVCache_Quantization
+/root/miniconda3/bin/python scripts/calibrate_behavior.py \
+  --quant_bits 4 \
+  --search \
+  --samples 32 \
+  --seq_len 8192 \
+  --search_group_sizes 8,16,32,64 \
+  --search_clip_percentiles 99.0,99.5,99.9,100.0 \
+  --search_outlier_ratios 0,0.0025,0.005,0.01 \
+  --calib_out artifacts/kv_calib_kl_int4_selected.json
+```
+
 ## 6) 运行 final matrix（论文验收版：同一目录完整闭环）
 
 > 说明：本协议默认把所有输出写入 `${BASE_DIR}`，并最终用 `scripts/aggregate_results.py` 聚合到 `${BASE_DIR}/tables` 与 `${BASE_DIR}/plots`。
@@ -199,6 +213,21 @@ cd /root/autodl-tmp/LLM_KVCache_Quantization
   --run_names fp16_throughput_8k_b1,fp16_throughput_8k_b2,fp16_throughput_8k_b4,fp16_throughput_8k_b8,fp16_throughput_8k_b16,int8_baseline_throughput_8k_b1,int8_baseline_throughput_8k_b2,int8_baseline_throughput_8k_b4,int8_baseline_throughput_8k_b8,int8_baseline_throughput_8k_b16,int8_ours_throughput_8k_b1,int8_ours_throughput_8k_b2,int8_ours_throughput_8k_b4,int8_ours_throughput_8k_b8,int8_ours_throughput_8k_b16 \
   --latency_warmup 2 \
   --latency_runs 3 \
+  --out_dir "${BASE_DIR}/runs" \
+  --logs_dir "${BASE_DIR}/logs"
+```
+
+### (E) INT4 扩展矩阵（冲优可选）
+```bash
+/root/miniconda3/bin/python scripts/run_experiments.py \
+  --config configs/exp_matrix.yaml \
+  --tasks profile_latency,profile_memory,eval_ppl,eval_needle \
+  --run_tag "${RUN_TAG}" \
+  --append \
+  --run_names int4_fused_throughput_8k_b1,int4_fused_throughput_8k_b2,int4_fused_throughput_8k_b4,int4_fused_throughput_8k_b8,int4_fused_throughput_8k_b16,int4_fused_throughput_8k_b24,int4_fused_throughput_8k_b32,int4_ours_curve_4k,int4_ours_curve_8k,int4_ours_curve_16k,int4_ours_long,int4_ours_throughput_8k_b1,int4_ours_throughput_8k_b2,int4_ours_throughput_8k_b4,int4_ours_throughput_8k_b8,int4_ours_throughput_8k_b16,int4_ours_throughput_8k_b24,int4_ours_throughput_8k_b32 \
+  --ppl_mode kv_cache \
+  --ppl_chunk_size 128 \
+  --needle_report_exact_match \
   --out_dir "${BASE_DIR}/runs" \
   --logs_dir "${BASE_DIR}/logs"
 ```

@@ -40,6 +40,8 @@ KV_MODE_ORDER: List[str] = [
     "int8_ours",
     "int8_fused",
     "int4_baseline",
+    "int4_ours",
+    "int4_ours_mixed",
     "int4_fused",
 ]
 
@@ -49,6 +51,8 @@ KV_MODE_DISPLAY: Dict[str, str] = {
     "int8_ours": "INT8-ours",
     "int8_fused": "INT8-fused",
     "int4_baseline": "INT4-baseline",
+    "int4_ours": "INT4-ours",
+    "int4_ours_mixed": "INT4-ours-mixed",
     "int4_fused": "INT4-fused",
 }
 

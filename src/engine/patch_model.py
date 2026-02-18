@@ -689,11 +689,12 @@ def _fused_forward_impl(
         cache_wrapper.engine._fused_decode_calls = calls
         if calls == 1:
             logger.info(
-                "INT8 fused decode active (layer=%s q_heads=%s kv_heads=%s seq_len=%s).",
+                "Quantized fused decode active (layer=%s q_heads=%s kv_heads=%s seq_len=%s, cache_kind=%s).",
                 layer_idx,
                 q_heads,
                 kv_heads,
                 seq_len,
+                cache_kind,
             )
 
     if return_cache:

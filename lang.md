@@ -236,6 +236,20 @@ agent 的输出应包含：
 
 （从这里开始追加）
 
+- **2026-02-19 04:36:00**：完成“INT4 主线增强 + 统计增强（开发中阶段验收）”✅
+  - 代码能力：
+    - 新增 `kv_mode=int4_ours/int4_ours_mixed`（生成、PPL、Needle、verify、runner 全链路可用）
+    - `calibrate_behavior.py` 新增 `--quant_bits 4` + outlier rescue 搜索参数，并可输出 `selection`
+    - `aggregate_results.py` 新增 95%CI、seed 配对差异表、prefill 吞吐曲线
+  - 远端验证（H20）：
+    - `tests/test_int4_cache.py` 通过
+    - `tests/test_triton_kernel.py` 通过（含 INT4 wrapper 用例）
+    - `verify_fused_decode.py --kv_mode int4_fused/int4_ours/int4_ours_mixed` 通过并命中 fused
+  - 试跑目录（远端）：
+    - `results/int4_ours_smoke/`（含 runs/logs/tables/plots/latex_tables）
+  - 说明：
+    - 当前 quick 校准参数下，INT4 needle 质量仍需继续收敛（此轮以“链路打通+可观测性增强”为目标）。
+
 - **2026-02-19 04:15:37**：完成“激进归档清理（第一轮）”✅
   - 归档目录：`development_history/archive_20260219_041537/`
   - 归档清单：`development_history/archive_20260219_041537/MANIFEST.md`

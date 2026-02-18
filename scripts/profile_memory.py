@@ -85,7 +85,16 @@ def main():
         "--kv_mode",
         type=str,
         default="fp16",
-        choices=["fp16", "int8_baseline", "int8_fused", "int8_ours", "int4_baseline", "int4_fused"],
+        choices=[
+            "fp16",
+            "int8_baseline",
+            "int8_fused",
+            "int8_ours",
+            "int4_baseline",
+            "int4_fused",
+            "int4_ours",
+            "int4_ours_mixed",
+        ],
     )
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
     parser.add_argument(

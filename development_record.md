@@ -1,3 +1,42 @@
+# <Antigravity 2026-02-19 04:36:00>
+## 修改目的
+推进“论文冲优”第三阶段：将 INT4 从附录能力升级为主线候选（`int4_ours`），并补齐统计学输出（95%CI + seed 配对差异），同时完成远端 H20 的阶段性回归验证。
+
+## 修改内容摘要
+- INT4 主线接入：
+  - `src/quant/int4_basic.py`：新增静态 scale 量化 `quantize_symmetric_int4_with_scale`。
+  - `src/cache/int4_cache.py`：支持 static scales、`inv_tau`、`adaptive_static_*`、`outlier_rescue_ratio`、`mixed_rescue`。
+  - `src/engine/generate_loop.py`：新增 `int4_ours`/`int4_ours_mixed` 模式，接入校准文件加载与 fused 路径。
+  - `scripts/eval_ppl.py`、`scripts/eval_needle.py`、`scripts/verify_fused_decode.py`、`scripts/run_experiments.py`：
+    - 支持新 kv_mode；
+    - `eval_ppl` 新增 `seed/replica_id/ppl_ci95_low/high` 字段；
+    - `eval_needle` 新增 `--report_exact_match`（主口径仍为 contains）。
+- 校准搜索增强：
+  - `scripts/calibrate_behavior.py` 新增 `--quant_bits {8,4}`、`--int4_search`、`--int4_outlier_ratio`、`--search_outlier_ratios`、`--int4_mixed_rescue`。
+  - 输出 payload 增加 `quant_bits/qmax/int4_outlier_ratio/int4_mixed_rescue/selection`。
+- 统计与图表增强：
+  - `scripts/aggregate_results.py`：新增 CI95 聚合列、seed 配对差异表 `significance_summary.csv`、prefill 吞吐曲线 `prefill_tok_per_s_vs_batch.png`。
+  - 修复仅单模式输入时配对差异聚合崩溃（`KeyError: ['int4_fused']`）。
+- 配置矩阵扩展：
+  - `configs/exp_matrix.yaml` 增补 `int4_ours` 曲线与 batch 扩展点（含 b24/b32）。
+
+## 远端验证（H20）
+- `python -m unittest tests/test_int4_cache.py`：通过。
+- `python -m unittest tests/test_triton_kernel.py`：通过（含 INT4 wrapper 用例，长测可选跳过）。
+- `KV_FUSED_DEBUG=1 python scripts/verify_fused_decode.py --kv_mode int4_fused`：通过。
+- `KV_FUSED_DEBUG=1 python scripts/verify_fused_decode.py --kv_mode int4_ours --calib_file artifacts/kv_calib_kl_int4_selected.json`：通过。
+- `KV_FUSED_DEBUG=1 python scripts/verify_fused_decode.py --kv_mode int4_ours_mixed --calib_file artifacts/kv_calib_kl_int4_selected.json`：通过。
+- smoke 试跑目录：
+  - `results/int4_ours_smoke/runs/`
+  - `results/int4_ours_smoke/tables/`
+  - `results/int4_ours_smoke/plots/`
+  - `results/int4_ours_smoke/latex_tables/`
+
+## 影响范围
+- INT4 主线已具备“可跑 + 可测 + 可聚合”的研究闭环基础。
+- 统计报告从“均值对比”升级到“均值 + CI + 配对差异”，更接近论文验收要求。
+- 当前 quick 校准下 INT4 needle 质量尚未达论文门槛，下一阶段应聚焦参数收敛与质量门槛达成。
+
 # <Antigravity 2026-02-19 04:15:37>
 ## 修改目的
 执行“论文冲优与仓库收口”中的激进清理阶段：将过时实验结果、远端评审遗留材料与废弃入口配置归档，收敛工作区结构并保留完整可追溯记录。

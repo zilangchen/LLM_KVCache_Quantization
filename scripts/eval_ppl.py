@@ -137,12 +137,26 @@ def load_calibration(
     static_k_scale = None
     static_v_scale = None
     inv_tau = None
+    outlier_rescue_ratio = 0.0
+    mixed_rescue = False
 
-    if kv_mode != "int8_ours":
-        return static_k_scale, static_v_scale, inv_tau, group_size, clip_percentile
+    if kv_mode not in ["int8_ours", "int4_ours", "int4_ours_mixed"]:
+        return (
+            static_k_scale,
+            static_v_scale,
+            inv_tau,
+            group_size,
+            clip_percentile,
+            outlier_rescue_ratio,
+            mixed_rescue,
+        )
 
     import warnings
-    calib_path = calib_file or os.path.join("artifacts", "kv_calib_kl.json")
+    if kv_mode == "int8_ours":
+        default_calib = os.path.join("artifacts", "kv_calib_kl.json")
+    else:
+        default_calib = os.path.join("artifacts", "kv_calib_kl_int4_selected.json")
+    calib_path = calib_file or default_calib
     if calib_path and os.path.exists(calib_path):
         try:
             with open(calib_path, "r") as f:
@@ -174,20 +188,32 @@ def load_calibration(
                 static_v_scale = torch.tensor(calib["v_scale"], dtype=torch.float16, device=device)
             if use_attn_temperature and "inv_tau" in calib:
                 inv_tau = torch.tensor(calib["inv_tau"], dtype=torch.float32, device=device)
+            outlier_rescue_ratio = float(calib.get("int4_outlier_ratio", 0.0) or 0.0)
+            mixed_rescue = bool(calib.get("int4_mixed_rescue", False))
+            if kv_mode == "int4_ours_mixed":
+                mixed_rescue = True
         except Exception as exc:
             warnings.warn(
                 f"Failed to load calibration file {calib_path}: {exc}. "
-                "Falling back to baseline int8 behavior.",
+                "Falling back to baseline behavior.",
                 UserWarning,
             )
     else:
         warnings.warn(
             f"Calibration file not found: {calib_path}. "
-            "Falling back to baseline int8 behavior.",
+            "Falling back to baseline behavior.",
             UserWarning,
         )
 
-    return static_k_scale, static_v_scale, inv_tau, group_size, clip_percentile
+    return (
+        static_k_scale,
+        static_v_scale,
+        inv_tau,
+        group_size,
+        clip_percentile,
+        outlier_rescue_ratio,
+        mixed_rescue,
+    )
 
 
 def build_kv_cache(
@@ -205,7 +231,15 @@ def build_kv_cache(
     decode_attn_impl: str | None,
 ):
     num_layers = getattr(model.config, "num_hidden_layers", 28)
-    static_k_scale, static_v_scale, inv_tau, group_size, clip_percentile = load_calibration(
+    (
+        static_k_scale,
+        static_v_scale,
+        inv_tau,
+        group_size,
+        clip_percentile,
+        outlier_rescue_ratio,
+        mixed_rescue,
+    ) = load_calibration(
         kv_mode,
         calib_file,
         group_size,
@@ -226,7 +260,7 @@ def build_kv_cache(
             group_size=group_size,
         ), group_size, clip_percentile
 
-    if kv_mode == "int4_fused":
+    if kv_mode in ["int4_fused", "int4_ours", "int4_ours_mixed"]:
         apply_int8_fused_patch(model)
         return INT4KVCache(
             num_layers=num_layers,
@@ -234,6 +268,16 @@ def build_kv_cache(
             clip_percentile=clip_percentile,
             group_size=group_size,
             decode_attn_impl=decode_attn_impl or "triton_fused",
+            static_k_scale=static_k_scale,
+            static_v_scale=static_v_scale,
+            inv_tau=inv_tau,
+            use_attn_temperature=use_attn_temperature,
+            adaptive_static_scales=adaptive_static_scales,
+            adaptive_static_margin=adaptive_static_margin,
+            adaptive_static_k=adaptive_static_k,
+            adaptive_static_v=adaptive_static_v,
+            outlier_rescue_ratio=outlier_rescue_ratio,
+            mixed_rescue=mixed_rescue or kv_mode == "int4_ours_mixed",
         ), group_size, clip_percentile
 
     if kv_mode in ["int8_fused", "int8_ours"]:
@@ -257,7 +301,7 @@ def build_kv_cache(
 
 
 def build_past_key_values(kv_mode: str, kv_cache, num_layers: int):
-    if kv_mode in ["int8_fused", "int8_ours", "int4_fused"]:
+    if kv_mode in ["int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"]:
         from src.engine.patch_model import INT8CacheWrapperContainer
         # IMPORTANT: Always pass our wrapper container, even when the cache is empty.
         # Otherwise the first chunk (q_len > 1) would run with float K/V and only quantize
@@ -456,6 +500,8 @@ def main():
             "int8_ours",
             "int4_baseline",
             "int4_fused",
+            "int4_ours",
+            "int4_ours_mixed",
         ],
     )
     parser.add_argument("--group_size", type=int, default=128)
@@ -540,6 +586,12 @@ def main():
     )
     parser.add_argument("--save_csv", action="store_true", default=True)
     parser.add_argument("--seed", type=int, default=1234)
+    parser.add_argument(
+        "--replica_id",
+        type=int,
+        default=0,
+        help="Replica id for repeated runs (set by run_experiments multi-seed loop).",
+    )
     parser.add_argument("--out_dir", type=str, default="results/runs")
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--run_name", type=str, default=None)
@@ -643,7 +695,7 @@ def main():
             args.decode_attn_impl,
         )
         if (
-            args.kv_mode == "int8_ours"
+            args.kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed"]
             and args.use_attn_temperature
             and getattr(kv_cache, "inv_tau", None) is not None
         ):
@@ -774,8 +826,12 @@ def main():
             "gpu_mem_peak_mb": 0,
             "timestamp": timestamp,
             "git_commit": git_commit,
+            "seed": int(args.seed),
+            "replica_id": int(args.replica_id),
             # Extra
             "perplexity": round(ppl.item(), 4),
+            "ppl_ci95_low": round(ppl.item(), 4),
+            "ppl_ci95_high": round(ppl.item(), 4),
             "ppl_mode": ppl_mode,
             "tokens_evaluated": total_tokens,
             "chunk_size": int(args.chunk_size),
@@ -785,8 +841,8 @@ def main():
         fields = [
             "run_id", "model_id", "kv_mode", "quant_bits", "clip_percentile", "group_size", 
             "dtype", "hardware", "seq_len", "gen_len", "batch", "ttft_ms", "tpot_ms",
-            "tok_per_s", "gpu_mem_peak_mb", "timestamp", "git_commit", "perplexity",
-            "ppl_mode", "tokens_evaluated", "chunk_size"
+            "tok_per_s", "gpu_mem_peak_mb", "timestamp", "git_commit", "seed", "replica_id",
+            "perplexity", "ppl_ci95_low", "ppl_ci95_high", "ppl_mode", "tokens_evaluated", "chunk_size"
         ]
         
         with open(path, "w", newline="") as f:

@@ -51,7 +51,16 @@ def main():
         "--kv_mode",
         type=str,
         default="fp16",
-        choices=["fp16", "int8_baseline", "int8_fused", "int8_ours", "int4_baseline", "int4_fused"],
+        choices=[
+            "fp16",
+            "int8_baseline",
+            "int8_fused",
+            "int8_ours",
+            "int4_baseline",
+            "int4_fused",
+            "int4_ours",
+            "int4_ours_mixed",
+        ],
     )
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
     parser.add_argument(
@@ -255,6 +264,10 @@ def main():
             else:
                 quant_bits = 16
 
+            prefill_tok_per_s = 0.0
+            if out.ttft_ms > 0:
+                prefill_tok_per_s = (int(args.batch) * int(out.prompt_len) / out.ttft_ms) * 1000.0
+
             row = {
                 "run_id": f"lat_{timestamp}_{i}",
                 "model_id": args.model_id,
@@ -269,6 +282,7 @@ def main():
                 "batch": int(args.batch),
                 "ttft_ms": round(out.ttft_ms, 2),
                 "tpot_ms": round(out.tpot_ms, 2),
+                "prefill_tok_per_s": round(prefill_tok_per_s, 2),
                 "tok_per_s": round(out.tok_per_s, 2),
                 "tok_per_s_per_seq": round(out.tok_per_s_per_seq, 2),
                 "gpu_mem_peak_mb": round(out.gpu_mem_peak_mb, 2),
@@ -280,6 +294,7 @@ def main():
             results.append(row)
             print(
                 f"Run {i}: TTFT={row['ttft_ms']}ms, TPOT={row['tpot_ms']}ms, "
+                f"PrefillTPS={row['prefill_tok_per_s']}, "
                 f"TPS(total)={row['tok_per_s']}, TPS/seq={row['tok_per_s_per_seq']}"
             )
 
@@ -308,7 +323,7 @@ def main():
         fields = [
             "run_id", "model_id", "kv_mode", "quant_bits", "clip_percentile", "group_size", 
             "dtype", "hardware", "seq_len", "gen_len", "batch", "ttft_ms", "tpot_ms",
-            "tok_per_s", "tok_per_s_per_seq", "gpu_mem_peak_mb", "kv_cache_mem_mb", "kv_cache_seq_len",
+            "prefill_tok_per_s", "tok_per_s", "tok_per_s_per_seq", "gpu_mem_peak_mb", "kv_cache_mem_mb", "kv_cache_seq_len",
             "timestamp", "git_commit"
         ]
         

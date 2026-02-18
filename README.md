@@ -1,7 +1,7 @@
 ## 项目概述
 毕业设计/论文：**面向高效推理的大语言模型键值缓存量化方法**
 
-本仓库目标：基于 `Qwen/Qwen2.5-1.5B-Instruct` 构建 **可复现** 的推理研究管线，实现 KV Cache **INT8** 量化（静态 group-wise scale），并以 **KL 行为对齐校准 + per-head temperature** 提升长上下文稳定性；decode 阶段（q_len=1）使用 **Triton 融合量化 attention kernel**。在 **显存 / 吞吐延迟 / 质量 / 长上下文稳定性** 四维进行评测。
+本仓库目标：基于 `Qwen/Qwen2.5-1.5B-Instruct` 构建 **可复现** 的推理研究管线，实现 KV Cache **INT8/INT4** 量化（静态 group-wise scale），并以 **KL 行为对齐校准 + per-head temperature** 提升长上下文稳定性；decode 阶段（q_len=1）使用 **Triton 融合量化 attention kernel**。在 **显存 / 吞吐延迟 / 质量 / 长上下文稳定性** 四维进行评测。
 
 ## 固定约束（不要改）
 - 模型：`Qwen/Qwen2.5-1.5B-Instruct`
@@ -40,6 +40,17 @@ cd /root/autodl-tmp/LLM_KVCache_Quantization
 - Runner：`scripts/run_experiments.py`
 - 聚合出图：`scripts/aggregate_results.py`
 - 导出 LaTeX 表：`scripts/export_tables_latex.py`
+
+## 当前主线模式
+- `fp16`
+- `int8_baseline` / `int8_ours`（KL 校准 + fused decode）
+- `int4_fused` / `int4_ours` / `int4_ours_mixed`（INT4 主线，支持校准搜索与 outlier rescue）
+
+## 统计增强（论文冲优）
+- `scripts/aggregate_results.py` 现已支持：
+  - 均值/标准差/95%CI 聚合
+  - `seed` 配对差异统计（`significance_summary.csv`）
+  - `prefill_tok_per_s` 与 decode 吞吐分离曲线
 
 ## 工作区整理与历史归档
 - 当前保留的活跃结果目录：

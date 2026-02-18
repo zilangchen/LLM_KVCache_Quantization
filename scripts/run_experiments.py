@@ -190,6 +190,12 @@ def main() -> int:
         help="Pass through to eval_needle.py --depth_batch to batch multiple depths per forward.",
     )
     parser.add_argument(
+        "--needle_report_exact_match",
+        action="store_true",
+        default=False,
+        help="Pass through to eval_needle.py --report_exact_match (appendix metric only).",
+    )
+    parser.add_argument(
         "--latency_runs",
         type=int,
         default=None,
@@ -307,6 +313,8 @@ def main() -> int:
             "int8_ours",
             "int4_baseline",
             "int4_fused",
+            "int4_ours",
+            "int4_ours_mixed",
         ]:
             print(f"Skip unsupported kv_mode={kv_mode} for {run_name}")
             continue
@@ -340,14 +348,14 @@ def main() -> int:
             if not calib_file_path.is_absolute():
                 calib_file_path = project_root / calib_file_path
 
-        if not args.dry_run and kv_mode == "int8_ours":
+        if not args.dry_run and kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed"]:
             needs_calib = (
                 calib_params.get("calib_strategy") == "kl_attn"
                 or calib_params.get("use_attn_temperature") is True
             )
             if needs_calib and (calib_file_path is None or not calib_file_path.exists()):
                 print(
-                    f"Error: kv_mode=int8_ours requires calibration file but it was not found: {calib_file_path}."
+                    f"Error: kv_mode={kv_mode} requires calibration file but it was not found: {calib_file_path}."
                 )
                 print(
                     "Run scripts/calibrate_behavior.py to generate it, or switch calib_strategy to 'percentile' and "
@@ -364,7 +372,7 @@ def main() -> int:
             logs_dir = project_root / logs_dir
 
         multi_seed = args.seeds is not None and len(seed_list) > 0
-        for seed in seed_list:
+        for replica_id, seed in enumerate(seed_list):
             run_id = f"{run_name}_s{seed}_{run_tag}" if multi_seed else f"{run_name}_{run_tag}"
             run_dir = out_dir / run_id
             if not args.dry_run:
@@ -418,7 +426,7 @@ def main() -> int:
                 ]
                 if model_revision:
                     cmd.extend(["--model_revision", str(model_revision)])
-                if kv_mode == "int8_ours" and calib_file_path:
+                if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed"] and calib_file_path:
                     cmd.extend(["--calib_file", str(calib_file_path)])
                 if calib_params.get("calib_strategy"):
                     cmd.extend(["--calib_strategy", str(calib_params["calib_strategy"])])
@@ -450,6 +458,7 @@ def main() -> int:
                         cmd.extend(["--max_samples", str(args.ppl_max_samples)])
                     if args.ppl_chunk_size is not None:
                         cmd.extend(["--chunk_size", str(args.ppl_chunk_size)])
+                    cmd.extend(["--replica_id", str(replica_id)])
 
                 if task == "eval_needle":
                     cmd.extend(["--needle_max_new_tokens", str(args.needle_max_new_tokens)])
@@ -459,6 +468,8 @@ def main() -> int:
                         cmd.extend(["--num_depths", str(args.needle_num_depths)])
                     if args.needle_depth_batch is not None:
                         cmd.extend(["--depth_batch", str(args.needle_depth_batch)])
+                    if args.needle_report_exact_match:
+                        cmd.append("--report_exact_match")
 
                 if task == "profile_latency":
                     cmd.extend(["--batch", str(batch)])

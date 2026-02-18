@@ -201,7 +201,8 @@ def generate_from_ids(
     batch (input_ids is a dense [B, S] tensor).
 
     Important constraints:
-    - For kv_mode in {"int8_fused","int8_ours","int4_fused"}, fused decode does NOT support
+    - For kv_mode in {"int8_fused","int8_ours","int4_fused","int4_ours","int4_ours_mixed"},
+      fused decode does NOT support
       padding/variable context lengths. For safety, when batch>1 we require
       attention_mask to be all ones (no padding).
     """
@@ -213,11 +214,13 @@ def generate_from_ids(
         "int8_ours",
         "int4_baseline",
         "int4_fused",
+        "int4_ours",
+        "int4_ours_mixed",
     ]:
         raise ValueError(
             f"kv_mode='{kv_mode}' not supported. "
             "Choose from ['fp16', 'int8_baseline', 'int8_fused', 'int8_ours', "
-            "'int4_baseline', 'int4_fused']."
+            "'int4_baseline', 'int4_fused', 'int4_ours', 'int4_ours_mixed']."
         )
 
     if decode_attn_impl not in ["triton_fused", "torch_ref"]:
@@ -261,17 +264,18 @@ def generate_from_ids(
                 f"Got batch={batch_size} kv_mode={kv_mode}."
             )
 
-    if kv_mode in ["int8_fused", "int8_ours", "int4_fused"] and batch_size > 1:
+    if kv_mode in ["int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"] and batch_size > 1:
         # Extra explicit guardrail for fused decode.
         if not torch.all(attention_mask == 1).item():
             raise ValueError(
-                "kv_mode=int8_fused/int8_ours/int4_fused with batch>1 does not support "
+                "kv_mode=int8_fused/int8_ours/int4_fused/int4_ours/int4_ours_mixed "
+                "with batch>1 does not support "
                 "padding/variable context lengths. "
                 "Provide equal-length prompts and attention_mask of all ones."
             )
 
     # Apply patch if needed
-    if kv_mode in ["int8_fused", "int8_ours", "int4_fused"]:
+    if kv_mode in ["int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"]:
         if kv_mode == "int8_ours":
             import warnings
 
@@ -316,11 +320,17 @@ def generate_from_ids(
     static_k_scale = None
     static_v_scale = None
     inv_tau = None
+    outlier_rescue_ratio = 0.0
+    mixed_rescue = False
 
-    if kv_mode == "int8_ours":
+    if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed"]:
         import warnings
 
-        calib_path = calib_file or os.path.join("artifacts", "kv_calib_kl.json")
+        if kv_mode == "int8_ours":
+            default_calib = os.path.join("artifacts", "kv_calib_kl.json")
+        else:
+            default_calib = os.path.join("artifacts", "kv_calib_kl_int4_selected.json")
+        calib_path = calib_file or default_calib
         if calib_path and os.path.exists(calib_path):
             try:
                 with open(calib_path, "r") as f:
@@ -352,6 +362,10 @@ def generate_from_ids(
                     static_v_scale = torch.tensor(calib["v_scale"], dtype=torch.float16)
                 if use_attn_temperature and "inv_tau" in calib:
                     inv_tau = torch.tensor(calib["inv_tau"], dtype=torch.float32)
+                outlier_rescue_ratio = float(calib.get("int4_outlier_ratio", 0.0) or 0.0)
+                mixed_rescue = bool(calib.get("int4_mixed_rescue", False))
+                if kv_mode == "int4_ours_mixed":
+                    mixed_rescue = True
 
                 if static_k_scale is not None:
                     static_k_scale = static_k_scale.to(model.device)
@@ -374,14 +388,14 @@ def generate_from_ids(
             if allow_missing_calib:
                 warnings.warn(
                     f"Calibration file not found: {calib_path}. "
-                    "Falling back to baseline int8 behavior.",
+                    "Falling back to baseline behavior.",
                     UserWarning,
                 )
             else:
                 raise FileNotFoundError(
-                    f"kv_mode=int8_ours requires a calibration file, but it was not found: {calib_path}. "
-                    "Run scripts/calibrate_behavior.py to generate artifacts/kv_calib_kl.json, "
-                    "or switch kv_mode to int8_baseline."
+                    f"kv_mode={kv_mode} requires a calibration file, but it was not found: {calib_path}. "
+                    "Run scripts/calibrate_behavior.py to generate calibration artifacts, "
+                    "or switch kv_mode to baseline."
                 )
 
     if kv_mode == "fp16":
@@ -411,7 +425,7 @@ def generate_from_ids(
             adaptive_static_k=adaptive_static_k,
             adaptive_static_v=adaptive_static_v,
         )
-    elif kv_mode in ["int4_baseline", "int4_fused"]:
+    elif kv_mode in ["int4_baseline", "int4_fused", "int4_ours", "int4_ours_mixed"]:
         from src.cache import INT4KVCache
 
         kv_cache = INT4KVCache(
@@ -421,6 +435,16 @@ def generate_from_ids(
             group_size=group_size,
             max_seq_len=max_cache_len,
             decode_attn_impl=decode_attn_impl,
+            static_k_scale=static_k_scale,
+            static_v_scale=static_v_scale,
+            inv_tau=inv_tau,
+            use_attn_temperature=use_attn_temperature,
+            adaptive_static_scales=adaptive_static_scales,
+            adaptive_static_margin=adaptive_static_margin,
+            adaptive_static_k=adaptive_static_k,
+            adaptive_static_v=adaptive_static_v,
+            outlier_rescue_ratio=outlier_rescue_ratio,
+            mixed_rescue=mixed_rescue,
         )
     else:
         raise ValueError(f"Unsupported kv_mode: {kv_mode}")
@@ -438,7 +462,7 @@ def generate_from_ids(
     decode_times = TimingStats()
 
     hook_handles = []
-    if kv_mode == "int8_ours" and use_attn_temperature and inv_tau is not None:
+    if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed"] and use_attn_temperature and inv_tau is not None:
         # Apply per-head temperature during prefill by scaling Q per head.
         # Decode already applies temperature inside the fused path.
         hook_handles = _register_prefill_temperature_hooks(model, inv_tau)
@@ -499,7 +523,7 @@ def generate_from_ids(
 
         with torch.no_grad():
             # Prepare past_key_values
-            if kv_mode in ["int8_fused", "int8_ours", "int4_fused"]:
+            if kv_mode in ["int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"]:
                 from src.engine.patch_model import INT8CacheWrapperContainer
 
                 current_past_key_values = INT8CacheWrapperContainer(kv_cache, num_layers)
@@ -515,7 +539,7 @@ def generate_from_ids(
 
             # Dynamic Cache Check (Skipped for fused wrapper as it mocks Cache)
             if (
-                kv_mode not in ["int8_fused", "int8_ours", "int4_fused"]
+                kv_mode not in ["int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"]
                 and HAS_DYNAMIC_CACHE
                 and isinstance(current_past_key_values, tuple)
             ):
@@ -532,7 +556,7 @@ def generate_from_ids(
             )
 
             # Update cache with NEW token's KV for non-fused modes.
-            if kv_mode not in ["int8_fused", "int8_ours", "int4_fused"]:
+            if kv_mode not in ["int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"]:
                 if outputs.past_key_values is not None:
                     for i, (k, v) in enumerate(outputs.past_key_values):
                         if k.shape[2] > 1:

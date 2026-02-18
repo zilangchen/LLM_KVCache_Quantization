@@ -15,6 +15,7 @@ from torch import Tensor
 from src.quant.int4_basic import (
     dequantize_symmetric_int4,
     quantize_symmetric_int4,
+    quantize_symmetric_int4_with_scale,
     pack_int4,
     unpack_int4,
 )
@@ -45,9 +46,27 @@ class INT4KVCache:
         max_seq_len: Optional[int] = None,
         bit_packed: bool = True,
         decode_attn_impl: str = "triton_fused",
+        static_k_scale: Optional[Tensor] = None,
+        static_v_scale: Optional[Tensor] = None,
+        inv_tau: Optional[Tensor] = None,
+        use_attn_temperature: bool = True,
+        adaptive_static_scales: bool = False,
+        adaptive_static_margin: float = 1.0,
+        adaptive_static_k: bool = True,
+        adaptive_static_v: bool = True,
+        outlier_rescue_ratio: float = 0.0,
+        mixed_rescue: bool = False,
     ):
         if num_layers <= 0:
             raise ValueError(f"num_layers must be > 0, got {num_layers}")
+        if adaptive_static_margin <= 0:
+            raise ValueError(
+                f"adaptive_static_margin must be > 0, got {adaptive_static_margin}"
+            )
+        if outlier_rescue_ratio < 0.0 or outlier_rescue_ratio > 1.0:
+            raise ValueError(
+                f"outlier_rescue_ratio must be in [0, 1], got {outlier_rescue_ratio}"
+            )
 
         self.num_layers = num_layers
         self.device = device
@@ -56,6 +75,16 @@ class INT4KVCache:
         self.dtype = dtype
         self.bit_packed = bool(bit_packed)
         self.decode_attn_impl = decode_attn_impl
+        self.static_k_scale = static_k_scale
+        self.static_v_scale = static_v_scale
+        self.inv_tau = inv_tau
+        self.use_attn_temperature = use_attn_temperature
+        self.adaptive_static_scales = adaptive_static_scales
+        self.adaptive_static_margin = adaptive_static_margin
+        self.adaptive_static_k = adaptive_static_k
+        self.adaptive_static_v = adaptive_static_v
+        self.outlier_rescue_ratio = float(outlier_rescue_ratio)
+        self.mixed_rescue = bool(mixed_rescue)
         self.max_seq_len = int(max_seq_len) if max_seq_len is not None else None
         if self.max_seq_len is not None and self.max_seq_len <= 0:
             raise ValueError(f"max_seq_len must be > 0, got {self.max_seq_len}")
@@ -239,6 +268,68 @@ class INT4KVCache:
         self._v_scale[layer_id] = new_vs
         self._layer_capacity[layer_id] = new_capacity
 
+    def _expand_static_scale_for_tensor(self, scale: Tensor, tensor: Tensor) -> Tensor:
+        """
+        Expand static scale to [B, H, S, num_groups] for the incoming tensor.
+        """
+        batch, heads, seq_len, head_dim = tensor.shape
+        if head_dim % self.group_size != 0:
+            raise ValueError(
+                f"head_dim {head_dim} must be divisible by group_size {self.group_size}"
+            )
+        num_groups = head_dim // self.group_size
+
+        if scale.ndim == 2:
+            # [H, G]
+            scale_view = scale[None, :, None, :]
+        elif scale.ndim == 4:
+            # [B, H, S, G]
+            scale_view = scale
+        elif scale.ndim == 5 and scale.shape[-1] == 1:
+            # [B, H, S, G, 1]
+            scale_view = scale.squeeze(-1)
+        else:
+            raise ValueError(f"Unsupported static scale shape: {tuple(scale.shape)}")
+
+        scale_view = scale_view.expand(batch, heads, seq_len, num_groups)
+        return scale_view.to(tensor.dtype).clamp(min=1e-5)
+
+    def _compute_dynamic_group_scale(self, tensor: Tensor) -> Tensor:
+        """
+        Compute per-token dynamic INT4 group scale as absmax/7.
+        Returns shape [B, H, S, num_groups].
+        """
+        batch, heads, seq_len, head_dim = tensor.shape
+        if head_dim % self.group_size != 0:
+            raise ValueError(
+                f"head_dim {head_dim} must be divisible by group_size {self.group_size}"
+            )
+        num_groups = head_dim // self.group_size
+        reshaped = tensor.view(batch, heads, seq_len, num_groups, self.group_size)
+        absmax = reshaped.abs().amax(dim=-1)
+        return (absmax.clamp(min=1e-5) / 7.0).to(tensor.dtype)
+
+    def _apply_outlier_rescue(self, tensor: Tensor, scale: Tensor) -> Tensor:
+        """
+        Outlier-rescue scale adjustment for INT4:
+        for the top-ratio largest group absmax values, switch to dynamic scale.
+        """
+        ratio = float(self.outlier_rescue_ratio)
+        if ratio <= 0.0:
+            return scale
+
+        dynamic_scale = self._compute_dynamic_group_scale(tensor)
+        if ratio >= 1.0:
+            return torch.maximum(scale, dynamic_scale)
+
+        # Compute global threshold across [B, H, S, G].
+        threshold = torch.quantile(
+            dynamic_scale.float().reshape(-1),
+            max(0.0, min(1.0, 1.0 - ratio)),
+        ).to(dynamic_scale.dtype)
+        rescue_mask = dynamic_scale >= threshold
+        return torch.where(rescue_mask, torch.maximum(scale, dynamic_scale), scale)
+
     def append(self, layer_id: int, k: Tensor, v: Tensor) -> None:
         """
         Quantize and append KV tensors to the cache.
@@ -252,12 +343,42 @@ class INT4KVCache:
             raise ValueError(f"layer_id {layer_id} out of range")
 
         # Quantize incoming K and V to INT4
-        q_k, scale_k = quantize_symmetric_int4(
-            k, self.clip_percentile, self.group_size
-        )
-        q_v, scale_v = quantize_symmetric_int4(
-            v, self.clip_percentile, self.group_size
-        )
+        if self.static_k_scale is not None:
+            scale_k = self.static_k_scale[layer_id].to(k.device)
+            scale_k = self._expand_static_scale_for_tensor(scale_k, k)
+            if self.adaptive_static_scales and self.adaptive_static_k:
+                dynamic_k_scale = self._compute_dynamic_group_scale(k)
+                scale_k = torch.maximum(
+                    scale_k * float(self.adaptive_static_margin), dynamic_k_scale
+                )
+            # mixed_rescue: make K more conservative to preserve attention logits.
+            if self.mixed_rescue:
+                scale_k = torch.maximum(scale_k, self._compute_dynamic_group_scale(k))
+            scale_k = self._apply_outlier_rescue(k, scale_k)
+            q_k, scale_k = quantize_symmetric_int4_with_scale(
+                k, scale_k, self.group_size
+            )
+        else:
+            q_k, scale_k = quantize_symmetric_int4(
+                k, self.clip_percentile, self.group_size
+            )
+
+        if self.static_v_scale is not None:
+            scale_v = self.static_v_scale[layer_id].to(v.device)
+            scale_v = self._expand_static_scale_for_tensor(scale_v, v)
+            if self.adaptive_static_scales and self.adaptive_static_v:
+                dynamic_v_scale = self._compute_dynamic_group_scale(v)
+                scale_v = torch.maximum(
+                    scale_v * float(self.adaptive_static_margin), dynamic_v_scale
+                )
+            scale_v = self._apply_outlier_rescue(v, scale_v)
+            q_v, scale_v = quantize_symmetric_int4_with_scale(
+                v, scale_v, self.group_size
+            )
+        else:
+            q_v, scale_v = quantize_symmetric_int4(
+                v, self.clip_percentile, self.group_size
+            )
 
         if self.bit_packed:
             if q_k.shape[-1] % 2 != 0:
