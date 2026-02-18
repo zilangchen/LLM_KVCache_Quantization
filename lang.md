@@ -45,6 +45,8 @@
 你可以用这张“节奏表”监督我：
 
 - **读背景**：先读 `development_record.md` 和 `objective.md`
+- **读协作规范**：读 `AGENTS.md`、`docs/AGENT_README.md`，并检查 `.agent/skills/` 下的 SKILL 文档
+- **远程执行**：凡是需要 GPU/模型下载/长任务，必须按 `.agent/skills/remote-server/SKILL.md` 走 SSH + tmux，并用 rsync 同步结果
 - **定计划**：把任务拆成可验收的小步（一次只做 1-2 个小步）
 - **改代码**：尽量原地修改文件；引入必要的异常处理；避免一次性大改
 - **跑验证**：能运行就运行；能测就测；输出关键日志/结果路径
@@ -129,10 +131,10 @@
 
 ### 阶段 F：INT8-ours（KL校准 + Temp + Group-wise）
 
-- [ ] **F1. 行为对齐校准脚本**
-- [ ] **F2. Group-wise INT8**
-- [ ] **F3. Per-head Temperature**
-- [ ] **F4. 集成验证**
+- [x] **F1. 行为对齐校准脚本**
+- [x] **F2. Group-wise INT8**
+- [x] **F3. Per-head Temperature**
+- [x] **F4. 集成验证**
 
 ---
 
@@ -167,7 +169,7 @@
 
 ### 阶段 J：论文与答辩材料（最后收口）
 
-- [ ] **J1. 实验表格与图自动生成**
+- [x] **J1. 实验表格与图自动生成**
   - agent 要做：从 CSV/JSON 自动出图（吞吐、显存、needle 曲线等）
   - 验收：一键生成论文可用图表
 
@@ -224,15 +226,37 @@ agent 的输出应包含：
 - **C FP16 KV Cache**：✅ 已完成
 - **D 评测框架**：✅ 已完成
 - **E INT8-baseline**：✅ 已完成
-- **F INT8-ours（KL+Temp+Group-wise）**：🚧 部分完成（按新 KL 口径需复核）
-- **G Triton 融合 Decode**：✅ 已实现（需回归/验收）
+- **F INT8-ours（KL+Temp+Group-wise）**：✅ 已完成（校准产物 + 温度/静态 scale 消融齐备）
+- **G Triton 融合 Decode**：✅ 已完成（单测 + verify_fused_decode 通过，且可证明命中 Triton）
 - **H INT4 / Mixed（可选）**：✅ 已实现（可选）
 - **I 服务化与压测（可选）**：未开始
-- **J 实验矩阵一键复现 + 出图**：🚧 部分完成（run_experiments 已有）
+- **J 实验矩阵一键复现 + 出图**：✅ 已完成（matrix + aggregate_results 出表出图）
 
 ### 4.2 更新记录（按时间倒序追加）
 
 （从这里开始追加）
+
+- **2026-02-12 23:48:34**：完成“final matrix → 出表出图 → 文档收口”✅
+  - 关键修复：
+    - 修复 `scripts/eval_needle.py` 在 `depth=100%` 时 needle 被截断导致“必失败”的评测 bug（旧的 66.67% 结论已作废）
+    - KV cache 扩容策略加入 `max_seq_len` cap（对齐 `max_position_embeddings`），避免 32K 附近无意义 2x 超配导致 KV 内存统计失真
+  - Final 结果目录（远端）：`results/final_20260212_230755/`
+    - 表格：`results/final_20260212_230755/tables/`
+    - 图：`results/final_20260212_230755/plots/`
+  - 关键结论（32K，`seq_len=32704, gen_len=64, warmup=2, runs=3`）：
+    - TPOT：`fp16=30.88ms`，`int8_baseline=50.64ms`，`int8_ours=39.12ms`（ours 相比 baseline -22.7%）
+    - KV 常驻内存：`fp16=896MB`，`int8_baseline/int8_ours=504MB`（相比 fp16 -43.8%）
+    - Needle：在 `4k/8k/16k/32k` 四点三种模式均为 `100%`
+  - 文档更新：`docs/final_experiment_protocol.md`、`docs/final_results_summary.md`
+  - 运行建议：kv_cache PPL 为 token-by-token 口径非常慢，已将 `scripts/run_experiments.py --ppl_max_samples` 默认值收紧为 4，避免无界长跑
+
+- **2026-02-10 04:46:38**：补齐 `.agent/workflows` 与 `agent_cli` 的远端 SSH 自检 ✅  
+  - 关键动作：`.agent/workflows/*` 增加“执行前检查（强制）”，统一要求先读 `AGENTS.md`/`docs/AGENT_README.md` 并跑 SSH 健康检查；实验/调试/kernel/milestone/auto-dev 全部对齐 tmux 远端执行  
+  - 协作门禁：`scripts/agent_tools/agent_cli.py` 新增 `bootstrap/ssh-check`，`start` 默认自动执行（列出 `.agent/skills/.agent/workflows` + SSH 健康检查），降低新 agent 漏掉远端环境连接的概率  
+
+- **2026-02-10 04:02:46**：补齐“新 Agent 自动走远程环境”的流程门禁 ✅  
+  - 关键动作：新增 `AGENTS.md`；更新 `.cursorrules`/`docs/AGENT_README.md`/`lang.md` 强制先查阅 `.agent/skills/` 并按 SSH+tmux 执行 GPU 任务  
+  - 工程修正：`decode_attn_impl` 变为真实开关（`triton_fused|torch_ref`）；`int8_ours` 缺校准文件默认直接失败；`run_experiments.py --dry_run` 本地无 torch 可用  
 
 - **2026-02-09 03:00:00**：新增 fused decode 一致性验证入口 ✅  
   - 关键动作：增加 `verify_fused_decode.py`，对比 fused 与参考路径 logits 差异  

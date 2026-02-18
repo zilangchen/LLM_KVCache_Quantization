@@ -8,6 +8,19 @@ description: 排查报错和调试问题的工作流
 
 ---
 
+## 执行前检查（强制）
+
+1. 先读规范：`AGENTS.md` 与 `docs/AGENT_README.md`
+2. 先查本仓库技能库：`ls .agent/skills`，并优先阅读：
+   - `.agent/skills/remote-server/SKILL.md`
+   - `.agent/skills/community/systematic-debugging/SKILL.md`
+3. 只要问题涉及 GPU/CUDA/模型下载/长任务，必须先连接远端并在 tmux 内复现：
+```bash
+ssh -p 31867 root@region-42.seetacloud.com "echo 'SSH OK' && nvidia-smi -L"
+```
+
+---
+
 ## 调试输入模板
 
 用户应提供：

@@ -39,6 +39,7 @@ class FP16KVCache:
         num_layers: int,
         device: str = "cuda",
         dtype: torch.dtype = torch.float16,
+        max_seq_len: Optional[int] = None,
     ):
         """
         Initialize FP16 KV Cache.
@@ -57,12 +58,92 @@ class FP16KVCache:
         self.num_layers = num_layers
         self.device = device
         self.dtype = dtype
+        self.max_seq_len = int(max_seq_len) if max_seq_len is not None else None
+        if self.max_seq_len is not None and self.max_seq_len <= 0:
+            raise ValueError(f"max_seq_len must be > 0, got {self.max_seq_len}")
+        self._min_capacity = 256
 
-        # Storage: list of (k, v) tuples per layer
-        # Each k, v has shape [batch, num_kv_heads, seq_len, head_dim]
+        # Storage tensors are preallocated by capacity and written by slices.
+        # Actual valid length is tracked per layer in _layer_seq_lens.
         self._k_cache: List[Optional[Tensor]] = [None] * num_layers
         self._v_cache: List[Optional[Tensor]] = [None] * num_layers
+        self._layer_seq_lens: List[int] = [0] * num_layers
+        self._layer_capacity: List[int] = [0] * num_layers
         self._seq_len: int = 0
+
+    def _ensure_capacity(
+        self,
+        layer_id: int,
+        batch: int,
+        heads: int,
+        head_dim: int,
+        target_len: int,
+    ) -> None:
+        if self.max_seq_len is not None and target_len > self.max_seq_len:
+            raise ValueError(
+                f"target_len {target_len} exceeds max_seq_len {self.max_seq_len} for layer {layer_id}"
+            )
+        capacity = self._layer_capacity[layer_id]
+        k_buf = self._k_cache[layer_id]
+        v_buf = self._v_cache[layer_id]
+
+        if k_buf is not None and v_buf is not None:
+            if k_buf.shape[0] != batch or k_buf.shape[1] != heads or k_buf.shape[3] != head_dim:
+                raise ValueError(
+                    "Inconsistent KV shape for layer "
+                    f"{layer_id}: existing={k_buf.shape}, incoming=({batch}, {heads}, *, {head_dim})"
+                )
+
+        if k_buf is None or v_buf is None:
+            new_capacity = max(target_len, self._min_capacity)
+            if self.max_seq_len is not None:
+                new_capacity = min(new_capacity, self.max_seq_len)
+                if new_capacity < target_len:
+                    raise ValueError(
+                        f"target_len {target_len} exceeds capped capacity {new_capacity} for layer {layer_id}"
+                    )
+            self._k_cache[layer_id] = torch.empty(
+                (batch, heads, new_capacity, head_dim),
+                device=self.device,
+                dtype=self.dtype,
+            )
+            self._v_cache[layer_id] = torch.empty(
+                (batch, heads, new_capacity, head_dim),
+                device=self.device,
+                dtype=self.dtype,
+            )
+            self._layer_capacity[layer_id] = new_capacity
+            return
+
+        if target_len <= capacity:
+            return
+
+        new_capacity = max(target_len, capacity * 2)
+        if self.max_seq_len is not None:
+            new_capacity = min(new_capacity, self.max_seq_len)
+            if new_capacity < target_len:
+                raise ValueError(
+                    f"target_len {target_len} exceeds capped capacity {new_capacity} for layer {layer_id}"
+                )
+        old_len = self._layer_seq_lens[layer_id]
+
+        new_k = torch.empty(
+            (batch, heads, new_capacity, head_dim),
+            device=self.device,
+            dtype=self.dtype,
+        )
+        new_v = torch.empty(
+            (batch, heads, new_capacity, head_dim),
+            device=self.device,
+            dtype=self.dtype,
+        )
+        if old_len > 0:
+            new_k[:, :, :old_len, :] = k_buf[:, :, :old_len, :]
+            new_v[:, :, :old_len, :] = v_buf[:, :, :old_len, :]
+
+        self._k_cache[layer_id] = new_k
+        self._v_cache[layer_id] = new_v
+        self._layer_capacity[layer_id] = new_capacity
 
     def append(self, layer_id: int, k: Tensor, v: Tensor) -> None:
         """
@@ -98,24 +179,18 @@ class FP16KVCache:
         v = v.to(device=self.device, dtype=self.dtype)
 
         new_seq_len = k.shape[2]
+        batch, heads, _, head_dim = k.shape
+        old_len = self._layer_seq_lens[layer_id]
+        target_len = old_len + new_seq_len
+        self._ensure_capacity(layer_id, batch, heads, head_dim, target_len)
 
-        # Append to existing cache or initialize
-        if self._k_cache[layer_id] is None:
-            # First append for this layer
-            self._k_cache[layer_id] = k
-            self._v_cache[layer_id] = v
-        else:
-            # Concatenate along sequence dimension
-            self._k_cache[layer_id] = torch.cat(
-                [self._k_cache[layer_id], k], dim=2
-            )
-            self._v_cache[layer_id] = torch.cat(
-                [self._v_cache[layer_id], v], dim=2
-            )
+        self._k_cache[layer_id][:, :, old_len:target_len, :] = k
+        self._v_cache[layer_id][:, :, old_len:target_len, :] = v
+        self._layer_seq_lens[layer_id] = target_len
 
         # Update sequence length (use layer 0 as reference)
         if layer_id == 0:
-            self._seq_len += new_seq_len
+            self._seq_len = target_len
 
     def get_kv(self, layer_id: int) -> Tuple[Tensor, Tensor]:
         """
@@ -141,7 +216,11 @@ class FP16KVCache:
                 f"Cache for layer {layer_id} is empty. Call append() first."
             )
 
-        return self._k_cache[layer_id], self._v_cache[layer_id]
+        seq_len = self._layer_seq_lens[layer_id]
+        return (
+            self._k_cache[layer_id][:, :, :seq_len, :],
+            self._v_cache[layer_id][:, :, :seq_len, :],
+        )
 
     def get_seq_len(self) -> int:
         """
@@ -153,9 +232,16 @@ class FP16KVCache:
         return self._seq_len
 
     def clear(self) -> None:
-        """Clear all cached key-value tensors."""
+        """Reset sequence lengths while keeping allocated buffers for reuse."""
+        self._layer_seq_lens = [0] * self.num_layers
+        self._seq_len = 0
+
+    def release(self) -> None:
+        """Release all allocated buffers."""
         self._k_cache = [None] * self.num_layers
         self._v_cache = [None] * self.num_layers
+        self._layer_seq_lens = [0] * self.num_layers
+        self._layer_capacity = [0] * self.num_layers
         self._seq_len = 0
 
     def get_memory_mb(self) -> float:
@@ -187,7 +273,7 @@ class FP16KVCache:
         for i in range(self.num_layers):
             if self._k_cache[i] is None:
                 raise ValueError(f"Layer {i} cache is empty")
-            result.append((self._k_cache[i], self._v_cache[i]))
+            result.append(self.get_kv(i))
         return tuple(result)
 
     @classmethod
@@ -210,12 +296,28 @@ class FP16KVCache:
         cache = cls(num_layers=num_layers, device=device)
 
         for layer_id, (k, v) in enumerate(past_key_values):
-            cache._k_cache[layer_id] = k.to(device=device)
-            cache._v_cache[layer_id] = v.to(device=device)
+            k = k.to(device=device, dtype=cache.dtype)
+            v = v.to(device=device, dtype=cache.dtype)
+            batch, heads, seq_len, head_dim = k.shape
+            capacity = max(seq_len, cache._min_capacity)
+            cache._k_cache[layer_id] = torch.empty(
+                (batch, heads, capacity, head_dim),
+                device=device,
+                dtype=cache.dtype,
+            )
+            cache._v_cache[layer_id] = torch.empty(
+                (batch, heads, capacity, head_dim),
+                device=device,
+                dtype=cache.dtype,
+            )
+            cache._k_cache[layer_id][:, :, :seq_len, :] = k
+            cache._v_cache[layer_id][:, :, :seq_len, :] = v
+            cache._layer_seq_lens[layer_id] = seq_len
+            cache._layer_capacity[layer_id] = capacity
 
         # Set sequence length from first layer
-        if cache._k_cache[0] is not None:
-            cache._seq_len = cache._k_cache[0].shape[2]
+        if cache._layer_seq_lens[0] > 0:
+            cache._seq_len = cache._layer_seq_lens[0]
 
         return cache
 

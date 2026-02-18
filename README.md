@@ -19,7 +19,24 @@
 - 学校材料归档：`docs/school/`
 
 ## 快速开始（占位）
-后续将补齐：
-- 依赖安装（`requirements.txt`）
-- `scripts/smoke_test.py`、`scripts/run_experiments.py`
-- `env/versions.txt` 与 `env/requirements_freeze.txt` 的生成方式
+本项目的 GPU 实验默认在远端 AutoDL(H20) 上运行（见 `AGENTS.md`）。
+
+### 1) 远端最小验证（Smoke Test）
+```bash
+cd /root/autodl-tmp/LLM_KVCache_Quantization
+/root/miniconda3/bin/python scripts/smoke_test.py --save_output
+```
+
+### 2) 一键复现论文最终表图（推荐）
+- 复现协议：`docs/final_experiment_protocol.md`
+- 最终验收目录（本地已同步）：`results/final_thesis_20260214_094156/`
+  - 表格：`results/final_thesis_20260214_094156/tables/`
+  - 图：`results/final_thesis_20260214_094156/plots/`
+  - LaTeX 表：`results/final_thesis_20260214_094156/latex_tables/all_tables.tex`
+  - Gates：`results/final_thesis_20260214_094156/gates/`
+
+### 3) 实验入口（唯一）
+- 矩阵配置：`configs/exp_matrix.yaml`
+- Runner：`scripts/run_experiments.py`
+- 聚合出图：`scripts/aggregate_results.py`
+- 导出 LaTeX 表：`scripts/export_tables_latex.py`

@@ -1,6 +1,6 @@
 # Environment versions for reproducibility
-# Collected at: 2026-02-13 03:27:38
-# Git commit: f585e00a
+# Collected at: 2026-01-21 14:05:01
+# Git commit: fa6ab125
 
 ## System
 Python: 3.12.3 | packaged by Anaconda, Inc. | (main, May  6 2024, 19:46:43) [GCC 11.2.0]
@@ -19,4 +19,4 @@ transformers: 4.57.6
 triton: 3.4.0
 accelerate: 1.12.0
 numpy: 2.3.2
-pandas: 2.3.3
+pandas: not installed

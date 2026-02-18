@@ -9,6 +9,16 @@
 
 ## 📋 执行前检查清单 (每次必须执行)
 
+### ✅ 步骤0: 读取 Agent 协作与远程规范（每次必须执行）
+```
+BEFORE ANY CODE MODIFICATION:
+1. 读取 AGENTS.md 和 docs/AGENT_README.md
+2. 查看 .agent/skills/ 并阅读相关 SKILL 文档（至少 remote-server/long-running-task）
+3. 运行一次启动自检（列出 .agent 内容 + SSH 健康检查）：
+   python3 scripts/agent_tools/agent_cli.py bootstrap
+4. 若任务需要 GPU/模型下载/长任务：先按 .agent/skills/remote-server/SKILL.md 走 SSH + tmux
+```
+
 ### ✅ 步骤1: 读取开发记录
 ```
 BEFORE ANY CODE MODIFICATION:

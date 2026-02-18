@@ -8,6 +8,17 @@ description: 推进里程碑任务的工作流
 
 ---
 
+## 执行前检查（强制）
+
+1. 先读规范：`AGENTS.md` 与 `docs/AGENT_README.md`
+2. 每个新 agent session 必须先检查：`ls .agent/skills` 并阅读相关 SKILL
+3. 只要涉及 GPU/模型下载/长任务，先按 `.agent/skills/remote-server/SKILL.md` 走 SSH + tmux：
+```bash
+ssh -p 31867 root@region-42.seetacloud.com "echo 'SSH OK' && nvidia-smi -L"
+```
+
+---
+
 ## 里程碑总览
 
 | Milestone | 目标 | 关键产出 |

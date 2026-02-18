@@ -53,12 +53,130 @@ class GenerationOutput:
     gpu_mem_peak_mb: float  # Peak GPU memory usage
     prompt_len: int         # Number of prompt tokens
     gen_len: int            # Number of generated tokens
+    tok_per_s_per_seq: float = 0.0  # Per-sequence throughput for batch runs
+    kv_cache_mem_mb: float = 0.0  # KV cache resident memory (implementation-specific)
+    kv_cache_seq_len: int = 0  # KV cache sequence length after generation
 
 
-def generate(
+@dataclass
+class GenerationBatchOutput:
+    """Batch output from generation_from_ids()."""
+
+    generated_ids: torch.Tensor  # [B, gen_len]
+    ttft_ms: float
+    tpot_ms: float
+    tok_per_s: float
+    tok_per_s_per_seq: float
+    gpu_mem_peak_mb: float
+    prompt_len: int
+    gen_len: int
+    batch: int
+    kv_cache_mem_mb: float = 0.0
+    kv_cache_seq_len: int = 0
+
+
+def _register_prefill_temperature_hooks(model, inv_tau: torch.Tensor):
+    """
+    Apply per-head temperature to prefill by scaling query states.
+
+    Implementation detail:
+    - If the attention module has q_norm, scale its output (post-normalization).
+    - Otherwise, scale q_proj output (pre-reshape).
+
+    Hooks only activate when the sequence length > 1, so decode (q_len==1) is not double-scaled.
+    """
+    handles = []
+
+    layers = getattr(getattr(model, "model", None), "layers", None)
+    if layers is None:
+        return handles
+
+    if not isinstance(inv_tau, torch.Tensor) or inv_tau.ndim != 2:
+        raise ValueError(f"inv_tau must be a 2D tensor [layers, heads], got {type(inv_tau)} {getattr(inv_tau, 'shape', None)}")
+
+    cfg = getattr(model, "config", None)
+    cfg_heads = getattr(cfg, "num_attention_heads", None)
+
+    for layer_idx, layer in enumerate(layers):
+        attn = getattr(layer, "self_attn", None)
+        if attn is None:
+            continue
+
+        num_heads = (
+            getattr(attn, "num_heads", None)
+            or getattr(attn, "_kv_num_attention_heads", None)
+            or cfg_heads
+        )
+        head_dim = getattr(attn, "head_dim", None)
+        if num_heads is None or head_dim is None:
+            continue
+
+        if layer_idx >= inv_tau.shape[0]:
+            raise ValueError(
+                f"inv_tau has {inv_tau.shape[0]} layers but model has layer_idx={layer_idx}."
+            )
+        if inv_tau.shape[1] != int(num_heads):
+            raise ValueError(
+                f"inv_tau head count mismatch at layer {layer_idx}: "
+                f"inv_tau.shape[1]={inv_tau.shape[1]} vs model.num_heads={num_heads}."
+            )
+
+        inv_tau_layer = inv_tau[layer_idx]  # [H]
+
+        if getattr(attn, "q_norm", None) is not None:
+            q_norm = attn.q_norm
+
+            def _q_norm_hook(module, inputs, output, _inv=inv_tau_layer, _h=int(num_heads)):
+                if not isinstance(output, torch.Tensor) or output.ndim != 4:
+                    return output
+
+                # Layout can be [B, H, S, D] or [B, S, H, D]. Detect head dim.
+                if output.shape[1] == _h:
+                    seq_len = output.shape[2]
+                    if seq_len <= 1:
+                        return output
+                    scale = _inv.to(device=output.device, dtype=output.dtype)
+                    return output * scale.view(1, -1, 1, 1)
+
+                if output.shape[2] == _h:
+                    seq_len = output.shape[1]
+                    if seq_len <= 1:
+                        return output
+                    scale = _inv.to(device=output.device, dtype=output.dtype)
+                    return output * scale.view(1, 1, -1, 1)
+
+                return output
+
+            handles.append(q_norm.register_forward_hook(_q_norm_hook))
+        else:
+            q_proj = getattr(attn, "q_proj", None)
+            if q_proj is None:
+                continue
+
+            def _q_proj_hook(module, inputs, output, _inv=inv_tau_layer, _h=int(num_heads), _d=int(head_dim)):
+                if not isinstance(output, torch.Tensor) or output.ndim != 3:
+                    return output
+                # output: [B, S, H*D]
+                if output.shape[1] <= 1:
+                    return output
+                if output.shape[2] != _h * _d:
+                    return output
+
+                scale = _inv.to(device=output.device, dtype=output.dtype)
+                bsz, seq_len, _ = output.shape
+                out = output.view(bsz, seq_len, _h, _d) * scale.view(1, 1, -1, 1)
+                return out.view(bsz, seq_len, _h * _d)
+
+            handles.append(q_proj.register_forward_hook(_q_proj_hook))
+
+    return handles
+
+
+def generate_from_ids(
     model: PreTrainedModel,
     tokenizer: PreTrainedTokenizer,
-    prompt: str,
+    input_ids: torch.Tensor,
+    attention_mask: Optional[torch.Tensor] = None,
     max_new_tokens: int = 128,
     kv_mode: str = "fp16",
     group_size: int = 128,
@@ -66,64 +184,112 @@ def generate(
     seed: int = 1234,
     calib_file: Optional[str] = None,
     use_attn_temperature: bool = True,
-) -> GenerationOutput:
+    use_static_scales: bool = True,
+    adaptive_static_scales: bool = False,
+    adaptive_static_margin: float = 1.0,
+    adaptive_static_k: bool = True,
+    adaptive_static_v: bool = True,
+    decode_attn_impl: str = "triton_fused",
+    allow_missing_calib: bool = False,
+    stop_on_eos: bool = True,
+) -> GenerationBatchOutput:
     """
-    Custom generation loop with prefill + token-by-token decode.
+    Batched generation loop using explicit prefill + token-by-token decode.
 
-    This function does NOT use model.generate(). Instead, it manually:
-    1. Prefill: Process the entire prompt in one forward pass
-    2. Decode: Generate tokens one at a time using past_key_values
+    This is an internal helper to enable batch throughput experiments and
+    batched needle evaluation. It assumes *uniform* sequence length across the
+    batch (input_ids is a dense [B, S] tensor).
 
-    Args:
-        model: HuggingFace model (AutoModelForCausalLM)
-        tokenizer: HuggingFace tokenizer
-        prompt: Input text prompt
-        max_new_tokens: Maximum number of tokens to generate
-        kv_mode: KV cache mode (fp16 or int8_baseline)
-        group_size: Group size for INT8 quantization
-        clip_percentile: Percentile for INT8 clipping
-        seed: Random seed for reproducibility
-        calib_file: Path to calibration JSON (int8_ours only)
-        use_attn_temperature: Apply per-head temperature if available (int8_ours)
-
-    Returns:
-        GenerationOutput with generated text and timing statistics
-
-    Raises:
-        ValueError: If input is too long or kv_mode is unsupported
-        RuntimeError: If CUDA is not available
+    Important constraints:
+    - For kv_mode in {"int8_fused","int8_ours","int4_fused"}, fused decode does NOT support
+      padding/variable context lengths. For safety, when batch>1 we require
+      attention_mask to be all ones (no padding).
     """
     # Validate inputs
-    if kv_mode not in ["fp16", "int8_baseline", "int8_fused", "int8_ours", "int4_baseline"]:
+    if kv_mode not in [
+        "fp16",
+        "int8_baseline",
+        "int8_fused",
+        "int8_ours",
+        "int4_baseline",
+        "int4_fused",
+    ]:
         raise ValueError(
             f"kv_mode='{kv_mode}' not supported. "
-            f"Choose from ['fp16', 'int8_baseline', 'int8_fused', 'int8_ours', 'int4_baseline']."
+            "Choose from ['fp16', 'int8_baseline', 'int8_fused', 'int8_ours', "
+            "'int4_baseline', 'int4_fused']."
         )
-        
-    # Apply Patch if needed
-    if kv_mode in ["int8_fused", "int8_ours"]:
-        if kv_mode == "int8_ours":
-            import warnings
-            warnings.warn(
-                "kv_mode=int8_ours uses the fused int8 path; calibration will be loaded "
-                "if calib_file is provided (or artifacts/kv_calib_kl.json exists).",
-                UserWarning,
-            )
-        from src.engine.patch_model import apply_int8_fused_patch, INT8CacheWrapper
-        apply_int8_fused_patch(model)
+
+    if decode_attn_impl not in ["triton_fused", "torch_ref"]:
+        raise ValueError(
+            f"decode_attn_impl='{decode_attn_impl}' not supported. "
+            "Choose from ['triton_fused', 'torch_ref']."
+        )
 
     if not torch.cuda.is_available():
         raise RuntimeError(
             "CUDA is required for generation. Please run on a GPU-enabled server."
         )
 
-    # ... (seeds, reset_stats, tokenizer...)
+    if not isinstance(input_ids, torch.Tensor):
+        raise TypeError(f"input_ids must be a torch.Tensor, got {type(input_ids)}")
+    if input_ids.ndim != 2:
+        raise ValueError(f"input_ids must have shape [B, S], got {tuple(input_ids.shape)}")
+
+    # Ensure dtype/device
+    input_ids = input_ids.to(device=model.device, dtype=torch.long)
+    batch_size, prompt_len = int(input_ids.shape[0]), int(input_ids.shape[1])
+
+    if attention_mask is None:
+        attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=model.device)
+    else:
+        if not isinstance(attention_mask, torch.Tensor):
+            raise TypeError(f"attention_mask must be a torch.Tensor, got {type(attention_mask)}")
+        if attention_mask.shape != input_ids.shape:
+            raise ValueError(
+                f"attention_mask shape must match input_ids. "
+                f"Got attention_mask={tuple(attention_mask.shape)} input_ids={tuple(input_ids.shape)}"
+            )
+        attention_mask = attention_mask.to(device=model.device, dtype=torch.long)
+
+    if batch_size > 1:
+        # Our custom KV cache implementation does not track per-sample context lengths.
+        # Padding/variable lengths would silently corrupt attention context in decode.
+        if not torch.all(attention_mask == 1).item():
+            raise ValueError(
+                "Batched generation requires attention_mask to be all ones (no padding). "
+                f"Got batch={batch_size} kv_mode={kv_mode}."
+            )
+
+    if kv_mode in ["int8_fused", "int8_ours", "int4_fused"] and batch_size > 1:
+        # Extra explicit guardrail for fused decode.
+        if not torch.all(attention_mask == 1).item():
+            raise ValueError(
+                "kv_mode=int8_fused/int8_ours/int4_fused with batch>1 does not support "
+                "padding/variable context lengths. "
+                "Provide equal-length prompts and attention_mask of all ones."
+            )
+
+    # Apply patch if needed
+    if kv_mode in ["int8_fused", "int8_ours", "int4_fused"]:
+        if kv_mode == "int8_ours":
+            import warnings
+
+            warnings.warn(
+                "kv_mode=int8_ours uses the fused int8 path; calibration will be loaded "
+                "if calib_file is provided (or artifacts/kv_calib_kl.json exists).",
+                UserWarning,
+            )
+        from src.engine.patch_model import apply_int8_fused_patch
+
+        apply_int8_fused_patch(model)
+
     # Set seeds for reproducibility
     set_seed(seed=seed, deterministic=True)
-    
+
     # Reset memory stats for accurate peak measurement
     reset_gpu_memory_stats()
-    
+
     # Get available GPU memory for OOM checks
     try:
         gpu_free_mb = (
@@ -133,21 +299,17 @@ def generate(
     except Exception:
         gpu_free_mb = None
 
-    # Tokenize input
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-    input_ids = inputs["input_ids"]
-    attention_mask = inputs.get("attention_mask")
-    prompt_len = input_ids.shape[1]
-
     # Check for excessively long input
     max_model_len = getattr(model.config, "max_position_embeddings", 32768)
-    if prompt_len + max_new_tokens > max_model_len:
+    if prompt_len + max_new_tokens > int(max_model_len):
         raise ValueError(
             f"Total length ({prompt_len} + {max_new_tokens} = "
             f"{prompt_len + max_new_tokens}) exceeds model's max "
             f"position embeddings ({max_model_len}). "
             f"Reduce prompt length or max_new_tokens."
         )
+
+    max_cache_len = min(int(max_model_len), int(prompt_len + max_new_tokens))
 
     # Initialize KV Cache based on mode
     num_layers = getattr(model.config, "num_hidden_layers", 28)
@@ -157,6 +319,7 @@ def generate(
 
     if kv_mode == "int8_ours":
         import warnings
+
         calib_path = calib_file or os.path.join("artifacts", "kv_calib_kl.json")
         if calib_path and os.path.exists(calib_path):
             try:
@@ -183,9 +346,9 @@ def generate(
                 group_size = calib_group_k or group_size
                 clip_percentile = calib_clip_k or clip_percentile
 
-                if "k_scale" in calib:
+                if use_static_scales and "k_scale" in calib:
                     static_k_scale = torch.tensor(calib["k_scale"], dtype=torch.float16)
-                if "v_scale" in calib:
+                if use_static_scales and "v_scale" in calib:
                     static_v_scale = torch.tensor(calib["v_scale"], dtype=torch.float16)
                 if use_attn_temperature and "inv_tau" in calib:
                     inv_tau = torch.tensor(calib["inv_tau"], dtype=torch.float32)
@@ -197,101 +360,148 @@ def generate(
                 if inv_tau is not None:
                     inv_tau = inv_tau.to(model.device)
             except Exception as exc:
+                if allow_missing_calib:
+                    warnings.warn(
+                        f"Failed to load calibration file {calib_path}: {exc}. "
+                        "Falling back to baseline int8 behavior.",
+                        UserWarning,
+                    )
+                else:
+                    raise RuntimeError(
+                        f"Failed to load calibration file {calib_path}: {exc}."
+                    ) from exc
+        else:
+            if allow_missing_calib:
                 warnings.warn(
-                    f"Failed to load calibration file {calib_path}: {exc}. "
+                    f"Calibration file not found: {calib_path}. "
                     "Falling back to baseline int8 behavior.",
                     UserWarning,
                 )
-        else:
-            warnings.warn(
-                f"Calibration file not found: {calib_path}. "
-                "Falling back to baseline int8 behavior.",
-                UserWarning,
-            )
+            else:
+                raise FileNotFoundError(
+                    f"kv_mode=int8_ours requires a calibration file, but it was not found: {calib_path}. "
+                    "Run scripts/calibrate_behavior.py to generate artifacts/kv_calib_kl.json, "
+                    "or switch kv_mode to int8_baseline."
+                )
+
     if kv_mode == "fp16":
         from src.cache import FP16KVCache
-        kv_cache = FP16KVCache(num_layers=num_layers, device=model.device.type)
+
+        kv_cache = FP16KVCache(
+            num_layers=num_layers,
+            device=model.device.type,
+            max_seq_len=max_cache_len,
+        )
     elif kv_mode in ["int8_baseline", "int8_fused", "int8_ours"]:
         from src.cache import INT8KVCache
+
         kv_cache = INT8KVCache(
             num_layers=num_layers,
             device=model.device.type,
             clip_percentile=clip_percentile,
             group_size=group_size,
+            max_seq_len=max_cache_len,
+            decode_attn_impl=decode_attn_impl,
             static_k_scale=static_k_scale,
             static_v_scale=static_v_scale,
             inv_tau=inv_tau,
             use_attn_temperature=use_attn_temperature,
+            adaptive_static_scales=adaptive_static_scales,
+            adaptive_static_margin=adaptive_static_margin,
+            adaptive_static_k=adaptive_static_k,
+            adaptive_static_v=adaptive_static_v,
         )
-    elif kv_mode == "int4_baseline":
+    elif kv_mode in ["int4_baseline", "int4_fused"]:
         from src.cache import INT4KVCache
+
         kv_cache = INT4KVCache(
             num_layers=num_layers,
             device=model.device.type,
             clip_percentile=clip_percentile,
             group_size=group_size,
+            max_seq_len=max_cache_len,
+            decode_attn_impl=decode_attn_impl,
         )
-    
-    # ... (memory check, prefill...)
+    else:
+        raise ValueError(f"Unsupported kv_mode: {kv_mode}")
+
     # Simple explicit memory check (rough estimate)
     if gpu_free_mb is not None and gpu_free_mb < 2000:
         import warnings
+
         warnings.warn(
             f"Low GPU memory ({gpu_free_mb:.0f} MB). Generation may OOM.",
-            ResourceWarning
+            ResourceWarning,
         )
 
-    generated_tokens: List[int] = []
+    generated_steps: List[torch.Tensor] = []
     decode_times = TimingStats()
-    
+
+    hook_handles = []
+    if kv_mode == "int8_ours" and use_attn_temperature and inv_tau is not None:
+        # Apply per-head temperature during prefill by scaling Q per head.
+        # Decode already applies temperature inside the fused path.
+        hook_handles = _register_prefill_temperature_hooks(model, inv_tau)
+
     # ========== PREFILL PHASE ==========
     prefill_timer = CUDATimer()
     prefill_timer.start()
 
-    with torch.no_grad():
-        outputs = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            use_cache=True,
-        )
-        
-        # Extract and store KV cache
-        if outputs.past_key_values is not None:
-            for i, (k, v) in enumerate(outputs.past_key_values):
-                kv_cache.append(i, k, v)
-        
-        next_token_logits = outputs.logits[:, -1, :]
-        next_token = torch.argmax(next_token_logits, dim=-1)
+    try:
+        with torch.no_grad():
+            outputs = model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                use_cache=True,
+            )
+
+            # Extract and store KV cache (prefill)
+            if outputs.past_key_values is not None:
+                for i, (k, v) in enumerate(outputs.past_key_values):
+                    kv_cache.append(i, k, v)
+
+            next_token_logits = outputs.logits[:, -1, :]
+            next_token = torch.argmax(next_token_logits, dim=-1)  # [B]
+    finally:
+        for h in hook_handles:
+            try:
+                h.remove()
+            except Exception:
+                pass
 
     prefill_timer.stop()
     ttft_ms = prefill_timer.elapsed_ms
 
-    generated_tokens.append(next_token.item())
-    current_token = next_token.unsqueeze(0)  # [1, 1]
+    generated_steps.append(next_token)
+    current_token = next_token.view(batch_size, 1)  # [B, 1]
 
     # Update attention mask for decode phase
     if attention_mask is not None:
         attention_mask = torch.cat(
-            [attention_mask,
-             torch.ones((1, 1), device=model.device, dtype=attention_mask.dtype)],
-            dim=1
+            [
+                attention_mask,
+                torch.ones((batch_size, 1), device=model.device, dtype=attention_mask.dtype),
+            ],
+            dim=1,
         )
 
     # ========== DECODE PHASE ==========
     eos_token_id = tokenizer.eos_token_id
 
-    for step in range(max_new_tokens - 1):
-        if generated_tokens[-1] == eos_token_id:
-            break
+    for _ in range(max_new_tokens - 1):
+        if stop_on_eos and eos_token_id is not None:
+            # Stop only when all sequences have emitted EOS to keep shapes uniform.
+            if torch.all(generated_steps[-1] == int(eos_token_id)).item():
+                break
 
         decode_timer = CUDATimer()
         decode_timer.start()
 
         with torch.no_grad():
             # Prepare past_key_values
-            if kv_mode in ["int8_fused", "int8_ours"]:
-                # Use Container class that satisfies HF Cache interface
+            if kv_mode in ["int8_fused", "int8_ours", "int4_fused"]:
                 from src.engine.patch_model import INT8CacheWrapperContainer
+
                 current_past_key_values = INT8CacheWrapperContainer(kv_cache, num_layers)
             elif kv_mode in ["int8_baseline", "int4_baseline"]:
                 # For baseline modes, we dequantize BEFORE attention
@@ -301,14 +511,17 @@ def generate(
                     current_past_key_values.append((k, v))
                 current_past_key_values = tuple(current_past_key_values)
             else:
-                # FP16 cache
                 current_past_key_values = kv_cache.to_tuple()
 
             # Dynamic Cache Check (Skipped for fused wrapper as it mocks Cache)
-            if kv_mode not in ["int8_fused", "int8_ours"] and HAS_DYNAMIC_CACHE and isinstance(current_past_key_values, tuple):
-                 try:
+            if (
+                kv_mode not in ["int8_fused", "int8_ours", "int4_fused"]
+                and HAS_DYNAMIC_CACHE
+                and isinstance(current_past_key_values, tuple)
+            ):
+                try:
                     current_past_key_values = DynamicCache.from_legacy_cache(current_past_key_values)
-                 except: 
+                except Exception:
                     pass
 
             outputs = model(
@@ -317,18 +530,9 @@ def generate(
                 past_key_values=current_past_key_values,
                 use_cache=True,
             )
-            
-            # Update cache with NEW token's KV
-            # For fused mode, the Patch's wrapper.update() ALREADY appended to engine?
-            # Let's check patch_model.py: 
-            #   cache_wrapper.engine.append(...) called inside _fused_forward_impl
-            # So if we are in fused mode, `kv_cache` is ALREADY updated.
-            # BUT `outputs.past_key_values` might be returning what?
-            # Model returns `outputs.past_key_values` which are usually the inputs updated.
-            # If fused patch returns `cache_wrapper`, then `outputs.past_key_values` is tuple of wrappers.
-            
-            # We ONLY need to update if we are NOT in fused mode (or verify).
-            if kv_mode not in ["int8_fused", "int8_ours"]:
+
+            # Update cache with NEW token's KV for non-fused modes.
+            if kv_mode not in ["int8_fused", "int8_ours", "int4_fused"]:
                 if outputs.past_key_values is not None:
                     for i, (k, v) in enumerate(outputs.past_key_values):
                         if k.shape[2] > 1:
@@ -337,64 +541,179 @@ def generate(
                             kv_cache.append(i, k_new, v_new)
                         else:
                             kv_cache.append(i, k, v)
-            
-            next_token_logits = outputs.logits[:, -1, :]
-            next_token = torch.argmax(next_token_logits, dim=-1)
 
+            next_token_logits = outputs.logits[:, -1, :]
+            next_token = torch.argmax(next_token_logits, dim=-1)  # [B]
 
         decode_timer.stop()
         decode_times.add(decode_timer.elapsed_ms)
 
-        generated_tokens.append(next_token.item())
-        current_token = next_token.unsqueeze(0)
+        generated_steps.append(next_token)
+        current_token = next_token.view(batch_size, 1)
 
         # Update attention mask
         if attention_mask is not None:
             attention_mask = torch.cat(
-                [attention_mask,
-                 torch.ones((1, 1), device=model.device,
-                            dtype=attention_mask.dtype)],
-                dim=1
+                [
+                    attention_mask,
+                    torch.ones((batch_size, 1), device=model.device, dtype=attention_mask.dtype),
+                ],
+                dim=1,
             )
 
     # ========== COLLECT RESULTS ==========
-    gen_len = len(generated_tokens)
+    gen_len = int(len(generated_steps))
     gpu_mem_peak_mb = get_gpu_memory_mb()
+    kv_cache_mem_mb = 0.0
+    kv_cache_seq_len = 0
+    try:
+        kv_cache_mem_mb = float(kv_cache.get_memory_mb())
+    except Exception:
+        kv_cache_mem_mb = 0.0
+    try:
+        kv_cache_seq_len = int(kv_cache.get_seq_len())
+    except Exception:
+        kv_cache_seq_len = 0
 
     # TPOT: average decode time (exclude prefill)
     tpot_ms = decode_times.mean_ms if decode_times.count > 0 else 0.0
 
-    # Throughput
+    # Throughput: report both total tok/s (across batch) and per-sequence tok/s.
     total_decode_ms = decode_times.total_ms
     if total_decode_ms > 0:
-        decode_tokens = gen_len - 1
-        tok_per_s = (decode_tokens / total_decode_ms) * 1000.0
+        decode_tokens_per_seq = max(gen_len - 1, 0)
+        decode_tokens_total = batch_size * decode_tokens_per_seq
+        tok_per_s_total = (decode_tokens_total / total_decode_ms) * 1000.0
+        tok_per_s_per_seq = tok_per_s_total / max(batch_size, 1)
     else:
-        tok_per_s = 0.0
+        tok_per_s_total = 0.0
+        tok_per_s_per_seq = 0.0
 
-    generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+    generated_ids = torch.stack(generated_steps, dim=1).to(dtype=torch.long)  # [B, gen_len]
 
-    output = GenerationOutput(
-        text=generated_text,
-        tokens=generated_tokens,
+    output = GenerationBatchOutput(
+        generated_ids=generated_ids,
         ttft_ms=ttft_ms,
         tpot_ms=tpot_ms,
-        tok_per_s=tok_per_s,
-        gpu_mem_peak_mb=gpu_mem_peak_mb,
-        prompt_len=prompt_len,
-        gen_len=gen_len,
+        tok_per_s=float(tok_per_s_total),
+        tok_per_s_per_seq=float(tok_per_s_per_seq),
+        gpu_mem_peak_mb=float(gpu_mem_peak_mb),
+        kv_cache_mem_mb=float(kv_cache_mem_mb),
+        kv_cache_seq_len=int(kv_cache_seq_len),
+        prompt_len=int(prompt_len),
+        gen_len=int(gen_len),
+        batch=int(batch_size),
     )
 
     # Cleanup memory to prevent OOM across runs
-    if 'kv_cache' in locals():
+    if "kv_cache" in locals():
         kv_cache.clear()
         del kv_cache
-    if 'outputs' in locals():
+    if "outputs" in locals():
         del outputs
-    if 'current_past_key_values' in locals():
+    if "current_past_key_values" in locals():
         del current_past_key_values
 
     gc.collect()
     torch.cuda.empty_cache()
 
     return output
+
+
+def generate(
+    model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizer,
+    prompt: str,
+    max_new_tokens: int = 128,
+    kv_mode: str = "fp16",
+    group_size: int = 128,
+    clip_percentile: float = 99.9,
+    seed: int = 1234,
+    calib_file: Optional[str] = None,
+    use_attn_temperature: bool = True,
+    use_static_scales: bool = True,
+    adaptive_static_scales: bool = False,
+    adaptive_static_margin: float = 1.0,
+    adaptive_static_k: bool = True,
+    adaptive_static_v: bool = True,
+    decode_attn_impl: str = "triton_fused",
+    allow_missing_calib: bool = False,
+    stop_on_eos: bool = True,
+) -> GenerationOutput:
+    """
+    Custom generation loop with prefill + token-by-token decode.
+
+    This function does NOT use model.generate(). Instead, it manually:
+    1. Prefill: Process the entire prompt in one forward pass
+    2. Decode: Generate tokens one at a time using past_key_values
+
+    Args:
+        model: HuggingFace model (AutoModelForCausalLM)
+        tokenizer: HuggingFace tokenizer
+        prompt: Input text prompt
+        max_new_tokens: Maximum number of tokens to generate
+        kv_mode: KV cache mode (fp16/int8/int4 variants)
+        group_size: Group size for quantization
+        clip_percentile: Percentile for quantization clipping
+        seed: Random seed for reproducibility
+        calib_file: Path to calibration JSON (int8_ours only)
+        use_attn_temperature: Apply per-head temperature if available (int8_ours)
+        use_static_scales: Use static K/V scales from calibration if available (int8_ours)
+        adaptive_static_scales: If using static scales, adaptively raise per-token scales
+            to avoid clipping at runtime.
+        adaptive_static_margin: Multiplicative safety margin applied to static scales before
+            adaptive max with observed per-token scales.
+        adaptive_static_k: Apply adaptive static-scale safeguard on K.
+        adaptive_static_v: Apply adaptive static-scale safeguard on V.
+        decode_attn_impl: Decode attention implementation for fused kv modes
+            - "triton_fused" (mainline, fast)
+            - "torch_ref" (reference, correctness/ablation)
+        allow_missing_calib: If True, int8_ours will warn+fallback when calib is missing.
+
+    Returns:
+        GenerationOutput with generated text and timing statistics
+
+    Raises:
+        ValueError: If input is too long or kv_mode is unsupported
+        RuntimeError: If CUDA is not available
+    """
+    # Tokenize input
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    batch_out = generate_from_ids(
+        model=model,
+        tokenizer=tokenizer,
+        input_ids=inputs["input_ids"],
+        attention_mask=inputs.get("attention_mask"),
+        max_new_tokens=max_new_tokens,
+        kv_mode=kv_mode,
+        group_size=group_size,
+        clip_percentile=clip_percentile,
+        seed=seed,
+        calib_file=calib_file,
+        use_attn_temperature=use_attn_temperature,
+        use_static_scales=use_static_scales,
+        adaptive_static_scales=adaptive_static_scales,
+        adaptive_static_margin=adaptive_static_margin,
+        adaptive_static_k=adaptive_static_k,
+        adaptive_static_v=adaptive_static_v,
+        decode_attn_impl=decode_attn_impl,
+        allow_missing_calib=allow_missing_calib,
+        stop_on_eos=stop_on_eos,
+    )
+
+    generated_tokens = batch_out.generated_ids[0].tolist()
+    generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+
+    return GenerationOutput(
+        text=generated_text,
+        tokens=generated_tokens,
+        ttft_ms=batch_out.ttft_ms,
+        tpot_ms=batch_out.tpot_ms,
+        tok_per_s=batch_out.tok_per_s,
+        tok_per_s_per_seq=batch_out.tok_per_s_per_seq,
+        gpu_mem_peak_mb=batch_out.gpu_mem_peak_mb,
+        kv_cache_mem_mb=batch_out.kv_cache_mem_mb,
+        kv_cache_seq_len=batch_out.kv_cache_seq_len,
+        prompt_len=batch_out.prompt_len,
+        gen_len=batch_out.gen_len,
+    )

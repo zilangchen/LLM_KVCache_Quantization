@@ -5,8 +5,9 @@ INT4 Symmetric Quantization for KV Cache.
 This module provides INT4 quantization functions for more aggressive compression.
 INT4 uses 4-bit signed integers with range [-7, 7] (we leave -8 for special cases).
 
-Note: We store INT4 values in torch.int8 for simplicity (no bit packing).
-      Bit packing (2 INT4 per byte) can be added later for memory optimization.
+Note:
+- Quantized values are represented as torch.int8 in [-7, 7].
+- Bit packing (2x INT4 per byte) is supported by pack_int4/unpack_int4.
 """
 
 from typing import Tuple
@@ -34,12 +35,10 @@ def quantize_symmetric_int4(
     Returns:
         (quantized, scale) tuple
         - quantized: INT8 tensor (storing INT4 values in [-7, 7])
-        - scale: FP16 tensor for dequantization
+        - scale: FP16 tensor for dequantization, shape [B, H, S, num_groups]
     """
-    # Ensure tensor is on correct dtype for computation
-    original_dtype = tensor.dtype
-    if tensor.dtype == torch.float16:
-        tensor = tensor.float()  # Compute in FP32 for precision
+    if not tensor.is_floating_point():
+        raise ValueError(f"Input tensor must be float, got {tensor.dtype}")
     
     # Get dimensions
     head_dim = tensor.shape[-1]
@@ -60,13 +59,18 @@ def quantize_symmetric_int4(
     abs_reshaped = reshaped.abs()
     
     if percentile < 100.0:
-        # Percentile clipping for outlier robustness
-        # Approximate with max for online efficiency
-        abs_max = torch.amax(abs_reshaped, dim=-1, keepdim=True)
+        quantile = max(min(percentile / 100.0, 1.0), 0.0)
+        abs_max = torch.quantile(
+            abs_reshaped.float(),
+            quantile,
+            dim=-1,
+            keepdim=True,
+        )
     else:
         abs_max = torch.amax(abs_reshaped, dim=-1, keepdim=True)
 
     # Avoid division by zero
+    abs_max = abs_max.to(tensor.dtype)
     abs_max = abs_max.clamp(min=1e-5)
     
     # INT4 range is [-7, 7] (we reserve -8 for potential special values)
@@ -78,9 +82,9 @@ def quantize_symmetric_int4(
     # Restore shape
     quantized = quantized_reshaped.view(*input_shape)
     
-    # Scale shape: [B, H, S, num_groups, 1] or flattened
-    # Keep as is for compatibility with dequantize
-    scale = scale.to(torch.float16)
+    # Store scales without trailing singleton dim for cache/storage compatibility:
+    # [B, H, S, num_groups, 1] -> [B, H, S, num_groups]
+    scale = scale.to(torch.float16).squeeze(-1)
     
     return quantized, scale
 
@@ -104,7 +108,7 @@ def dequantize_symmetric_int4(
     """
     # Check dimensions to detect group-wise scaling
     # quantized: [B, H, S, D]
-    # scale: [B, H, S, num_groups, 1] or [B, H, S, 1]
+    # scale: [B, H, S, num_groups] or [B, H, S, num_groups, 1] or [B, H, S, 1]
     
     if scale.ndim == quantized.ndim + 1:
         # Group-wise scale [..., num_groups, 1]
@@ -116,6 +120,16 @@ def dequantize_symmetric_int4(
         # Scale broadcasts: [..., num_groups, 1] * [..., num_groups, group_size]
         decoded_reshaped = q_reshaped.to(scale.dtype) * scale
         
+        return decoded_reshaped.view(B, H, S, D)
+
+    if scale.ndim == quantized.ndim and scale.shape[-1] != 1:
+        # Group-wise scale stored as [B, H, S, num_groups]
+        B, H, S, D = quantized.shape
+        num_groups = scale.shape[-1]
+        group_size = D // num_groups
+
+        q_reshaped = quantized.view(B, H, S, num_groups, group_size)
+        decoded_reshaped = q_reshaped.to(scale.dtype) * scale.unsqueeze(-1)
         return decoded_reshaped.view(B, H, S, D)
         
     return quantized.to(scale.dtype) * scale

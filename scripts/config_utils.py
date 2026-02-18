@@ -73,7 +73,7 @@ def resolve_run_config(config: Dict[str, Any], run_name: str) -> Dict[str, Any]:
         ),
         "quant_bits": run_entry.get("quant_bits", quant_defaults.get("quant_bits")),
         "dtype": runtime.get("dtype"),
-        "seed": runtime.get("seed"),
+        "seed": run_entry.get("seed", runtime.get("seed")),
         "calib_file": run_entry.get("calib_file", quant_defaults.get("calib_file")),
         "use_attn_temperature": run_entry.get(
             "use_attn_temperature", quant_defaults.get("use_attn_temperature")

@@ -42,9 +42,20 @@ sys.path.insert(0, str(project_root))
 # Or we can manually feed batches.
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
+try:
+    from transformers import DynamicCache
+    HAS_DYNAMIC_CACHE = True
+except ImportError:
+    try:
+        from transformers.cache_utils import DynamicCache
+        HAS_DYNAMIC_CACHE = True
+    except ImportError:
+        HAS_DYNAMIC_CACHE = False
 from datasets import load_dataset
 from src.cache import FP16KVCache, INT8KVCache, INT4KVCache
 from src.engine.patch_model import apply_int8_fused_patch
+from src.engine.generate_loop import _register_prefill_temperature_hooks
+from src.utils.hf import resolve_pretrained_path
 from src.utils.repro import (
     build_config_snapshot,
     get_hardware_info,
@@ -65,6 +76,21 @@ def get_git_commit() -> str:
         return result.stdout.strip()[:8]
     except Exception:
         return "unknown"
+
+
+def maybe_to_dynamic_cache(past_key_values):
+    """
+    Transformers versions differ on whether model forward accepts legacy tuples.
+    If DynamicCache is available, convert legacy cache tuples to DynamicCache.
+    """
+    if not HAS_DYNAMIC_CACHE:
+        return past_key_values
+    if isinstance(past_key_values, tuple):
+        try:
+            return DynamicCache.from_legacy_cache(past_key_values)
+        except Exception:
+            return past_key_values
+    return past_key_values
 
 
 def iter_token_ids(dataset, tokenizer, max_tokens):
@@ -95,8 +121,8 @@ def iter_token_ids(dataset, tokenizer, max_tokens):
             if len(ids) > remaining:
                 ids = ids[:remaining]
 
-    total_tokens += len(ids)
-    yield ids
+        total_tokens += len(ids)
+        yield ids
 
 
 def load_calibration(
@@ -106,6 +132,7 @@ def load_calibration(
     clip_percentile: float,
     device: torch.device,
     use_attn_temperature: bool,
+    use_static_scales: bool,
 ):
     static_k_scale = None
     static_v_scale = None
@@ -141,9 +168,9 @@ def load_calibration(
             group_size = calib_group_k or group_size
             clip_percentile = calib_clip_k or clip_percentile
 
-            if "k_scale" in calib:
+            if use_static_scales and "k_scale" in calib:
                 static_k_scale = torch.tensor(calib["k_scale"], dtype=torch.float16, device=device)
-            if "v_scale" in calib:
+            if use_static_scales and "v_scale" in calib:
                 static_v_scale = torch.tensor(calib["v_scale"], dtype=torch.float16, device=device)
             if use_attn_temperature and "inv_tau" in calib:
                 inv_tau = torch.tensor(calib["inv_tau"], dtype=torch.float32, device=device)
@@ -170,6 +197,12 @@ def build_kv_cache(
     clip_percentile: float,
     calib_file: str | None,
     use_attn_temperature: bool,
+    use_static_scales: bool,
+    adaptive_static_scales: bool,
+    adaptive_static_margin: float,
+    adaptive_static_k: bool,
+    adaptive_static_v: bool,
+    decode_attn_impl: str | None,
 ):
     num_layers = getattr(model.config, "num_hidden_layers", 28)
     static_k_scale, static_v_scale, inv_tau, group_size, clip_percentile = load_calibration(
@@ -179,10 +212,11 @@ def build_kv_cache(
         clip_percentile,
         model.device,
         use_attn_temperature,
+        use_static_scales,
     )
 
     if kv_mode == "fp16":
-        return FP16KVCache(num_layers=num_layers, device=model.device.type)
+        return FP16KVCache(num_layers=num_layers, device=model.device.type), group_size, clip_percentile
 
     if kv_mode == "int4_baseline":
         return INT4KVCache(
@@ -190,7 +224,17 @@ def build_kv_cache(
             device=model.device.type,
             clip_percentile=clip_percentile,
             group_size=group_size,
-        )
+        ), group_size, clip_percentile
+
+    if kv_mode == "int4_fused":
+        apply_int8_fused_patch(model)
+        return INT4KVCache(
+            num_layers=num_layers,
+            device=model.device.type,
+            clip_percentile=clip_percentile,
+            group_size=group_size,
+            decode_attn_impl=decode_attn_impl or "triton_fused",
+        ), group_size, clip_percentile
 
     if kv_mode in ["int8_fused", "int8_ours"]:
         apply_int8_fused_patch(model)
@@ -200,20 +244,28 @@ def build_kv_cache(
         device=model.device.type,
         clip_percentile=clip_percentile,
         group_size=group_size,
+        decode_attn_impl=decode_attn_impl or "triton_fused",
         static_k_scale=static_k_scale,
         static_v_scale=static_v_scale,
         inv_tau=inv_tau,
         use_attn_temperature=use_attn_temperature,
-    )
+        adaptive_static_scales=adaptive_static_scales,
+        adaptive_static_margin=adaptive_static_margin,
+        adaptive_static_k=adaptive_static_k,
+        adaptive_static_v=adaptive_static_v,
+    ), group_size, clip_percentile
 
 
 def build_past_key_values(kv_mode: str, kv_cache, num_layers: int):
+    if kv_mode in ["int8_fused", "int8_ours", "int4_fused"]:
+        from src.engine.patch_model import INT8CacheWrapperContainer
+        # IMPORTANT: Always pass our wrapper container, even when the cache is empty.
+        # Otherwise the first chunk (q_len > 1) would run with float K/V and only quantize
+        # after the forward, which changes logits and breaks chunk_size equivalence.
+        return INT8CacheWrapperContainer(kv_cache, num_layers), False
+
     if kv_cache.get_seq_len() == 0:
         return None, True
-
-    if kv_mode in ["int8_fused", "int8_ours"]:
-        from src.engine.patch_model import INT8CacheWrapperContainer
-        return INT8CacheWrapperContainer(kv_cache, num_layers), False
 
     if kv_mode == "fp16":
         return kv_cache.to_tuple(), True
@@ -231,55 +283,126 @@ def eval_window_kv_cache(
     trg_len: int,
     kv_cache,
     kv_mode: str,
+    chunk_size: int = 1,
 ):
     num_layers = getattr(model.config, "num_hidden_layers", 28)
     seq_len = input_ids.size(1)
     start_loss_idx = max(seq_len - trg_len, 0)
 
     kv_cache.clear()
-    attention_mask = torch.ones((1, 1), device=model.device, dtype=torch.long)
-    current_token = input_ids[:, 0:1]
-
     total_nll = torch.tensor(0.0, device=model.device)
     total_tokens = 0
 
     with torch.no_grad():
-        for t in range(seq_len - 1):
-            past_key_values, should_update_cache = build_past_key_values(
-                kv_mode, kv_cache, num_layers
-            )
+        chunk_size = int(chunk_size)
+        if chunk_size <= 1:
+            attention_mask = torch.ones((1, 1), device=model.device, dtype=torch.long)
+            current_token = input_ids[:, 0:1]
 
-            outputs = model(
-                input_ids=current_token,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-                use_cache=True,
-            )
+            for t in range(seq_len - 1):
+                past_key_values, should_update_cache = build_past_key_values(
+                    kv_mode, kv_cache, num_layers
+                )
+                past_key_values = maybe_to_dynamic_cache(past_key_values)
 
-            next_token = input_ids[:, t + 1 : t + 2]
-            logits = outputs.logits[:, -1, :]
-            log_probs = torch.log_softmax(logits, dim=-1)
-            nll = -log_probs.gather(dim=-1, index=next_token).squeeze(-1)
+                outputs = model(
+                    input_ids=current_token,
+                    attention_mask=attention_mask,
+                    past_key_values=past_key_values,
+                    use_cache=True,
+                )
 
-            pred_idx = t + 1
-            if pred_idx >= start_loss_idx:
-                total_nll += nll
-                total_tokens += 1
+                next_token = input_ids[:, t + 1 : t + 2]
+                logits = outputs.logits[:, -1, :]
+                log_probs = torch.log_softmax(logits, dim=-1)
+                nll = -log_probs.gather(dim=-1, index=next_token).squeeze(-1)
+                # Ensure scalar to avoid in-place broadcast issues on 0-dim tensors.
+                nll = nll.sum()
 
-            if should_update_cache and outputs.past_key_values is not None:
-                for i, (k, v) in enumerate(outputs.past_key_values):
-                    if k.shape[2] > 1:
-                        k_new = k[:, :, -1:, :]
-                        v_new = v[:, :, -1:, :]
-                        kv_cache.append(i, k_new, v_new)
-                    else:
-                        kv_cache.append(i, k, v)
+                pred_idx = t + 1
+                if pred_idx >= start_loss_idx:
+                    total_nll += nll
+                    total_tokens += 1
 
-            attention_mask = torch.cat(
-                [attention_mask, torch.ones((1, 1), device=model.device, dtype=attention_mask.dtype)],
-                dim=1,
-            )
-            current_token = next_token
+                if should_update_cache and outputs.past_key_values is not None:
+                    for i, (k, v) in enumerate(outputs.past_key_values):
+                        if k.shape[2] > 1:
+                            k_new = k[:, :, -1:, :]
+                            v_new = v[:, :, -1:, :]
+                            kv_cache.append(i, k_new, v_new)
+                        else:
+                            kv_cache.append(i, k, v)
+
+                attention_mask = torch.cat(
+                    [
+                        attention_mask,
+                        torch.ones(
+                            (1, 1),
+                            device=model.device,
+                            dtype=attention_mask.dtype,
+                        ),
+                    ],
+                    dim=1,
+                )
+                current_token = next_token
+        else:
+            # Chunked path: process multiple tokens per forward to reduce Python overhead.
+            # Note: this changes intra-chunk KV quantization exposure (tokens within a chunk
+            # attend to each other with float K/V); keep chunk_size=1 for strict decode-like evaluation.
+            attention_mask = torch.zeros((1, 0), device=model.device, dtype=torch.long)
+            pos = 0
+            while pos < (seq_len - 1):
+                chunk_len = min(chunk_size, (seq_len - 1) - pos)
+                chunk_input = input_ids[:, pos : pos + chunk_len]
+
+                # attention_mask must include past + current tokens
+                attention_mask = torch.cat(
+                    [
+                        attention_mask,
+                        torch.ones(
+                            (1, chunk_len),
+                            device=model.device,
+                            dtype=attention_mask.dtype,
+                        ),
+                    ],
+                    dim=1,
+                )
+
+                past_key_values, should_update_cache = build_past_key_values(
+                    kv_mode, kv_cache, num_layers
+                )
+                past_key_values = maybe_to_dynamic_cache(past_key_values)
+
+                outputs = model(
+                    input_ids=chunk_input,
+                    attention_mask=attention_mask,
+                    past_key_values=past_key_values,
+                    use_cache=True,
+                )
+
+                # Compute NLL for this chunk: predict token (pos+1 .. pos+chunk_len)
+                targets = input_ids[:, pos + 1 : pos + chunk_len + 1]
+                log_probs = torch.log_softmax(outputs.logits, dim=-1)
+                nll = -log_probs.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1)  # [1, L]
+
+                pred_indices = torch.arange(
+                    pos + 1, pos + chunk_len + 1, device=model.device
+                )
+                mask = pred_indices >= int(start_loss_idx)
+                if mask.any().item():
+                    total_nll += nll[0, mask].sum()
+                    total_tokens += int(mask.sum().item())
+
+                if should_update_cache and outputs.past_key_values is not None:
+                    for i, (k, v) in enumerate(outputs.past_key_values):
+                        if k.shape[2] > chunk_len:
+                            k_new = k[:, :, -chunk_len:, :]
+                            v_new = v[:, :, -chunk_len:, :]
+                            kv_cache.append(i, k_new, v_new)
+                        else:
+                            kv_cache.append(i, k, v)
+
+                pos += chunk_len
 
     return total_nll, total_tokens
 
@@ -287,6 +410,12 @@ def eval_window_kv_cache(
 def main():
     parser = argparse.ArgumentParser(description="D3: PPL Evaluation")
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
+    parser.add_argument(
+        "--model_revision",
+        type=str,
+        default=None,
+        help="Optional model revision (commit hash/tag) for strict reproducibility.",
+    )
     # PPL specific
     parser.add_argument("--stride", type=int, default=512)
     parser.add_argument(
@@ -301,13 +430,33 @@ def main():
         default=None,
         help="Limit total tokens to max_samples * max_length",
     )
+    parser.add_argument(
+        "--chunk_size",
+        type=int,
+        default=128,
+        help=(
+            "Chunk size for ppl_mode=kv_cache. Use 1 for strict token-by-token evaluation; "
+            "larger values reduce Python overhead and increase GPU utilization."
+        ),
+    )
     
     # Schema filler args
+    # NOTE: scripts/run_experiments.py passes --seq_len/--gen_len for all tasks; accept them
+    # as no-ops here to keep the matrix runner compatible.
+    parser.add_argument("--seq_len", type=int, default=None)
+    parser.add_argument("--gen_len", type=int, default=None)
     parser.add_argument(
         "--kv_mode",
         type=str,
         default="fp16",
-        choices=["fp16", "int8_baseline", "int8_fused", "int8_ours", "int4_baseline"],
+        choices=[
+            "fp16",
+            "int8_baseline",
+            "int8_fused",
+            "int8_ours",
+            "int4_baseline",
+            "int4_fused",
+        ],
     )
     parser.add_argument("--group_size", type=int, default=128)
     parser.add_argument("--clip_percentile", type=float, default=99.9)
@@ -330,6 +479,64 @@ def main():
         dest="use_attn_temperature",
         action="store_false",
         help="Disable per-head temperature even if calib provides it.",
+    )
+    parser.add_argument(
+        "--use_static_scales",
+        dest="use_static_scales",
+        action="store_true",
+        default=True,
+        help="Use static K/V scales from calibration if available (int8_ours).",
+    )
+    parser.add_argument(
+        "--no_use_static_scales",
+        dest="use_static_scales",
+        action="store_false",
+        help="Ignore static K/V scales from calibration (int8_ours).",
+    )
+    parser.add_argument(
+        "--adaptive_static_scales",
+        dest="adaptive_static_scales",
+        action="store_true",
+        default=False,
+        help="Adaptively raise static scales with runtime observed scales (int8_ours).",
+    )
+    parser.add_argument(
+        "--no_adaptive_static_scales",
+        dest="adaptive_static_scales",
+        action="store_false",
+        help="Disable adaptive static-scale safeguard.",
+    )
+    parser.add_argument(
+        "--adaptive_static_margin",
+        type=float,
+        default=1.0,
+        help="Safety margin multiplier for static scales before adaptive max.",
+    )
+    parser.add_argument(
+        "--adaptive_static_k",
+        dest="adaptive_static_k",
+        action="store_true",
+        default=True,
+        help="Apply adaptive static-scale safeguard on K.",
+    )
+    parser.add_argument(
+        "--no_adaptive_static_k",
+        dest="adaptive_static_k",
+        action="store_false",
+        help="Disable adaptive static-scale safeguard on K.",
+    )
+    parser.add_argument(
+        "--adaptive_static_v",
+        dest="adaptive_static_v",
+        action="store_true",
+        default=True,
+        help="Apply adaptive static-scale safeguard on V.",
+    )
+    parser.add_argument(
+        "--no_adaptive_static_v",
+        dest="adaptive_static_v",
+        action="store_false",
+        help="Disable adaptive static-scale safeguard on V.",
     )
     parser.add_argument("--save_csv", action="store_true", default=True)
     parser.add_argument("--seed", type=int, default=1234)
@@ -363,11 +570,15 @@ def main():
         ppl_mode = "kv_cache"
 
     print(f"Loading {args.model_id}...")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_id, trust_remote_code=True)
+    model_path = resolve_pretrained_path(args.model_id, revision=args.model_revision)
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_path, revision=args.model_revision, trust_remote_code=True
+    )
     model = AutoModelForCausalLM.from_pretrained(
-        args.model_id,
+        model_path,
         torch_dtype=torch.float16,
         device_map="auto",
+        revision=args.model_revision,
         trust_remote_code=True,
     )
     model.eval()
@@ -407,21 +618,39 @@ def main():
 
     print(
         f"Evaluating PPL with {ppl_mode} mode "
-        f"(Window: {max_length}, Stride: {stride})..."
+        f"(Window: {max_length}, Stride: {stride}, Chunk: {args.chunk_size})..."
     )
     pbar = tqdm(desc="Evaluating PPL", unit="win")
     buffer_tokens = []
 
     kv_cache = None
+    hook_handles = []
+    effective_group_size = args.group_size
+    effective_clip_percentile = args.clip_percentile
     if ppl_mode == "kv_cache":
-        kv_cache = build_kv_cache(
+        kv_cache, effective_group_size, effective_clip_percentile = build_kv_cache(
             args.kv_mode,
             model,
             args.group_size,
             args.clip_percentile,
             args.calib_file,
             args.use_attn_temperature,
+            args.use_static_scales,
+            args.adaptive_static_scales,
+            args.adaptive_static_margin,
+            args.adaptive_static_k,
+            args.adaptive_static_v,
+            args.decode_attn_impl,
         )
+        if (
+            args.kv_mode == "int8_ours"
+            and args.use_attn_temperature
+            and getattr(kv_cache, "inv_tau", None) is not None
+        ):
+            # Apply temperature to q_len>1 (prefill / chunked) via hooks.
+            # Hooks explicitly no-op when seq_len<=1 to avoid double-scaling decode,
+            # since fused decode path scales Q internally.
+            hook_handles = _register_prefill_temperature_hooks(model, kv_cache.inv_tau)
 
     try:
         for ids in iter_token_ids(test, tokenizer, max_tokens):
@@ -455,6 +684,7 @@ def main():
                         trg_len=trg_len,
                         kv_cache=kv_cache,
                         kv_mode=args.kv_mode,
+                        chunk_size=args.chunk_size,
                     )
                     total_nll += nll
                     total_tokens += tokens
@@ -486,6 +716,7 @@ def main():
                         trg_len=trg_len,
                         kv_cache=kv_cache,
                         kv_mode=args.kv_mode,
+                        chunk_size=args.chunk_size,
                     )
                     total_nll += nll
                     total_tokens += tokens
@@ -497,6 +728,11 @@ def main():
             print("Tip: reduce --max_length or --max_samples.")
         sys.exit(1)
     finally:
+        for h in hook_handles:
+            try:
+                h.remove()
+            except Exception:
+                pass
         pbar.close()
 
     if prev_end_loc <= 0 or total_tokens <= 0:
@@ -525,8 +761,8 @@ def main():
             "model_id": args.model_id,
             "kv_mode": kv_mode_used,
             "quant_bits": 4 if "int4" in kv_mode_used else (8 if "int8" in kv_mode_used else 16),
-            "clip_percentile": args.clip_percentile,
-            "group_size": args.group_size,
+            "clip_percentile": effective_clip_percentile,
+            "group_size": effective_group_size,
             "dtype": str(model.dtype),
             "hardware": f"{hardware['gpu']} ({hardware['gpu_memory']})",
             "seq_len": seq_len, # Total evaluated
@@ -542,6 +778,7 @@ def main():
             "perplexity": round(ppl.item(), 4),
             "ppl_mode": ppl_mode,
             "tokens_evaluated": total_tokens,
+            "chunk_size": int(args.chunk_size),
         }
         
         # Extended fields
@@ -549,7 +786,7 @@ def main():
             "run_id", "model_id", "kv_mode", "quant_bits", "clip_percentile", "group_size", 
             "dtype", "hardware", "seq_len", "gen_len", "batch", "ttft_ms", "tpot_ms",
             "tok_per_s", "gpu_mem_peak_mb", "timestamp", "git_commit", "perplexity",
-            "ppl_mode", "tokens_evaluated"
+            "ppl_mode", "tokens_evaluated", "chunk_size"
         ]
         
         with open(path, "w", newline="") as f:

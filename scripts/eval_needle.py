@@ -18,7 +18,8 @@ script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from src.engine.generate_loop import generate
+from src.engine.generate_loop import generate_from_ids
+from src.utils.hf import resolve_pretrained_path
 from src.utils.repro import (
     build_config_snapshot,
     get_hardware_info,
@@ -41,9 +42,9 @@ def get_git_commit() -> str:
     except Exception:
         return "unknown"
 
-def generate_haystack(tokenizer, context_len, needle, depth_percent):
+def generate_haystack_ids(tokenizer, context_len, needle, depth_percent):
     """
-    Generates a haystack text with the needle inserted at depth_percent.
+    Generate a haystack token-id list with the needle inserted at depth_percent.
     Haystack is "The quick brown fox..." repeated.
     """
     filler = "The quick brown fox jumps over the lazy dog. " * 50
@@ -53,40 +54,91 @@ def generate_haystack(tokenizer, context_len, needle, depth_percent):
     needle_text = f" The special secret passkey is {needle}. Remember it. "
     needle_tokens = tokenizer.encode(needle_text, add_special_tokens=False)
     
-    # Target total tokens
-    target_len = context_len - 100 # leave room for system prompt / response
-    
-    # Calculate insertion point
-    depth_idx = int(target_len * (depth_percent / 100))
-    
-    # Construct
-    # Fill up to depth
+    # Target total tokens for the haystack only.
+    # Keep a safety margin for system/user template + question + answer.
+    target_len = context_len - 100
+    if target_len <= 0:
+        raise ValueError(f"context_len too small: {context_len}")
+
+    # Ensure the needle is always included even at depth_percent=100.
+    filler_len = target_len - len(needle_tokens)
+    if filler_len <= 0:
+        raise ValueError(
+            f"context_len too small to fit needle: context_len={context_len}, "
+            f"target_len={target_len}, needle_tokens={len(needle_tokens)}"
+        )
+
+    depth_idx = int(filler_len * (depth_percent / 100.0))
+    depth_idx = max(0, min(depth_idx, filler_len))
+
+    # Build: filler_before + needle + filler_after, total == target_len.
     current_tokens = []
     while len(current_tokens) < depth_idx:
         current_tokens.extend(filler_tokens)
     current_tokens = current_tokens[:depth_idx]
-    
-    # Insert needle
+
     current_tokens.extend(needle_tokens)
-    
-    # Fill rest
+
+    remaining = target_len - len(current_tokens)
     while len(current_tokens) < target_len:
         current_tokens.extend(filler_tokens)
     current_tokens = current_tokens[:target_len]
-    
-    return tokenizer.decode(current_tokens)
+
+    if remaining < 0:
+        # Should not happen; keep as a guard to avoid silent needle truncation.
+        raise RuntimeError(
+            f"Internal error: haystack overflow. target_len={target_len}, "
+            f"len(current_tokens)={len(current_tokens)}"
+        )
+
+    return current_tokens
 
 def main():
     parser = argparse.ArgumentParser(description="D4: Needle Evaluation")
     parser.add_argument("--context_len", type=int, default=4096)
     parser.add_argument("--num_depths", type=int, default=10) # How many checkpoints (e.g. 0, 10, ... 100)
     parser.add_argument(
+        "--depth_batch",
+        type=int,
+        default=1,
+        help=(
+            "Batch multiple depths per forward pass. Requires equal-length prompts and no padding. "
+            "Recommended: 2-8 on H20."
+        ),
+    )
+    parser.add_argument(
+        "--needle_max_new_tokens",
+        type=int,
+        default=64,
+        help="Maximum tokens to generate for the answer span.",
+    )
+    # NOTE: scripts/run_experiments.py passes --seq_len/--gen_len for all tasks. Needle eval uses
+    # --context_len and a fixed generation length; accept these args for compatibility.
+    parser.add_argument(
+        "--seq_len",
+        type=int,
+        default=None,
+        help="Alias for --context_len (run_experiments compatibility).",
+    )
+    parser.add_argument(
+        "--gen_len",
+        type=int,
+        default=None,
+        help="Ignored. Needle eval uses a fixed short generation length.",
+    )
+    parser.add_argument(
         "--kv_mode",
         type=str,
         default="fp16",
-        choices=["fp16", "int8_baseline", "int8_fused", "int8_ours", "int4_baseline"],
+        choices=["fp16", "int8_baseline", "int8_fused", "int8_ours", "int4_baseline", "int4_fused"],
     )
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
+    parser.add_argument(
+        "--model_revision",
+        type=str,
+        default=None,
+        help="Optional model revision (commit hash/tag) for strict reproducibility.",
+    )
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--run_name", type=str, default=None)
     # Schema args
@@ -112,6 +164,64 @@ def main():
         action="store_false",
         help="Disable per-head temperature even if calib provides it.",
     )
+    parser.add_argument(
+        "--use_static_scales",
+        dest="use_static_scales",
+        action="store_true",
+        default=True,
+        help="Use static K/V scales from calibration if available (int8_ours).",
+    )
+    parser.add_argument(
+        "--no_use_static_scales",
+        dest="use_static_scales",
+        action="store_false",
+        help="Ignore static K/V scales from calibration (int8_ours).",
+    )
+    parser.add_argument(
+        "--adaptive_static_scales",
+        dest="adaptive_static_scales",
+        action="store_true",
+        default=False,
+        help="Adaptively raise static scales with runtime observed scales (int8_ours).",
+    )
+    parser.add_argument(
+        "--no_adaptive_static_scales",
+        dest="adaptive_static_scales",
+        action="store_false",
+        help="Disable adaptive static-scale safeguard.",
+    )
+    parser.add_argument(
+        "--adaptive_static_margin",
+        type=float,
+        default=1.0,
+        help="Safety margin multiplier for static scales before adaptive max.",
+    )
+    parser.add_argument(
+        "--adaptive_static_k",
+        dest="adaptive_static_k",
+        action="store_true",
+        default=True,
+        help="Apply adaptive static-scale safeguard on K.",
+    )
+    parser.add_argument(
+        "--no_adaptive_static_k",
+        dest="adaptive_static_k",
+        action="store_false",
+        help="Disable adaptive static-scale safeguard on K.",
+    )
+    parser.add_argument(
+        "--adaptive_static_v",
+        dest="adaptive_static_v",
+        action="store_true",
+        default=True,
+        help="Apply adaptive static-scale safeguard on V.",
+    )
+    parser.add_argument(
+        "--no_adaptive_static_v",
+        dest="adaptive_static_v",
+        action="store_false",
+        help="Disable adaptive static-scale safeguard on V.",
+    )
     parser.add_argument("--save_csv", action="store_true", default=True)
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--out_dir", type=str, default="results/runs")
@@ -125,15 +235,23 @@ def main():
             if value is not None:
                 setattr(args, key, value)
 
+    # Apply aliasing for matrix-runner compatibility.
+    if args.seq_len is not None:
+        args.context_len = args.seq_len
+
     normalize_kv_params(args)
     set_seed(seed=args.seed, deterministic=True)
 
     print(f"Loading {args.model_id}...")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_id, trust_remote_code=True)
+    model_path = resolve_pretrained_path(args.model_id, revision=args.model_revision)
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_path, revision=args.model_revision, trust_remote_code=True
+    )
     model = AutoModelForCausalLM.from_pretrained(
-        args.model_id, 
+        model_path, 
         torch_dtype=torch.float16, 
         device_map="auto", 
+        revision=args.model_revision,
         trust_remote_code=True
     )
 
@@ -146,43 +264,104 @@ def main():
     print(f"Running Needle Test (Context: {args.context_len}, Depths: {args.num_depths})...")
 
     pass_count = 0
+    rng = np.random.default_rng(args.seed)
+    depth_batch = max(int(args.depth_batch), 1)
+
+    prefix_text = (
+        "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
+        "<|im_start|>user\n"
+    )
+    suffix_text = (
+        "\n\nWhat is the special passkey mentioned in the text?\n"
+        "Reply with the passkey only (verbatim), no extra words.<|im_end|>\n"
+        "<|im_start|>assistant\n"
+    )
+    prefix_ids = tokenizer.encode(prefix_text, add_special_tokens=False)
+    suffix_ids = tokenizer.encode(suffix_text, add_special_tokens=False)
+
+    prompt_ids_list = []
+    needles = []
+    depth_values = []
     
     for depth in depths:
-        needle = str(uuid.uuid4())
-        haystack = generate_haystack(tokenizer, args.context_len, needle, depth)
-        
-        prompt = (
-            f"<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n"
-            f"<|im_start|>user\n{haystack}\n\n"
-            f"What is the special passkey mentioned in the text?<|im_end|>\n"
-            f"<|im_start|>assistant\nMO" # Prefill slightly to guide
-        )
-        
-        out = generate(
+        needle = str(uuid.UUID(bytes=rng.bytes(16)))
+        haystack_ids = generate_haystack_ids(tokenizer, args.context_len, needle, depth)
+        haystack_text = tokenizer.decode(haystack_ids, skip_special_tokens=True)
+        if needle not in haystack_text:
+            raise RuntimeError(
+                "Needle not present in generated haystack. "
+                f"context_len={args.context_len} depth={float(depth):.1f} needle={needle}"
+            )
+
+        prompt_ids = prefix_ids + haystack_ids + suffix_ids
+        prompt_ids_list.append(prompt_ids)
+        needles.append(needle)
+        depth_values.append(float(depth))
+
+    if not prompt_ids_list:
+        raise RuntimeError("No prompts were generated for needle evaluation.")
+
+    prompt_len = len(prompt_ids_list[0])
+    for idx, ids in enumerate(prompt_ids_list):
+        if len(ids) != prompt_len:
+            raise RuntimeError(
+                "Needle batch requires equal-length prompts, but found mismatch: "
+                f"idx0_len={prompt_len} idx{idx}_len={len(ids)}"
+            )
+
+    for start in range(0, len(prompt_ids_list), depth_batch):
+        batch_prompts = prompt_ids_list[start : start + depth_batch]
+        batch_needles = needles[start : start + depth_batch]
+        batch_depths = depth_values[start : start + depth_batch]
+
+        input_ids = torch.tensor(batch_prompts, dtype=torch.long, device=model.device)
+        attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=model.device)
+
+        out = generate_from_ids(
             model=model,
             tokenizer=tokenizer,
-            prompt=prompt,
-            max_new_tokens=32, # short gen
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            max_new_tokens=args.needle_max_new_tokens,
             kv_mode=args.kv_mode,
             group_size=args.group_size,
             clip_percentile=args.clip_percentile,
             calib_file=args.calib_file,
             use_attn_temperature=args.use_attn_temperature,
+            use_static_scales=args.use_static_scales,
+            adaptive_static_scales=args.adaptive_static_scales,
+            adaptive_static_margin=args.adaptive_static_margin,
+            adaptive_static_k=args.adaptive_static_k,
+            adaptive_static_v=args.adaptive_static_v,
+            decode_attn_impl=args.decode_attn_impl or "triton_fused",
             seed=args.seed,
+            stop_on_eos=True,
         )
-        
-        # Verify
-        generated_text = out.text
-        passed = needle in generated_text
-        if passed: pass_count += 1
-        
-        print(f"Depth {depth:.1f}%: {'PASS' if passed else 'FAIL'} (Needle: {needle} vs Gen: {generated_text.strip()})")
-        
-        results.append({
-            "depth": depth,
-            "passed": int(passed),
-            "generated": generated_text
-        })
+
+        gen_ids = out.generated_ids
+        for j in range(gen_ids.shape[0]):
+            generated_text = tokenizer.decode(
+                gen_ids[j].tolist(), skip_special_tokens=True
+            )
+            needle = batch_needles[j]
+            depth = batch_depths[j]
+            passed = needle in generated_text
+            if passed:
+                pass_count += 1
+
+            print(
+                f"Depth {depth:.1f}%: {'PASS' if passed else 'FAIL'} "
+                f"(Needle: {needle} vs Gen: {generated_text.strip()})"
+            )
+
+            results.append(
+                {
+                    "depth": depth,
+                    "passed": int(passed),
+                    "needle": needle,
+                    "generated_text": generated_text.strip(),
+                }
+            )
 
     pass_rate = (pass_count / len(depths)) * 100
     print(f"\nFinal Pass Rate: {pass_rate:.2f}%")
@@ -193,6 +372,7 @@ def main():
             out_dir = project_root / out_dir
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / f"profile_needle_{args.kv_mode}_{timestamp.replace(':','-')}.csv"
+        details_path = out_dir / f"needle_details_{args.kv_mode}_{timestamp.replace(':','-')}.csv"
         
         row = {
             "run_id": f"needle_{timestamp}",
@@ -204,8 +384,8 @@ def main():
             "dtype": str(model.dtype),
             "hardware": f"{hardware['gpu']} ({hardware['gpu_memory']})",
             "seq_len": args.context_len,
-            "gen_len": 32,
-            "batch": 1,
+            "gen_len": args.needle_max_new_tokens,
+            "batch": int(depth_batch),
             "ttft_ms": 0,
             "tpot_ms": 0,
             "tok_per_s": 0,
@@ -226,6 +406,32 @@ def main():
             writer.writeheader()
             writer.writerow(row)
         print(f"Saved to {path}")
+
+        detail_fields = [
+            "run_id",
+            "kv_mode",
+            "context_len",
+            "depth",
+            "passed",
+            "needle",
+            "generated_text",
+        ]
+        with open(details_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=detail_fields)
+            writer.writeheader()
+            for r in results:
+                writer.writerow(
+                    {
+                        "run_id": row["run_id"],
+                        "kv_mode": args.kv_mode,
+                        "context_len": args.context_len,
+                        "depth": r["depth"],
+                        "passed": r["passed"],
+                        "needle": r["needle"],
+                        "generated_text": r["generated_text"],
+                    }
+                )
+        print(f"Saved needle details to {details_path}")
 
         run_snapshot_dir = out_dir / row["run_id"]
         snapshot = build_config_snapshot(

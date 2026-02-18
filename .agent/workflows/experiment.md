@@ -15,6 +15,23 @@ description: 运行实验、收集数据、生成图表的工作流
 
 ---
 
+## 执行前检查（强制）
+
+1. 先读规范：`AGENTS.md` 与 `docs/AGENT_README.md`
+2. 先查本仓库技能库：`ls .agent/skills`，并至少阅读：
+   - `.agent/skills/remote-server/SKILL.md`
+   - `.agent/skills/long-running-task/SKILL.md`
+3. 本项目的实验与评测默认需要 GPU，必须先做远端连接健康检查（GPU 可见）：
+```bash
+ssh -p 31867 root@region-42.seetacloud.com "echo 'SSH OK' && nvidia-smi -L"
+```
+4. 长任务必须用 tmux（避免 SSH 断线导致实验中断）：
+```bash
+ssh -p 31867 root@region-42.seetacloud.com "bash -lc 'tmux new -s exp_run -d \"cd /root/LLM_KVCache_Quantization && python3 scripts/run_experiments.py --config configs/exp_matrix.yaml\"'"
+```
+
+---
+
 ## 实验流程
 
 // turbo
@@ -30,7 +47,7 @@ cat configs/exp_matrix.yaml
 ```
 
 // turbo
-### Step 2: 环境记录
+### Step 2: 环境记录（在 GPU 服务器上执行）
 ```bash
 # 记录实验环境
 nvidia-smi --query-gpu=name,memory.total --format=csv > env/gpu_info.csv
@@ -38,12 +55,9 @@ pip freeze > env/requirements_freeze.txt
 git rev-parse HEAD > env/git_commit.txt
 ```
 
-### Step 3: 运行实验（建议使用 screen）
+### Step 3: 运行实验（建议使用 tmux，远端执行）
 ```bash
-# 询问用户是否使用 screen
-screen -S exp_run
-
-# 运行实验矩阵
+# 运行实验矩阵（在 tmux 内运行）
 python scripts/run_experiments.py --config configs/exp_matrix.yaml
 
 # 或者分步运行
@@ -54,7 +68,7 @@ python scripts/eval_needle.py --config <config>
 ```
 
 // turbo
-### Step 4: 结果验证
+### Step 4: 结果验证（远端生成，本地用 rsync 同步）
 ```bash
 # 检查输出文件
 ls -la results/runs/

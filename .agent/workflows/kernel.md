@@ -8,6 +8,19 @@ description: Triton kernel 开发和调试工作流
 
 ---
 
+## 执行前检查（强制）
+
+1. 先读规范：`AGENTS.md` 与 `docs/AGENT_README.md`
+2. 先查本仓库技能库：`ls .agent/skills`，并至少阅读：
+   - `.agent/skills/remote-server/SKILL.md`（kernel 编译/跑测试需要 GPU）
+   - `.agent/skills/long-running-task/SKILL.md`
+3. 先做远端连接健康检查（GPU 可见），并在 tmux 内跑测试/benchmark：
+```bash
+ssh -p 31867 root@region-42.seetacloud.com "echo 'SSH OK' && nvidia-smi -L"
+```
+
+---
+
 ## Kernel 目标（Milestone G）
 
 实现融合量化 decode attention (q_len=1)：

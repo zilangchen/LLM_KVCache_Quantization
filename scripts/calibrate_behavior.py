@@ -5,6 +5,7 @@ F1: KL Calibration Script (scripts/calibrate_behavior.py)
 Outputs:
   - artifacts/kv_calib_kl.json (static k/v scales + per-head inv_tau)
   - results/calibration/calibration_stats.csv (optional stats)
+  - results/calibration/search_trials.csv (if --search)
   - results/calibration/outlier_profile.png (optional plot)
 """
 
@@ -14,7 +15,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
@@ -33,6 +34,7 @@ from src.utils.repro import (
     set_seed,
     write_config_snapshot,
 )
+from src.utils.hf import resolve_pretrained_path
 from scripts.config_utils import load_config, resolve_run_config
 
 
@@ -99,6 +101,32 @@ def dequantize_with_scale(
     return k_deq.view(-1, head_dim)
 
 
+def quantize_dequantize_with_clip_stats(
+    tensor: torch.Tensor,
+    scale: torch.Tensor,
+    group_size: int,
+) -> Tuple[torch.Tensor, int, int]:
+    """
+    Quantize/dequantize with int8 range and return clipping stats.
+
+    tensor: [seq, head_dim], scale: [num_groups]
+    returns: dequantized tensor [seq, head_dim], clipped_count, total_count
+    """
+    head_dim = tensor.shape[-1]
+    num_groups = head_dim // group_size
+    tensor_view = tensor.view(-1, num_groups, group_size)
+    scale_view = scale.view(1, num_groups, 1)
+
+    normalized = tensor_view / scale_view
+    clip_mask = normalized.abs() > 127.0
+    q = torch.round(normalized).clamp(-127, 127)
+    deq = q * scale_view
+
+    clipped_count = int(clip_mask.sum().item())
+    total_count = int(clip_mask.numel())
+    return deq.view(-1, head_dim), clipped_count, total_count
+
+
 def compute_inv_tau(
     q_samples: List[List[torch.Tensor]],
     k_samples: List[List[torch.Tensor]],
@@ -146,9 +174,227 @@ def compute_inv_tau(
     return inv_tau_tensor
 
 
+def evaluate_quant_candidate(
+    q_samples: List[List[torch.Tensor]],
+    k_samples: List[List[torch.Tensor]],
+    v_samples: List[List[torch.Tensor]],
+    k_scales: List[torch.Tensor],
+    v_scales: List[torch.Tensor],
+    num_heads: int,
+    num_kv_heads: int,
+    head_dim: int,
+    group_size_k: int,
+    group_size_v: int,
+) -> Dict[str, float]:
+    """
+    Evaluate one candidate quantization setting.
+
+    Returns:
+      - mean_kl, p95_kl, max_kl over attention distributions
+      - k_clip_rate, v_clip_rate (fraction of elements clipped to int8 range)
+      - v_rel_l2_mean (value dequant relative L2 error, mean over heads/samples/layers)
+    """
+    sm_scale = 1.0 / (head_dim ** 0.5)
+    kv_ratio = num_heads // num_kv_heads
+    eps = 1e-6
+
+    kl_values: List[float] = []
+    v_rel_l2_values: List[float] = []
+    k_clip_count = 0
+    k_total_count = 0
+    v_clip_count = 0
+    v_total_count = 0
+
+    for layer_idx in range(len(k_scales)):
+        k_scale_layer = k_scales[layer_idx]  # [kv_heads, num_groups]
+        v_scale_layer = v_scales[layer_idx]  # [kv_heads, num_groups]
+
+        for sample_idx in range(len(q_samples)):
+            k_deq_for_sample: List[torch.Tensor] = []
+            for kv_head in range(num_kv_heads):
+                # K clipping/dequant stats
+                k = k_samples[sample_idx][layer_idx][kv_head].float()  # [S, D]
+                k_deq, k_clip_local, k_total_local = quantize_dequantize_with_clip_stats(
+                    k, k_scale_layer[kv_head].float(), group_size_k
+                )
+                k_deq_for_sample.append(k_deq)
+                k_clip_count += k_clip_local
+                k_total_count += k_total_local
+
+                # V clipping/dequant stats + relative L2
+                v = v_samples[sample_idx][layer_idx][kv_head].float()  # [S, D]
+                v_deq, v_clip_local, v_total_local = quantize_dequantize_with_clip_stats(
+                    v, v_scale_layer[kv_head].float(), group_size_v
+                )
+                v_clip_count += v_clip_local
+                v_total_count += v_total_local
+
+                v_rel_l2 = torch.norm(v - v_deq) / (torch.norm(v) + eps)
+                v_rel_l2_values.append(float(v_rel_l2.item()))
+
+            for head_idx in range(num_heads):
+                kv_head = head_idx // kv_ratio
+                q = q_samples[sample_idx][layer_idx][head_idx].float()  # [D]
+                k = k_samples[sample_idx][layer_idx][kv_head].float()   # [S, D]
+                k_deq = k_deq_for_sample[kv_head]
+
+                logits_fp16 = (q @ k.T) * sm_scale
+                p_ref = torch.softmax(logits_fp16, dim=-1)
+
+                logits_quant = (q @ k_deq.T) * sm_scale
+                p_quant = torch.softmax(logits_quant, dim=-1)
+
+                p_ref_safe = torch.clamp(p_ref, min=eps)
+                p_quant_safe = torch.clamp(p_quant, min=eps)
+                kl = (p_ref_safe * (torch.log(p_ref_safe) - torch.log(p_quant_safe))).sum().item()
+                kl_values.append(float(kl))
+
+    if kl_values:
+        mean_kl = float(np.mean(kl_values))
+        p95_kl = float(np.quantile(np.array(kl_values, dtype=np.float64), 0.95))
+        max_kl = float(np.max(kl_values))
+    else:
+        mean_kl = 0.0
+        p95_kl = 0.0
+        max_kl = 0.0
+
+    return {
+        "mean_kl": mean_kl,
+        "p95_kl": p95_kl,
+        "max_kl": max_kl,
+        "k_clip_rate": float(k_clip_count / max(k_total_count, 1)),
+        "v_clip_rate": float(v_clip_count / max(v_total_count, 1)),
+        "v_rel_l2_mean": float(np.mean(v_rel_l2_values)) if v_rel_l2_values else 0.0,
+    }
+
+
+def select_best_trial(
+    trials: List[Dict[str, float]],
+    objective: str,
+    max_k_clip_rate: float,
+    max_v_clip_rate: float,
+) -> Tuple[Dict[str, float], Dict[str, object]]:
+    if not trials:
+        raise ValueError("No candidate trials found for calibration selection.")
+
+    if objective == "mean_kl":
+        ranked = sorted(
+            trials,
+            key=lambda x: (
+                x["mean_kl"],
+                x["p95_kl"],
+                x["k_clip_rate"] + x["v_clip_rate"],
+                x["group_size"],
+                x["clip_percentile"],
+            ),
+        )
+        return ranked[0], {
+            "mode": "mean_kl",
+            "constraints": None,
+            "num_feasible": len(trials),
+            "num_trials": len(trials),
+        }
+
+    feasible = [
+        t
+        for t in trials
+        if t["k_clip_rate"] <= max_k_clip_rate and t["v_clip_rate"] <= max_v_clip_rate
+    ]
+
+    if feasible:
+        ranked = sorted(
+            feasible,
+            key=lambda x: (
+                x["p95_kl"],
+                x["mean_kl"],
+                x["v_rel_l2_mean"],
+                x["group_size"],
+                x["clip_percentile"],
+            ),
+        )
+        return ranked[0], {
+            "mode": "robust_feasible",
+            "constraints": {
+                "max_k_clip_rate": max_k_clip_rate,
+                "max_v_clip_rate": max_v_clip_rate,
+            },
+            "num_feasible": len(feasible),
+            "num_trials": len(trials),
+        }
+
+    ranked = sorted(
+        trials,
+        key=lambda x: (
+            x["k_clip_rate"] + x["v_clip_rate"],
+            x["p95_kl"],
+            x["mean_kl"],
+            x["v_rel_l2_mean"],
+            x["group_size"],
+            x["clip_percentile"],
+        ),
+    )
+    return ranked[0], {
+        "mode": "robust_fallback_clip_first",
+        "constraints": {
+            "max_k_clip_rate": max_k_clip_rate,
+            "max_v_clip_rate": max_v_clip_rate,
+        },
+        "num_feasible": 0,
+        "num_trials": len(trials),
+    }
+
+
+def collect_absmax_samples(
+    kv_samples: List[List[torch.Tensor]],
+    group_size: int,
+) -> List[List[torch.Tensor]]:
+    """
+    Collect per-layer absmax-per-group statistics from cached KV tensors.
+
+    kv_samples: list over samples -> list over layers -> tensor [kv_heads, seq, head_dim]
+    Returns: list over layers -> list over samples -> tensor [kv_heads, num_groups]
+    """
+    if not kv_samples:
+        return []
+    num_layers = len(kv_samples[0])
+    out: List[List[torch.Tensor]] = [[] for _ in range(num_layers)]
+    for sample_idx in range(len(kv_samples)):
+        for layer_idx in range(num_layers):
+            out[layer_idx].append(compute_absmax_per_group(kv_samples[sample_idx][layer_idx], group_size))
+    return out
+
+
+def scales_from_absmax_samples(
+    absmax_samples: List[List[torch.Tensor]],
+    clip_percentile: float,
+) -> List[torch.Tensor]:
+    scales: List[torch.Tensor] = []
+    for layer_idx in range(len(absmax_samples)):
+        # torch.quantile requires float32/float64
+        stack = torch.stack(absmax_samples[layer_idx], dim=0).float()
+        absmax = torch.quantile(stack, clip_percentile / 100.0, dim=0)
+        scales.append(absmax.clamp(min=1e-5) / 127.0)
+    return scales
+
+
+def validate_group_size(head_dim: int, group_size: int, name: str) -> None:
+    if group_size <= 0:
+        raise ValueError(f"{name} must be > 0, got {group_size}.")
+    if head_dim % group_size != 0:
+        raise ValueError(
+            f"{name} must divide head_dim exactly. head_dim={head_dim}, {name}={group_size}."
+        )
+
+
 def main():
     parser = argparse.ArgumentParser(description="KL calibration for KV cache quantization")
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
+    parser.add_argument(
+        "--model_revision",
+        type=str,
+        default=None,
+        help="Optional model revision (commit hash/tag) for strict reproducibility.",
+    )
     parser.add_argument("--samples", type=int, default=16)
     parser.add_argument("--seq_len", type=int, default=512)
     parser.add_argument("--out_dir", type=str, default="results/calibration")
@@ -160,6 +406,48 @@ def main():
     parser.add_argument("--clip_percentile_v", type=float, default=99.9)
     parser.add_argument("--group_size_k", type=int, default=32)
     parser.add_argument("--group_size_v", type=int, default=32)
+    parser.add_argument(
+        "--search",
+        action="store_true",
+        help=(
+            "Search over (clip_percentile, group_size). "
+            "By default uses a robust objective (KL + clipping constraints)."
+        ),
+    )
+    parser.add_argument(
+        "--search_group_sizes",
+        type=str,
+        default="16,32,64,128",
+        help="Comma-separated group_size candidates (applied to both K and V).",
+    )
+    parser.add_argument(
+        "--search_clip_percentiles",
+        type=str,
+        default="99.0,99.5,99.9,100.0",
+        help="Comma-separated clip_percentile candidates (applied to both K and V).",
+    )
+    parser.add_argument(
+        "--search_objective",
+        type=str,
+        default="robust",
+        choices=["robust", "mean_kl"],
+        help=(
+            "Selection objective: robust=prefer low p95_kl under clip-rate constraints; "
+            "mean_kl=backward-compatible pure mean KL ranking."
+        ),
+    )
+    parser.add_argument(
+        "--search_max_k_clip_rate",
+        type=float,
+        default=0.01,
+        help="For robust objective: max allowed K clip rate (fraction) for feasible candidates.",
+    )
+    parser.add_argument(
+        "--search_max_v_clip_rate",
+        type=float,
+        default=0.01,
+        help="For robust objective: max allowed V clip rate (fraction) for feasible candidates.",
+    )
     parser.add_argument(
         "--inv_tau_candidates",
         type=str,
@@ -195,11 +483,15 @@ def main():
     calib_out_path.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Loading {args.model_id}...")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_id, trust_remote_code=True)
+    model_path = resolve_pretrained_path(args.model_id, revision=args.model_revision)
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_path, revision=args.model_revision, trust_remote_code=True
+    )
     model = AutoModelForCausalLM.from_pretrained(
-        args.model_id,
+        model_path,
         torch_dtype=torch.float16,
         device_map="auto",
+        revision=args.model_revision,
         trust_remote_code=True,
     )
     model.eval()
@@ -211,8 +503,6 @@ def main():
     head_dim = getattr(model.config, "hidden_size", 1536) // num_heads
 
     # Collect samples
-    k_absmax_samples = [[] for _ in range(num_layers)]
-    v_absmax_samples = [[] for _ in range(num_layers)]
     q_samples: List[List[torch.Tensor]] = []
     k_samples: List[List[torch.Tensor]] = []
     v_samples: List[List[torch.Tensor]] = []
@@ -224,6 +514,10 @@ def main():
             outputs = model(input_ids, use_cache=True, output_hidden_states=True)
             hidden_states = outputs.hidden_states
             past_key_values = outputs.past_key_values
+            if not isinstance(past_key_values, tuple) and hasattr(
+                past_key_values, "to_legacy_cache"
+            ):
+                past_key_values = past_key_values.to_legacy_cache()
 
             q_per_layer = []
             k_per_layer = []
@@ -234,7 +528,7 @@ def main():
                 hs_last = hidden_states[layer_idx][:, -1:, :]
                 q = attn.q_proj(hs_last)
                 bsz = q.shape[0]
-                q = q.view(bsz, 1, attn.num_heads, attn.head_dim).transpose(1, 2)
+                q = q.view(bsz, 1, num_heads, head_dim).transpose(1, 2)
                 q_last = q.squeeze(2).squeeze(0).cpu()  # [num_heads, head_dim]
 
                 k = past_key_values[layer_idx][0].squeeze(0).cpu()  # [kv_heads, seq, head_dim]
@@ -244,28 +538,155 @@ def main():
                 k_per_layer.append(k)
                 v_per_layer.append(v)
 
-                k_absmax = compute_absmax_per_group(k, args.group_size_k)
-                v_absmax = compute_absmax_per_group(v, args.group_size_v)
-                k_absmax_samples[layer_idx].append(k_absmax)
-                v_absmax_samples[layer_idx].append(v_absmax)
-
             q_samples.append(q_per_layer)
             k_samples.append(k_per_layer)
             v_samples.append(v_per_layer)
 
+    selection = None
+    if args.search:
+        group_candidates_raw = [int(x) for x in args.search_group_sizes.split(",") if x.strip()]
+        clip_candidates = [float(x) for x in args.search_clip_percentiles.split(",") if x.strip()]
+        if not group_candidates_raw or not clip_candidates:
+            raise ValueError("Search candidates cannot be empty.")
+
+        # Filter invalid group sizes early for clearer diagnostics.
+        group_candidates = []
+        skipped_groups = []
+        for group_size in group_candidates_raw:
+            if group_size > 0 and head_dim % group_size == 0:
+                group_candidates.append(group_size)
+            else:
+                skipped_groups.append(group_size)
+        if not group_candidates:
+            raise ValueError(
+                f"No valid search group sizes for head_dim={head_dim}. "
+                f"Provided={group_candidates_raw}"
+            )
+        if skipped_groups:
+            print(
+                f"Skipping invalid group_size candidates (must divide head_dim={head_dim}): {skipped_groups}"
+            )
+
+        print(
+            "Selecting (clip_percentile, group_size) with "
+            f"objective={args.search_objective}..."
+        )
+        trials = []
+
+        # Cache absmax stats per group_size to avoid recomputation.
+        k_absmax_cache = {}
+        v_absmax_cache = {}
+        for group_size in group_candidates:
+            k_absmax_cache[group_size] = collect_absmax_samples(k_samples, group_size)
+            v_absmax_cache[group_size] = collect_absmax_samples(v_samples, group_size)
+
+        for group_size in group_candidates:
+            absmax_samples_k = k_absmax_cache[group_size]
+            absmax_samples_v = v_absmax_cache[group_size]
+            for clip_p in clip_candidates:
+                k_scales_candidate = scales_from_absmax_samples(absmax_samples_k, clip_p)
+                v_scales_candidate = scales_from_absmax_samples(absmax_samples_v, clip_p)
+                stats = evaluate_quant_candidate(
+                    q_samples=q_samples,
+                    k_samples=k_samples,
+                    v_samples=v_samples,
+                    k_scales=k_scales_candidate,
+                    v_scales=v_scales_candidate,
+                    num_heads=num_heads,
+                    num_kv_heads=num_kv_heads,
+                    head_dim=head_dim,
+                    group_size_k=group_size,
+                    group_size_v=group_size,
+                )
+                trial = {
+                    "group_size": group_size,
+                    "clip_percentile": clip_p,
+                    **stats,
+                }
+                trial["feasible"] = (
+                    trial["k_clip_rate"] <= args.search_max_k_clip_rate
+                    and trial["v_clip_rate"] <= args.search_max_v_clip_rate
+                )
+                trials.append(trial)
+                print(
+                    "  "
+                    f"group_size={group_size:>4} clip={clip_p:>5}: "
+                    f"mean_kl={trial['mean_kl']:.6f} p95_kl={trial['p95_kl']:.6f} "
+                    f"k_clip={trial['k_clip_rate']:.4f} v_clip={trial['v_clip_rate']:.4f} "
+                    f"v_rel_l2={trial['v_rel_l2_mean']:.6f}"
+                )
+
+        best, selection_meta = select_best_trial(
+            trials=trials,
+            objective=args.search_objective,
+            max_k_clip_rate=args.search_max_k_clip_rate,
+            max_v_clip_rate=args.search_max_v_clip_rate,
+        )
+        args.group_size_k = int(best["group_size"])
+        args.group_size_v = int(best["group_size"])
+        args.clip_percentile_k = float(best["clip_percentile"])
+        args.clip_percentile_v = float(best["clip_percentile"])
+
+        trials_sorted = sorted(
+            trials,
+            key=lambda x: (
+                x["p95_kl"],
+                x["mean_kl"],
+                x["k_clip_rate"] + x["v_clip_rate"],
+                x["group_size"],
+                x["clip_percentile"],
+            ),
+        )
+        for rank_idx, trial in enumerate(trials_sorted, start=1):
+            trial["rank"] = rank_idx
+
+        trials_csv_path = out_dir / "search_trials.csv"
+        with open(trials_csv_path, "w") as f:
+            f.write(
+                "rank,group_size,clip_percentile,mean_kl,p95_kl,max_kl,k_clip_rate,"
+                "v_clip_rate,v_rel_l2_mean,feasible\n"
+            )
+            for t in trials_sorted:
+                f.write(
+                    f"{t['rank']},{t['group_size']},{t['clip_percentile']},"
+                    f"{t['mean_kl']},{t['p95_kl']},{t['max_kl']},"
+                    f"{t['k_clip_rate']},{t['v_clip_rate']},{t['v_rel_l2_mean']},"
+                    f"{int(bool(t['feasible']))}\n"
+                )
+        print(f"Saved search trial metrics to {trials_csv_path}")
+
+        selection = {
+            "objective": args.search_objective,
+            "constraints": selection_meta["constraints"],
+            "selection_mode": selection_meta["mode"],
+            "num_feasible": selection_meta["num_feasible"],
+            "num_trials": selection_meta["num_trials"],
+            "candidates": {
+                "group_sizes": group_candidates,
+                "clip_percentiles": clip_candidates,
+            },
+            "best": {
+                "group_size": int(best["group_size"]),
+                "clip_percentile": float(best["clip_percentile"]),
+                "mean_kl": float(best["mean_kl"]),
+                "p95_kl": float(best["p95_kl"]),
+                "max_kl": float(best["max_kl"]),
+                "k_clip_rate": float(best["k_clip_rate"]),
+                "v_clip_rate": float(best["v_clip_rate"]),
+                "v_rel_l2_mean": float(best["v_rel_l2_mean"]),
+            },
+            "trials": trials_sorted,
+            "trials_csv": str(trials_csv_path),
+        }
+
     # Compute static scales (percentile over sample-wise absmax)
+    validate_group_size(head_dim, int(args.group_size_k), "group_size_k")
+    validate_group_size(head_dim, int(args.group_size_v), "group_size_v")
     print("Computing static scales...")
-    k_scales = []
-    v_scales = []
-    for layer_idx in range(num_layers):
-        k_stack = torch.stack(k_absmax_samples[layer_idx], dim=0)
-        v_stack = torch.stack(v_absmax_samples[layer_idx], dim=0)
-        k_absmax = torch.quantile(k_stack, args.clip_percentile_k / 100.0, dim=0)
-        v_absmax = torch.quantile(v_stack, args.clip_percentile_v / 100.0, dim=0)
-        k_scale = k_absmax.clamp(min=1e-5) / 127.0
-        v_scale = v_absmax.clamp(min=1e-5) / 127.0
-        k_scales.append(k_scale)
-        v_scales.append(v_scale)
+    k_absmax_samples = collect_absmax_samples(k_samples, args.group_size_k)
+    v_absmax_samples = collect_absmax_samples(v_samples, args.group_size_v)
+    k_scales = scales_from_absmax_samples(k_absmax_samples, args.clip_percentile_k)
+    v_scales = scales_from_absmax_samples(v_absmax_samples, args.clip_percentile_v)
 
     # Compute inv_tau (KL minimization)
     print("Computing per-head inv_tau...")
@@ -299,6 +720,8 @@ def main():
         "inv_tau": inv_tau.tolist(),
         "inv_tau_candidates": inv_tau_candidates,
     }
+    if selection is not None:
+        calib_payload["selection"] = selection
 
     with open(calib_out_path, "w") as f:
         json.dump(calib_payload, f, indent=2)
@@ -338,6 +761,7 @@ def main():
                 "calibration_stats": str(csv_path),
                 "outlier_profile": str(plot_path),
                 "calibration_json": str(calib_out_path),
+                "search_trials": str(out_dir / "search_trials.csv") if args.search else None,
             },
         },
     )

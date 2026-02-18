@@ -214,6 +214,7 @@ def main():
     try:
         from src.engine.generate_loop import generate, GenerationOutput
         from src.utils.timing import reset_gpu_memory_stats
+        from src.utils.hf import resolve_pretrained_path
         from src.utils.repro import (
             build_config_snapshot,
             get_hardware_info,
@@ -239,14 +240,15 @@ def main():
     # Step 2: Load model and tokenizer
     print(f"\n[2/5] Loading model: {args.model_id}...")
     try:
+        model_path = resolve_pretrained_path(args.model_id)
         tokenizer = AutoTokenizer.from_pretrained(
-            args.model_id,
+            model_path,
             trust_remote_code=True,
         )
         print("  ✓ Tokenizer loaded")
 
         model = AutoModelForCausalLM.from_pretrained(
-            args.model_id,
+            model_path,
             torch_dtype=torch.float16,
             device_map="auto",
             trust_remote_code=True,

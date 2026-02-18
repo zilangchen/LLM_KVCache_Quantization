@@ -99,6 +99,9 @@ Kernel `decode_attn_int8_kernel`:
 
 """
 
+import os
+from typing import Optional
+
 import torch
 import triton
 import triton.language as tl
@@ -168,8 +171,7 @@ def decode_attn_int8_kernel(
     l_i = 0.0           # Sum exp
     acc = tl.zeros([HEAD_DIM], dtype=tl.float32) # Accumulator
     
-    # Loop over Sequence Length
-    # We step by BLOCK_SIZE
+    # Runtime loop avoids pathological compile-time unrolling at very long context lengths.
     for start_n in range(0, ctx_len, BLOCK_SIZE):
         # Current block indices: [start_n : start_n + BLOCK_SIZE]
         offs_n = start_n + tl.arange(0, BLOCK_SIZE)
@@ -283,23 +285,67 @@ def decode_attn_int8_kernel(
     tl.store(o_ptr + offs_d * stride_o_d, acc.to(tl.float16))
 
 
-def decode_attn_int8(q, k_cache, v_cache, k_scale, v_scale, context_lens, sm_scale=None):
+def decode_attn_int8(
+    q,
+    k_cache,
+    v_cache,
+    k_scale,
+    v_scale,
+    context_lens,
+    sm_scale=None,
+    debug_stats: Optional[dict] = None,
+    layer_idx: Optional[int] = None,
+    block_size: Optional[int] = None,
+):
     """
     Wrapper for Triton kernel.
     """
     if sm_scale is None:
         sm_scale = 1.0 / (q.shape[-1] ** 0.5)
-        
+
+    if q.ndim != 3:
+        raise ValueError(f"q must have shape [B, Hq, D], got {tuple(q.shape)}")
+    if k_cache.ndim != 4 or v_cache.ndim != 4:
+        raise ValueError(
+            f"k_cache/v_cache must have shape [B, Hkv, S, D], got {tuple(k_cache.shape)} / {tuple(v_cache.shape)}"
+        )
+    if k_scale.ndim != 4 or v_scale.ndim != 4:
+        raise ValueError(
+            f"k_scale/v_scale must have shape [B, Hkv, S, G], got {tuple(k_scale.shape)} / {tuple(v_scale.shape)}"
+        )
+    if context_lens.ndim != 1:
+        raise ValueError(f"context_lens must be 1D, got {tuple(context_lens.shape)}")
+    if not q.is_cuda:
+        raise ValueError("decode_attn_int8 requires CUDA tensors.")
+
     batch, q_heads, head_dim = q.shape
     # q: [batch, q_heads, head_dim]
     # k_cache/v_cache: [batch, kv_heads, max_seq, head_dim]
     # k_scale/v_scale: [batch, kv_heads, max_seq, num_groups]
-    
+
     # Validation
-    assert k_cache.shape[-1] == head_dim
-    assert k_scale.ndim == 4
-    assert v_cache.shape[:3] == k_cache.shape[:3]
-    assert v_scale.shape[:3] == k_scale.shape[:3]
+    if k_cache.shape[0] != batch or v_cache.shape[0] != batch:
+        raise ValueError(
+            f"Batch mismatch: q={batch}, k={k_cache.shape[0]}, v={v_cache.shape[0]}"
+        )
+    if k_cache.shape[-1] != head_dim or v_cache.shape[-1] != head_dim:
+        raise ValueError(
+            f"Head dim mismatch: q={head_dim}, k={k_cache.shape[-1]}, v={v_cache.shape[-1]}"
+        )
+    if k_cache.shape[:3] != v_cache.shape[:3]:
+        raise ValueError(
+            f"k/v cache shape mismatch: {tuple(k_cache.shape)} vs {tuple(v_cache.shape)}"
+        )
+    if k_scale.shape[:3] != k_cache.shape[:3] or v_scale.shape[:3] != v_cache.shape[:3]:
+        raise ValueError(
+            "Scale and cache shapes mismatch: "
+            f"k_scale={tuple(k_scale.shape)}, v_scale={tuple(v_scale.shape)}, "
+            f"k={tuple(k_cache.shape)}, v={tuple(v_cache.shape)}"
+        )
+    if context_lens.shape[0] != batch:
+        raise ValueError(
+            f"context_lens batch mismatch: expected {batch}, got {context_lens.shape[0]}"
+        )
 
     kv_heads = k_cache.shape[1]
     if q_heads % kv_heads != 0:
@@ -307,18 +353,56 @@ def decode_attn_int8(q, k_cache, v_cache, k_scale, v_scale, context_lens, sm_sca
             f"GQA head mismatch: q_heads={q_heads} must be a multiple of kv_heads={kv_heads}"
         )
     n_rep = q_heads // kv_heads
-    
+
     num_groups = k_scale.shape[-1]
+    if num_groups <= 0:
+        raise ValueError(f"num_groups must be > 0, got {num_groups}")
+    if head_dim % num_groups != 0:
+        raise ValueError(
+            f"head_dim {head_dim} must be divisible by num_groups {num_groups}"
+        )
     group_size = head_dim // num_groups
-    
+    max_seq = int(k_cache.shape[2])
+    max_ctx_in_batch = int(context_lens.max().item())
+    min_ctx_in_batch = int(context_lens.min().item())
+    if min_ctx_in_batch < 0:
+        raise ValueError(f"context_lens must be >= 0, got min={min_ctx_in_batch}")
+    if max_ctx_in_batch > max_seq:
+        raise ValueError(
+            f"context_lens max ({max_ctx_in_batch}) exceeds cache seq dim ({max_seq})"
+        )
+
     output = torch.empty_like(q)
-    
+
+    if block_size is None:
+        env_block_size = os.environ.get("KV_TRITON_BLOCK_SIZE")
+        if env_block_size:
+            try:
+                block_size = int(env_block_size)
+            except ValueError as exc:
+                raise ValueError(
+                    f"KV_TRITON_BLOCK_SIZE must be an integer, got {env_block_size!r}"
+                ) from exc
+        else:
+            # Longer context benefits from larger blocks by reducing loop overhead.
+            block_size = 128 if max_ctx_in_batch >= 8192 else 64
+
+    if block_size not in (32, 64, 128, 256):
+        raise ValueError(
+            f"Unsupported block_size={block_size}. Choose from [32, 64, 128, 256]."
+        )
+
     # Grid: (Batch, Heads)
     grid = (batch, q_heads)
-    
-    # Block size 128 usually good
-    BLOCK_SIZE = 128
-    
+
+    if isinstance(debug_stats, dict):
+        debug_stats["triton_kernel_calls"] = int(debug_stats.get("triton_kernel_calls", 0)) + 1
+        debug_stats["triton_block_size"] = int(block_size)
+        if layer_idx is not None:
+            triton_layer_hits = debug_stats.setdefault("triton_layer_hits", {})
+            layer_key = str(layer_idx)
+            triton_layer_hits[layer_key] = int(triton_layer_hits.get(layer_key, 0)) + 1
+
     # Launch
     decode_attn_int8_kernel[grid](
         q, k_cache, v_cache, k_scale, v_scale,
@@ -340,7 +424,7 @@ def decode_attn_int8(q, k_cache, v_cache, k_scale, v_scale, context_lens, sm_sca
         output.stride(0), output.stride(1), output.stride(2),
         
         HEAD_DIM=head_dim,
-        BLOCK_SIZE=BLOCK_SIZE,
+        BLOCK_SIZE=block_size,
         GROUP_SIZE=group_size,
         NUM_GROUPS=num_groups,
         N_REP=n_rep,

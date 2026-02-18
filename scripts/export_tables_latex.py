@@ -1,0 +1,315 @@
+#!/usr/bin/env python3
+"""
+Export aggregated CSV summary tables to LaTeX tables (booktabs).
+
+This script is intended to take the outputs from `scripts/aggregate_results.py`
+and convert them into thesis-ready LaTeX `table` environments.
+
+Inputs (expected under --tables_dir):
+  - latency_summary.csv
+  - memory_summary.csv
+  - needle_summary.csv
+  - ppl_summary.csv
+
+Outputs (written under --out_dir):
+  - latency_tpot_vs_seq.tex
+  - latency_tok_per_s_vs_seq.tex
+  - latency_ttft_vs_seq.tex
+  - memory_kv_cache_mem_vs_seq.tex
+  - memory_gpu_peak_vs_seq.tex
+  - needle_pass_rate_vs_seq.tex
+  - ppl_summary.tex
+  - all_tables.tex (\\input includes)
+
+Notes:
+  - Requires LaTeX packages: booktabs
+  - For wide tables, you may want to wrap with \\resizebox{\\linewidth}{!}{...}
+"""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+from typing import Dict, Iterable, List, Optional
+
+import pandas as pd
+
+KV_MODE_ORDER: List[str] = [
+    "fp16",
+    "int8_baseline",
+    "int8_ours",
+    "int8_fused",
+    "int4_baseline",
+    "int4_fused",
+]
+
+KV_MODE_DISPLAY: Dict[str, str] = {
+    "fp16": "FP16",
+    "int8_baseline": "INT8-baseline",
+    "int8_ours": "INT8-ours",
+    "int8_fused": "INT8-fused",
+    "int4_baseline": "INT4-baseline",
+    "int4_fused": "INT4-fused",
+}
+
+
+def _read_csv(path: Path) -> pd.DataFrame:
+    try:
+        return pd.read_csv(path)
+    except Exception:
+        return pd.DataFrame()
+
+
+def _sort_kv_mode(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty or "kv_mode" not in df.columns:
+        return df
+    order = {m: i for i, m in enumerate(KV_MODE_ORDER)}
+    df = df.copy()
+    df["_kv_mode_rank"] = df["kv_mode"].map(order).fillna(9999).astype(int)
+    df = df.sort_values(["_kv_mode_rank", "kv_mode"])
+    return df.drop(columns=["_kv_mode_rank"])
+
+
+def _display_kv_mode(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty or "kv_mode" not in df.columns:
+        return df
+    df = df.copy()
+    df["kv_mode"] = df["kv_mode"].map(KV_MODE_DISPLAY).fillna(df["kv_mode"])
+    return df
+
+
+def _pivot_metric(
+    df: pd.DataFrame,
+    metric_col: str,
+    *,
+    index_col: str = "seq_len",
+    columns_col: str = "kv_mode",
+    round_digits: Optional[int] = None,
+) -> pd.DataFrame:
+    if df.empty or metric_col not in df.columns:
+        return pd.DataFrame()
+
+    keep = [c for c in [index_col, columns_col, metric_col] if c in df.columns]
+    sub = df[keep].copy()
+    sub[index_col] = pd.to_numeric(sub[index_col], errors="coerce")
+    sub[metric_col] = pd.to_numeric(sub[metric_col], errors="coerce")
+    sub = sub.dropna(subset=[index_col, columns_col, metric_col])
+
+    # Handle duplicates defensively (e.g., multiple clip/group configs in one tables_dir).
+    sub = (
+        sub.groupby([index_col, columns_col], dropna=False, as_index=False)[metric_col]
+        .mean()
+    )
+
+    pivot = sub.pivot(index=index_col, columns=columns_col, values=metric_col).reset_index()
+    pivot = pivot.sort_values(index_col)
+
+    if round_digits is not None:
+        metric_cols = [c for c in pivot.columns if c != index_col]
+        pivot[metric_cols] = pivot[metric_cols].round(round_digits)
+
+    # Make seq_len an int when possible.
+    try:
+        pivot[index_col] = pivot[index_col].astype(int)
+    except Exception:
+        pass
+    return pivot
+
+
+def _latex_table_env(tabular_latex: str, *, caption: str, label: str) -> str:
+    tabular_latex = tabular_latex.rstrip()
+    return "\n".join(
+        [
+            r"\begin{table}[t]",
+            r"\centering",
+            rf"\caption{{{caption}}}",
+            rf"\label{{{label}}}",
+            r"\small",
+            tabular_latex,
+            r"\end{table}",
+            "",
+        ]
+    )
+
+
+def _to_latex_tabular(df: pd.DataFrame, *, index: bool = False) -> str:
+    if df.empty:
+        return ""
+    return df.to_latex(
+        index=index,
+        escape=True,
+    )
+
+
+def _write(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def export_latency(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[Path]:
+    paths: List[Path] = []
+    src = tables_dir / "latency_summary.csv"
+    df = _read_csv(src)
+    if df.empty:
+        return paths
+
+    # Default thesis tables assume batch=1 and fixed curve gen_len=64.
+    if "batch" in df.columns:
+        df = df[pd.to_numeric(df["batch"], errors="coerce") == 1]
+    if "gen_len" in df.columns:
+        gen = pd.to_numeric(df["gen_len"], errors="coerce")
+        if (gen == 64).any():
+            df = df[gen == 64]
+
+    df = _sort_kv_mode(df)
+    df = _display_kv_mode(df)
+
+    for metric, fname, caption, digits in [
+        ("tpot_ms_mean", "latency_tpot_vs_seq.tex", "TPOT vs context length (ms/token)", 2),
+        ("tok_per_s_mean", "latency_tok_per_s_vs_seq.tex", "Throughput vs context length (tok/s)", 2),
+        ("ttft_ms_mean", "latency_ttft_vs_seq.tex", "TTFT vs context length (ms)", 2),
+    ]:
+        pivot = _pivot_metric(df, metric, round_digits=digits)
+        if pivot.empty:
+            continue
+        tabular = _to_latex_tabular(pivot, index=False)
+        label = f"{label_prefix}:latency:{metric}"
+        latex = _latex_table_env(tabular, caption=caption, label=label)
+        out_path = out_dir / fname
+        _write(out_path, latex)
+        paths.append(out_path)
+    return paths
+
+
+def export_memory(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[Path]:
+    paths: List[Path] = []
+    src = tables_dir / "memory_summary.csv"
+    df = _read_csv(src)
+    if df.empty:
+        return paths
+
+    # Default thesis tables assume batch=1 and fixed curve gen_len=64.
+    if "batch" in df.columns:
+        df = df[pd.to_numeric(df["batch"], errors="coerce") == 1]
+    if "gen_len" in df.columns:
+        gen = pd.to_numeric(df["gen_len"], errors="coerce")
+        if (gen == 64).any():
+            df = df[gen == 64]
+
+    df = _sort_kv_mode(df)
+    df = _display_kv_mode(df)
+
+    for metric, fname, caption, digits in [
+        ("kv_cache_mem_mb_mean", "memory_kv_cache_mem_vs_seq.tex", "KV cache resident memory vs context length (MB)", 0),
+        ("gpu_mem_peak_mb_mean", "memory_gpu_peak_vs_seq.tex", "Peak GPU memory vs context length (MB)", 0),
+    ]:
+        pivot = _pivot_metric(df, metric, round_digits=digits)
+        if pivot.empty:
+            continue
+        tabular = _to_latex_tabular(pivot, index=False)
+        label = f"{label_prefix}:memory:{metric}"
+        latex = _latex_table_env(tabular, caption=caption, label=label)
+        out_path = out_dir / fname
+        _write(out_path, latex)
+        paths.append(out_path)
+    return paths
+
+
+def export_needle(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[Path]:
+    paths: List[Path] = []
+    src = tables_dir / "needle_summary.csv"
+    df = _read_csv(src)
+    if df.empty:
+        return paths
+
+    df = _sort_kv_mode(df)
+    df = _display_kv_mode(df)
+
+    pivot = _pivot_metric(df, "needle_pass_rate_mean", round_digits=2)
+    if pivot.empty:
+        return paths
+    tabular = _to_latex_tabular(pivot, index=False)
+    label = f"{label_prefix}:needle:pass_rate"
+    latex = _latex_table_env(tabular, caption="Needle pass rate vs context length (%)", label=label)
+    out_path = out_dir / "needle_pass_rate_vs_seq.tex"
+    _write(out_path, latex)
+    paths.append(out_path)
+    return paths
+
+
+def export_ppl(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[Path]:
+    paths: List[Path] = []
+    src = tables_dir / "ppl_summary.csv"
+    df = _read_csv(src)
+    if df.empty:
+        return paths
+
+    if "batch" in df.columns:
+        df = df[pd.to_numeric(df["batch"], errors="coerce") == 1]
+
+    df = _sort_kv_mode(df)
+    df = _display_kv_mode(df)
+
+    cols = [c for c in ["kv_mode", "perplexity_mean", "tokens_evaluated_mean"] if c in df.columns]
+    if not cols:
+        return paths
+    out = df[cols].copy()
+    if "perplexity_mean" in out.columns:
+        out["perplexity_mean"] = pd.to_numeric(out["perplexity_mean"], errors="coerce").round(4)
+    if "tokens_evaluated_mean" in out.columns:
+        out["tokens_evaluated_mean"] = pd.to_numeric(out["tokens_evaluated_mean"], errors="coerce").round(0)
+        try:
+            out["tokens_evaluated_mean"] = out["tokens_evaluated_mean"].astype("Int64")
+        except Exception:
+            pass
+
+    tabular = _to_latex_tabular(out, index=False)
+    label = f"{label_prefix}:ppl:summary"
+    latex = _latex_table_env(tabular, caption="Perplexity summary (kv_cache mode)", label=label)
+    out_path = out_dir / "ppl_summary.tex"
+    _write(out_path, latex)
+    paths.append(out_path)
+    return paths
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Export aggregated CSV tables to LaTeX")
+    parser.add_argument("--tables_dir", type=str, default="results/tables")
+    parser.add_argument("--out_dir", type=str, default="results/latex_tables")
+    parser.add_argument("--label_prefix", type=str, default="tab")
+    args = parser.parse_args()
+
+    tables_dir = Path(args.tables_dir)
+    out_dir = Path(args.out_dir)
+    label_prefix = str(args.label_prefix).strip() or "tab"
+
+    if not tables_dir.exists():
+        print(f"tables_dir not found: {tables_dir}")
+        return 2
+
+    written: List[Path] = []
+    written += export_latency(tables_dir, out_dir, label_prefix=label_prefix)
+    written += export_memory(tables_dir, out_dir, label_prefix=label_prefix)
+    written += export_needle(tables_dir, out_dir, label_prefix=label_prefix)
+    written += export_ppl(tables_dir, out_dir, label_prefix=label_prefix)
+
+    # Convenience include file.
+    all_tex = out_dir / "all_tables.tex"
+    lines: List[str] = [
+        "% Auto-generated by scripts/export_tables_latex.py",
+        "% Requires: \\usepackage{booktabs}",
+        "",
+    ]
+    for path in written:
+        rel = path.name
+        lines.append(rf"\input{{{rel}}}")
+    lines.append("")
+    _write(all_tex, "\n".join(lines))
+
+    print(f"Wrote {len(written)} table(s) to: {out_dir}")
+    print(f"Wrote include file to: {all_tex}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

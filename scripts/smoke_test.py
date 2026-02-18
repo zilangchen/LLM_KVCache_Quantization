@@ -31,6 +31,7 @@ project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
 from src.utils.repro import set_seed
+from src.utils.hf import resolve_pretrained_path
 
 
 def get_git_commit() -> str:
@@ -83,6 +84,12 @@ def main():
         help="HuggingFace model ID",
     )
     parser.add_argument(
+        "--model_revision",
+        type=str,
+        default=None,
+        help="Optional model revision (commit hash/tag) for strict reproducibility.",
+    )
+    parser.add_argument(
         "--save_output",
         action="store_true",
         help="Save structured output to results/runs/",
@@ -130,16 +137,19 @@ def main():
     # Step 2: Load model and tokenizer
     print(f"\n[2/4] Loading model: {args.model_id}...")
     try:
+        model_path = resolve_pretrained_path(args.model_id, revision=args.model_revision)
         tokenizer = AutoTokenizer.from_pretrained(
-            args.model_id,
+            model_path,
+            revision=args.model_revision,
             trust_remote_code=True,
         )
         print("  ✓ Tokenizer loaded")
 
         model = AutoModelForCausalLM.from_pretrained(
-            args.model_id,
+            model_path,
             torch_dtype=torch.float16,
             device_map="auto",
+            revision=args.model_revision,
             trust_remote_code=True,
         )
         print("  ✓ Model loaded")

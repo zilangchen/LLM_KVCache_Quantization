@@ -11,7 +11,23 @@ description: 自动开发、测试、交付完整功能的工作流
 ## 执行前检查（强制）
 
 // turbo
-### Step 0: 环境与上下文检查
+### Step 0A: Agent 协作与远程规范（先做这个）
+```bash
+# 新 agent session 必须先读规范
+sed -n '1,200p' AGENTS.md
+sed -n '1,200p' docs/AGENT_README.md
+
+# 每次都要检查并阅读 .agent/skills 里的相关 SKILL
+ls .agent/skills
+sed -n '1,200p' .agent/skills/remote-server/SKILL.md
+sed -n '1,200p' .agent/skills/long-running-task/SKILL.md
+
+# GPU/模型下载/长任务：先做远端连接健康检查（GPU 可见）
+ssh -p 31867 root@region-42.seetacloud.com "echo 'SSH OK' && nvidia-smi -L"
+```
+
+// turbo
+### Step 0B: 环境与上下文检查
 ```bash
 # 读取项目目标和任务清单
 cat objective.md | head -100
