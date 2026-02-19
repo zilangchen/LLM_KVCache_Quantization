@@ -236,6 +236,17 @@ agent 的输出应包含：
 
 （从这里开始追加）
 
+- **2026-02-19 04:58:00**：完成“论文写作前置清单 + final_thesis_plus 重跑启动”✅
+  - 新增文档：`docs/thesis_preflight_checklist.md`
+  - 新增一键脚本：`scripts/run_final_thesis_plus.sh`
+  - 聚合新增产物：
+    - 表：`thesis_main_claims_32k.csv`、`relative_gain_summary.csv`、`latency_tpot_gain_vs_fp16.csv`
+    - 图：`throughput_tok_per_s_per_seq_vs_batch.png`、`needle_exact_match_vs_context.png`、`latency_tpot_gain_vs_fp16.png`
+  - 远端已启动全量重跑：
+    - tmux: `thesis_plus_0219_045623`
+    - run_tag: `final_thesis_plus_20260219_045623`
+    - launcher log: `results/thesis_plus_0219_045623_launcher.log`
+
 - **2026-02-19 04:36:00**：完成“INT4 主线增强 + 统计增强（开发中阶段验收）”✅
   - 代码能力：
     - 新增 `kv_mode=int4_ours/int4_ours_mixed`（生成、PPL、Needle、verify、runner 全链路可用）

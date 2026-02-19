@@ -17,6 +17,7 @@
 ## 文档与模板
 - 提示词模板：`docs/prompt_templates.md`
 - 学校材料归档：`docs/school/`
+- 论文前置检查：`docs/thesis_preflight_checklist.md`
 
 ## 快速开始
 本项目的 GPU 实验默认在远端 AutoDL(H20) 上运行（见 `AGENTS.md`）。
@@ -29,17 +30,18 @@ cd /root/autodl-tmp/LLM_KVCache_Quantization
 
 ### 2) 一键复现论文最终表图（推荐）
 - 复现协议：`docs/final_experiment_protocol.md`
-- 最终验收目录（本地已同步）：`results/final_thesis_20260214_094156/`
-  - 表格：`results/final_thesis_20260214_094156/tables/`
-  - 图：`results/final_thesis_20260214_094156/plots/`
-  - LaTeX 表：`results/final_thesis_20260214_094156/latex_tables/all_tables.tex`
-  - Gates：`results/final_thesis_20260214_094156/gates/`
+- 当前最终验收目录（远端）：`/root/autodl-tmp/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/`
+  - 表格：`.../tables/`
+  - 图：`.../plots/`
+  - LaTeX 表：`.../latex_tables/all_tables.tex`
+  - Gates：`.../gates/`
 
 ### 3) 实验入口（唯一）
 - 矩阵配置：`configs/exp_matrix.yaml`
 - Runner：`scripts/run_experiments.py`
 - 聚合出图：`scripts/aggregate_results.py`
 - 导出 LaTeX 表：`scripts/export_tables_latex.py`
+- 终版全量重跑：`scripts/run_final_thesis_plus.sh`
 
 ## 当前主线模式
 - `fp16`
@@ -54,6 +56,7 @@ cd /root/autodl-tmp/LLM_KVCache_Quantization
 
 ## 工作区整理与历史归档
 - 当前保留的活跃结果目录：
+  - `results/final_thesis_plus_20260219_045623/`（建议先从远端 rsync 回本地）
   - `results/final_thesis_20260214_094156/`
   - `results/int4_fused_round_20260219_0315/`
 - 历史实验与过时材料已归档到：

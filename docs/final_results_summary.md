@@ -1,81 +1,51 @@
 # 最终结果总结（Final Thesis）
 
 ## 范围与口径（锁定）
-- 模式：`fp16 / int8_baseline / int8_ours`
+- 主线：`fp16 / int8_baseline / int8_ours`
+- 扩展：`int4_fused / int4_ours`（冲优探索，不纳入主结论）
 - 模型：`Qwen/Qwen2.5-1.5B-Instruct@989aa7980e4cf806f80c7fef2b1adb7bc71aa306`
-- 硬件：NVIDIA H20 (96GB)
-- 解码口径：greedy（temperature=0, top_p=1, top_k=0）
+- 硬件：NVIDIA H20（96GB）
+- 解码：greedy（`temperature=0, top_p=1, top_k=0`）
 
-## 本次论文验收“最终目录”（统一引用）
-- `results/final_thesis_20260214_094156/`
-  - `tables/`：聚合表（CSV）
-  - `plots/`：论文主图（PNG）
-  - `latex_tables/`：论文可直接引用的 LaTeX 表（由 `scripts/export_tables_latex.py` 生成）
-  - `gates/`：四闸门日志（可审计证据）
-  - `env/`：环境冻结（`versions.txt` / `requirements_freeze.txt`）+ git 状态（含未提交 patch）
-  - `runs/`：每个 run 的原始输出（CSV + config_snapshot）
-  - `logs/`：每个 run 的任务日志 + `_pipeline.log`
+## 最终验收目录（统一引用）
+- 远端：`/root/autodl-tmp/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/`
+- 本地（同步后）：`results/final_thesis_plus_20260219_045623/`
+- 关键子目录：`tables/`、`plots/`、`latex_tables/`、`gates/`、`env/`、`runs/`、`logs/`
 
-## 硬闸门（Gates，可审计）
-日志统一落盘在：`results/final_thesis_20260214_094156/gates/`
-- Gate-0 `scripts/smoke_test.py`：PASS（`gate0_smoke_test.log`）
-- Gate-1 `scripts/run_experiments.py --dry_run`：PASS（`gate1_dry_run.log`）
-- Gate-2 `tests/test_triton_kernel.py`（含 GQA）：PASS（`gate2_triton_unittest.log`）
-- Gate-3 `scripts/verify_fused_decode.py`：PASS（`KV_FUSED_DEBUG=1` 可证明 Triton 被真实调用）
-  - `int8_fused`：`max_abs_diff=0.080078`, `mean_abs_diff=0.014450`, `top1_match=True`
-  - `int8_ours`（`kv_calib_kl_selected_v3_quick.json`, `--no_use_attn_temperature --adaptive_static_scales`）：`max_abs_diff=0.121094`, `mean_abs_diff=0.019974`, `top1_match=True`
+## 硬闸门（可审计）
+日志目录：`/root/autodl-tmp/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/gates/`
+- Gate-0：`gate0_smoke_test.log` PASS
+- Gate-1：`gate1_dry_run.log` PASS
+- Gate-2：`gate2_triton_unittest.log` PASS
+- Gate-3：`gate3_verify_int8_fused.log`、`gate3_verify_int8_ours.log`、`gate3_verify_int4_fused.log`、`gate3_verify_int4_ours.log` 均 PASS
 
-## 当前主线配置（论文对照用）
-- `int8_ours` 校准文件：`artifacts/kv_calib_kl_selected_v3_quick.json`
-- 量化：`group_size=16`，`clip_percentile=99.5`
-- 温度：`use_attn_temperature=false`（温度作为 ablation 保留，不进入主线推荐配置）
-- 标定尺度：`use_static_scales=true` + `adaptive_static_scales=true`（静态标定 + 运行时安全护栏）
-- decode(q_len=1)：`decode_attn_impl=triton_fused`
+## 主线结论（32K，论文可引用）
+来源：`/root/autodl-tmp/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/tables/thesis_main_claims_32k.csv`
+- `fp16`：TPOT `30.91ms`，KV 常驻 `896MB`，Needle `100%`，PPL `9.4872`
+- `int8_baseline`：TPOT `50.29ms`，KV 常驻 `504MB`，Needle `100%`，PPL `9.4912`
+- `int8_ours`：TPOT `39.96ms`，KV 常驻 `504MB`，Needle `100%`，PPL `9.5085`
+- 结论：`int8_ours` 相比 `int8_baseline` 在质量基本持平前提下，32K TPOT 改善约 **20.5%**（`(50.29-39.96)/50.29`）。
 
-## 质量（Needle + PPL）
-
-### Needle（长上下文稳定性）
-- 评测点：`seq_len ∈ {4096, 8192, 16384, 32704}`
-- 评测设置：`seeds={1234,1235,1236}`，`num_depths=20`，短上下文 `depth_batch=2`，32K `depth_batch=1`
-- 结果：三种模式在四个上下文长度上 **全部 100%**（见 `results/final_thesis_20260214_094156/tables/needle_summary.csv`）
-
-### PPL（kv_cache 流式口径，chunk 加速）
-> 说明：`ppl_mode=kv_cache` 会真实走自定义 KV cache（含量化/反量化），是更贴近 decode-like 的“流式”口径；为减少 Python 开销，启用 `chunk_size=128`。
-
-- 评测设置：`max_length=1024, stride=512, chunk_size=128, max_samples=64`
-- `tokens_evaluated=65535`
-- 结果（见 `results/final_thesis_20260214_094156/tables/ppl_summary.csv`）：
-  - `fp16`: `9.4872`
-  - `int8_baseline`: `9.4912`
-  - `int8_ours`: `9.5085`
-
-## 性能与显存（关键结论）
-
-### 32K 长上下文（`seq_len=32704, gen_len=64, batch=1, warmup=2, runs=3`）
-来源：`results/final_thesis_20260214_094156/tables/latency_summary.csv` 与 `results/final_thesis_20260214_094156/tables/memory_summary.csv`
-- TPOT（ms/token，越低越好）：
-  - `fp16`: `30.88`
-  - `int8_baseline`: `50.10`
-  - `int8_ours`: `39.03`（相对 baseline：约 **-22%**）
-- KV cache 常驻内存（MB，越低越好）：
-  - `fp16`: `896`
-  - `int8_baseline`: `504`
-  - `int8_ours`: `504`（相对 fp16：约 **-43.8%**）
-- 峰值显存（NVML peak, MB）：三者接近（权重/激活/临时张量主导峰值）；**KV 常驻内存曲线**更能反映“cache 省显存”的真实收益。
-
-## 吞吐（系统分析补充：batch 扩展）
-来源：`results/final_thesis_20260214_094156/tables/throughput_by_batch.csv`
-- 设置：`seq_len=8192, gen_len=128, batch ∈ {1,2,4,8,16}`
+## 吞吐与容量上限（batch 扩展）
+来源：`/root/autodl-tmp/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/tables/throughput_by_batch.csv`
+- 设置：`seq_len=8192, gen_len=128, batch ∈ {1,2,4,8,16,24,32}`
 - 代表点（batch=16，总 tok/s）：
-  - `fp16`: `350.52 tok/s`
-  - `int8_baseline`: `199.41 tok/s`
-  - `int8_ours`: `441.97 tok/s`
+  - `fp16`: `350.33`
+  - `int8_baseline`: `200.04`
+  - `int8_ours`: `460.90`
+- 当前已知容量缺口：`int8_baseline@batch=32` OOM（见 `logs/int8_baseline_throughput_8k_b32_.../profile_latency.log`）
+- 聚合脚本已新增容量上限摘要：`throughput_capacity_limits.csv`，并在 batch 曲线中标注容量虚线与 OOM/MISS 点。
 
-## 论文引用建议（最小集合）
-- 主图（PNG）：`results/final_thesis_20260214_094156/plots/`
+## INT4 扩展现状（如实披露）
+来源：`thesis_main_claims_32k.csv`
+- `int4_fused` 与 `int4_ours` 在 32K Needle 为 `0%`，PPL 分别约 `161.83` / `23.41`
+- 结论：INT4 路径当前不满足论文主线质量门槛，应作为“扩展尝试 + 失败分析”而非主结论。
+
+## 论文引用建议
+- 主图目录：`/root/autodl-tmp/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/plots/`
   - `latency_tpot_vs_seq.png`
   - `memory_kv_cache_vs_seq.png`
   - `needle_pass_rate_vs_context.png`
   - `ppl_vs_tokens.png`
   - `throughput_tok_per_s_vs_batch.png`
-- 表格（LaTeX）：`results/final_thesis_20260214_094156/latex_tables/all_tables.tex`
+- 表格目录：`/root/autodl-tmp/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/latex_tables/all_tables.tex`

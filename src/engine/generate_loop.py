@@ -41,6 +41,89 @@ from src.utils.timing import (
 from src.utils.repro import set_seed
 
 
+def _cache_stats_from_past_key_values(past_key_values) -> tuple[float, int]:
+    """
+    Best-effort memory/seq-len extraction from HF cache objects or legacy tuples.
+    Returns (memory_mb, seq_len). Never raises.
+    """
+    if past_key_values is None:
+        return 0.0, 0
+
+    total_bytes = 0
+    seq_len = 0
+
+    # New cache API (transformers>=4.57): cache.layers[i].keys / values
+    layers = getattr(past_key_values, "layers", None)
+    if layers is not None:
+        try:
+            for layer in layers:
+                k = getattr(layer, "keys", None)
+                v = getattr(layer, "values", None)
+                if isinstance(k, torch.Tensor):
+                    total_bytes += k.numel() * k.element_size()
+                    if seq_len == 0 and k.ndim >= 3:
+                        seq_len = int(k.shape[-2])
+                if isinstance(v, torch.Tensor):
+                    total_bytes += v.numel() * v.element_size()
+            if total_bytes > 0:
+                return total_bytes / (1024 * 1024), seq_len
+        except Exception:
+            pass
+
+    # Legacy tuple path (or iterable cache wrappers).
+    legacy = None
+    if isinstance(past_key_values, tuple):
+        legacy = past_key_values
+    elif hasattr(past_key_values, "to_legacy_cache"):
+        try:
+            legacy = past_key_values.to_legacy_cache()
+        except Exception:
+            legacy = None
+
+    if isinstance(legacy, tuple):
+        try:
+            for item in legacy:
+                if not isinstance(item, tuple) or len(item) < 2:
+                    continue
+                k, v = item[0], item[1]
+                if isinstance(k, torch.Tensor):
+                    total_bytes += k.numel() * k.element_size()
+                    if seq_len == 0 and k.ndim >= 3:
+                        seq_len = int(k.shape[-2])
+                if isinstance(v, torch.Tensor):
+                    total_bytes += v.numel() * v.element_size()
+            return total_bytes / (1024 * 1024), seq_len
+        except Exception:
+            return 0.0, 0
+
+    return 0.0, 0
+
+
+def _to_dynamic_cache_safely(legacy_cache):
+    """
+    Convert legacy tuple cache to DynamicCache with robust fallback.
+    Raises RuntimeError with details if conversion fails.
+    """
+    if not HAS_DYNAMIC_CACHE or not isinstance(legacy_cache, tuple):
+        return legacy_cache
+
+    errors: list[str] = []
+    try:
+        return DynamicCache.from_legacy_cache(legacy_cache)
+    except Exception as exc:
+        errors.append(f"from_legacy_cache failed: {exc}")
+
+    try:
+        return DynamicCache(ddp_cache_data=legacy_cache)
+    except Exception as exc:
+        errors.append(f"DynamicCache(ddp_cache_data=...) failed: {exc}")
+
+    raise RuntimeError(
+        "Failed to convert legacy past_key_values tuple to DynamicCache. "
+        + " | ".join(errors)
+    )
+
+
 @dataclass
 class GenerationOutput:
     """Structured output from the generation loop."""
@@ -460,6 +543,8 @@ def generate_from_ids(
 
     generated_steps: List[torch.Tensor] = []
     decode_times = TimingStats()
+    model_cache_for_decode = None
+    fp16_use_model_cache = False
 
     hook_handles = []
     if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed"] and use_attn_temperature and inv_tau is not None:
@@ -483,6 +568,15 @@ def generate_from_ids(
             if outputs.past_key_values is not None:
                 for i, (k, v) in enumerate(outputs.past_key_values):
                     kv_cache.append(i, k, v)
+                if (
+                    kv_mode == "fp16"
+                    and HAS_DYNAMIC_CACHE
+                    and hasattr(outputs.past_key_values, "get_seq_length")
+                ):
+                    # Reuse HF dynamic cache directly in decode to avoid
+                    # per-step tuple->DynamicCache conversion spikes at high batch.
+                    model_cache_for_decode = outputs.past_key_values
+                    fp16_use_model_cache = True
 
             next_token_logits = outputs.logits[:, -1, :]
             next_token = torch.argmax(next_token_logits, dim=-1)  # [B]
@@ -523,7 +617,9 @@ def generate_from_ids(
 
         with torch.no_grad():
             # Prepare past_key_values
-            if kv_mode in ["int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"]:
+            if kv_mode == "fp16" and fp16_use_model_cache and model_cache_for_decode is not None:
+                current_past_key_values = model_cache_for_decode
+            elif kv_mode in ["int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"]:
                 from src.engine.patch_model import INT8CacheWrapperContainer
 
                 current_past_key_values = INT8CacheWrapperContainer(kv_cache, num_layers)
@@ -543,10 +639,7 @@ def generate_from_ids(
                 and HAS_DYNAMIC_CACHE
                 and isinstance(current_past_key_values, tuple)
             ):
-                try:
-                    current_past_key_values = DynamicCache.from_legacy_cache(current_past_key_values)
-                except Exception:
-                    pass
+                current_past_key_values = _to_dynamic_cache_safely(current_past_key_values)
 
             outputs = model(
                 input_ids=current_token,
@@ -554,9 +647,14 @@ def generate_from_ids(
                 past_key_values=current_past_key_values,
                 use_cache=True,
             )
+            if kv_mode == "fp16" and fp16_use_model_cache:
+                model_cache_for_decode = outputs.past_key_values
 
             # Update cache with NEW token's KV for non-fused modes.
-            if kv_mode not in ["int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"]:
+            if (
+                kv_mode not in ["int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"]
+                and not (kv_mode == "fp16" and fp16_use_model_cache)
+            ):
                 if outputs.past_key_values is not None:
                     for i, (k, v) in enumerate(outputs.past_key_values):
                         if k.shape[2] > 1:
@@ -590,14 +688,17 @@ def generate_from_ids(
     gpu_mem_peak_mb = get_gpu_memory_mb()
     kv_cache_mem_mb = 0.0
     kv_cache_seq_len = 0
-    try:
-        kv_cache_mem_mb = float(kv_cache.get_memory_mb())
-    except Exception:
-        kv_cache_mem_mb = 0.0
-    try:
-        kv_cache_seq_len = int(kv_cache.get_seq_len())
-    except Exception:
-        kv_cache_seq_len = 0
+    if kv_mode == "fp16" and fp16_use_model_cache and model_cache_for_decode is not None:
+        kv_cache_mem_mb, kv_cache_seq_len = _cache_stats_from_past_key_values(model_cache_for_decode)
+    else:
+        try:
+            kv_cache_mem_mb = float(kv_cache.get_memory_mb())
+        except Exception:
+            kv_cache_mem_mb = 0.0
+        try:
+            kv_cache_seq_len = int(kv_cache.get_seq_len())
+        except Exception:
+            kv_cache_seq_len = 0
 
     # TPOT: average decode time (exclude prefill)
     tpot_ms = decode_times.mean_ms if decode_times.count > 0 else 0.0

@@ -276,6 +276,110 @@ def export_ppl(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[Pa
     return paths
 
 
+def export_main_claims(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[Path]:
+    paths: List[Path] = []
+    src = tables_dir / "thesis_main_claims_32k.csv"
+    df = _read_csv(src)
+    if df.empty:
+        return paths
+    df = _sort_kv_mode(df)
+    df = _display_kv_mode(df)
+
+    keep_cols = [
+        c
+        for c in [
+            "kv_mode",
+            "claim_seq_len",
+            "tpot_ms_mean",
+            "kv_cache_mem_mb_mean",
+            "needle_pass_rate_mean",
+            "needle_exact_match_rate_mean",
+            "perplexity_mean",
+        ]
+        if c in df.columns
+    ]
+    if not keep_cols:
+        return paths
+    out = df[keep_cols].copy()
+    for col, digits in [
+        ("tpot_ms_mean", 2),
+        ("kv_cache_mem_mb_mean", 0),
+        ("needle_pass_rate_mean", 2),
+        ("needle_exact_match_rate_mean", 2),
+        ("perplexity_mean", 4),
+    ]:
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce").round(digits)
+
+    tabular = _to_latex_tabular(out, index=False)
+    label = f"{label_prefix}:main:claims32k"
+    latex = _latex_table_env(
+        tabular,
+        caption="Main claims at long context (32K or nearest available point)",
+        label=label,
+    )
+    out_path = out_dir / "main_claims_32k.tex"
+    _write(out_path, latex)
+    paths.append(out_path)
+    return paths
+
+
+def export_relative_gain(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[Path]:
+    paths: List[Path] = []
+    src = tables_dir / "relative_gain_summary.csv"
+    df = _read_csv(src)
+    if df.empty:
+        return paths
+
+    # Keep thesis-critical pairs and metrics for a compact table.
+    df = df[df["metric"].isin(["tpot_ms", "kv_cache_mem_mb", "perplexity", "needle_pass_rate"])]
+    df = df[df["baseline_mode"].isin(["int8_baseline", "int4_fused"])]
+    df = df[df["challenger_mode"].isin(["int8_ours", "int4_ours"])]
+    if "seq_len" in df.columns:
+        seq = pd.to_numeric(df["seq_len"], errors="coerce")
+        if (seq == 32704).any():
+            df = df[seq == 32704]
+    if "batch" in df.columns:
+        batch = pd.to_numeric(df["batch"], errors="coerce")
+        if (batch == 1).any():
+            df = df[batch == 1]
+    if df.empty:
+        return paths
+
+    out = df.copy()
+    out["baseline_mode"] = out["baseline_mode"].map(KV_MODE_DISPLAY).fillna(out["baseline_mode"])
+    out["challenger_mode"] = out["challenger_mode"].map(KV_MODE_DISPLAY).fillna(out["challenger_mode"])
+    keep = [
+        c
+        for c in [
+            "metric",
+            "seq_len",
+            "baseline_mode",
+            "challenger_mode",
+            "baseline_value",
+            "challenger_value",
+            "gain_pct",
+        ]
+        if c in out.columns
+    ]
+    out = out[keep].copy()
+    for col, digits in [("baseline_value", 4), ("challenger_value", 4), ("gain_pct", 2)]:
+        if col in out.columns:
+            out[col] = pd.to_numeric(out[col], errors="coerce").round(digits)
+
+    tabular = _to_latex_tabular(out, index=False)
+    label = f"{label_prefix}:summary:gain"
+    latex = _latex_table_env(
+        tabular,
+        caption="Relative gain summary on key pairs (positive gain means challenger is better)",
+        label=label,
+    )
+    out_path = out_dir / "relative_gain_summary.tex"
+    _write(out_path, latex)
+    paths.append(out_path)
+    return paths
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Export aggregated CSV tables to LaTeX")
     parser.add_argument("--tables_dir", type=str, default="results/tables")
@@ -296,6 +400,8 @@ def main() -> int:
     written += export_memory(tables_dir, out_dir, label_prefix=label_prefix)
     written += export_needle(tables_dir, out_dir, label_prefix=label_prefix)
     written += export_ppl(tables_dir, out_dir, label_prefix=label_prefix)
+    written += export_main_claims(tables_dir, out_dir, label_prefix=label_prefix)
+    written += export_relative_gain(tables_dir, out_dir, label_prefix=label_prefix)
 
     # Convenience include file.
     all_tex = out_dir / "all_tables.tex"

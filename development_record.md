@@ -1,3 +1,39 @@
+# <Antigravity 2026-02-19 04:58:00>
+## 修改目的
+进入“论文写作前准备”阶段：补齐论文必需图表/表格产物，固化 final-thesis-plus 一键重跑脚本，并在远端 H20 启动全量重跑。
+
+## 修改内容摘要
+- 图表/表格聚合增强（`scripts/aggregate_results.py`）：
+  - 新增表：
+    - `tables/thesis_main_claims_32k.csv`
+    - `tables/relative_gain_summary.csv`
+    - `tables/latency_tpot_gain_vs_fp16.csv`
+  - 新增图：
+    - `plots/throughput_tok_per_s_per_seq_vs_batch.png`
+    - `plots/prefill_tok_per_s_vs_batch.png`
+    - `plots/needle_exact_match_vs_context.png`
+    - `plots/latency_tpot_gain_vs_fp16.png`
+  - 保留并兼容旧产物；无对应数据时自动跳过相关图表。
+- LaTeX 导出增强（`scripts/export_tables_latex.py`）：
+  - 新增 `main_claims_32k.tex`
+  - 新增 `relative_gain_summary.tex`
+- 新增论文前置检查文档：
+  - `docs/thesis_preflight_checklist.md`
+- 新增一键重跑脚本：
+  - `scripts/run_final_thesis_plus.sh`
+  - 流程：`gates -> core(perf/mem) -> needle -> ppl -> throughput -> aggregate -> latex`
+  - 支持 `RUN_TAG/BASE_DIR/SEEDS/INT8_CALIB/INT4_CALIB` 环境变量覆盖。
+- 文档同步：
+  - `README.md` 增加 preflight 文档与一键重跑脚本入口
+  - `docs/final_experiment_protocol.md` 增加 final-thesis-plus 一键执行方式与新增产物说明
+
+## 远端执行状态
+- 已在远端启动 tmux 会话：
+  - session：`thesis_plus_0219_045623`
+  - run tag：`final_thesis_plus_20260219_045623`
+  - launcher log：`results/thesis_plus_0219_045623_launcher.log`
+- 当前阶段：`Core latency/memory` 在跑（run_experiments 进程已启动）。
+
 # <Antigravity 2026-02-19 04:36:00>
 ## 修改目的
 推进“论文冲优”第三阶段：将 INT4 从附录能力升级为主线候选（`int4_ours`），并补齐统计学输出（95%CI + seed 配对差异），同时完成远端 H20 的阶段性回归验证。

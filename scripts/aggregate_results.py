@@ -110,6 +110,337 @@ def _save_table(df: pd.DataFrame, out_path: Path) -> None:
     df.to_csv(out_path, index=False)
 
 
+def _parse_seq_tag_to_len(seq_tag: str) -> int | None:
+    seq_tag = str(seq_tag).strip().lower()
+    m = re.fullmatch(r"(\d+)(k?)", seq_tag)
+    if not m:
+        return None
+    value = int(m.group(1))
+    if m.group(2) == "k":
+        return value * 1024
+    return value
+
+
+def _parse_batch_list(text: str) -> List[int]:
+    if not isinstance(text, str) or not text.strip():
+        return []
+    out: List[int] = []
+    for item in text.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            out.append(int(item))
+        except Exception:
+            continue
+    return sorted(set(out))
+
+
+def _format_batch_list(values: Iterable[int]) -> str:
+    uniq = sorted({int(v) for v in values})
+    return ",".join(str(v) for v in uniq)
+
+
+def _log_contains_oom(log_path: Path) -> bool:
+    if not log_path.exists():
+        return False
+    try:
+        content = log_path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return False
+    return bool(re.search(r"\bOOM\b|out of memory", content, flags=re.IGNORECASE))
+
+
+def _collect_throughput_attempts(runs_dir: Path, logs_dir: Path | None) -> pd.DataFrame:
+    """
+    Parse attempted throughput runs from runs/<run_dir_name>.
+    Expected naming pattern includes: <kv_mode>_throughput_<seq_tag>_b<batch>
+    """
+    rows = []
+    pattern = re.compile(
+        r"(?P<kv_mode>[A-Za-z0-9_]+)_throughput_(?P<seq_tag>[0-9]+k?)_b(?P<batch>[0-9]+)"
+    )
+    for run_dir in sorted(runs_dir.iterdir()):
+        if not run_dir.is_dir():
+            continue
+        m = pattern.search(run_dir.name)
+        if not m:
+            continue
+        seq_len = _parse_seq_tag_to_len(m.group("seq_tag"))
+        if seq_len is None:
+            continue
+        kv_mode = m.group("kv_mode")
+        batch = int(m.group("batch"))
+        has_latency_csv = any(run_dir.glob("profile_latency_*.csv"))
+        latency_log = (
+            logs_dir / run_dir.name / "profile_latency.log"
+            if logs_dir is not None
+            else Path("")
+        )
+        has_oom = _log_contains_oom(latency_log) if logs_dir is not None else False
+        status = "ok" if has_latency_csv else ("oom" if has_oom else "missing")
+        rows.append(
+            {
+                "run_dir": run_dir.name,
+                "kv_mode": kv_mode,
+                "seq_len": seq_len,
+                "batch": batch,
+                "has_latency_csv": bool(has_latency_csv),
+                "status": status,
+            }
+        )
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows)
+
+
+def _build_throughput_capacity_summary(
+    lat_batch: pd.DataFrame,
+    attempts: pd.DataFrame,
+    *,
+    target_seq: int,
+) -> pd.DataFrame:
+    if attempts.empty:
+        return pd.DataFrame()
+
+    work_attempts = attempts.copy()
+    work_attempts["seq_len"] = pd.to_numeric(work_attempts["seq_len"], errors="coerce")
+    work_attempts["batch"] = pd.to_numeric(work_attempts["batch"], errors="coerce")
+    work_attempts = work_attempts[work_attempts["seq_len"] == float(target_seq)]
+    if work_attempts.empty:
+        return pd.DataFrame()
+
+    work_latency = lat_batch.copy()
+    if not work_latency.empty and {"kv_mode", "batch"}.issubset(work_latency.columns):
+        work_latency["batch"] = pd.to_numeric(work_latency["batch"], errors="coerce")
+        work_latency = work_latency.dropna(subset=["batch"])
+    else:
+        work_latency = pd.DataFrame(columns=["kv_mode", "batch"])
+
+    rows = []
+    for kv_mode, sub in sorted(work_attempts.groupby("kv_mode")):
+        attempted_batches = sorted(int(x) for x in sub["batch"].dropna().unique())
+        successful_batches = sorted(
+            int(x)
+            for x in work_latency.loc[work_latency["kv_mode"] == kv_mode, "batch"].dropna().unique()
+        )
+        missing_batches = sorted(set(attempted_batches) - set(successful_batches))
+        oom_batches = sorted(
+            int(x) for x in sub.loc[sub["status"] == "oom", "batch"].dropna().unique()
+        )
+        mode_status = "complete"
+        if missing_batches:
+            mode_status = "oom_or_missing"
+            if set(missing_batches).issubset(set(oom_batches)):
+                mode_status = "oom_capacity_limit"
+            elif not oom_batches:
+                mode_status = "missing_results"
+        rows.append(
+            {
+                "seq_len": target_seq,
+                "kv_mode": kv_mode,
+                "attempted_batches": _format_batch_list(attempted_batches),
+                "successful_batches": _format_batch_list(successful_batches),
+                "missing_batches": _format_batch_list(missing_batches),
+                "oom_batches": _format_batch_list(oom_batches),
+                "max_success_batch": max(successful_batches) if successful_batches else np.nan,
+                "first_missing_batch": min(missing_batches) if missing_batches else np.nan,
+                "first_oom_batch": min(oom_batches) if oom_batches else np.nan,
+                "mode_status": mode_status,
+            }
+        )
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows).sort_values(["kv_mode"]).reset_index(drop=True)
+
+
+def _annotate_batch_curve_with_capacity(
+    curve_df: pd.DataFrame,
+    capacity_df: pd.DataFrame,
+) -> pd.DataFrame:
+    if curve_df.empty:
+        return curve_df
+    out = curve_df.copy()
+    out["point_status"] = "measured"
+    out["status_reason"] = "ok"
+    out["capacity_limit_batch"] = np.nan
+    out["is_capacity_limit"] = False
+
+    if capacity_df.empty:
+        return out
+
+    missing_rows = []
+    for _, info in capacity_df.iterrows():
+        kv_mode = info.get("kv_mode")
+        if not isinstance(kv_mode, str):
+            continue
+        mode_rows = out[out["kv_mode"] == kv_mode]
+        max_success = pd.to_numeric(info.get("max_success_batch"), errors="coerce")
+        missing_batches = _parse_batch_list(str(info.get("missing_batches", "")))
+
+        if pd.notna(max_success) and missing_batches and not mode_rows.empty:
+            cap_mask = (out["kv_mode"] == kv_mode) & (
+                pd.to_numeric(out["batch"], errors="coerce") == float(max_success)
+            )
+            out.loc[cap_mask, "is_capacity_limit"] = True
+            out.loc[cap_mask, "capacity_limit_batch"] = float(max_success)
+
+        if not missing_batches:
+            continue
+
+        mode_status = str(info.get("mode_status", "missing"))
+        template = mode_rows.iloc[0] if not mode_rows.empty else None
+        for batch in missing_batches:
+            row = {col: np.nan for col in out.columns}
+            row["kv_mode"] = kv_mode
+            row["batch"] = batch
+            row["point_status"] = "missing"
+            row["status_reason"] = mode_status
+            row["capacity_limit_batch"] = float(max_success) if pd.notna(max_success) else np.nan
+            row["is_capacity_limit"] = False
+            if "seq_len" in row:
+                row["seq_len"] = info.get("seq_len", np.nan)
+            for copy_col in [
+                "model_id",
+                "hardware",
+                "gen_len",
+                "group_size",
+                "clip_percentile",
+            ]:
+                if template is not None and copy_col in out.columns:
+                    row[copy_col] = template.get(copy_col, np.nan)
+            missing_rows.append(row)
+
+    if missing_rows:
+        out = pd.concat([out, pd.DataFrame(missing_rows)], ignore_index=True)
+    if "batch" in out.columns:
+        out = out.sort_values(["kv_mode", "batch"]).reset_index(drop=True)
+    return out
+
+
+def _plot_batch_with_capacity(
+    df: pd.DataFrame,
+    *,
+    x: str,
+    y: str,
+    hue: str,
+    title: str,
+    xlabel: str,
+    ylabel: str,
+    out_path: Path,
+    yerr: str | None = None,
+) -> None:
+    if df.empty or y not in df.columns:
+        return
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    plot_df = df.copy()
+    plot_df[x] = pd.to_numeric(plot_df[x], errors="coerce")
+    plot_df[y] = pd.to_numeric(plot_df[y], errors="coerce")
+    plot_df = plot_df.dropna(subset=[x])
+    if plot_df.empty:
+        return
+
+    measured = plot_df
+    if "point_status" in plot_df.columns:
+        measured = plot_df[plot_df["point_status"] != "missing"]
+    if measured.empty:
+        return
+
+    plt.figure(figsize=(8, 5))
+    color_map = {}
+    for label, sub in sorted(measured.groupby(hue)):
+        sub = sub.sort_values(x)
+        if yerr and yerr in sub.columns:
+            cont = plt.errorbar(
+                sub[x],
+                sub[y],
+                yerr=sub[yerr],
+                marker="o",
+                label=str(label),
+                capsize=3,
+            )
+            try:
+                color_map[str(label)] = cont[0].get_color()
+            except Exception:
+                pass
+        else:
+            line = plt.plot(sub[x], sub[y], marker="o", label=str(label))
+            if line:
+                try:
+                    color_map[str(label)] = line[0].get_color()
+                except Exception:
+                    pass
+
+    # Capacity-limit annotation lines.
+    if "is_capacity_limit" in measured.columns:
+        limits = measured[measured["is_capacity_limit"] == True]
+        y_max = pd.to_numeric(measured[y], errors="coerce").max()
+        if pd.notna(y_max):
+            used_labels = set()
+            for idx, row in limits.iterrows():
+                mode = str(row.get(hue))
+                x_cap = pd.to_numeric(row.get(x), errors="coerce")
+                if pd.isna(x_cap):
+                    continue
+                color = color_map.get(mode, "gray")
+                plt.axvline(x_cap, linestyle="--", linewidth=1.0, alpha=0.25, color=color)
+                if mode in used_labels:
+                    continue
+                y_text = y_max * (0.97 - 0.05 * (len(used_labels) % 6))
+                plt.text(
+                    x_cap,
+                    y_text,
+                    f"{mode} cap≤{int(x_cap)}",
+                    rotation=90,
+                    fontsize=8,
+                    color=color,
+                    ha="right",
+                    va="top",
+                    alpha=0.75,
+                )
+                used_labels.add(mode)
+
+    # Missing / OOM markers.
+    if {"point_status", "status_reason"}.issubset(plot_df.columns):
+        missing = plot_df[plot_df["point_status"] == "missing"]
+        for mode, sub_miss in sorted(missing.groupby(hue)):
+            mode_str = str(mode)
+            mode_measured = measured[measured[hue] == mode]
+            if mode_measured.empty:
+                continue
+            anchor = pd.to_numeric(mode_measured[y], errors="coerce").dropna()
+            if anchor.empty:
+                continue
+            anchor_y = float(anchor.iloc[-1])
+            color = color_map.get(mode_str, "red")
+            for _, row in sub_miss.sort_values(x).iterrows():
+                x_miss = pd.to_numeric(row.get(x), errors="coerce")
+                if pd.isna(x_miss):
+                    continue
+                reason = str(row.get("status_reason", "missing")).lower()
+                marker_text = "OOM" if "oom" in reason else "MISS"
+                marker_color = "red" if marker_text == "OOM" else color
+                plt.scatter([x_miss], [anchor_y], marker="x", color=marker_color, s=45, zorder=6)
+                plt.text(
+                    x_miss,
+                    anchor_y,
+                    marker_text,
+                    fontsize=7,
+                    color=marker_color,
+                    ha="left",
+                    va="bottom",
+                )
+
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.grid(True, alpha=0.3)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=160)
+    plt.close()
+
+
 def _plot_lines(
     df: pd.DataFrame,
     x: str,
@@ -255,20 +586,220 @@ def _significance_summary(
     return pd.concat(results, ignore_index=True)
 
 
+def _relative_gain_table(
+    df: pd.DataFrame,
+    *,
+    metric_col: str,
+    metric_name: str,
+    key_cols: List[str],
+    pairings: List[tuple[str, str]],
+    higher_is_better: bool,
+) -> pd.DataFrame:
+    """
+    Build relative-gain table for selected mode pairings on aggregated summaries.
+    gain_pct > 0 means challenger is better than baseline under the metric direction.
+    """
+    if df.empty or metric_col not in df.columns or "kv_mode" not in df.columns:
+        return pd.DataFrame()
+    keep = [c for c in key_cols if c in df.columns]
+    sub = df[keep + ["kv_mode", metric_col]].copy()
+    sub[metric_col] = pd.to_numeric(sub[metric_col], errors="coerce")
+    sub = sub.dropna(subset=[metric_col])
+    if sub.empty:
+        return pd.DataFrame()
+
+    pivot = sub.pivot_table(index=keep, columns="kv_mode", values=metric_col, aggfunc="mean")
+    out_frames: List[pd.DataFrame] = []
+    for baseline, challenger in pairings:
+        if baseline not in pivot.columns or challenger not in pivot.columns:
+            continue
+        tmp = pivot[[baseline, challenger]].dropna().reset_index()
+        if tmp.empty:
+            continue
+        base_val = pd.to_numeric(tmp[baseline], errors="coerce")
+        chall_val = pd.to_numeric(tmp[challenger], errors="coerce")
+        delta_abs = chall_val - base_val
+        denom = base_val.abs().replace(0, np.nan)
+        delta_pct = (delta_abs / denom) * 100.0
+        if higher_is_better:
+            gain_pct = delta_pct
+        else:
+            gain_pct = ((base_val - chall_val) / denom) * 100.0
+
+        row = tmp[keep].copy()
+        row["metric"] = metric_name
+        row["baseline_mode"] = baseline
+        row["challenger_mode"] = challenger
+        row["baseline_value"] = base_val
+        row["challenger_value"] = chall_val
+        row["delta_abs"] = delta_abs
+        row["delta_pct"] = delta_pct
+        row["gain_pct"] = gain_pct
+        out_frames.append(row)
+
+    if not out_frames:
+        return pd.DataFrame()
+    return pd.concat(out_frames, ignore_index=True)
+
+
+def _main_claims_32k_table(
+    latency_summary: pd.DataFrame,
+    memory_summary: pd.DataFrame,
+    needle_summary: pd.DataFrame,
+    ppl_summary: pd.DataFrame,
+    *,
+    target_seq_len: int = 32704,
+) -> pd.DataFrame:
+    """
+    Build a one-glance thesis claim table at 32K context (or nearest available point).
+    """
+    def _pick_seq(df: pd.DataFrame, preferred: int) -> int | None:
+        if df.empty or "seq_len" not in df.columns:
+            return None
+        seq = pd.to_numeric(df["seq_len"], errors="coerce").dropna()
+        if seq.empty:
+            return None
+        if (seq == float(preferred)).any():
+            return int(preferred)
+        return int(seq.max())
+
+    lat = latency_summary.copy()
+    mem = memory_summary.copy()
+    ned = needle_summary.copy()
+    ppl = ppl_summary.copy()
+
+    lat_seq = _pick_seq(lat, target_seq_len)
+    mem_seq = _pick_seq(mem, target_seq_len)
+    ned_seq = _pick_seq(ned, target_seq_len)
+    if lat_seq is None and mem_seq is None and ned_seq is None:
+        return pd.DataFrame()
+
+    if not lat.empty and "batch" in lat.columns:
+        lat = lat[pd.to_numeric(lat["batch"], errors="coerce") == 1]
+    if not lat.empty and "gen_len" in lat.columns:
+        gen = pd.to_numeric(lat["gen_len"], errors="coerce")
+        if (gen == 64).any():
+            lat = lat[gen == 64]
+    if lat_seq is not None and "seq_len" in lat.columns:
+        lat = lat[pd.to_numeric(lat["seq_len"], errors="coerce") == float(lat_seq)]
+
+    if not mem.empty and "batch" in mem.columns:
+        mem = mem[pd.to_numeric(mem["batch"], errors="coerce") == 1]
+    if not mem.empty and "gen_len" in mem.columns:
+        gen = pd.to_numeric(mem["gen_len"], errors="coerce")
+        if (gen == 64).any():
+            mem = mem[gen == 64]
+    if mem_seq is not None and "seq_len" in mem.columns:
+        mem = mem[pd.to_numeric(mem["seq_len"], errors="coerce") == float(mem_seq)]
+
+    if ned_seq is not None and "seq_len" in ned.columns:
+        ned = ned[pd.to_numeric(ned["seq_len"], errors="coerce") == float(ned_seq)]
+
+    # PPL: choose kv_cache row with maximal tokens_evaluated for each mode.
+    if not ppl.empty and "ppl_mode" in ppl.columns:
+        ppl = ppl[ppl["ppl_mode"] == "kv_cache"]
+    if not ppl.empty and "tokens_evaluated_mean" in ppl.columns:
+        ppl = (
+            ppl.sort_values("tokens_evaluated_mean", ascending=False)
+            .drop_duplicates(subset=["kv_mode"], keep="first")
+        )
+
+    lat_cols = [c for c in ["kv_mode", "tpot_ms_mean", "ttft_ms_mean", "tok_per_s_mean"] if c in lat.columns]
+    mem_cols = [c for c in ["kv_mode", "gpu_mem_peak_mb_mean", "kv_cache_mem_mb_mean"] if c in mem.columns]
+    ned_cols = [c for c in ["kv_mode", "needle_pass_rate_mean", "needle_exact_match_rate_mean"] if c in ned.columns]
+    ppl_cols = [c for c in ["kv_mode", "perplexity_mean", "tokens_evaluated_mean"] if c in ppl.columns]
+
+    if not lat_cols or not mem_cols:
+        return pd.DataFrame()
+
+    out = lat[lat_cols].copy()
+    if mem_cols:
+        out = out.merge(mem[mem_cols], on="kv_mode", how="outer")
+    if ned_cols:
+        out = out.merge(ned[ned_cols], on="kv_mode", how="outer")
+    if ppl_cols:
+        out = out.merge(ppl[ppl_cols], on="kv_mode", how="left")
+
+    out["claim_seq_len"] = int(lat_seq or mem_seq or ned_seq or target_seq_len)
+    out = out.sort_values("kv_mode").reset_index(drop=True)
+    return out
+
+
+def _speedup_vs_reference(
+    df: pd.DataFrame,
+    *,
+    metric_col: str,
+    reference_mode: str,
+    key_cols: List[str],
+    higher_is_better: bool = False,
+) -> pd.DataFrame:
+    """
+    Compute relative speedup/gain vs reference mode for each kv_mode and key.
+    """
+    if df.empty or metric_col not in df.columns or "kv_mode" not in df.columns:
+        return pd.DataFrame()
+    keep = [c for c in key_cols if c in df.columns]
+    sub = df[keep + ["kv_mode", metric_col]].copy()
+    sub[metric_col] = pd.to_numeric(sub[metric_col], errors="coerce")
+    sub = sub.dropna(subset=[metric_col])
+    if sub.empty:
+        return pd.DataFrame()
+    pivot = sub.pivot_table(index=keep, columns="kv_mode", values=metric_col, aggfunc="mean")
+    if reference_mode not in pivot.columns:
+        return pd.DataFrame()
+    ref = pd.to_numeric(pivot[reference_mode], errors="coerce")
+    denom = ref.abs().replace(0, np.nan)
+
+    rows: List[pd.DataFrame] = []
+    for mode in pivot.columns:
+        if mode == reference_mode:
+            continue
+        val = pd.to_numeric(pivot[mode], errors="coerce")
+        if higher_is_better:
+            gain = ((val - ref) / denom) * 100.0
+        else:
+            gain = ((ref - val) / denom) * 100.0
+        tmp = gain.reset_index(name="gain_pct")
+        tmp["reference_mode"] = reference_mode
+        tmp["challenger_mode"] = mode
+        tmp["metric"] = metric_col
+        rows.append(tmp)
+
+    if not rows:
+        return pd.DataFrame()
+    return pd.concat(rows, ignore_index=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Aggregate results into tables and plots")
     parser.add_argument("--runs_dir", type=str, default="results/runs")
     parser.add_argument("--tables_dir", type=str, default="results/tables")
     parser.add_argument("--plots_dir", type=str, default="results/plots")
+    parser.add_argument(
+        "--logs_dir",
+        type=str,
+        default="",
+        help="Optional logs directory for OOM/missing annotation (default: sibling of runs_dir).",
+    )
     args = parser.parse_args()
 
     runs_dir = Path(args.runs_dir)
     tables_dir = Path(args.tables_dir)
     plots_dir = Path(args.plots_dir)
+    logs_dir: Path | None = None
+    if args.logs_dir:
+        logs_dir = Path(args.logs_dir)
+    else:
+        sibling_logs = runs_dir.parent / "logs"
+        if sibling_logs.exists():
+            logs_dir = sibling_logs
 
     if not runs_dir.exists():
         print(f"runs_dir not found: {runs_dir}")
         return 2
+
+    throughput_attempts = _collect_throughput_attempts(runs_dir, logs_dir)
+    throughput_capacity_summary = pd.DataFrame()
 
     # Latency
     latency = _read_csvs(runs_dir, ["profile_latency_*.csv"])
@@ -343,9 +874,21 @@ def main() -> int:
             if "gen_len" in lat_batch.columns and (lat_batch["gen_len"] == 128).any():
                 lat_batch = lat_batch[lat_batch["gen_len"] == 128]
             if not lat_batch.empty:
-                _save_table(lat_batch, tables_dir / "throughput_by_batch.csv")
-                _plot_lines(
+                capacity_summary = _build_throughput_capacity_summary(
                     lat_batch,
+                    throughput_attempts,
+                    target_seq=target_seq,
+                )
+                throughput_capacity_summary = capacity_summary
+                if not capacity_summary.empty:
+                    _save_table(capacity_summary, tables_dir / "throughput_capacity_limits.csv")
+                lat_batch_annotated = _annotate_batch_curve_with_capacity(
+                    lat_batch,
+                    capacity_summary,
+                )
+                _save_table(lat_batch_annotated, tables_dir / "throughput_by_batch.csv")
+                _plot_batch_with_capacity(
+                    lat_batch_annotated,
                     x="batch",
                     y="tok_per_s_mean",
                     hue="kv_mode",
@@ -355,10 +898,22 @@ def main() -> int:
                     out_path=plots_dir / "throughput_tok_per_s_vs_batch.png",
                     yerr="tok_per_s_ci95_half",
                 )
+                if "tok_per_s_per_seq_mean" in lat_batch.columns:
+                    _plot_batch_with_capacity(
+                        lat_batch_annotated,
+                        x="batch",
+                        y="tok_per_s_per_seq_mean",
+                        hue="kv_mode",
+                        title=f"Throughput per Sequence vs Batch (seq_len={target_seq})",
+                        xlabel="Batch size",
+                        ylabel="Tokens/s/seq (mean)",
+                        out_path=plots_dir / "throughput_tok_per_s_per_seq_vs_batch.png",
+                        yerr="tok_per_s_per_seq_ci95_half",
+                    )
 
                 if "prefill_tok_per_s_mean" in lat_batch.columns:
-                    _plot_lines(
-                        lat_batch,
+                    _plot_batch_with_capacity(
+                        lat_batch_annotated,
                         x="batch",
                         y="prefill_tok_per_s_mean",
                         hue="kv_mode",
@@ -368,6 +923,26 @@ def main() -> int:
                         out_path=plots_dir / "prefill_tok_per_s_vs_batch.png",
                         yerr="prefill_tok_per_s_ci95_half",
                     )
+        # Relative TPOT gain vs FP16 (batch=1, curve points).
+        tpot_gain = _speedup_vs_reference(
+            _maybe_filter_batch_gen_len(latency_summary, batch=1, gen_len=64),
+            metric_col="tpot_ms_mean",
+            reference_mode="fp16",
+            key_cols=["seq_len", "gen_len", "batch"],
+            higher_is_better=False,
+        )
+        if not tpot_gain.empty and {"seq_len", "gain_pct", "challenger_mode"}.issubset(tpot_gain.columns):
+            _save_table(tpot_gain, tables_dir / "latency_tpot_gain_vs_fp16.csv")
+            _plot_lines(
+                tpot_gain,
+                x="seq_len",
+                y="gain_pct",
+                hue="challenger_mode",
+                title="TPOT Gain vs FP16",
+                xlabel="Sequence length (tokens)",
+                ylabel="Gain vs FP16 (%)",
+                out_path=plots_dir / "latency_tpot_gain_vs_fp16.png",
+            )
 
     # Memory
     memory = _read_csvs(runs_dir, ["profile_memory_*.csv"])
@@ -443,8 +1018,12 @@ def main() -> int:
             if "gen_len" in mem_batch.columns and (mem_batch["gen_len"] == 128).any():
                 mem_batch = mem_batch[mem_batch["gen_len"] == 128]
             if not mem_batch.empty:
-                _plot_lines(
+                mem_batch_annotated = _annotate_batch_curve_with_capacity(
                     mem_batch,
+                    throughput_capacity_summary,
+                )
+                _plot_batch_with_capacity(
+                    mem_batch_annotated,
                     x="batch",
                     y="gpu_mem_peak_mb_mean",
                     hue="kv_mode",
@@ -459,8 +1038,12 @@ def main() -> int:
             if "gen_len" in mem_batch.columns and (mem_batch["gen_len"] == 128).any():
                 mem_batch = mem_batch[mem_batch["gen_len"] == 128]
             if not mem_batch.empty:
-                _plot_lines(
+                mem_batch_annotated = _annotate_batch_curve_with_capacity(
                     mem_batch,
+                    throughput_capacity_summary,
+                )
+                _plot_batch_with_capacity(
+                    mem_batch_annotated,
                     x="batch",
                     y="kv_cache_mem_mb_mean",
                     hue="kv_mode",
@@ -539,6 +1122,20 @@ def main() -> int:
                 out_path=plots_dir / "needle_pass_rate_vs_context.png",
                 yerr="needle_pass_rate_ci95_half",
             )
+        if "needle_exact_match_rate_mean" in needle_summary.columns:
+            exact = needle_summary.dropna(subset=["needle_exact_match_rate_mean"], how="all")
+            if not exact.empty:
+                _plot_lines(
+                    exact,
+                    x="seq_len",
+                    y="needle_exact_match_rate_mean",
+                    hue="kv_mode",
+                    title="Needle Exact Match Rate vs Context Len",
+                    xlabel="Context length (tokens)",
+                    ylabel="Exact match rate (%)",
+                    out_path=plots_dir / "needle_exact_match_vs_context.png",
+                    yerr="needle_exact_match_rate_ci95_half",
+                )
 
     # Needle details (curve over depth)
     needle_details = _read_csvs(runs_dir, ["needle_details_*.csv"])
@@ -601,6 +1198,80 @@ def main() -> int:
     if sig_frames:
         significance_summary = pd.concat(sig_frames, ignore_index=True)
         _save_table(significance_summary, tables_dir / "significance_summary.csv")
+
+    # Relative gain summary table for thesis discussion.
+    pairings = [
+        ("int8_baseline", "int8_ours"),
+        ("int4_fused", "int4_ours"),
+        ("int4_ours", "int4_ours_mixed"),
+        ("fp16", "int8_ours"),
+        ("fp16", "int4_ours"),
+    ]
+    gain_frames = []
+    gain_frames.append(
+        _relative_gain_table(
+            latency_summary,
+            metric_col="tpot_ms_mean",
+            metric_name="tpot_ms",
+            key_cols=["seq_len", "gen_len", "batch"],
+            pairings=pairings,
+            higher_is_better=False,
+        )
+    )
+    gain_frames.append(
+        _relative_gain_table(
+            latency_summary,
+            metric_col="tok_per_s_mean",
+            metric_name="tok_per_s",
+            key_cols=["seq_len", "gen_len", "batch"],
+            pairings=pairings,
+            higher_is_better=True,
+        )
+    )
+    gain_frames.append(
+        _relative_gain_table(
+            memory_summary,
+            metric_col="kv_cache_mem_mb_mean",
+            metric_name="kv_cache_mem_mb",
+            key_cols=["seq_len", "gen_len", "batch"],
+            pairings=pairings,
+            higher_is_better=False,
+        )
+    )
+    gain_frames.append(
+        _relative_gain_table(
+            ppl_summary,
+            metric_col="perplexity_mean",
+            metric_name="perplexity",
+            key_cols=["seq_len", "ppl_mode", "chunk_size"],
+            pairings=pairings,
+            higher_is_better=False,
+        )
+    )
+    gain_frames.append(
+        _relative_gain_table(
+            needle_summary,
+            metric_col="needle_pass_rate_mean",
+            metric_name="needle_pass_rate",
+            key_cols=["seq_len"],
+            pairings=pairings,
+            higher_is_better=True,
+        )
+    )
+    gain_frames = [g for g in gain_frames if not g.empty]
+    if gain_frames:
+        gain_summary = pd.concat(gain_frames, ignore_index=True)
+        _save_table(gain_summary, tables_dir / "relative_gain_summary.csv")
+
+    main_claims = _main_claims_32k_table(
+        latency_summary=latency_summary,
+        memory_summary=memory_summary,
+        needle_summary=needle_summary,
+        ppl_summary=ppl_summary,
+        target_seq_len=32704,
+    )
+    if not main_claims.empty:
+        _save_table(main_claims, tables_dir / "thesis_main_claims_32k.csv")
 
     print(f"Wrote tables to {tables_dir} and plots to {plots_dir}")
     return 0

@@ -2,7 +2,15 @@
 
 > 目标：在远端 H20 环境一键复现 `fp16 / int8_baseline / int8_ours` 主线，并可扩展 `int4_fused / int4_ours` 作为论文冲优补充，产出可直接引用的表格与图。
 
-论文验收最终产物目录（本地已同步）：`results/final_thesis_20260214_094156/`（见 `docs/final_results_summary.md`）。
+当前论文验收最终产物目录（远端）：`/root/autodl-tmp/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/`（见 `docs/final_results_summary.md`）。
+如需同步到本地，请使用文末 rsync 命令。
+
+新增：可直接使用一键脚本跑 `final_thesis_plus_*`：
+```bash
+cd /root/autodl-tmp/LLM_KVCache_Quantization
+bash scripts/run_final_thesis_plus.sh
+```
+脚本会自动完成：`gates -> 主线实验 -> batch 扩展 -> aggregate -> latex`。
 
 ## 1) 环境（固定）
 - 远端解释器：`/root/miniconda3/bin/python`（Python 3.12 / Torch 2.8.0 + cu128 / CUDA 12.8）
@@ -41,10 +49,10 @@ cd /root/autodl-tmp/LLM_KVCache_Quantization
 ## 4) 四个硬闸门（跑出 0 退出码才能信结果）
 建议把闸门输出也落盘到最终目录，答辩/验收时可直接展示。
 
-创建最终目录（建议固定 `final_thesis_*` 前缀）：
+创建最终目录（建议固定 `final_thesis_plus_*` 前缀）：
 ```bash
 cd /root/autodl-tmp/LLM_KVCache_Quantization
-RUN_TAG="final_thesis_$(date +%Y%m%d_%H%M%S)"
+RUN_TAG="final_thesis_plus_$(date +%Y%m%d_%H%M%S)"
 BASE_DIR="results/${RUN_TAG}"
 mkdir -p "${BASE_DIR}"/{runs,logs,tables,plots,latex_tables,gates,env}
 echo "${BASE_DIR}"
@@ -237,6 +245,7 @@ cd /root/autodl-tmp/LLM_KVCache_Quantization
 cd /root/autodl-tmp/LLM_KVCache_Quantization
 /root/miniconda3/bin/python scripts/aggregate_results.py \
   --runs_dir "${BASE_DIR}/runs" \
+  --logs_dir "${BASE_DIR}/logs" \
   --tables_dir "${BASE_DIR}/tables" \
   --plots_dir "${BASE_DIR}/plots"
 ```
@@ -244,8 +253,11 @@ cd /root/autodl-tmp/LLM_KVCache_Quantization
 产出至少包括：
 - tables: `latency_summary.csv`, `memory_summary.csv`, `needle_summary.csv`, `ppl_summary.csv`
 - tables: `throughput_by_batch.csv`
+- tables: `throughput_capacity_limits.csv`（批大小容量上限与 OOM/缺失点摘要）
+- tables: `thesis_main_claims_32k.csv`, `relative_gain_summary.csv`, `significance_summary.csv`
 - plots: `latency_tpot_vs_seq.png`, `memory_kv_cache_vs_seq.png`, `needle_pass_rate_vs_context.png`, `ppl_vs_tokens.png`
-- plots: `throughput_tok_per_s_vs_batch.png`, `memory_peak_vs_batch.png`, `memory_kv_cache_vs_batch.png`
+- plots: `throughput_tok_per_s_vs_batch.png`, `throughput_tok_per_s_per_seq_vs_batch.png`, `prefill_tok_per_s_vs_batch.png`（含容量上限虚线与 OOM/MISS 标记）
+- plots: `memory_peak_vs_batch.png`, `memory_kv_cache_vs_batch.png`, `needle_exact_match_vs_context.png`, `latency_tpot_gain_vs_fp16.png`
 
 ## 8) 导出 LaTeX 表格（论文直接引用）
 ```bash
@@ -254,6 +266,10 @@ cd /root/autodl-tmp/LLM_KVCache_Quantization
   --tables_dir "${BASE_DIR}/tables" \
   --out_dir "${BASE_DIR}/latex_tables"
 ```
+
+新增导出表（若对应 CSV 存在）：
+- `latex_tables/main_claims_32k.tex`
+- `latex_tables/relative_gain_summary.tex`
 
 ## 9) 可选：fused dump（用于定点诊断）
 ```bash
@@ -266,4 +282,11 @@ KV_FUSED_DUMP_DIR=results/fused_dumps KV_FUSED_DUMP_LAYER=0 KV_FUSED_DUMP_STEP=3
   --needle_max_new_tokens 64 \
   --calib_file artifacts/kv_calib_kl_selected_v3_quick.json \
   --seed 1234
+```
+
+## 10) 同步最终目录到本地
+```bash
+rsync -avz -e "ssh -p 31867" \
+  root@region-42.seetacloud.com:/root/autodl-tmp/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/ \
+  /Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/
 ```
