@@ -253,5 +253,41 @@ class TestTritonDecodeAttn(unittest.TestCase):
 
         self.assertTrue(torch.allclose(ref_tensor, triton_out, atol=3e-2, rtol=3e-2))
 
+    def test_inv_tau_prescaled_query(self):
+        """Verify that pre-scaling Q by inv_tau produces correct results.
+
+        The int8_ours path applies inv_tau by scaling Q before attention:
+            attn(inv_tau * Q, K, V) == softmax(inv_tau * Q @ K^T / sqrt(d)) @ V
+        This test confirms the kernel handles pre-scaled queries correctly
+        by comparing against a reference that applies the same pre-scaling.
+        """
+        inv_tau = torch.rand(self.H, dtype=torch.float16, device=self.device) * 0.5 + 0.75
+
+        q_raw = torch.randn((self.B, self.H, self.D), dtype=torch.float16, device=self.device)
+        q_scaled = q_raw * inv_tau.view(1, -1, 1)
+
+        k_int8 = torch.randint(-127, 127, (self.B, self.H, self.S, self.D), dtype=torch.int8, device=self.device)
+        v_int8 = torch.randint(-127, 127, (self.B, self.H, self.S, self.D), dtype=torch.int8, device=self.device)
+        k_scale = torch.rand((self.B, self.H, self.S, self.num_groups), dtype=torch.float16, device=self.device) * 0.1
+        v_scale = torch.rand((self.B, self.H, self.S, self.num_groups), dtype=torch.float16, device=self.device) * 0.1
+        context_lens = torch.tensor([self.S - 10, self.S - 20], dtype=torch.int32, device=self.device)
+
+        out_scaled = decode_attn_int8(q_scaled, k_int8, v_int8, k_scale, v_scale, context_lens)
+        ref_scaled = self._torch_ref_decode(q_scaled, k_int8, v_int8, k_scale, v_scale, context_lens)
+
+        max_diff = (out_scaled - ref_scaled).abs().max().item()
+        print(f"[INV_TAU] Max Diff: {max_diff}")
+        self.assertTrue(
+            torch.allclose(out_scaled, ref_scaled, atol=1e-2, rtol=1e-2),
+            f"Pre-scaled query should match reference; max_diff={max_diff}",
+        )
+
+        out_raw = decode_attn_int8(q_raw, k_int8, v_int8, k_scale, v_scale, context_lens)
+        self.assertFalse(
+            torch.allclose(out_scaled, out_raw, atol=1e-3),
+            "Scaled and unscaled queries should produce different outputs",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

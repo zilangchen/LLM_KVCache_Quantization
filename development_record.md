@@ -1,3 +1,25 @@
+# <Cursor-AI 2026-02-21 21:09:15>
+## 修改目的
+项目全面审查与优化：数据同步、补齐单元测试、消融实验状态确认、论文章节对齐、代码质量提升。
+
+## 修改内容摘要
+- 数据同步：rsync 远端实验结果与校准产物到本地，preflight 自检全部通过（22/22 + 5/5）
+- 单元测试补齐：
+  - 新增 `tests/test_int8_cache.py`（15 tests）
+  - 新增 `tests/test_int8_quant.py`（22 tests）
+  - 新增 `tests/test_fp16_cache.py`（20 tests）
+  - 扩展 `tests/test_triton_kernel.py`（+1 inv_tau test，max_diff=0.002）
+  - 远端验证全部 58 tests 通过
+- 消融实验确认：主线 no_temp，历史有 temp 数据可对比
+- 论文章节对齐：新增 `docs/thesis_chapter_mapping.md` + `scripts/plot_calib_analysis.py`（4张图）
+- 代码质量：deprecated 标注 + 占位模块说明
+
+## 影响范围
+- 新增：tests/test_int8_cache.py, tests/test_int8_quant.py, tests/test_fp16_cache.py, docs/thesis_chapter_mapping.md, scripts/plot_calib_analysis.py
+- 修改：tests/test_triton_kernel.py, scripts/profile_baseline.py, src/model/__init__.py, src/server/__init__.py, lang.md
+
+---
+
 # <Antigravity 2026-02-19 04:58:00>
 ## 修改目的
 进入“论文写作前准备”阶段：补齐论文必需图表/表格产物，固化 final-thesis-plus 一键重跑脚本，并在远端 H20 启动全量重跑。

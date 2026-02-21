@@ -2,6 +2,10 @@
 """
 Profile FP16 baseline generation performance.
 
+.. deprecated::
+    This is a legacy script from Milestone B. For new evaluations,
+    use ``scripts/profile_latency.py`` or ``scripts/run_experiments.py``.
+
 This script tests the custom generation loop (NOT model.generate()) and
 outputs structured performance metrics including TTFT, TPOT, throughput,
 and GPU memory usage.
