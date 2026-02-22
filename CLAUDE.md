@@ -95,7 +95,11 @@ python scripts/export_tables_latex.py --tables_dir results/<tag>/tables --out_di
 
 纯只读操作（读代码、搜索、分析日志、回答问题）不需要 Plan，可直接执行。
 
-### 4.4 Phase 闸门：启动下一 Phase 前必须清空待办
+### 4.4 Agent Teams 模式豁免
+
+当以 **主管 Agent** 角色运行（Agent Teams 模式 / `/auto-iterate`）时，**ExecPlan 门禁完全豁免**。主管 Agent 及其调度的开发 Agent 可自主决策并执行，无需输出 ExecPlan、无需等待用户 `APPROVE PLAN`、无需使用 `EnterPlanMode`。仅在触发 `auto-iterate` SKILL.md 中定义的强制 Escalation 场景（修改 objective 目标/边界、破坏性操作、研究方向转变）时才暂停询问用户。
+
+### 4.5 Phase 闸门：启动下一 Phase 前必须清空待办
 
 在启动任何新 Phase（如 Phase 5）之前，**必须先解决 `iteration.md` 顶部待办清单中属于当前 Phase 的所有条目**。
 若某条目因外部依赖无法完成，须在 iteration.md 中标注原因并降级为下一 Phase 的待办，不得无声跳过。
@@ -144,13 +148,15 @@ python scripts/export_tables_latex.py --tables_dir results/<tag>/tables --out_di
 
 规则：
 - 当一个 Plan 被用户讨论并认可后，必须追加到 `## Approved Plans` 区块（不要放在 TODO Backlog 里）
-- 每条 Plan 记录：批准日期、Plan 名称、前置条件、状态（待执行/执行中/已完成）、具体 checklist
-- Plan 完成后将状态改为"已完成"并记录完成日期，不删除原记录
+- 每条 Plan 记录：批准日期、Plan 名称、前置条件、状态（待执行/执行中）、具体 checklist
+- **Plan 完成后从 Approved Plans 区块删除**，在 Timeline 中记录完成摘要即可
 
 ### 7.2 iteration.md 追加记录
 
+**时间戳必须使用系统真实时间**：写入 iteration.md 前，必须先执行 `date '+%Y-%m-%d %H:%M'` 获取真实时间，禁止自行编造或估算时间。
+
 ```markdown
-### YYYY-MM-DD HH:MM | 标题
+### <执行 date 命令获取的真实时间> | 标题
 - Goal:
 - Changed files:
 - Commands:
@@ -251,11 +257,20 @@ python scripts/export_tables_latex.py --tables_dir results/<tag>/tables --out_di
 - 审查重点：数值正确性、接口兼容性、边界情况、测试覆盖、配置一致性
 - **常驻运行**，仅在用户手动终止 / 主管发送 shutdown / 所有开发任务完成时退出
 
+### 强制规则：每次启动必须读取 iteration.md
+
+**所有角色（主管/开发/审查）在每次启动、每轮迭代开始时，必须先读取 `iteration.md`**，获取：
+- TODO Backlog（当前待修复问题）
+- Approved Plans（当前待执行计划）
+- Timeline 最近条目（上次做到哪里）
+
+这是保持上下文同步的唯一机制，不得跳过。
+
 ### 协作流程
 ```
-主管 → 拆解 objective.md 为任务
-  ├── spawn 开发 Agent → 编码/测试/提交
-  ├── spawn 审查 Agent → 审查变更 → 写 TODO
+主管 → 读 iteration.md + objective.md → 拆解任务
+  ├── spawn 开发 Agent → 读 iteration.md → 领取任务 → 编码/测试/提交
+  ├── spawn 审查 Agent → 读 iteration.md → 监控变更 → 审查 → 写 TODO
   ├── 审查发现问题 → 主管分配修复任务 → 开发 Agent 修复
   └── 循环直到目标达成
 ```

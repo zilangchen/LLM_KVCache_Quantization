@@ -140,7 +140,7 @@ description: >
 
 ```markdown
 ---
-## 迭代 N/M | YYYY-MM-DD HH:MM
+## 迭代 N/M | <执行 date '+%Y-%m-%d %H:%M' 获取的真实时间>
 
 ### 状态评估
 - 目标达成：X/Y

@@ -140,6 +140,20 @@ Canonical agent workflow directory is `.agents/`.
 - [ ] `[LOW]` Bootstrap CI 单样本情况返回 (value, value) 无警告 (L1059-1060): 无法区分单样本 CI 与真正精确的无变异情况
 - [ ] `[LOW]` 精确枚举阈值 n=16 硬编码 (L1092-1107): 从精确枚举到 MC 采样的切换点不可调
 
+#### N. 第六轮审查 — eval_ppl.py / aggregate_results.py / CLAUDE.md 修复验证
+
+**已修复项确认**（开发 agent 工作树修改，待提交）：
+- [x] L1 修复：`eval_ppl.py` `build_kv_cache()` 添加 kivi_style 分支，创建 `KIVIStyleKVCache` ✓；同时添加 `quant_bits` 参数并在 `main()` 中传递
+- [x] M1 修复：`aggregate_results.py` 添加 kivi_style 显著性配对 `("kivi_style", "int8_ours")` 和 `("kivi_style", "int8_baseline")` ✓
+- [x] M2 修复：`aggregate_results.py` 添加 `longbench_official_macro` 到 `_to_numeric()` 列表和聚合值列表 ✓
+- [x] M3 修复：`aggregate_results.py` 全部 5 个 sig_specs 的 key_cols 添加 `model_id`（latency/ppl/needle/longbench/ruler）✓ — 跨模型数据不再混淆
+- [x] M4 修复：`aggregate_results.py` ruler_depth_keys 添加 `model_id` ✓
+
+**修复质量评价**：eval_ppl.py 的 KIVI 分支正确使用 `KIVIStyleKVCache` 且只传必要参数（num_layers/device/quant_bits），其余用合理默认值。aggregate_results.py 单个 diff 同时修复 M1-M4 四项 HIGH+ 问题，涵盖显著性配对、聚合列、跨模型分组三个维度，修复完整。
+
+**未修复的 M 节残留问题**：
+- M5（kv_mode 字母序排序）、M6（pivot aggfunc="mean" 静默平均）、M7/M8（边界情况）— 低优先级，不阻塞
+
 ---
 
 ## Approved Plans
