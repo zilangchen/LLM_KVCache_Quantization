@@ -1,152 +1,262 @@
 ## 项目名称
-面向高效推理的大语言模型键值缓存量化方法（本科毕业设计/论文）
+
+面向高效推理的大语言模型键值缓存行为对齐量化框架
+
+**目标会议**：EMNLP 2026（预计 2026 年 6 月截稿）
 
 ---
 
-## 项目定位（与 LMDeploy 的差别）
+## 论文定位
 
-- **本项目（窄而深，论文导向）**：围绕 KV Cache 量化做“方法 + 系统分析 +
-  可复现实验闭环 + 关键 kernel 优化”的研究型工程。重点回答
-  “在固定评测口径下，如何在质量/显存/速度之间取得可解释、可复现的最优折中”。
-- **LMDeploy（广而全，部署系统）**：通用推理部署框架，KV 量化是其功能之一。
-  本项目中 **LMDeploy 仅作为 baseline/对照系统**（可选），用于系统级参考对比；
-  主线贡献必须来自本仓库的独立实现，且与 LMDeploy 脚本隔离，避免耦合与归属不清。
+本项目提出 **行为对齐校准框架（Behavior-Aligned Calibration Framework）**，
+核心思想：以 attention 权重分布的 KL 散度（而非简单数值误差）驱动量化参数选择，
+并引入逐层逐头温度校正（per-head `inv_tau`），使同一套校准方法论在
+**不同 bit-width（INT8 / INT4）** 和 **不同模型族（Qwen2.5 / LLaMA-3）** 下均有效。
+
+与现有工作的差异化：
+- 多数 KV Cache 量化方法（KIVI、KVQuant、ZipCache 等）聚焦 **更低的 bit-width**
+  或 **更复杂的混合精度策略**，校准方式通常为 MSE 或 percentile；
+- 本工作不追求极限压缩率，而是回答一个被忽略的系统性问题：
+  **"什么样的校准准则能在质量、显存、速度三者间取得最可解释、最可复现的折中，
+  并且能跨 bit-width 和模型族泛化？"**
 
 ---
 
 ## 固定决策（不可修改）
 
-- **模型**：`Qwen/Qwen2.5-1.5B-Instruct`
-- **核心技术栈**：Python 3.12（以 AutoDL 镜像为准）、PyTorch 2.8.0（CUDA
-  12.8 runtime）、Transformers、Triton、FastAPI/Uvicorn、pynvml、
-  numpy/pandas/matplotlib
-- **两条执行路径**
-  - **研究主路径（必须）**：Transformers + 自定义 generation loop +
-    自定义 KV cache（服务于算法与 kernel 优化，避免被框架“封装掉关键环节”）。
-  - **系统参考路径（可选）**：LMDeploy/TurboMind（仅做 baseline；与主线代码隔离）。
-- **复现实验入口**：`configs/exp_matrix.yaml` 作为实验矩阵（可一键复跑）。
-- **质量评测解码口径**：固定 greedy（temperature=0.0, top_p=1.0, top_k=0），
-  与 `configs/exp_matrix.yaml` 对齐。
+### 模型
+
+| 模型 | 用途 | Revision |
+|------|------|----------|
+| `Qwen/Qwen2.5-1.5B-Instruct` | 主模型，全量实验 | 已 pin，见 `configs/snapshots/` |
+| `Qwen/Qwen2.5-7B-Instruct` | 同架构放大，验证 scale-up | 待首次下载后 pin |
+| `Meta-Llama/LLaMA-3-8B-Instruct` | 跨架构验证，证明泛化性 | 待首次下载后 pin |
+
+> 所有模型的 `model_revision`（commit hash）在首次下载后立即 pin 住，
+> 写入 `configs/snapshots/` 对应的 YAML 配置文件，确保严格复现。
+
+### 核心技术栈
+
+- Python 3.12（AutoDL 镜像）、PyTorch 2.8.0（CUDA 12.8 runtime）
+- Transformers、Triton、pynvml、numpy/pandas/matplotlib
+
+### 执行路径
+
+- **研究主路径（唯一）**：Transformers + 自定义 generation loop + 自定义 KV cache
+  （服务于算法与 kernel 优化，避免被框架"封装掉关键环节"）
+
+### 解码口径
+
+- 质量评测统一 **greedy 解码**：`temperature=0.0, top_p=1.0, top_k=0`
+- 与 `configs/snapshots/` 中实验矩阵对齐
 
 ---
 
-## 研究问题与假设（论文写作口径）
+## 研究问题与假设
 
-- **RQ1：长上下文下 INT8 KV 的误差累积与稳定性**  
-  假设：KV 的量化误差会随解码步数/上下文长度累积，导致长上下文任务（needle）
-  更易出现检索失败或语义漂移。
-- **RQ2：KL 行为对齐校准 + per-head temperature 能否稳定长上下文**  
-  假设：量化会改变 attention logits 的尖锐度与分布形态；
-  通过对齐 attention weights 的 KL（而非仅数值误差）选择 scale/clipping，
-  并引入每层每头 `inv_tau` 进行温度校正，能显著提升长上下文 needle 稳定性。
-- **RQ3：Triton 融合 decode-attn（q_len=1）能否避免“省显存但速度没了”**  
-  假设：在 decode 阶段避免“全量反量化 → 独立 attention”路径，
-  用单个融合 kernel 完成“读 int8 K/V → group-wise 反量化 → logits/softmax → 输出累加”，
-  可减少内存带宽与 kernel 调度开销，使端到端 TPOT 不退化并有机会提升。
+### RQ1：校准泛化性
+
+行为对齐（KL）校准是否在 INT8 和 INT4 上都优于 MSE / percentile 基线？
+跨模型族（Qwen2.5 vs LLaMA-3）是否成立？
+
+**假设**：以 attention 分布 KL 散度为目标的校准，能同时优化 scale 与 clipping，
+比数值 MSE 或固定 percentile 更好地保持注意力分布形态，从而在不同 bit-width 下
+产生更稳定的长上下文性能。
+
+### RQ2：逐头温度校正
+
+Per-head `inv_tau` 能否恢复量化后的注意力分布尖锐度，
+提升长上下文检索（Needle / RULER）准确率？
+
+**假设**：量化会平坦化 attention logits，导致长上下文检索失败；
+通过校准得到的逐层逐头 `inv_tau` 施加温度校正（在 decode 时等价于缩放 Query），
+可恢复注意力尖锐度，提升 retrieval 准确率。
+
+### RQ3：系统效率
+
+Triton 融合 decode attention（q_len=1）能否消除"省显存但掉速度"的问题？
+吞吐量如何随 batch size 扩展？
+
+**假设**：在 decode 阶段用单个 Triton kernel 完成
+"读量化 K/V → group-wise 反量化 → online softmax → 加权输出"，
+可减少内存带宽与 kernel 调度开销，使 TPOT 不退化或有提升。
+
+### RQ4：跨模型鲁棒性
+
+校准得到的 scales 和 temperatures 在 Qwen2.5 和 LLaMA-3 架构间
+是否保持质量-效率的平衡？
+
+**假设**：行为对齐校准是模型无关的方法论（只依赖 attention 分布而非特定架构假设），
+在不同模型族上仅需重新跑校准即可获得有效参数。
 
 ---
 
-## 创新点与贡献（避免“只开关对比”）
+## 创新点与贡献
 
-- **方法层（Algorithm）**
-  - 行为对齐校准（KL）：对齐 attention weights 分布（不是仅数值误差），输出静态
-    `k_scale/v_scale` 与 `inv_tau[layer, head]`
-  - 量化策略：INT8 对称量化 + group-wise scale（静态 per-layer/per-head/per-group）
-  - 输出：可复现的校准产物（`artifacts/kv_calib_kl.json`）与消融开关
-- **系统层（System/Analysis）**
-  - 固定口径下给出 **显存/吞吐/延迟/质量/needle** 随序列长度变化的曲线
-  - 解释：同显存预算下可支持的最大上下文与并发的变化趋势与原因
-- **工程层（Engineering）**
-  - decode 阶段（q_len=1）强制走 Triton 融合 kernel：在一个 kernel 内完成
-    读取量化 K/V → 组尺度反量化 → logits/softmax → 加权求和输出（并融合 `inv_tau`）
+### 贡献 1：行为对齐校准框架
+
+- 以 attention weights 的 KL 散度为优化目标选择 `k_scale / v_scale`，
+  而非传统的 weight MSE 或激活值 percentile
+- 同时搜索逐层逐头 `inv_tau` 作为温度校正参数
+- 产出可移植的校准产物（JSON）：静态 scales + per-head inv_tau
+- **关键性质**：同一校准流程对 INT8 和 INT4 均适用（只需调整量化范围）；
+  对不同模型只需重新运行校准脚本
+
+### 贡献 2：Triton 融合量化 decode attention
+
+- 单 kernel 完成 INT8 / INT4 在线反量化 + online softmax + GQA 支持
+- 实现位置：`src/kernels/triton_decode_attn_int8.py`（`decode_attn_int8_kernel`）
+- INT4 通过先 unpack 为 INT8 后复用同一 kernel
+  （`src/kernels/triton_decode_attn_int4.py`）
+- **inv_tau 实现说明**：`inv_tau` 通过 Q 预缩放在 `src/engine/patch_model.py`
+  第 546-550 行实现（`query_states = query_states * inv_tau_layer`），
+  数学上等价于对 attention logits 乘以 `inv_tau`，但不在 kernel 内部实现。
+  这一设计使 kernel 签名保持简洁，避免额外 launch 参数
+
+### 贡献 3：全面实证研究
+
+- 3 模型（1.5B + 7B + 8B）× 2 bit-width（INT8 + INT4）
+- 3 benchmark 套件：Needle-in-a-Haystack + LongBench + RULER
+- 与 KIVI 的公平对比（同框架自实现）
+- 多种子 + BH-FDR 统计检验（控制 false discovery rate）
+
+---
+
+## 评测体系
+
+### Benchmarks
+
+| 维度 | Benchmark | 口径 | 状态 |
+|------|-----------|------|------|
+| 长上下文检索 | Needle-in-a-Haystack | 4K/8K/16K/32K，20 depth levels，exact match | ✅ 已有 |
+| 长上下文理解 | LongBench（子集） | 6-8 个代表性任务（见下），中英覆盖 | 🆕 需新增 |
+| 合成检索压测 | RULER（子集） | 4 个子任务 × 4 长度点 | 🆕 需新增 |
+| 语言建模质量 | PPL (WikiText-2) | chunk=128 主结果 + chunk=1 验证 | ✅ 已有 |
+| 系统性能 | Latency/Memory/Throughput | TPOT/TTFT/峰值显存/吞吐 | ✅ 已有 |
+
+**LongBench 主表任务**（6-8 个，覆盖中英 × 检索/总结/推理/代码）：
+- 单文档 QA：NarrativeQA (EN)、DRCD (ZH)
+- 多文档 QA：HotpotQA (EN)
+- 摘要：GovReport (EN)、VCSUM (ZH)
+- 少样本学习：TREC (EN)
+- 代码：LCC (EN)
+- 全量 LongBench 结果放附录
+
+**RULER 主表子任务**：
+- Needle retrieval（单/多 needle）
+- Variable tracking
+- Common/Frequent words extraction
+- 长度点：4K / 8K / 16K / 32K
+
+### PPL 评测口径
+
+- **主结果**：`chunk_size=128, max_length=1024, stride=512, max_samples=64`
+  - 所有方法（FP16 / INT8 / INT4 / KIVI）统一使用同一 chunk_size
+  - 论文中须声明：chunk=128 意味着 chunk 内 token 间用 float KV（未量化），
+    跨 chunk 的 token 经过量化 KV cache
+- **辅助验证**：在 Qwen2.5-1.5B 上额外跑 `chunk_size=1`（max_samples=8），
+  确认 PPL 差异趋势与 chunk=128 一致，作为严格性验证
+
+### SOTA 对照基线
+
+| 方法 | 说明 | 状态 |
+|------|------|------|
+| FP16 | 无量化，上界参考 | ✅ 已有 |
+| INT8 naive percentile | 简单 percentile clipping，下界参考 | ✅ 已有 |
+| INT8-ours | KL 校准 + inv_tau + group-wise + Triton fused | ✅ 已有 |
+| INT4-baseline | 简单 percentile INT4 | ✅ 已有 |
+| INT4-ours | KL 校准 + inv_tau + group-wise INT4 | ✅ 已有 |
+| KIVI | per-channel K + per-token V 非对称量化（自实现简化版） | 🆕 需新增 |
+
+### 统计框架
+
+- **Bootstrap CI**（95%）+ **sign-flip permutation test** + **BH-FDR q-value**（α=0.05）
+- Family 范围：同一指标/任务组合下的所有 kv_mode 配对比较
+- 已在 `scripts/aggregate_results.py` 中实现（`_add_bh_fdr_qvalues` 函数）
+- **不使用 Holm-Bonferroni**：BH-FDR 控制 false discovery rate（而非 FWER），
+  在 NLP/ML 实验中为标准做法，检验力更优
+
+### 种子
+
+- **主实验**：5 个种子（1234, 1235, 1236, 1237, 1238）
+- **吞吐测试**：8 个种子（1234–1241）
 
 ---
 
 ## 完成定义（Definition of Done）
 
-对齐 `AGENT_TASKLIST.md` 的里程碑顺序（A–J，H/I 可选），满足：
-
-- **端到端三条管线可跑**：FP16 / INT8-baseline / INT8-ours
-- **实验矩阵可复现**：`configs/exp_matrix.yaml` 驱动的一键复跑，产出 tables/plots
-- **结构化结果齐全**：每次 run 输出 CSV/JSON，字段口径与 tasklist 中定义一致
-  （至少包含：`run_id, model_id, kv_mode, quant_bits, clip_percentile, group_size, dtype,
-  seq_len, gen_len, batch, ttft_ms, tpot_ms, tok_per_s, gpu_mem_peak_mb, timestamp,
-  git_commit`）
-- **kernel 硬指标达成**：至少 1 个 Triton kernel 被真实推理路径调用，
-  且通过数值一致性检查（容忍小误差）与性能对比（不退化或有提升）
-- **论文可交付**：依据学校工科/理科格式规范完成论文正文、图表与答辩材料
+- **全管线可跑**：3 模型 × {FP16, INT8-baseline, INT8-ours, INT4-baseline,
+  INT4-ours, KIVI} 全部产出结构化结果（CSV/JSON）
+- **评测齐全**：LongBench（子集）+ Needle + RULER（子集）+ PPL 全部通过
+- **统计严谨**：所有主表结果附带 Bootstrap CI 和 BH-FDR q-value
+- **可复现**：实验矩阵配置文件 + 一键复跑脚本 + env freeze + git commit pin
+- **LaTeX-ready**：自动导出论文表格和图表
+- **消融完整**：KL vs MSE vs percentile、group_size、temperature 开关、
+  static vs adaptive scales 等系统性消融
+- **2-bit 拓展**（可选 stretch goal）
 
 ---
 
 ## 复现与记录规则（强制）
 
-- **运行记录**：所有脚本输出结构化结果（CSV/JSON），并记录：
-  - `timestamp`（运行时刻）
-  - `git_commit`（当前 commit）
-  - `hardware`（GPU 型号/显存）、驱动/CUDA/torch/transformers 版本（见 `env/`）
-  - 关键参数快照（从 `configs/exp_matrix.yaml` 解析后的 config dump）
-- **解码固定**：涉及质量评测时，统一 greedy 解码，禁止临时改采样参数造成口径漂移
-- **实验输出路径**：推荐写入 `results/` 下的 runs/tables/plots 子目录
-  （具体以 `AGENT_TASKLIST.md` 约定为准）
+### 实验入口
+
+- 以 `configs/snapshots/` 下的 YAML 配置文件为实验矩阵定义
+  （当前版本：`exp_matrix_week4_final_journal_v1.yaml`）
+- 一键复跑脚本：`scripts/run_final_journal_v1.sh`
+- 关键口径锁定（与配置对齐）：
+  - greedy decoding：`temperature=0.0, top_p=1.0, top_k=0`
+  - 多种子运行（见上述种子定义）
+
+### 运行记录
+
+所有脚本输出结构化结果（CSV/JSON），并记录：
+- `timestamp`（运行时刻）
+- `git_commit`（当前 commit）
+- `hardware`（GPU 型号/显存）、驱动/CUDA/torch/transformers 版本（见 `env/`）
+- 关键参数快照（从配置文件解析后的 config dump）
+
+### 解码固定
+
+涉及质量评测时，统一 greedy 解码，禁止临时改采样参数造成口径漂移。
+
+### 实验输出路径
+
+- `results/`（禁止手写散落到其他目录）
+  - `results/runs/`：每次运行的 CSV/JSON
+  - `results/tables/`：论文表格
+  - `results/plots/`：论文图
+  - `results/logs/`：脚本运行日志
+- `artifacts/`：校准与中间产物（例如 `artifacts/kv_calib_kl_selected_v3_quick.json`）
+
+### 结构化结果字段（CSV schema）
+
+所有 profile/eval 脚本必须输出 `results/runs/*.csv`，字段至少包含：
+
+`run_id, model_id, kv_mode, quant_bits, clip_percentile, group_size, dtype,
+seq_len, gen_len, batch, ttft_ms, tpot_ms, tok_per_s, gpu_mem_peak_mb,
+timestamp, git_commit`
 
 ---
 
 ## 非目标（明确边界）
 
-- 不做“全能部署框架”，不以 LMDeploy 为核心交付
-- 不追求支持所有模型/所有后端；以固定模型与固定口径完成论文闭环为第一优先级
-- 在主线闭环未完成前，不优先做 INT4/mixed 等扩展（对应里程碑 H 为可选）
+- 不做"全能部署框架"；以固定模型和固定口径完成论文闭环为第一优先级
+- **2-bit / 1-bit 量化为拓展 / 未来工作，非核心贡献**
+- 不涉及多 GPU / 分布式推理
+- 不涉及模型训练或微调
+- 不做服务端并发压测（Milestone I 从主线中移除）
 
 ---
 
-## 开源/学术合规（baseline-only 写法）
+## 稳定接口（Stable APIs）
 
-- LMDeploy 作为对照系统引用与比较（论文中明确引用与版本信息）
-- 主线贡献（算法、实现、实验与结论）必须来自本仓库独立实现与可复现实验
-- 对照实验脚本与主线实现保持隔离，避免“对照代码混入主线贡献”的归属风险
-
----
-
-## 开工前门禁清单（进入 Milestone A 之前必须确认）
-
-- **硬件与环境**
-  - 已确认（AutoDL）：H20-NVLink × 1，显存 96GB；CPU 16 核；内存 150GB
-  - 已确认：驱动 `580.76.05`；基础镜像 PyTorch 2.8.0 / Python 3.12 /
-    CUDA 12.8（Ubuntu 22.04）
-  - 已确认：允许联网下载 HuggingFace 模型与评测所需资源
-- **模型 pinning（复现强度）**
-  - 已确认：需要 pin（严格复现）
-  - 待落实：`model_revision` 的具体值（首次下载后解析 resolved revision，
-    写入运行记录，并回填到 `configs/exp_matrix.yaml`）
-- **评测定义（口径必须固定）**
-  - 已确认：TTFT/TPOT 的关键计时点前后都做 GPU 同步（优先 `torch.cuda.synchronize()`；也可用 CUDA events），保证计时可信
-  - 已确认：PPL 数据集使用 `wikitext-2-raw-v1`（允许联网下载）
-  - 已确认：needle 采用方案 A（合成 needle-in-a-haystack + 字符串命中评分；固定 seed）
-  - 吞吐负载：ShareGPT（或本地 prompts）来源与采样策略（固定 seed）
-- **实验可行性（显存预算）**
-  - 已确认：先以 `seq_lens` 最大 32768 为主线目标
-  - 若不可跑：fallback 的最大长度与分阶段策略（先短后长）
-  - 校准 prompts 来源与规模（例如 `num_prompts=256`、`max_prompt_tokens=1024`）
-- **存储与缓存策略**
-  - 已确认：磁盘可扩容，不作为瓶颈
-  - 仍建议：将 HF/datasets cache 指向数据盘或扩容盘，避免系统盘 30GB 被写满
-- **论文对齐（产出驱动写作）**
-  - 计划输出的表格/图表清单与论文章节对应
-  - CSV schema 字段与 `AGENT_TASKLIST.md` 的输出字段一致，避免后期返工
-
----
-
-## 稳定接口（Stable APIs，后续实现必须遵守）
-
-本项目采用“研究主路径（Transformers + 自定义 generation loop + 自定义 KV cache）”，
-为保证后续模块可替换、可对比，接口在早期固定，后续实现不得随意破坏。
+本项目采用"研究主路径（Transformers + 自定义 generation loop + 自定义 KV cache）"，
+接口在早期固定，后续实现不得随意破坏。
 
 ### Engine
 
 - `Engine.generate(prompts, generation_config, kv_mode, runtime_config) -> GenerationOutput`
-- 必须同时支持：
-  - 脚本离线调用（non-streaming）
-  - 服务端流式输出（streaming，Milestone I）
 
 ### KV Cache
 
@@ -154,70 +264,144 @@
 - `KVCache.get_kv(layer_id) -> (k, v)`
 - 约束：
   - 必须支持 decode 过程中按步增长（每步追加 1 token 的 KV）
-  - 必须能在 `kv_mode` 切换时替换实现（fp16 / int8_baseline / int8_ours）
+  - 必须能在 `kv_mode` 切换时替换实现
+    （fp16 / int8_baseline / int8_ours / int4_baseline / int4_ours / kivi）
+- 实现位置：
+  - `src/cache/fp16_cache.py`
+  - `src/cache/int8_cache.py`（含静态/自适应 scales、per-head temperature）
+  - `src/cache/int4_cache.py`（含 outlier rescue、mixed rescue）
 
 ### Quantizer
 
-- `Quantizer.quantize_kv(k, v, meta) -> (qk, qv, qmeta)`
-- `Quantizer.dequantize_kv(qk, qv, qmeta) -> (k, v)`
-- 约束：
-  - 量化配置（bits、clipping percentile、group_size 等）必须可序列化写入结果与
-    artifacts，确保复现
+- `quantize_symmetric(tensor, percentile, group_size) -> (quantized, scale)`
+- `dequantize_symmetric(quantized, scale) -> tensor`
+- INT8 实现：`src/quant/int8_basic.py`
+- INT4 实现：`src/quant/int4_basic.py`（含 pack_int4 / unpack_int4）
+- 静态 scale 支持：`quantize_symmetric_int8_with_scale` / `quantize_symmetric_int4_with_scale`
 
 ### Kernels
 
-- Triton kernels 必须提供 python wrapper，放在 `src/kernels/`
-- 至少 1 个 kernel 必须在真实 decode 路径被调用（不仅是 demo）
+- Triton kernels 位于 `src/kernels/`
+- INT8：`triton_decode_attn_int8.py`（`decode_attn_int8_kernel` + `decode_attn_int8` wrapper）
+- INT4：`triton_decode_attn_int4.py`（先 unpack 为 INT8 后复用同一 kernel）
+
+### 校准产物
+
+- 格式：JSON
+- 典型路径：`artifacts/kv_calib_kl_selected_v3_quick.json`
+- 内容：per-layer `k_scale`、`v_scale`（group-wise）、`inv_tau`（per-head）
+- 生成脚本：`scripts/calibrate_behavior.py`
 
 ---
 
-## 结果与复现口径（单一事实来源）
+## 项目执行路线图
 
-### 实验入口（唯一）
+### 已完成里程碑
 
-- 以 `configs/exp_matrix.yaml` 为唯一实验入口：跑矩阵 → 产出 CSV/图表
-- 关键口径锁定（与 `configs/exp_matrix.yaml` 对齐）：
-  - `seed=1234`
-  - greedy decoding：`temperature=0.0, top_p=1.0, top_k=0`
+| 里程碑 | 内容 | 关键产出 |
+|--------|------|----------|
+| A ✅ | 环境与 Smoke Test | `env/versions.txt`、`scripts/smoke_test.py` |
+| B ✅ | 自定义 Generation Loop | `src/engine/generate_loop.py`，prefill + decode 分离 |
+| C ✅ | FP16 KV Cache Baseline | `src/cache/fp16_cache.py` |
+| D ✅ | 评测框架 | `profile_latency.py`、`profile_memory.py`、`eval_ppl.py`、`eval_needle.py` |
+| E ✅ | INT8 Baseline | `src/quant/int8_basic.py`、`src/cache/int8_cache.py` |
+| F ✅ | INT8-ours（KL 校准 + inv_tau + group-wise） | `scripts/calibrate_behavior.py`、`artifacts/kv_calib_kl*.json` |
+| G ✅ | Triton 融合 Decode Kernel（INT8） | `src/kernels/triton_decode_attn_int8.py` |
+| H ✅ | INT4 实现 | `src/quant/int4_basic.py`、`src/cache/int4_cache.py`、`src/kernels/triton_decode_attn_int4.py` |
+| J（部分）✅ | 实验矩阵 & 可复现流水线 | `scripts/run_experiments.py`、`scripts/run_final_journal_v1.sh`、`scripts/aggregate_results.py` |
 
-### 输出位置与结构（约定）
+### 新增里程碑（期刊扩展）
 
-- `results/`（禁止手写散落到其他目录）
-  - `results/runs/`：每次运行的 CSV/JSON（每个 run 一套）
-  - `results/tables/`：论文表格
-  - `results/plots/`：论文图
-  - `results/logs/`：脚本运行日志（如有）
-- `artifacts/`：校准与中间产物（例如 `artifacts/kv_calib_kl.json`）
+#### Milestone K：多模型支持
 
-### 结构化结果字段（CSV schema）
+- **目标**：在 Qwen2.5-7B 和 LLaMA-3-8B 上复现校准 + 全量实验
+- **子任务**：
+  - K1：模型下载与 revision pin
+  - K2：分别运行 `calibrate_behavior.py` 生成校准产物
+  - K3：验证 INT8 + INT4 管线在两个新模型上端到端跑通
+  - K4：跑完整实验矩阵（needle + PPL + latency + memory）
+- **验收**：3 模型均产出结构化结果，且 INT8-ours 在所有模型上 needle 不劣于 baseline
 
-所有 profile/eval 脚本必须输出 `results/runs/*.csv`，字段至少包含：
+#### Milestone L：LongBench 集成
 
-`run_id, model_id, kv_mode, quant_bits, clip_percentile, group_size, dtype, seq_len, gen_len, batch, ttft_ms, tpot_ms, tok_per_s, gpu_mem_peak_mb, timestamp, git_commit`
+- **目标**：接入 LongBench 评测，代表性子集作为主表
+- **子任务**：
+  - L1：数据集下载与预处理（6-8 个任务）
+  - L2：编写 `scripts/eval_longbench.py`
+  - L3：接入实验矩阵（configs 新增 LongBench runs）
+  - L4：全量 LongBench 作为附录（可选）
+- **验收**：3 模型 × 6 kv_mode × 6-8 任务均产出结果
 
-### 每次运行必须记录的元信息（最少集合）
+#### Milestone M：RULER 集成
 
-- `timestamp`：运行时刻（写入 CSV/JSON）
-- `git_commit`：当前 commit（写入 CSV/JSON）
-- `hardware`：GPU 型号/显存（写入 JSON 或 CSV 扩展字段）
-- `config_dump`：本次 run 的配置快照（从 `configs/exp_matrix.yaml` 解析后写入 JSON）
+- **目标**：接入 RULER 合成检索 benchmark
+- **子任务**：
+  - M1：RULER 任务生成器（4 个子任务 × 4 个长度点）
+  - M2：编写 `scripts/eval_ruler.py`
+  - M3：接入实验矩阵
+- **验收**：3 模型 × 6 kv_mode × 16 个（4 任务 × 4 长度）条目均产出结果
+
+#### Milestone N：KIVI Baseline 实现
+
+- **目标**：在本框架内自实现简化版 KIVI 作为 SOTA 对照
+- **子任务**：
+  - N1：实现 per-channel K quantization + per-token V quantization
+  - N2：编写 `src/cache/kivi_cache.py`
+  - N3：接入 `kv_mode=kivi`
+  - N4：在 3 个模型上跑完整评测
+- **验收**：KIVI 管线端到端可跑，产出结构化结果
+
+#### Milestone O：INT4 补全
+
+- **目标**：确保 INT4 在 3 个模型上全部跑通，质量可控
+- **子任务**：
+  - O1：在 7B 和 8B 模型上验证 INT4 量化 + 校准
+  - O2：修复可能的 INT4 数值问题
+  - O3：完善 INT4 消融（pack/unpack 正确性、outlier rescue 效果）
+- **验收**：INT4-ours 在所有模型上 needle/PPL 有合理结果
+
+#### Milestone P：系统性消融实验
+
+- **目标**：产出消融表，支撑论文的方法选择论证
+- **消融维度**：
+  - 校准方法：KL vs MSE vs percentile（RQ1 核心）
+  - group_size：16 / 32 / 64 / 128
+  - temperature：开 / 关（RQ2 核心）
+  - scales：static vs adaptive vs dynamic
+  - bit-width：INT8 vs INT4（同一校准框架下）
+- **验收**：每个消融对产出结构化结果 + 统计显著性
+
+#### Milestone Q：最终实验 & 论文表格
+
+- **目标**：3 模型全矩阵运行 + 统计聚合 + LaTeX 导出
+- **子任务**：
+  - Q1：运行完整实验矩阵（含 throughput repair loop）
+  - Q2：`aggregate_results.py` 生成全部表格（含 BH-FDR q-value）
+  - Q3：`export_tables_latex.py` 导出 LaTeX
+  - Q4：`generate_thesis_report.py` 生成汇总报告
+- **验收**：`results/final_journal_v2/` 目录完整，所有 LaTeX 表格可编译
+
+#### Milestone R（拓展）：2-bit 量化
+
+- **目标**：探索 INT2 的可行性，作为论文的 future work 实验支撑
+- **子任务**：
+  - R1：INT2 量化模块（`src/quant/int2_basic.py`）
+  - R2：Triton 2-bit decode kernel（或复用 INT8 kernel + unpack）
+  - R3：校准适配（calibrate_behavior.py 支持 2-bit 范围）
+  - R4：在 1.5B 模型上运行 needle + PPL
+- **验收**：有初步结果可报告（即使质量下降明显也属预期）
 
 ---
 
 ## 如何驱动 agent 做每一步（统一指令模板）
 
-后续每个 Milestone 的每个子任务，都用下面模板驱动 agent，保证“实现—验收—记录”
-闭环，不靠临时口头约定。
-
-### 模板 A：实现一个功能点（功能/重构/新增脚本）
-
-你发给 agent 的输入（复制后填空）：
+### 模板 A：实现一个功能点
 
 ```text
 目标：<1 句话描述本次要完成的子任务>
 当前状态：<已完成到哪里；相关文件/分支/结果路径>
 约束：
-  - 必须对齐：objective.md / AGENT_TASKLIST.md / configs/exp_matrix.yaml
+  - 必须对齐：objective.md / AGENT_TASKLIST.md / configs/snapshots/
   - 代码风格：PEP8（79 字符），不要引入未使用依赖
   - 必须加异常处理：文件/网络/显存不足/缺少 CUDA 等
 验收标准：
@@ -227,15 +411,12 @@
 ```
 
 agent 输出必须包含：
-
 - 改了哪些文件（精确路径）
 - 我该运行哪些命令（复制即可运行）
 - 预期输出长什么样（关键日志 + 文件路径 + CSV/JSON 字段）
 - 失败了怎么办（2-3 个最常见报错的定位与修复）
 
-### 模板 B：排查报错（debug）
-
-你发给 agent 的输入：
+### 模板 B：排查报错
 
 ```text
 我运行命令：<粘贴命令>
@@ -245,154 +426,6 @@ agent 输出必须包含：
 ```
 
 agent 输出必须包含：
-
 - 根因（用 1-2 句话说清）
 - 修复方案（最小改动优先）
 - 我该运行的复现/验证命令
-
----
-
-## 项目执行路线图（Milestone A–J）
-
-说明：先把 A–J 的“骨架版”写全，确保路径完整；后续我们按顺序逐章细化到
-“agent 可直接照做 + 你可直接运行验收命令”的粒度。
-
-### Milestone A：环境与 Smoke Test
-
-- **目标**：项目可安装、可加载模型、可对单条 prompt 进行 greedy 生成。
-- **子任务**
-  - **A1 依赖安装与版本记录**
-    - 产出物：`requirements.txt`、`env/versions.txt`、`env/requirements_freeze.txt`
-    - 实现方法要点：写脚本/命令自动收集 torch/CUDA/GPU 信息并落盘
-    - 异常处理与降级：无 GPU/无 CUDA/离线下载失败时给出清晰提示与替代方案
-    - 验收标准（命令）：`python -c "import torch; import transformers"`
-  - **A2 最小生成脚本**
-    - 产出物：`scripts/smoke_test.py`
-    - 实现方法要点：固定 greedy；打印输出文本与关键元信息（commit/硬件）
-    - 异常处理与降级：OOM/模型下载失败时给出提示与 retry 参数
-    - 验收标准（命令）：`python scripts/smoke_test.py` 输出非空文本
-- **与矩阵对齐点**：对齐 `configs/exp_matrix.yaml: project.model_id, runtime.decoding`
-- **完成后更新记录**
-  - `development_record.md`：记录环境信息落盘方式与 smoke test 命令
-  - `iteration.md`：更新 A1/A2/A3 的状态与追加一条更新记录
-
-### Milestone B：自定义 Generation Loop（不使用 `model.generate`）
-
-- **目标**：实现可控的 prefill + token-by-token decode，为替换 KV cache 做准备。
-- **子任务**
-  - **B1 generate_loop 骨架**
-    - 产出物：`src/engine/generate_loop.py`
-    - 实现方法要点：prefill + decode 分离；greedy；返回结构化输出
-    - 异常处理与降级：超长输入/显存不足时给出可读错误与建议（缩短 seq_len）
-    - 验收标准（命令）：提供最小脚本调用并能生成非空文本
-  - **B2 计时口径（TTFT/TPOT）**
-    - 产出物：计时工具函数（位置后续细化）
-    - 实现方法要点：定义 TTFT/TPOT 的同步点（是否 `torch.cuda.synchronize()`）
-    - 验收标准（命令）：同一输入多次运行，波动可解释且输出字段齐全
-- **与矩阵对齐点**：对齐 `runtime.decoding` 与 `seed`
-- **完成后更新记录**：同上
-
-### Milestone C：FP16 KV Cache（Baseline）
-
-- **目标**：在固定 layout 下实现正确的 KV caching，并可在 decode 中按步增长。
-- **子任务**
-  - **C1 KV layout 文档**
-    - 产出物：`src/cache/README_cache_layout.md`
-    - 实现方法要点：写清 shape（layer/head/head_dim/seq）、增长策略与内存布局
-    - 验收标准：文档可直接指导实现与测试用例编写
-  - **C2 FP16 cache 实现**
-    - 产出物：`src/cache/fp16_cache.py`
-    - 实现方法要点：实现 `append/get_kv`；确保长度在 prefill 后等于 prompt_len，
-      decode 每步 +1
-    - 异常处理与降级：shape 不匹配时抛出清晰错误（包含 layer_id/期望 shape）
-    - 验收标准：生成正确性保持；cache 长度 invariants 通过
-- **与矩阵对齐点**：kv_mode=fp16
-
-### Milestone D：评测与实验框架（先锁口径）
-
-- **目标**：在做量化前先把 memory/speed/quality/needle 的评测闭环跑通。
-- **子任务**
-  - **D1 profile_latency**
-    - 产出物：`scripts/profile_latency.py` + `results/runs/*.csv`
-    - 验收标准：CSV 含 `ttft_ms/tpot_ms/tok_per_s` 等字段
-  - **D2 profile_memory**
-    - 产出物：`scripts/profile_memory.py` + `results/runs/*.csv`
-    - 实现方法要点：pynvml 采样/峰值统计；记录 `gpu_mem_peak_mb`
-  - **D3 eval_ppl**
-    - 产出物：`scripts/eval_ppl.py` + `results/runs/*.csv`
-    - 说明：数据集选择与下载方式在门禁清单中先确定
-  - **D4 eval_needle**
-    - 产出物：`scripts/eval_needle.py` + `results/runs/*.csv`
-    - 实现方法要点：可复现生成与评分；固定 seed
-- **与矩阵对齐点**：`experiments[*].tasks` 与 CSV schema
-
-### Milestone E：INT8-baseline（功能正确优先）
-
-- **目标**：实现可跑的 int8 KV（baseline），并可通过 kv_mode 切换进入推理路径。
-- **子任务**
-  - **E1 baseline quantizer**
-    - 产出物：`src/quant/int8_basic.py`
-    - 实现方法要点：先做最简单（per-tensor 或 per-head）的对称量化/反量化
-  - **E2 int8 cache**
-    - 产出物：`src/cache/int8_cache.py`
-    - 实现方法要点：append 时量化，get 时反量化（或延迟到 attention）
-  - **E3 engine kv_mode 切换**
-    - 产出物：engine 增加 `kv_mode=fp16/int8_baseline`
-    - 验收标准：`kv_mode=int8_baseline` 可端到端跑通
-- **与矩阵对齐点**：kv_mode=int8_baseline，quant_bits=8
-
-### Milestone F：INT8-ours（KL 行为对齐校准 + per-head temperature + group-wise INT8）
-
-- **目标**：实现论文主线：KL 行为对齐校准 + per-head temperature + group-wise INT8。
-- **子任务**
-  - **F1 行为对齐校准脚本（KL）**
-    - 产出物：`scripts/calibrate_behavior.py` → `artifacts/kv_calib_kl.json`
-    - 实现方法要点：对齐对象为 attention weights；对 key 位置抽样；
-      对 `inv_tau` 做 per-layer/per-head 网格搜索
-    - 与矩阵对齐点：`calib_strategy=kl_attn`、`calib_file=artifacts/kv_calib_kl.json`
-  - **F2 group-wise INT8 量化与裁剪**
-    - 产出物：`src/quant/groupwise.py`、`src/quant/clipping.py`
-    - 与矩阵对齐点：`group_size_{k,v}`、`clip_percentile_{k,v}`
-  - **F3 per-head temperature（一致作用于 prefill 与 decode）**
-    - 产出物：`src/quant/temperature.py`
-    - 实现方法要点：prefill 侧通过缩放 Q 实现等价 logits 缩放；decode 侧由 fused kernel 使用
-    - 与矩阵对齐点：`use_attn_temperature=true/false`
-  - **F4 kv_mode=int8_ours 接入**
-    - 验收标准：needle 或 PPL 趋势上不劣于 baseline（尤其长上下文）
-
-### Milestone G：Triton 主线（融合 quantized decode attention，q_len=1，必做）
-
-- **目标**：实现 decode 侧 Triton 融合量化 attention（q_len=1）并接入真实 decode 路径。
-- **子任务**
-  - **G1 融合 decode kernel**
-    - 产出物：`src/kernels/triton_decode_attn_int8.py`
-    - 实现方法要点：读 int8 K/V + group-wise scale 反量化；online softmax；
-      融合 `inv_tau[layer, q_head]`；支持 GQA 映射
-    - 与矩阵对齐点：`decode_attn_impl=triton_fused`
-  - **G2 集成到 decode（强制）**
-    - 产出物：在 `kv_mode=int8_ours` 且 `q_len==1` 时强制走 fused kernel
-  - **G3 Torch reference 与单测对齐**
-    - 产出物：torch ref：dequant→matmul→softmax→matmul；固定 seed 误差阈值
-  - **G4 性能与回归检查**
-    - 产出物：TTFT/TPOT/吞吐 CSV，长上下文下至少不退化（最好有提升）
-
-### Milestone H（可选）：INT4 / Mixed Precision
-
-- **目标**：在主线闭环后扩展研究深度（只在需要时做）。
-- **子任务**（占位）：kv_mode=int4/mixed、mixed policy、同口径评测
-
-### Milestone I（可选）：服务化与压测
-
-- **目标**：可演示的服务端推理与并发压测。
-- **子任务**（占位）：`src/server/app.py`、`scripts/load_test.py`、对齐 engine 输出
-
-### Milestone J：实验矩阵一键复现 + 出图（论文交付）
-
-- **目标**：一条命令跑矩阵并产出论文表格/图表。
-- **子任务**
-  - **J1 run_experiments**
-    - 产出物：`scripts/run_experiments.py`（读取 `configs/exp_matrix.yaml`）
-  - **J2 make_plots**
-    - 产出物：`scripts/make_plots.py` → `results/plots/*`
-  - **J3 paper-ready 输出组织**
-    - 产出物：`results/tables/*` + 图表清单与章节映射（后续细化）
