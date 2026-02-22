@@ -14,9 +14,11 @@ profile_ppl, profile_needle, needle_details).
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import re
 from pathlib import Path
-from typing import Iterable, List
+from typing import Dict, Iterable, List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -149,6 +151,329 @@ def _log_contains_oom(log_path: Path) -> bool:
     except Exception:
         return False
     return bool(re.search(r"\bOOM\b|out of memory", content, flags=re.IGNORECASE))
+
+
+def _log_contains_traceback(log_path: Path) -> bool:
+    if not log_path.exists():
+        return False
+    try:
+        content = log_path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return False
+    return "Traceback (most recent call last):" in content
+
+
+def _strict_log_failures(runs_dir: Path, logs_dir: Path | None) -> List[str]:
+    issues: List[str] = []
+    if logs_dir is None or not logs_dir.exists():
+        issues.append(
+            "strict mode requires logs_dir to validate Traceback/OOM conditions "
+            f"(current logs_dir={logs_dir})."
+        )
+        return issues
+
+    task_to_csv_pattern = {
+        "profile_latency": "profile_latency_*.csv",
+        "profile_memory": "profile_memory_*.csv",
+        "eval_ppl": "profile_ppl_*.csv",
+        "eval_needle": "profile_needle_*.csv",
+    }
+    for run_dir in sorted(runs_dir.iterdir()):
+        if not run_dir.is_dir():
+            continue
+        for task_name, csv_pattern in task_to_csv_pattern.items():
+            log_path = logs_dir / run_dir.name / f"{task_name}.log"
+            if not log_path.exists():
+                continue
+            has_traceback = _log_contains_traceback(log_path)
+            has_oom = _log_contains_oom(log_path)
+            if not (has_traceback or has_oom):
+                continue
+            has_csv = any(run_dir.glob(csv_pattern))
+            if has_csv:
+                reason = "traceback" if has_traceback else "oom"
+                issues.append(
+                    "mixed failure/success detected: "
+                    f"run_dir={run_dir.name} task={task_name} reason={reason} "
+                    f"log={log_path}"
+                )
+            elif has_traceback:
+                issues.append(
+                    "task traceback detected: "
+                    f"run_dir={run_dir.name} task={task_name} log={log_path}"
+                )
+    return issues
+
+
+def _strict_missing_seed(df: pd.DataFrame, *, table_name: str) -> List[str]:
+    if df.empty:
+        return []
+    if "seed" not in df.columns:
+        return [f"{table_name}: missing required column 'seed'."]
+    seed_series = pd.to_numeric(df["seed"], errors="coerce")
+    missing = seed_series.isna()
+    n_missing = int(missing.sum())
+    if n_missing <= 0:
+        return []
+    sample = []
+    if "source_file" in df.columns:
+        sample = (
+            df.loc[missing, "source_file"]
+            .dropna()
+            .astype(str)
+            .head(3)
+            .tolist()
+        )
+    sample_txt = f" sample_files={sample}" if sample else ""
+    return [
+        f"{table_name}: found {n_missing} rows with missing/non-numeric seed.{sample_txt}"
+    ]
+
+
+def _print_strict_issues(issues: List[str]) -> None:
+    if not issues:
+        return
+    print("Strict mode checks failed:")
+    for idx, issue in enumerate(issues, start=1):
+        print(f"  {idx}. {issue}")
+
+
+def _read_json(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        return {}
+    return {}
+
+
+def _same_commit_prefix(a: str, b: str) -> bool:
+    a = str(a).strip()
+    b = str(b).strip()
+    if not a or not b:
+        return True
+    if a == "unknown" or b == "unknown":
+        return True
+    return a[:8] == b[:8]
+
+
+def _csv_git_commits(path: Path) -> List[str]:
+    commits = set()
+    try:
+        df = pd.read_csv(path, usecols=["git_commit"])
+    except ValueError:
+        return []
+    except Exception:
+        return []
+    for val in df.get("git_commit", pd.Series(dtype=object)).dropna().astype(str):
+        v = val.strip()
+        if v:
+            commits.add(v)
+    return sorted(commits)
+
+
+def _strict_manifest_and_artifact_checks(
+    runs_dir: Path,
+    logs_dir: Path | None,
+) -> List[str]:
+    issues: List[str] = []
+    task_to_csv_pattern = {
+        "profile_latency": "profile_latency_*.csv",
+        "profile_memory": "profile_memory_*.csv",
+        "eval_ppl": "profile_ppl_*.csv",
+        "eval_needle": "profile_needle_*.csv",
+    }
+    for run_dir in sorted(runs_dir.iterdir()):
+        if not run_dir.is_dir():
+            continue
+        csv_files = []
+        for pattern in task_to_csv_pattern.values():
+            csv_files.extend(sorted(run_dir.glob(pattern)))
+        if not csv_files:
+            continue
+
+        manifest_path = run_dir / "run_manifest.json"
+        manifest = _read_json(manifest_path)
+        if not manifest:
+            issues.append(f"{run_dir.name}: missing or invalid run_manifest.json")
+            tasks = {}
+            manifest_commit = ""
+        else:
+            tasks = manifest.get("tasks", {})
+            if not isinstance(tasks, dict):
+                tasks = {}
+            manifest_commit = str(manifest.get("git_commit", "")).strip()
+
+        run_commits = set()
+        for csv_path in csv_files:
+            for c in _csv_git_commits(csv_path):
+                run_commits.add(c)
+        if len(run_commits) > 1:
+            issues.append(
+                f"{run_dir.name}: inconsistent git_commit across CSVs: {sorted(run_commits)}"
+            )
+        if manifest_commit and run_commits:
+            mismatch = [
+                c for c in sorted(run_commits) if not _same_commit_prefix(c, manifest_commit)
+            ]
+            if mismatch:
+                issues.append(
+                    f"{run_dir.name}: run_manifest git_commit ({manifest_commit}) "
+                    f"mismatches CSV git_commit values {mismatch}"
+                )
+
+        for task_name, pattern in task_to_csv_pattern.items():
+            task_csvs = sorted(run_dir.glob(pattern))
+            if len(task_csvs) > 1:
+                issues.append(
+                    f"{run_dir.name}: task={task_name} has multiple CSV files: "
+                    f"{[p.name for p in task_csvs]}"
+                )
+            if not task_csvs:
+                continue
+
+            if logs_dir is not None:
+                log_path = logs_dir / run_dir.name / f"{task_name}.log"
+                if not log_path.exists():
+                    issues.append(
+                        f"{run_dir.name}: task={task_name} has CSV but missing log file ({log_path})"
+                    )
+
+            task_info = tasks.get(task_name, {})
+            status = ""
+            if isinstance(task_info, dict):
+                status = str(task_info.get("status", "")).strip().lower()
+            if not status:
+                issues.append(
+                    f"{run_dir.name}: task={task_name} missing task status in run_manifest."
+                )
+            elif status != "success":
+                issues.append(
+                    f"{run_dir.name}: task={task_name} status={status} in run_manifest but CSV exists."
+                )
+
+    return issues
+
+
+def _collect_execution_coverage(
+    runs_dir: Path,
+    logs_dir: Path | None,
+) -> pd.DataFrame:
+    rows: List[Dict[str, object]] = []
+    known_tasks = {
+        "profile_latency": "profile_latency_*.csv",
+        "profile_memory": "profile_memory_*.csv",
+        "eval_ppl": "profile_ppl_*.csv",
+        "eval_needle": "profile_needle_*.csv",
+    }
+    for run_dir in sorted(runs_dir.iterdir()):
+        if not run_dir.is_dir():
+            continue
+        manifest = _read_json(run_dir / "run_manifest.json") or {}
+        task_map = manifest.get("tasks", {}) if isinstance(manifest.get("tasks"), dict) else {}
+
+        observed_tasks = set()
+        for task_name, pattern in known_tasks.items():
+            if any(run_dir.glob(pattern)):
+                observed_tasks.add(task_name)
+            if logs_dir is not None and (logs_dir / run_dir.name / f"{task_name}.log").exists():
+                observed_tasks.add(task_name)
+            if task_name in task_map:
+                observed_tasks.add(task_name)
+        if not observed_tasks:
+            continue
+
+        for task_name in sorted(observed_tasks):
+            csv_pattern = known_tasks.get(task_name, "")
+            has_csv = bool(csv_pattern and any(run_dir.glob(csv_pattern)))
+            log_path = logs_dir / run_dir.name / f"{task_name}.log" if logs_dir is not None else Path("")
+            has_log = bool(log_path and log_path.exists())
+            log_has_oom = _log_contains_oom(log_path) if has_log else False
+            log_has_traceback = _log_contains_traceback(log_path) if has_log else False
+
+            info = task_map.get(task_name, {}) if isinstance(task_map.get(task_name, {}), dict) else {}
+            manifest_status = str(info.get("status", "")).strip().lower()
+            attempts = pd.to_numeric(info.get("attempts"), errors="coerce")
+            returncode = pd.to_numeric(info.get("returncode"), errors="coerce")
+            failure_type = str(info.get("failure_type", "")).strip().lower()
+
+            if has_csv and manifest_status == "success":
+                execution_state = "success"
+            elif failure_type == "oom" or (log_has_oom and not has_csv):
+                execution_state = "oom_failure"
+            elif log_has_traceback:
+                execution_state = "traceback_failure"
+            elif has_csv and manifest_status and manifest_status != "success":
+                execution_state = "csv_without_success_status"
+            elif manifest_status in {"failed", "running"}:
+                execution_state = f"{manifest_status}_without_csv"
+            elif has_csv:
+                execution_state = "csv_without_manifest_status"
+            else:
+                execution_state = "missing_artifacts"
+
+            rows.append(
+                {
+                    "run_dir": run_dir.name,
+                    "run_name": manifest.get("run_name", ""),
+                    "run_tag": manifest.get("run_tag", ""),
+                    "kv_mode": manifest.get("kv_mode", ""),
+                    "seed": pd.to_numeric(manifest.get("seed"), errors="coerce"),
+                    "replica_id": pd.to_numeric(manifest.get("replica_id"), errors="coerce"),
+                    "task": task_name,
+                    "manifest_status": manifest_status,
+                    "attempts": attempts,
+                    "returncode": returncode,
+                    "failure_type": failure_type,
+                    "has_csv": bool(has_csv),
+                    "has_log": bool(has_log),
+                    "log_has_oom": bool(log_has_oom),
+                    "log_has_traceback": bool(log_has_traceback),
+                    "log_path": str(log_path) if has_log else "",
+                    "execution_state": execution_state,
+                }
+            )
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows)
+
+
+def _build_failure_registry(execution_coverage: pd.DataFrame) -> pd.DataFrame:
+    if execution_coverage.empty:
+        return pd.DataFrame()
+    fail_states = {
+        "oom_failure",
+        "traceback_failure",
+        "csv_without_success_status",
+        "running_without_csv",
+        "failed_without_csv",
+        "csv_without_manifest_status",
+    }
+    sub = execution_coverage[execution_coverage["execution_state"].isin(fail_states)].copy()
+    if sub.empty:
+        return pd.DataFrame()
+
+    def _category(state: str) -> str:
+        s = str(state)
+        if "oom" in s:
+            return "oom"
+        if "traceback" in s:
+            return "traceback"
+        if "running" in s:
+            return "incomplete"
+        if "csv_without" in s:
+            return "status_mismatch"
+        if "failed" in s:
+            return "runtime_failure"
+        return "other"
+
+    sub["failure_category"] = sub["execution_state"].map(_category)
+    sub["is_throughput_run"] = sub["run_name"].astype(str).str.contains("_throughput_")
+    return sub.sort_values(["run_dir", "task"]).reset_index(drop=True)
 
 
 def _collect_throughput_attempts(runs_dir: Path, logs_dir: Path | None) -> pd.DataFrame:
@@ -521,19 +846,133 @@ def _significance_summary(
     key_cols: List[str],
     pairings: List[tuple[str, str]],
     metric_name: str,
+    *,
+    higher_is_better: bool,
+    min_pairs: int = 3,
+    alpha: float = 0.05,
+    ci_level: float = 0.95,
+    n_bootstrap: int = 10000,
+    n_permutations: int = 20000,
+    random_seed: int = 1234,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Build publication-grade paired significance summaries.
+
+    Returns:
+      (summary_df, paired_rows_df)
+    """
+    paired = _build_paired_metric_rows(
+        df=df,
+        metric_col=metric_col,
+        key_cols=key_cols,
+        pairings=pairings,
+        metric_name=metric_name,
+        higher_is_better=higher_is_better,
+    )
+    if paired.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    keep_keys = [c for c in key_cols if c in paired.columns]
+    group_cols = ["metric", "baseline_mode", "challenger_mode"] + keep_keys
+    rows = []
+
+    for group_key, sub in paired.groupby(group_cols, dropna=False):
+        if not isinstance(group_key, tuple):
+            group_key = (group_key,)
+        row = {col: val for col, val in zip(group_cols, group_key)}
+
+        diff = pd.to_numeric(sub["diff"], errors="coerce").dropna().to_numpy(dtype=np.float64)
+        favorable = pd.to_numeric(sub["favorable_diff"], errors="coerce").dropna().to_numpy(dtype=np.float64)
+        gain = pd.to_numeric(sub["gain_pct"], errors="coerce").dropna().to_numpy(dtype=np.float64)
+        base_val = pd.to_numeric(sub["baseline_value"], errors="coerce").dropna().to_numpy(dtype=np.float64)
+        chall_val = pd.to_numeric(sub["challenger_value"], errors="coerce").dropna().to_numpy(dtype=np.float64)
+        seed_series = pd.to_numeric(sub["seed"], errors="coerce").dropna()
+
+        n_pairs = int(diff.size)
+        n_unique_seeds = int(seed_series.nunique())
+
+        row["n_pairs"] = n_pairs
+        row["n_unique_seeds"] = n_unique_seeds
+        row["seed_min"] = float(seed_series.min()) if not seed_series.empty else np.nan
+        row["seed_max"] = float(seed_series.max()) if not seed_series.empty else np.nan
+        row["higher_is_better"] = bool(higher_is_better)
+        row["favorable_direction"] = (
+            "challenger > baseline" if higher_is_better else "challenger < baseline"
+        )
+        row["meets_min_pairs"] = bool(n_pairs >= int(min_pairs))
+        if n_pairs < 2:
+            row["inference_status"] = "insufficient_pairs_for_test"
+        elif n_pairs < int(min_pairs):
+            row["inference_status"] = "below_recommended_pairs"
+        else:
+            row["inference_status"] = "ok"
+
+        row["baseline_mean"] = float(np.mean(base_val)) if base_val.size else np.nan
+        row["challenger_mean"] = float(np.mean(chall_val)) if chall_val.size else np.nan
+        row["diff_mean"] = float(np.mean(diff)) if n_pairs else np.nan
+        row["diff_median"] = float(np.median(diff)) if n_pairs else np.nan
+        row["diff_std"] = float(np.std(diff, ddof=1)) if n_pairs > 1 else np.nan
+        row["mean_favorable_diff"] = float(np.mean(favorable)) if favorable.size else np.nan
+        row["probability_of_superiority"] = (
+            float(np.mean(favorable > 0.0) + 0.5 * np.mean(favorable == 0.0))
+            if favorable.size
+            else np.nan
+        )
+        row["effect_size_dz"] = _cohens_dz(diff)
+        row["favors_challenger"] = bool(row["mean_favorable_diff"] > 0.0) if favorable.size else False
+
+        row["gain_pct_mean"] = float(np.mean(gain)) if gain.size else np.nan
+        row["gain_pct_median"] = float(np.median(gain)) if gain.size else np.nan
+        row["gain_pct_std"] = float(np.std(gain, ddof=1)) if gain.size > 1 else np.nan
+
+        ci_seed = _stable_random_seed(random_seed, metric_name, *group_key)
+        diff_ci_low, diff_ci_high = _bootstrap_ci_mean(
+            diff, n_bootstrap=n_bootstrap, ci_level=ci_level, seed=ci_seed
+        )
+        gain_ci_low, gain_ci_high = _bootstrap_ci_mean(
+            gain, n_bootstrap=n_bootstrap, ci_level=ci_level, seed=_stable_random_seed(ci_seed, "gain")
+        )
+        row["diff_ci95_low"] = diff_ci_low
+        row["diff_ci95_high"] = diff_ci_high
+        row["gain_pct_ci95_low"] = gain_ci_low
+        row["gain_pct_ci95_high"] = gain_ci_high
+
+        p_value, p_method, permutation_samples = _paired_signflip_pvalue(
+            diff,
+            n_permutations=n_permutations,
+            seed=_stable_random_seed(ci_seed, "perm"),
+        )
+        row["p_value"] = p_value
+        row["p_method"] = p_method
+        row["permutation_samples"] = int(permutation_samples)
+        row["bootstrap_samples"] = int(n_bootstrap) if n_pairs >= 2 else 0
+        row["alpha"] = float(alpha)
+        row["ci_level"] = float(ci_level)
+        rows.append(row)
+
+    if not rows:
+        return pd.DataFrame(), pd.DataFrame()
+    summary = pd.DataFrame(rows)
+    return summary, paired
+
+
+def _build_paired_metric_rows(
+    *,
+    df: pd.DataFrame,
+    metric_col: str,
+    key_cols: List[str],
+    pairings: List[tuple[str, str]],
+    metric_name: str,
+    higher_is_better: bool,
 ) -> pd.DataFrame:
-    """
-    Build paired-difference summary by seed for selected mode pairings.
-    """
     if df.empty or metric_col not in df.columns:
         return pd.DataFrame()
     if "kv_mode" not in df.columns:
         return pd.DataFrame()
 
     work = df.copy()
-    if "seed" not in work.columns:
-        if "run_id" in work.columns:
-            work["seed"] = work["run_id"].map(_extract_seed_from_run_id)
+    if "seed" not in work.columns and "run_id" in work.columns:
+        work["seed"] = work["run_id"].map(_extract_seed_from_run_id)
     work["seed"] = pd.to_numeric(work.get("seed"), errors="coerce")
     work[metric_col] = pd.to_numeric(work[metric_col], errors="coerce")
     work = work.dropna(subset=["seed", metric_col])
@@ -541,49 +980,165 @@ def _significance_summary(
         return pd.DataFrame()
 
     keys = [c for c in key_cols if c in work.columns]
-    results = []
-    for base_mode, ours_mode in pairings:
-        sub = work[work["kv_mode"].isin([base_mode, ours_mode])]
+    rows: List[pd.DataFrame] = []
+    for base_mode, challenger_mode in pairings:
+        sub = work[work["kv_mode"].isin([base_mode, challenger_mode])]
         if sub.empty:
             continue
-        pivot = (
-            sub.pivot_table(
-                index=keys + ["seed"],
-                columns="kv_mode",
-                values=metric_col,
-                aggfunc="mean",
-            )
+        pivot = sub.pivot_table(
+            index=keys + ["seed"],
+            columns="kv_mode",
+            values=metric_col,
+            aggfunc="mean",
         )
-        if base_mode not in pivot.columns or ours_mode not in pivot.columns:
+        if base_mode not in pivot.columns or challenger_mode not in pivot.columns:
             continue
-        pivot = pivot.dropna(subset=[base_mode, ours_mode], how="any").reset_index()
+        pivot = pivot.dropna(subset=[base_mode, challenger_mode], how="any").reset_index()
         if pivot.empty:
             continue
-        pivot["diff"] = pivot[ours_mode] - pivot[base_mode]
-        grouped = pivot.groupby(keys, dropna=False)["diff"]
-        summary = grouped.agg(["mean", "std", "count"]).reset_index()
-        if summary.empty:
-            continue
-        summary["metric"] = metric_name
-        summary["baseline_mode"] = base_mode
-        summary["challenger_mode"] = ours_mode
-        sem = summary["std"] / np.sqrt(summary["count"].clip(lower=1))
-        ci_half = 1.96 * sem
-        ci_half = ci_half.where(summary["count"] > 1, 0.0)
-        summary["diff_ci95_low"] = summary["mean"] - ci_half
-        summary["diff_ci95_high"] = summary["mean"] + ci_half
-        summary = summary.rename(
-            columns={
-                "mean": "diff_mean",
-                "std": "diff_std",
-                "count": "n_pairs",
-            }
-        )
-        results.append(summary)
 
-    if not results:
+        baseline = pd.to_numeric(pivot[base_mode], errors="coerce")
+        challenger = pd.to_numeric(pivot[challenger_mode], errors="coerce")
+        diff = challenger - baseline
+        favorable_diff = diff if higher_is_better else -diff
+        denom = baseline.abs().replace(0.0, np.nan)
+        if higher_is_better:
+            gain_pct = ((challenger - baseline) / denom) * 100.0
+        else:
+            gain_pct = ((baseline - challenger) / denom) * 100.0
+
+        paired = pivot[keys + ["seed"]].copy()
+        paired["metric"] = metric_name
+        paired["baseline_mode"] = base_mode
+        paired["challenger_mode"] = challenger_mode
+        paired["baseline_value"] = baseline
+        paired["challenger_value"] = challenger
+        paired["diff"] = diff
+        paired["favorable_diff"] = favorable_diff
+        paired["gain_pct"] = gain_pct
+        rows.append(paired)
+
+    if not rows:
         return pd.DataFrame()
-    return pd.concat(results, ignore_index=True)
+    out = pd.concat(rows, ignore_index=True)
+    out = _to_numeric(
+        out,
+        ["seed", "baseline_value", "challenger_value", "diff", "favorable_diff", "gain_pct"],
+    )
+    out = out.dropna(
+        subset=["seed", "baseline_value", "challenger_value", "diff", "favorable_diff"]
+    )
+    return out.reset_index(drop=True)
+
+
+def _stable_random_seed(base_seed: int, *parts: object) -> int:
+    txt = "||".join(str(p) for p in parts)
+    digest = hashlib.sha256(txt.encode("utf-8")).hexdigest()
+    offset = int(digest[:8], 16)
+    return int((int(base_seed) + offset) % (2**32 - 1))
+
+
+def _bootstrap_ci_mean(
+    values: np.ndarray,
+    *,
+    n_bootstrap: int,
+    ci_level: float,
+    seed: int,
+) -> Tuple[float, float]:
+    arr = np.asarray(values, dtype=np.float64)
+    arr = arr[np.isfinite(arr)]
+    n = int(arr.size)
+    if n <= 0:
+        return np.nan, np.nan
+    if n == 1:
+        return float(arr[0]), float(arr[0])
+
+    ci = float(ci_level)
+    if not (0.0 < ci < 1.0):
+        ci = 0.95
+    n_bs = max(1000, int(n_bootstrap))
+    rng = np.random.default_rng(int(seed))
+    sample_idx = rng.integers(0, n, size=(n_bs, n))
+    means = arr[sample_idx].mean(axis=1)
+    alpha = 1.0 - ci
+    low = float(np.quantile(means, alpha / 2.0))
+    high = float(np.quantile(means, 1.0 - alpha / 2.0))
+    return low, high
+
+
+def _paired_signflip_pvalue(
+    values: np.ndarray,
+    *,
+    n_permutations: int,
+    seed: int,
+) -> Tuple[float, str, int]:
+    arr = np.asarray(values, dtype=np.float64)
+    arr = arr[np.isfinite(arr)]
+    n = int(arr.size)
+    if n < 2:
+        return np.nan, "insufficient_pairs", 0
+
+    observed = abs(float(np.mean(arr)))
+    if observed == 0.0:
+        return 1.0, "zero_effect", 0
+
+    # Exact paired sign-flip test for small n; MC approximation for larger n.
+    if n <= 16:
+        n_enum = 1 << n
+        idx = np.arange(n_enum, dtype=np.uint32)[:, None]
+        bits = ((idx >> np.arange(n, dtype=np.uint32)) & 1).astype(np.int8)
+        signs = bits * 2 - 1
+        perm_means = np.abs((signs * arr[None, :]).mean(axis=1))
+        p_value = float(np.mean(perm_means >= (observed - 1e-12)))
+        return p_value, "exact_signflip", int(n_enum)
+
+    n_perm = max(2000, int(n_permutations))
+    rng = np.random.default_rng(int(seed))
+    signs = rng.choice(np.array([-1.0, 1.0], dtype=np.float64), size=(n_perm, n), replace=True)
+    perm_means = np.abs((signs * arr[None, :]).mean(axis=1))
+    exceed = int(np.count_nonzero(perm_means >= (observed - 1e-12)))
+    p_value = float((exceed + 1) / (n_perm + 1))
+    return p_value, "mc_signflip", int(n_perm)
+
+
+def _cohens_dz(values: np.ndarray) -> float:
+    arr = np.asarray(values, dtype=np.float64)
+    arr = arr[np.isfinite(arr)]
+    if arr.size < 2:
+        return np.nan
+    std = float(np.std(arr, ddof=1))
+    if std <= 0.0:
+        return np.nan
+    return float(np.mean(arr) / std)
+
+
+def _add_bh_fdr_qvalues(
+    df: pd.DataFrame,
+    *,
+    p_col: str = "p_value",
+    q_col: str = "q_value",
+) -> pd.DataFrame:
+    if df.empty or p_col not in df.columns:
+        return df
+    out = df.copy()
+    p = pd.to_numeric(out[p_col], errors="coerce").to_numpy(dtype=np.float64)
+    q = np.full_like(p, np.nan, dtype=np.float64)
+    valid = np.isfinite(p) & (p >= 0.0) & (p <= 1.0)
+    m = int(np.count_nonzero(valid))
+    if m <= 0:
+        out[q_col] = q
+        return out
+    valid_idx = np.where(valid)[0]
+    p_valid = p[valid_idx]
+    order = np.argsort(p_valid)
+    ranked = p_valid[order]
+    ranks = np.arange(1, m + 1, dtype=np.float64)
+    adjusted = ranked * (float(m) / ranks)
+    adjusted = np.minimum.accumulate(adjusted[::-1])[::-1]
+    adjusted = np.clip(adjusted, 0.0, 1.0)
+    q[valid_idx[order]] = adjusted
+    out[q_col] = q
+    return out
 
 
 def _relative_gain_table(
@@ -781,6 +1336,54 @@ def main() -> int:
         default="",
         help="Optional logs directory for OOM/missing annotation (default: sibling of runs_dir).",
     )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        default=False,
+        help=(
+            "Enable strict data-quality gates. Fails on Traceback/OOM mixed runs "
+            "and missing seed values."
+        ),
+    )
+    parser.add_argument(
+        "--significance_min_pairs",
+        type=int,
+        default=3,
+        help=(
+            "Minimum paired seeds required for significance claims. "
+            "Rows below this threshold are marked as low-confidence."
+        ),
+    )
+    parser.add_argument(
+        "--significance_alpha",
+        type=float,
+        default=0.05,
+        help="Alpha threshold for p/q significance flags.",
+    )
+    parser.add_argument(
+        "--significance_ci_level",
+        type=float,
+        default=0.95,
+        help="Confidence level used for bootstrap intervals.",
+    )
+    parser.add_argument(
+        "--significance_bootstrap",
+        type=int,
+        default=10000,
+        help="Number of bootstrap resamples per significance row.",
+    )
+    parser.add_argument(
+        "--significance_permutations",
+        type=int,
+        default=20000,
+        help="Number of sign-flip permutations for Monte Carlo tests when n>16.",
+    )
+    parser.add_argument(
+        "--significance_seed",
+        type=int,
+        default=1234,
+        help="Base RNG seed for deterministic bootstrap/permutation statistics.",
+    )
     args = parser.parse_args()
 
     runs_dir = Path(args.runs_dir)
@@ -797,6 +1400,21 @@ def main() -> int:
     if not runs_dir.exists():
         print(f"runs_dir not found: {runs_dir}")
         return 2
+
+    if args.strict:
+        strict_issues = []
+        strict_issues.extend(_strict_manifest_and_artifact_checks(runs_dir, logs_dir))
+        strict_issues.extend(_strict_log_failures(runs_dir, logs_dir))
+        if strict_issues:
+            _print_strict_issues(strict_issues)
+            return 2
+
+    execution_coverage = _collect_execution_coverage(runs_dir, logs_dir)
+    if not execution_coverage.empty:
+        _save_table(execution_coverage, tables_dir / "execution_coverage.csv")
+        failure_registry = _build_failure_registry(execution_coverage)
+        if not failure_registry.empty:
+            _save_table(failure_registry, tables_dir / "failure_registry.csv")
 
     throughput_attempts = _collect_throughput_attempts(runs_dir, logs_dir)
     throughput_capacity_summary = pd.DataFrame()
@@ -822,6 +1440,11 @@ def main() -> int:
     if "seed" not in latency.columns and "run_id" in latency.columns:
         latency["seed"] = latency["run_id"].map(_extract_seed_from_run_id)
     latency = _to_numeric(latency, ["seed"])
+    if args.strict:
+        strict_issues = _strict_missing_seed(latency, table_name="latency")
+        if strict_issues:
+            _print_strict_issues(strict_issues)
+            return 2
     latency_keys = [
         c
         for c in [
@@ -964,6 +1587,11 @@ def main() -> int:
     if "seed" not in memory.columns and "run_id" in memory.columns:
         memory["seed"] = memory["run_id"].map(_extract_seed_from_run_id)
     memory = _to_numeric(memory, ["seed"])
+    if args.strict:
+        strict_issues = _strict_missing_seed(memory, table_name="memory")
+        if strict_issues:
+            _print_strict_issues(strict_issues)
+            return 2
     memory_keys = [
         c
         for c in [
@@ -1060,6 +1688,11 @@ def main() -> int:
     if "seed" not in ppl.columns and "run_id" in ppl.columns:
         ppl["seed"] = ppl["run_id"].map(_extract_seed_from_run_id)
     ppl = _to_numeric(ppl, ["seed"])
+    if args.strict:
+        strict_issues = _strict_missing_seed(ppl, table_name="ppl")
+        if strict_issues:
+            _print_strict_issues(strict_issues)
+            return 2
     ppl_keys = [
         c
         for c in [
@@ -1101,6 +1734,11 @@ def main() -> int:
     if "seed" not in needle.columns and "run_id" in needle.columns:
         needle["seed"] = needle["run_id"].map(_extract_seed_from_run_id)
     needle = _to_numeric(needle, ["seed"])
+    if args.strict:
+        strict_issues = _strict_missing_seed(needle, table_name="needle")
+        if strict_issues:
+            _print_strict_issues(strict_issues)
+            return 2
     needle_keys = [c for c in ["model_id", "hardware", "kv_mode", "seq_len"] if c in needle.columns]
     needle_summary = _agg_mean_std(
         needle,
@@ -1167,37 +1805,94 @@ def main() -> int:
         ("int4_fused", "int4_ours"),
     ]
     sig_frames = []
-    sig_latency = _significance_summary(
-        latency,
-        metric_col="tpot_ms",
-        key_cols=["seq_len", "gen_len", "batch"],
-        pairings=pairings,
-        metric_name="tpot_ms",
-    )
-    if not sig_latency.empty:
-        sig_frames.append(sig_latency)
-    sig_ppl = _significance_summary(
-        ppl,
-        metric_col="perplexity",
-        key_cols=["seq_len", "ppl_mode", "chunk_size"],
-        pairings=pairings,
-        metric_name="perplexity",
-    )
-    if not sig_ppl.empty:
-        sig_frames.append(sig_ppl)
-    sig_needle = _significance_summary(
-        needle,
-        metric_col="needle_pass_rate",
-        key_cols=["seq_len"],
-        pairings=pairings,
-        metric_name="needle_pass_rate",
-    )
-    if not sig_needle.empty:
-        sig_frames.append(sig_needle)
+    sig_pair_rows = []
+    sig_specs = [
+        {
+            "df": latency,
+            "metric_col": "tpot_ms",
+            "metric_name": "tpot_ms",
+            "key_cols": ["seq_len", "gen_len", "batch"],
+            "higher_is_better": False,
+        },
+        {
+            "df": ppl,
+            "metric_col": "perplexity",
+            "metric_name": "perplexity",
+            "key_cols": ["seq_len", "ppl_mode", "chunk_size"],
+            "higher_is_better": False,
+        },
+        {
+            "df": needle,
+            "metric_col": "needle_pass_rate",
+            "metric_name": "needle_pass_rate",
+            "key_cols": ["seq_len"],
+            "higher_is_better": True,
+        },
+    ]
+    for spec in sig_specs:
+        sig_summary, paired_rows = _significance_summary(
+            spec["df"],
+            metric_col=spec["metric_col"],
+            key_cols=spec["key_cols"],
+            pairings=pairings,
+            metric_name=spec["metric_name"],
+            higher_is_better=bool(spec["higher_is_better"]),
+            min_pairs=max(2, int(args.significance_min_pairs)),
+            alpha=float(args.significance_alpha),
+            ci_level=float(args.significance_ci_level),
+            n_bootstrap=max(1000, int(args.significance_bootstrap)),
+            n_permutations=max(2000, int(args.significance_permutations)),
+            random_seed=int(args.significance_seed),
+        )
+        if not sig_summary.empty:
+            sig_frames.append(sig_summary)
+        if not paired_rows.empty:
+            sig_pair_rows.append(paired_rows)
 
     if sig_frames:
         significance_summary = pd.concat(sig_frames, ignore_index=True)
+        significance_summary = _add_bh_fdr_qvalues(
+            significance_summary, p_col="p_value", q_col="q_value"
+        )
+        alpha = float(args.significance_alpha)
+        significance_summary["significant_p_alpha"] = (
+            pd.to_numeric(significance_summary["p_value"], errors="coerce") <= alpha
+        ) & significance_summary["meets_min_pairs"].astype(bool)
+        significance_summary["significant_q_alpha"] = (
+            pd.to_numeric(significance_summary["q_value"], errors="coerce") <= alpha
+        ) & significance_summary["meets_min_pairs"].astype(bool)
         _save_table(significance_summary, tables_dir / "significance_summary.csv")
+
+        coverage_cols = [
+            c
+            for c in [
+                "metric",
+                "baseline_mode",
+                "challenger_mode",
+                "seq_len",
+                "gen_len",
+                "batch",
+                "ppl_mode",
+                "chunk_size",
+                "n_pairs",
+                "n_unique_seeds",
+                "seed_min",
+                "seed_max",
+                "meets_min_pairs",
+                "inference_status",
+                "significant_p_alpha",
+                "significant_q_alpha",
+            ]
+            if c in significance_summary.columns
+        ]
+        if coverage_cols:
+            _save_table(
+                significance_summary[coverage_cols].copy(),
+                tables_dir / "significance_coverage.csv",
+            )
+    if sig_pair_rows:
+        significance_pairs = pd.concat(sig_pair_rows, ignore_index=True)
+        _save_table(significance_pairs, tables_dir / "significance_pairs.csv")
 
     # Relative gain summary table for thesis discussion.
     pairings = [

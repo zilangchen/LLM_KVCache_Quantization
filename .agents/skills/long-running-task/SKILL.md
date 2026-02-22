@@ -109,11 +109,11 @@ def resume_from_checkpoint(checkpoint_file=".task_checkpoint.json"):
 
 // turbo
 ```bash
-# 每个重要检查点后更新 lang.md
-echo "- **$(date '+%Y-%m-%d %H:%M:%S')**: 任务进度 - 步骤 N/M 完成" >> lang.md
+# 每个重要检查点后更新 iteration.md
+echo "- **$(date '+%Y-%m-%d %H:%M:%S')**: 任务进度 - 步骤 N/M 完成" >> iteration.md
 
-# 更新 development_record.md
-echo "# <Antigravity $(date '+%Y-%m-%d %H:%M:%S')>" >> development_record.md
+# 使用单一进度记录
+# 仅更新 iteration.md
 ```
 
 ---

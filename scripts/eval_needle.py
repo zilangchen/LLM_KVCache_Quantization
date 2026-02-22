@@ -6,10 +6,12 @@ Strategy A: Synthetic UUID Retrieval.
 
 import argparse
 import csv
+import json
 import sys
 import torch
 import uuid
 import numpy as np
+import traceback
 from datetime import datetime
 from pathlib import Path
 import subprocess
@@ -29,6 +31,11 @@ from src.utils.repro import (
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from scripts.config_utils import load_config, normalize_kv_params, resolve_run_config
 
+EXIT_OOM = 73
+EXIT_EXCEPTION = 74
+_LAST_ARGS: argparse.Namespace | None = None
+
+
 def get_git_commit() -> str:
     try:
         result = subprocess.run(
@@ -41,6 +48,42 @@ def get_git_commit() -> str:
         return result.stdout.strip()[:8]
     except Exception:
         return "unknown"
+
+
+def _resolve_out_dir(out_dir_arg: str) -> Path:
+    out_dir = Path(out_dir_arg)
+    if not out_dir.is_absolute():
+        out_dir = project_root / out_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir
+
+
+def _write_task_failure(
+    *,
+    args: argparse.Namespace,
+    failure_type: str,
+    message: str,
+    exception: Exception | None = None,
+) -> None:
+    out_dir = _resolve_out_dir(args.out_dir)
+    payload = {
+        "script": Path(__file__).name,
+        "timestamp": datetime.now().isoformat(),
+        "failure_type": str(failure_type),
+        "message": str(message),
+        "kv_mode": str(getattr(args, "kv_mode", "")),
+        "run_name": str(getattr(args, "run_name", "")),
+        "seed": int(getattr(args, "seed", 0)),
+        "replica_id": int(getattr(args, "replica_id", 0)),
+        "context_len": int(getattr(args, "context_len", 0)),
+        "num_depths": int(getattr(args, "num_depths", 0)),
+    }
+    if exception is not None:
+        payload["exception_type"] = type(exception).__name__
+        payload["exception_repr"] = repr(exception)
+        payload["traceback"] = traceback.format_exc()
+    path = out_dir / f"task_failure_{Path(__file__).stem}.json"
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=True), encoding="utf-8")
 
 def generate_haystack_ids(tokenizer, context_len, needle, depth_percent):
     """
@@ -94,6 +137,7 @@ def generate_haystack_ids(tokenizer, context_len, needle, depth_percent):
     return current_tokens
 
 def main():
+    global _LAST_ARGS
     parser = argparse.ArgumentParser(description="D4: Needle Evaluation")
     parser.add_argument("--context_len", type=int, default=4096)
     parser.add_argument("--num_depths", type=int, default=10) # How many checkpoints (e.g. 0, 10, ... 100)
@@ -242,9 +286,16 @@ def main():
     )
     parser.add_argument("--save_csv", action="store_true", default=True)
     parser.add_argument("--seed", type=int, default=1234)
+    parser.add_argument(
+        "--replica_id",
+        type=int,
+        default=0,
+        help="Replica id for repeated runs (set by run_experiments multi-seed loop).",
+    )
     parser.add_argument("--out_dir", type=str, default="results/runs")
 
     args = parser.parse_args()
+    _LAST_ARGS = args
 
     if args.config and args.run_name:
         cfg = load_config(args.config)
@@ -403,6 +454,7 @@ def main():
         row = {
             "run_id": f"needle_{timestamp}",
             "model_id": args.model_id,
+            "run_name": args.run_name,
             "kv_mode": args.kv_mode,
             "quant_bits": 4 if "int4" in args.kv_mode else (8 if "int8" in args.kv_mode else 16),
             "clip_percentile": args.clip_percentile,
@@ -418,17 +470,21 @@ def main():
             "gpu_mem_peak_mb": 0,
             "timestamp": timestamp,
             "git_commit": git_commit,
+            "seed": int(args.seed),
+            "replica_id": int(args.replica_id),
             "needle_pass_rate": pass_rate,
             "needle_exact_match_rate": exact_match_rate,
         }
         
         fields = [
-            "run_id", "model_id", "kv_mode", "quant_bits", "clip_percentile", "group_size", 
+            "run_id", "model_id", "run_name", "kv_mode", "quant_bits", "clip_percentile", "group_size",
             "dtype", "hardware", "seq_len", "gen_len", "batch", "ttft_ms", "tpot_ms",
             "tok_per_s",
             "gpu_mem_peak_mb",
             "timestamp",
             "git_commit",
+            "seed",
+            "replica_id",
             "needle_pass_rate",
             "needle_exact_match_rate",
         ]
@@ -441,6 +497,9 @@ def main():
 
         detail_fields = [
             "run_id",
+            "run_name",
+            "seed",
+            "replica_id",
             "kv_mode",
             "context_len",
             "depth",
@@ -456,6 +515,9 @@ def main():
                 writer.writerow(
                     {
                         "run_id": row["run_id"],
+                        "run_name": args.run_name,
+                        "seed": int(args.seed),
+                        "replica_id": int(args.replica_id),
                         "kv_mode": args.kv_mode,
                         "context_len": args.context_len,
                         "depth": r["depth"],
@@ -475,4 +537,25 @@ def main():
         write_config_snapshot(str(run_snapshot_dir), snapshot)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except torch.cuda.OutOfMemoryError as exc:
+        print("OOM")
+        if _LAST_ARGS is not None:
+            _write_task_failure(
+                args=_LAST_ARGS,
+                failure_type="oom",
+                message="CUDA out of memory during eval_needle execution.",
+                exception=exc,
+            )
+        sys.exit(EXIT_OOM)
+    except Exception as exc:  # noqa: BLE001
+        print(f"ERROR: {type(exc).__name__}: {exc}")
+        if _LAST_ARGS is not None:
+            _write_task_failure(
+                args=_LAST_ARGS,
+                failure_type="exception",
+                message="Unhandled exception during eval_needle execution.",
+                exception=exc,
+            )
+        sys.exit(EXIT_EXCEPTION)

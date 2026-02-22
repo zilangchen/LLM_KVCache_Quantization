@@ -1,64 +1,39 @@
-# Agent Startup Guide (Repository Policy)
+# AGENTS.md (repo root)
 
-This repository expects agents (human or AI) to follow the same execution and
-reproducibility rules. If you are a new agent session, do this first.
+# Project Guidance for Codex
 
-## 1. Boot Checklist (Do This Before Editing Code)
+## Project snapshot
 
-1. Read project goals and fixed constraints: `objective.md`
-2. Read current progress and what is "done": `lang.md`
-3. Read collaboration + remote execution rules: `docs/AGENT_README.md`
-4. Inspect local agent skills (always):
-   - list: `ls .agent/skills`
-   - read the relevant skill docs:
-     - remote server: `.agent/skills/remote-server/SKILL.md`
-     - long tasks: `.agent/skills/long-running-task/SKILL.md`
-     - reproducibility: `.agent/skills/reproducibility/SKILL.md`
-5. Optional but recommended (prints `.agent` contents + SSH health check):
-   - `python3 scripts/agent_tools/agent_cli.py bootstrap`
+- Project purpose: reproducible KV-cache quantization research pipeline for efficient LLM inference.
+- Tech stack: Python 3.12, PyTorch, Transformers, Triton, numpy/pandas/matplotlib.
+- Key modules: `src/cache/`, `src/quant/`, `src/kernels/`, `src/engine/`, `scripts/`.
+- Architecture docs: `objective.md`, `README.md`, `docs/final_experiment_protocol.md`.
+- Coding conventions: follow existing style in repo; prefer minimal diffs and explicit reproducibility metadata.
 
-If your task needs GPU or model downloads, you should NOT run it locally.
-Use the remote server workflow below.
+## Mandatory planning gate
 
-## 2. Remote Server Workflow (GPU Tasks)
+- For any non-trivial change (multi-file change, new feature, refactor, or unclear bug):
+  - Create or update an ExecPlan in `.agent/execplans/<YYYY-MM-DD>_<slug>.md` following `.agent/PLANS.md`.
+  - Present the plan in chat and WAIT for `APPROVE PLAN` before coding.
 
-Source of truth for connection details and tmux usage:
-- `.agent/skills/remote-server/SKILL.md`
-- `docs/autodl_server.md`
+## Mandatory iteration log + commit workflow
 
-Minimum safe sequence:
-1. Connection health check (GPU visible):
-   - `ssh -p 31867 root@region-42.seetacloud.com "echo 'SSH OK' && nvidia-smi -L"`
-2. Start a tmux session for long tasks:
-   - `ssh -p 31867 root@region-42.seetacloud.com "bash -lc 'tmux new -s <name> -d \"cd /root/LLM_KVCache_Quantization && <cmd>\"'"`
-3. Monitor logs/output:
-   - `ssh -p 31867 root@region-42.seetacloud.com "tmux capture-pane -t <name> -p -S -50"`
-4. Sync results back:
-   - follow the `rsync` recipes in `.agent/skills/remote-server/SKILL.md`
+- After EACH completed functional unit:
+  1) Update `iteration.md` (append entry).
+  2) Run verification commands relevant to that unit.
+  3) Commit (small, logical commit; no `wip`) unless user asks not to commit.
+- Prefer using skill `$unit-commit` for this workflow.
 
-If you use the multi-agent CLI, also follow:
-- `docs/AGENT_README.md` and `scripts/agent_tools/agent_cli.py`
+## Repo hygiene rules (keep repo not messy)
 
-## 3. Single Entrypoint For Experiments
+- Generated outputs/logs go to `results/<run_tag>/` or `artifacts/` and are usually NOT committed.
+- Historical and deprecated materials go to `development_history/archive_<YYYYMMDD>_<topic>/`.
+- Keep top-level clean; move transient files to archive paths and update `.gitignore` when needed.
+- After each commit, run `$repo-hygiene`.
 
-The only experiment matrix is:
-- `configs/exp_matrix.yaml`
+## Git discipline
 
-The recommended runner:
-- `scripts/run_experiments.py`
-
-Do not use the deprecated root `exp_matrix.yaml`.
-
-## 3.1 Calibration Gate (int8_ours)
-
-`kv_mode=int8_ours` requires a calibration file (default: `artifacts/kv_calib_kl.json`).
-Generate it first on the GPU server:
-- `python3 scripts/calibrate_behavior.py --config configs/exp_matrix.yaml --run_name int8_ours_kl_temp_fused`
-
-## 4. Reproducibility Minimum Bar
-
-Every run must:
-1. be driven by `configs/exp_matrix.yaml` (or a snapshot of it)
-2. write outputs under `results/`
-3. write a config snapshot (see `src/utils/repro.py`)
-4. record `git_commit`, `timestamp`, and hardware info
+- Never use `git add .`
+- Stage files in semantic groups.
+- Commit message format: `feat: ...`, `fix: ...`, `refactor: ...`, `test: ...`, `docs: ...`, `chore: ...`
+- If pushing requires network/credentials, ask before `git push`.

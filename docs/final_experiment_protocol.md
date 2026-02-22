@@ -2,19 +2,26 @@
 
 > 目标：在远端 H20 环境一键复现 `fp16 / int8_baseline / int8_ours` 主线，并可扩展 `int4_fused / int4_ours` 作为论文冲优补充，产出可直接引用的表格与图。
 
-当前论文验收最终产物目录（远端）：`/root/autodl-tmp/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/`（见 `docs/final_results_summary.md`）。
+当前论文验收最终产物目录（远端）：`/root/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/`（见 `docs/final_results_summary.md`）。
 如需同步到本地，请使用文末 rsync 命令。
 
 新增：可直接使用一键脚本跑 `final_thesis_plus_*`：
 ```bash
-cd /root/autodl-tmp/LLM_KVCache_Quantization
+cd /root/LLM_KVCache_Quantization
 bash scripts/run_final_thesis_plus.sh
 ```
 脚本会自动完成：`gates -> 主线实验 -> batch 扩展 -> aggregate -> latex`。
+脚本会自动产出 `reports/`（claim gate + 统计决策摘要 + 论文可粘贴 Markdown 摘要）。
+
+> 自 2026-02 起，`scripts/run_experiments.py` 会在每个 `runs/<run_id>/` 下写入 `run_manifest.json`，
+> 并在 `--append` 时强制校验 `git_commit/env_hash` 一致性；非 `--append` 模式下拒绝写入非空目录，
+> 以避免历史结果与新结果混写。
+> 同时支持 `--failure_policy/--max_retries/--skip_completed_success`，可在不破坏复现实验口径的前提下进行自动补跑。
+> `scripts/run_final_thesis_plus.sh` 已接入 `scripts/check_run_completeness.py`，支持 required/stress 分层与迭代修复。
 
 ## 1) 环境（固定）
 - 远端解释器：`/root/miniconda3/bin/python`（Python 3.12 / Torch 2.8.0 + cu128 / CUDA 12.8）
-- 仓库目录：`/root/autodl-tmp/LLM_KVCache_Quantization`
+- 仓库目录：`/root/LLM_KVCache_Quantization`
 - 模型：`Qwen/Qwen2.5-1.5B-Instruct`
 - 模型 revision（已 pin）：`989aa7980e4cf806f80c7fef2b1adb7bc71aa306`
 
@@ -42,7 +49,7 @@ source /etc/network_turbo
 
 ## 3) 冻结环境（复现最小门槛）
 ```bash
-cd /root/autodl-tmp/LLM_KVCache_Quantization
+cd /root/LLM_KVCache_Quantization
 /root/miniconda3/bin/python scripts/collect_env.py
 ```
 
@@ -51,7 +58,7 @@ cd /root/autodl-tmp/LLM_KVCache_Quantization
 
 创建最终目录（建议固定 `final_thesis_plus_*` 前缀）：
 ```bash
-cd /root/autodl-tmp/LLM_KVCache_Quantization
+cd /root/LLM_KVCache_Quantization
 RUN_TAG="final_thesis_plus_$(date +%Y%m%d_%H%M%S)"
 BASE_DIR="results/${RUN_TAG}"
 mkdir -p "${BASE_DIR}"/{runs,logs,tables,plots,latex_tables,gates,env}
@@ -60,7 +67,7 @@ echo "${BASE_DIR}"
 
 冻结环境到最终目录：
 ```bash
-cd /root/autodl-tmp/LLM_KVCache_Quantization
+cd /root/LLM_KVCache_Quantization
 /root/miniconda3/bin/python scripts/collect_env.py
 cp -f env/versions.txt "${BASE_DIR}/env/versions.txt"
 cp -f env/requirements_freeze.txt "${BASE_DIR}/env/requirements_freeze.txt"
@@ -73,7 +80,7 @@ git diff > "${BASE_DIR}/env/uncommitted_changes.patch" || true
 
 四闸门（日志落盘到 `${BASE_DIR}/gates/`）：
 ```bash
-cd /root/autodl-tmp/LLM_KVCache_Quantization
+cd /root/LLM_KVCache_Quantization
 
 # Gate-0: 最小生成
 /root/miniconda3/bin/python scripts/smoke_test.py --save_output --model_revision 989aa7980e4cf806f80c7fef2b1adb7bc71aa306 \
@@ -111,7 +118,7 @@ HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 KV_FUSED_DEBUG=1 \
 
 如果需要重新生成（GPU 上）：
 ```bash
-cd /root/autodl-tmp/LLM_KVCache_Quantization
+cd /root/LLM_KVCache_Quantization
 /root/miniconda3/bin/python scripts/calibrate_behavior.py \
   --search \
   --samples 16 \
@@ -121,7 +128,7 @@ cd /root/autodl-tmp/LLM_KVCache_Quantization
 
 INT4 校准（论文冲优扩展）：
 ```bash
-cd /root/autodl-tmp/LLM_KVCache_Quantization
+cd /root/LLM_KVCache_Quantization
 /root/miniconda3/bin/python scripts/calibrate_behavior.py \
   --quant_bits 4 \
   --search \
@@ -138,6 +145,8 @@ cd /root/autodl-tmp/LLM_KVCache_Quantization
 > 说明：本协议默认把所有输出写入 `${BASE_DIR}`，并最终用 `scripts/aggregate_results.py` 聚合到 `${BASE_DIR}/tables` 与 `${BASE_DIR}/plots`。
 
 ### (A) 性能 + 显存（batch=1 曲线 + 32K 点）
+> 顶会统计口径建议：此步骤启用多 seed（`--seeds 1234,1235,1236`），
+> 以便在 `significance_summary.csv` 中获得 TPOT 的配对显著性检验行。
 ```bash
 /root/miniconda3/bin/python scripts/run_experiments.py \
   --config configs/exp_matrix.yaml \
@@ -145,6 +154,7 @@ cd /root/autodl-tmp/LLM_KVCache_Quantization
   --run_tag "${RUN_TAG}" \
   --append \
   --run_names fp16_kv_curve_4k,fp16_kv_curve_8k,fp16_kv_curve_16k,fp16_kv_long,int8_baseline_curve_4k,int8_baseline_curve_8k,int8_baseline_curve_16k,int8_baseline_long_torch,int8_ours_curve_4k_static_v3_no_temp_adaptive_fused,int8_ours_curve_8k_static_v3_no_temp_adaptive_fused,int8_ours_curve_16k_static_v3_no_temp_adaptive_fused,int8_ours_long_static_v3_no_temp_adaptive_fused \
+  --seeds 1234,1235,1236 \
   --latency_warmup 2 \
   --latency_runs 3 \
   --out_dir "${BASE_DIR}/runs" \
@@ -242,26 +252,40 @@ cd /root/autodl-tmp/LLM_KVCache_Quantization
 
 ## 7) 聚合出表出图
 ```bash
-cd /root/autodl-tmp/LLM_KVCache_Quantization
+cd /root/LLM_KVCache_Quantization
 /root/miniconda3/bin/python scripts/aggregate_results.py \
   --runs_dir "${BASE_DIR}/runs" \
   --logs_dir "${BASE_DIR}/logs" \
   --tables_dir "${BASE_DIR}/tables" \
-  --plots_dir "${BASE_DIR}/plots"
+  --plots_dir "${BASE_DIR}/plots" \
+  --significance_min_pairs 3 \
+  --significance_alpha 0.05 \
+  --significance_ci_level 0.95 \
+  --significance_bootstrap 10000 \
+  --significance_permutations 20000 \
+  --strict
 ```
 
 产出至少包括：
 - tables: `latency_summary.csv`, `memory_summary.csv`, `needle_summary.csv`, `ppl_summary.csv`
 - tables: `throughput_by_batch.csv`
 - tables: `throughput_capacity_limits.csv`（批大小容量上限与 OOM/缺失点摘要）
-- tables: `thesis_main_claims_32k.csv`, `relative_gain_summary.csv`, `significance_summary.csv`
+- tables: `execution_coverage.csv`（任务级执行覆盖与状态）
+- tables: `failure_registry.csv`（失败透明登记：OOM/traceback/状态不一致）
+- tables: `thesis_main_claims_32k.csv`, `relative_gain_summary.csv`
+- tables: `significance_summary.csv`（配对差异 + bootstrap CI + sign-flip p-value + BH-FDR q-value + effect size）
+- tables: `significance_pairs.csv`（每个 seed 的配对原始差异，审计用）
+- tables: `significance_coverage.csv`（每个假设的样本覆盖率与是否满足最小配对数）
+- reports: `claim_validation.csv`（主结论 gate：PASS/FAIL/INCONCLUSIVE）
+- reports: `statistical_decision_summary.csv`（robust_support / contradiction / insufficient_pairs）
+- reports: `paper_ready_summary.md`（论文“实验结论”草稿模板）
 - plots: `latency_tpot_vs_seq.png`, `memory_kv_cache_vs_seq.png`, `needle_pass_rate_vs_context.png`, `ppl_vs_tokens.png`
 - plots: `throughput_tok_per_s_vs_batch.png`, `throughput_tok_per_s_per_seq_vs_batch.png`, `prefill_tok_per_s_vs_batch.png`（含容量上限虚线与 OOM/MISS 标记）
 - plots: `memory_peak_vs_batch.png`, `memory_kv_cache_vs_batch.png`, `needle_exact_match_vs_context.png`, `latency_tpot_gain_vs_fp16.png`
 
 ## 8) 导出 LaTeX 表格（论文直接引用）
 ```bash
-cd /root/autodl-tmp/LLM_KVCache_Quantization
+cd /root/LLM_KVCache_Quantization
 /root/miniconda3/bin/python scripts/export_tables_latex.py \
   --tables_dir "${BASE_DIR}/tables" \
   --out_dir "${BASE_DIR}/latex_tables"
@@ -273,7 +297,7 @@ cd /root/autodl-tmp/LLM_KVCache_Quantization
 
 ## 9) 可选：fused dump（用于定点诊断）
 ```bash
-cd /root/autodl-tmp/LLM_KVCache_Quantization
+cd /root/LLM_KVCache_Quantization
 KV_FUSED_DUMP_DIR=results/fused_dumps KV_FUSED_DUMP_LAYER=0 KV_FUSED_DUMP_STEP=32704 \
   /root/miniconda3/bin/python scripts/eval_needle.py \
   --kv_mode int8_ours \
@@ -287,6 +311,6 @@ KV_FUSED_DUMP_DIR=results/fused_dumps KV_FUSED_DUMP_LAYER=0 KV_FUSED_DUMP_STEP=3
 ## 10) 同步最终目录到本地
 ```bash
 rsync -avz -e "ssh -p 31867" \
-  root@region-42.seetacloud.com:/root/autodl-tmp/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/ \
+  root@region-42.seetacloud.com:/root/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/ \
   /Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/
 ```

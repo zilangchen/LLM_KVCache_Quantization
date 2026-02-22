@@ -69,6 +69,7 @@
 ### 4.2 主线性能对比（核心表格）
 
 - **表格**：`tables/thesis_main_claims_32k.csv` → `latex_tables/main_claims_32k.tex`
+- **主结论门禁**：`reports/claim_validation.csv`（C1-C4 claim 的 PASS/FAIL/INCONCLUSIVE）
 - **关键数据（32K, batch=1）**：
 
 | kv_mode | TPOT (ms) | KV Mem (MB) | Needle | PPL |
@@ -89,7 +90,11 @@
 - **图**：`plots/needle_pass_rate_vs_context.png`
 - **图**：`plots/ppl_vs_tokens.png`
 - **表**：`tables/needle_summary.csv`、`tables/ppl_summary.csv`
-- **统计**：`tables/significance_summary.csv`（含 CI95 + 配对差异）
+- **统计**：
+  - `tables/significance_summary.csv`（配对差异、bootstrap CI95、sign-flip p-value、BH-FDR q-value、effect size）
+  - `tables/significance_coverage.csv`（各假设的有效样本覆盖率与最小配对达标状态）
+  - `tables/significance_pairs.csv`（seed 级配对原始明细，便于审计）
+  - `reports/statistical_decision_summary.csv`（robust_support / contradiction / insufficient_pairs）
 
 ### 4.5 吞吐扩展（Batch Scaling）
 

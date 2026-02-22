@@ -195,7 +195,7 @@ def compute_result_hash(csv_path):
 # 完整复现性检查
 python scripts/collect_env.py
 git rev-parse HEAD > env/git_commit.txt
-python -c "from scripts.utils import validate_config; validate_config()"
+python scripts/run_experiments.py --config configs/exp_matrix.yaml --dry_run
 
 echo "✓ 复现性检查完成"
 ```

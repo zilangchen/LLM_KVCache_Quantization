@@ -274,7 +274,7 @@ agent 输出必须包含：
 - **与矩阵对齐点**：对齐 `configs/exp_matrix.yaml: project.model_id, runtime.decoding`
 - **完成后更新记录**
   - `development_record.md`：记录环境信息落盘方式与 smoke test 命令
-  - `lang.md`：更新 A1/A2/A3 的状态与追加一条更新记录
+  - `iteration.md`：更新 A1/A2/A3 的状态与追加一条更新记录
 
 ### Milestone B：自定义 Generation Loop（不使用 `model.generate`）
 
@@ -396,4 +396,3 @@ agent 输出必须包含：
     - 产出物：`scripts/make_plots.py` → `results/plots/*`
   - **J3 paper-ready 输出组织**
     - 产出物：`results/tables/*` + 图表清单与章节映射（后续细化）
-

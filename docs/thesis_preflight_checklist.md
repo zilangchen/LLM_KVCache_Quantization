@@ -38,10 +38,14 @@
 - `tables/ppl_summary.csv`
 - `tables/throughput_by_batch.csv`
 - `tables/thesis_main_claims_32k.csv`
+- `tables/execution_coverage.csv`
+- `tables/failure_registry.csv`
 
 ## 4) 建议表（附录/统计学）
 
 - `tables/significance_summary.csv`
+- `tables/significance_coverage.csv`
+- `tables/significance_pairs.csv`
 - `tables/relative_gain_summary.csv`
 - `tables/needle_curve_by_depth.csv`
 - `tables/latency_tpot_gain_vs_fp16.csv`
@@ -52,7 +56,14 @@
 - `latex_tables/main_claims_32k.tex`
 - `latex_tables/relative_gain_summary.tex`
 
-## 6) 可审计证据（必须）
+## 6) 论文结论报告（Week-3，建议主文直接引用）
+
+- `reports/claim_validation.csv`
+- `reports/statistical_decision_summary.csv`
+- `reports/reproducibility_gate.csv`
+- `reports/paper_ready_summary.md`
+
+## 7) 可审计证据（必须）
 
 - `gates/gate0_smoke_test.log`
 - `gates/gate1_dry_run.log`
@@ -61,10 +72,10 @@
 - `gates/gate3_verify_int8_ours.log`
 - （若含 INT4）`gates/gate3_verify_int4_fused.log`、`gates/gate3_verify_int4_ours.log`
 
-## 7) 一键自检命令（生成后执行）
+## 8) 一键自检命令（生成后执行）
 
 ```bash
-cd /root/autodl-tmp/LLM_KVCache_Quantization
+cd /root/LLM_KVCache_Quantization
 BASE_DIR="results/final_thesis_plus_YYYYMMDD_HHMMSS"
 
 python - <<'PY'

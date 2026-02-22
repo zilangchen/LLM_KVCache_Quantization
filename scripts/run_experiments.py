@@ -6,13 +6,18 @@ Run experiment matrix defined in configs/exp_matrix.yaml.
 from __future__ import annotations
 
 import argparse
+import csv
+import hashlib
+import json
 import os
+import platform
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 
 script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
@@ -27,6 +32,332 @@ TASK_TO_SCRIPT = {
     "eval_ppl": "scripts/eval_ppl.py",
     "eval_needle": "scripts/eval_needle.py",
 }
+
+TASK_TO_CSV_PATTERNS = {
+    "profile_latency": "profile_latency_*.csv",
+    "profile_memory": "profile_memory_*.csv",
+    "eval_ppl": "profile_ppl_*.csv",
+    "eval_needle": "profile_needle_*.csv",
+}
+
+
+def _now_iso() -> str:
+    return datetime.now().isoformat()
+
+
+def _get_git_commit() -> str:
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=project_root,
+        ).stdout.strip()
+        return out or "unknown"
+    except Exception:
+        return "unknown"
+
+
+def _collect_env_info() -> Dict[str, Any]:
+    info: Dict[str, Any] = {
+        "python_version": sys.version.split()[0],
+        "python_executable": sys.executable,
+        "platform": platform.platform(),
+    }
+    try:
+        import torch  # type: ignore
+
+        info["torch_version"] = getattr(torch, "__version__", "unknown")
+        info["cuda_version"] = getattr(getattr(torch, "version", None), "cuda", None)
+        info["cuda_available"] = bool(torch.cuda.is_available())
+    except Exception:
+        info["torch_version"] = "unavailable"
+        info["cuda_version"] = None
+        info["cuda_available"] = False
+
+    try:
+        import transformers  # type: ignore
+
+        info["transformers_version"] = getattr(transformers, "__version__", "unknown")
+    except Exception:
+        info["transformers_version"] = "unavailable"
+
+    payload = json.dumps(info, sort_keys=True, ensure_ascii=True)
+    info["env_hash"] = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+    return info
+
+
+def _read_json(path: Path) -> Dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        return None
+    return None
+
+
+def _write_json(path: Path, data: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, sort_keys=True, ensure_ascii=True)
+    tmp_path.replace(path)
+
+
+def _existing_result_git_commits(run_dir: Path) -> List[str]:
+    commits = set()
+    patterns = [
+        "profile_latency_*.csv",
+        "profile_memory_*.csv",
+        "profile_ppl_*.csv",
+        "profile_needle_*.csv",
+    ]
+    for pattern in patterns:
+        for path in run_dir.glob(pattern):
+            try:
+                with open(path, "r", encoding="utf-8", newline="") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        commit = str(row.get("git_commit", "")).strip()
+                        if commit:
+                            commits.add(commit)
+            except Exception:
+                continue
+    return sorted(commits)
+
+
+def _same_commit_prefix(a: str, b: str) -> bool:
+    a = str(a).strip()
+    b = str(b).strip()
+    if not a or not b:
+        return True
+    if a == "unknown" or b == "unknown":
+        return True
+    return a[:8] == b[:8]
+
+
+def _validate_append_commit(
+    run_dir: Path,
+    manifest_path: Path,
+    current_git_commit: str,
+    current_env_hash: str,
+) -> tuple[bool, str]:
+    manifest = _read_json(manifest_path)
+    if manifest:
+        prev_commit = str(manifest.get("git_commit", "")).strip()
+        if prev_commit and not _same_commit_prefix(prev_commit, current_git_commit):
+            return (
+                False,
+                "append blocked: existing run_manifest git_commit "
+                f"({prev_commit}) != current git_commit ({current_git_commit[:8]}).",
+            )
+        prev_env_hash = str(manifest.get("env_hash", "")).strip()
+        if prev_env_hash and current_env_hash and prev_env_hash != current_env_hash:
+            return (
+                False,
+                "append blocked: existing run_manifest env_hash "
+                f"({prev_env_hash}) != current env_hash ({current_env_hash}).",
+            )
+
+    for prev_commit in _existing_result_git_commits(run_dir):
+        if not _same_commit_prefix(prev_commit, current_git_commit):
+            return (
+                False,
+                "append blocked: existing CSV git_commit "
+                f"({prev_commit}) != current git_commit ({current_git_commit[:8]}).",
+            )
+    return True, ""
+
+
+def _is_nonempty_dir(path: Path) -> bool:
+    if not path.exists() or not path.is_dir():
+        return False
+    try:
+        next(path.iterdir())
+        return True
+    except StopIteration:
+        return False
+    except Exception:
+        return True
+
+
+def _task_has_csv(run_dir: Path, task: str) -> bool:
+    pattern = TASK_TO_CSV_PATTERNS.get(task)
+    if not pattern:
+        return False
+    return any(run_dir.glob(pattern))
+
+
+def _read_text_best_effort(path: Path) -> str:
+    if not path.exists():
+        return ""
+    try:
+        return path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return ""
+
+
+def _classify_failure(*, log_path: Path, returncode: int | None) -> str:
+    if returncode is not None and int(returncode) == 73:
+        return "oom"
+    if returncode is not None and int(returncode) == 130:
+        return "interrupt"
+    content = _read_text_best_effort(log_path).lower()
+    if "oom" in content or "out of memory" in content or "cuda out of memory" in content:
+        return "oom"
+    if "traceback (most recent call last):" in content:
+        return "traceback"
+    if returncode is not None and int(returncode) != 0:
+        return "runtime_error"
+    return "unknown"
+
+
+def _init_manifest(
+    manifest_path: Path,
+    *,
+    run_id: str,
+    run_name: str,
+    run_tag: str,
+    kv_mode: str,
+    seed: int,
+    replica_id: int,
+    model_id: str,
+    model_revision: str | None,
+    args: argparse.Namespace,
+    append_mode: bool,
+    git_commit_full: str,
+    env_info: Dict[str, Any],
+) -> Dict[str, Any]:
+    now = _now_iso()
+    manifest = _read_json(manifest_path) or {}
+    if not manifest:
+        manifest = {
+            "manifest_version": 1,
+            "created_at": now,
+            "tasks": {},
+            "append_history": [],
+        }
+
+    manifest["updated_at"] = now
+    manifest["run_id"] = run_id
+    manifest["run_name"] = run_name
+    manifest["run_tag"] = run_tag
+    manifest["kv_mode"] = kv_mode
+    manifest["seed"] = int(seed)
+    manifest["replica_id"] = int(replica_id)
+    manifest["model_id"] = model_id
+    manifest["model_revision"] = model_revision
+    manifest["git_commit"] = git_commit_full[:8] if git_commit_full else "unknown"
+    manifest["git_commit_full"] = git_commit_full
+    manifest["env_hash"] = env_info.get("env_hash", "unknown")
+    manifest["env_info"] = env_info
+    manifest["append_mode"] = bool(append_mode)
+    manifest["argv"] = list(sys.argv)
+    if not isinstance(manifest.get("tasks"), dict):
+        manifest["tasks"] = {}
+    if not isinstance(manifest.get("append_history"), list):
+        manifest["append_history"] = []
+    if append_mode:
+        manifest["append_history"].append(
+            {
+                "timestamp": now,
+                "tasks": args.tasks,
+                "config": args.config,
+            }
+        )
+    _write_json(manifest_path, manifest)
+    return manifest
+
+
+def _mark_task_status(
+    manifest_path: Path,
+    manifest: Dict[str, Any],
+    *,
+    task: str,
+    status: str,
+    cmd: List[str],
+    log_path: Path,
+    returncode: int | None = None,
+    error: str | None = None,
+    failure_type: str | None = None,
+    attempt_idx: int | None = None,
+) -> None:
+    now = _now_iso()
+    tasks = manifest.setdefault("tasks", {})
+    entry = tasks.get(task, {})
+    history = entry.get("history")
+    if not isinstance(history, list):
+        history = []
+    if status == "running":
+        entry["attempts"] = int(entry.get("attempts", 0)) + 1
+        entry["started_at"] = now
+        if attempt_idx is None:
+            attempt_idx = int(entry["attempts"])
+    entry["status"] = status
+    entry["updated_at"] = now
+    entry["log_path"] = str(log_path)
+    entry["cmd"] = cmd
+    if attempt_idx is not None:
+        entry["last_attempt"] = int(attempt_idx)
+    if returncode is not None:
+        entry["returncode"] = int(returncode)
+    if status in {"success", "skipped"}:
+        # Keep terminal success state canonical when resuming/skip-completed paths.
+        entry.pop("failure_type", None)
+        entry.pop("error", None)
+    elif failure_type:
+        entry["failure_type"] = str(failure_type)
+    if error and status not in {"success", "skipped"}:
+        entry["error"] = str(error)
+    if status in {"success", "failed", "skipped"}:
+        hist_row: Dict[str, Any] = {
+            "timestamp": now,
+            "status": status,
+            "attempt": int(attempt_idx) if attempt_idx is not None else int(entry.get("attempts", 0)),
+            "returncode": int(returncode) if returncode is not None else None,
+            "failure_type": str(failure_type) if failure_type else "",
+            "error": str(error) if error else "",
+        }
+        history.append(hist_row)
+        # Keep manifest compact; preserve the latest 20 terminal events.
+        entry["history"] = history[-20:]
+    tasks[task] = entry
+    manifest["tasks"] = tasks
+    manifest["updated_at"] = now
+    _write_json(manifest_path, manifest)
+
+
+def _task_is_completed_successfully(
+    *,
+    manifest: Dict[str, Any],
+    run_dir: Path,
+    task: str,
+) -> bool:
+    task_info = manifest.get("tasks", {}).get(task, {})
+    if not isinstance(task_info, dict):
+        return False
+    status = str(task_info.get("status", "")).strip().lower()
+    if status not in {"success", "skipped"}:
+        history = task_info.get("history")
+        has_success_history = False
+        if isinstance(history, list):
+            for item in history:
+                if isinstance(item, dict) and str(item.get("status", "")).strip().lower() == "success":
+                    has_success_history = True
+                    break
+        if not has_success_history:
+            return False
+    return _task_has_csv(run_dir, task)
+
+
+def _write_execution_summary(path: Path, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(path, payload)
 
 
 def resolve_quant_params(run_entry: Dict, quant_defaults: Dict) -> Dict[str, float]:
@@ -89,14 +420,6 @@ def resolve_calib_params(run_entry: Dict, quant_defaults: Dict) -> Dict[str, obj
     }
 
 
-def run_task(cmd: List[str], log_path: Path) -> None:
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(log_path, "w") as f:
-        result = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, text=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"Task failed: {' '.join(cmd)}")
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run experiment matrix")
     parser.add_argument("--config", type=str, default="configs/exp_matrix.yaml")
@@ -129,6 +452,45 @@ def main() -> int:
             "Append mode for an existing run_id directory: keep the existing "
             "config_snapshot.yaml (if present) and append to task logs instead of overwriting."
         ),
+    )
+    parser.add_argument(
+        "--failure_policy",
+        type=str,
+        choices=["abort", "continue_on_oom", "continue_all"],
+        default="abort",
+        help=(
+            "Failure handling policy. "
+            "'abort': stop immediately on any failed task; "
+            "'continue_on_oom': continue only when failure is OOM; "
+            "'continue_all': continue on any failed task."
+        ),
+    )
+    parser.add_argument(
+        "--max_retries",
+        type=int,
+        default=0,
+        help="Maximum retry count per failed task (total attempts = max_retries + 1).",
+    )
+    parser.add_argument(
+        "--retry_backoff_sec",
+        type=float,
+        default=0.0,
+        help="Sleep interval between retry attempts in seconds.",
+    )
+    parser.add_argument(
+        "--skip_completed_success",
+        action="store_true",
+        default=False,
+        help=(
+            "When used with --append, skip tasks already marked success in run_manifest "
+            "and with matching CSV artifacts."
+        ),
+    )
+    parser.add_argument(
+        "--summary_json",
+        type=str,
+        default="",
+        help="Optional path to write execution summary JSON.",
     )
     parser.add_argument("--out_dir", type=str, default="results/runs")
     parser.add_argument("--logs_dir", type=str, default="logs/run_experiments")
@@ -208,6 +570,12 @@ def main() -> int:
         help="Pass through to profile_latency.py --warmup (useful for long-context runs).",
     )
     args = parser.parse_args()
+    if int(args.max_retries) < 0:
+        print("Error: --max_retries must be >= 0.")
+        return 2
+    if float(args.retry_backoff_sec) < 0:
+        print("Error: --retry_backoff_sec must be >= 0.")
+        return 2
 
     config_path = Path(args.config).resolve()
     deprecated_config = (project_root / "exp_matrix.yaml").resolve()
@@ -241,6 +609,8 @@ def main() -> int:
 
     model_id = project.get("model_id", "Qwen/Qwen2.5-1.5B-Instruct")
     model_revision = project.get("model_revision")
+    git_commit_full = _get_git_commit()
+    env_info = _collect_env_info()
     default_seed = runtime.get("seed", 1234)
     seed_list = [int(default_seed)]
     if args.seeds:
@@ -297,6 +667,41 @@ def main() -> int:
                 "Allowed: letters, digits, '.', '_', '-'."
             )
             return 2
+
+    summary_path: Path | None = None
+    if args.summary_json:
+        summary_path = Path(args.summary_json)
+        if not summary_path.is_absolute():
+            summary_path = project_root / summary_path
+
+    execution_rows: List[Dict[str, Any]] = []
+
+    def _flush_summary(exit_code: int) -> None:
+        if summary_path is None:
+            return
+        success_count = sum(1 for row in execution_rows if row.get("status") == "success")
+        failed_count = sum(1 for row in execution_rows if row.get("status") == "failed")
+        skipped_count = sum(1 for row in execution_rows if row.get("status") == "skipped")
+        payload = {
+            "generated_at": _now_iso(),
+            "exit_code": int(exit_code),
+            "failure_policy": str(args.failure_policy),
+            "max_retries": int(args.max_retries),
+            "retry_backoff_sec": float(args.retry_backoff_sec),
+            "append": bool(args.append),
+            "skip_completed_success": bool(args.skip_completed_success),
+            "run_tag": run_tag,
+            "config": args.config,
+            "tasks": task_list,
+            "totals": {
+                "executed": int(len(execution_rows)),
+                "success": int(success_count),
+                "failed": int(failed_count),
+                "skipped": int(skipped_count),
+            },
+            "rows": execution_rows,
+        }
+        _write_execution_summary(summary_path, payload)
 
     for run_entry in matrix:
         run_name = run_entry.get("run_name")
@@ -375,8 +780,43 @@ def main() -> int:
         for replica_id, seed in enumerate(seed_list):
             run_id = f"{run_name}_s{seed}_{run_tag}" if multi_seed else f"{run_name}_{run_tag}"
             run_dir = out_dir / run_id
+            manifest_path = run_dir / "run_manifest.json"
             if not args.dry_run:
+                if not args.append and _is_nonempty_dir(run_dir):
+                    print(
+                        "Error: target run_dir already exists and is non-empty. "
+                        f"Refusing to overwrite: {run_dir}"
+                    )
+                    print("Use a new --run_tag for a clean run, or pass --append for controlled resume.")
+                    return 2
                 run_dir.mkdir(parents=True, exist_ok=True)
+                if args.append:
+                    ok, reason = _validate_append_commit(
+                        run_dir=run_dir,
+                        manifest_path=manifest_path,
+                        current_git_commit=git_commit_full,
+                        current_env_hash=str(env_info.get("env_hash", "")),
+                    )
+                    if not ok:
+                        print(f"Error: {reason}")
+                        return 2
+                manifest = _init_manifest(
+                    manifest_path,
+                    run_id=run_id,
+                    run_name=run_name,
+                    run_tag=run_tag,
+                    kv_mode=kv_mode,
+                    seed=int(seed),
+                    replica_id=int(replica_id),
+                    model_id=model_id,
+                    model_revision=model_revision,
+                    args=args,
+                    append_mode=bool(args.append),
+                    git_commit_full=git_commit_full,
+                    env_info=env_info,
+                )
+            else:
+                manifest = {}
 
             if build_config_snapshot and write_config_snapshot:
                 snapshot = build_config_snapshot(
@@ -421,9 +861,13 @@ def main() -> int:
                     str(quant_params["clip_percentile_v"]),
                     "--seed",
                     str(seed),
+                    "--replica_id",
+                    str(replica_id),
                     "--out_dir",
                     str(run_dir),
                 ]
+                if run_name:
+                    cmd.extend(["--run_name", str(run_name)])
                 if model_revision:
                     cmd.extend(["--model_revision", str(model_revision)])
                 if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed"] and calib_file_path:
@@ -458,7 +902,6 @@ def main() -> int:
                         cmd.extend(["--max_samples", str(args.ppl_max_samples)])
                     if args.ppl_chunk_size is not None:
                         cmd.extend(["--chunk_size", str(args.ppl_chunk_size)])
-                    cmd.extend(["--replica_id", str(replica_id)])
 
                 if task == "eval_needle":
                     cmd.extend(["--needle_max_new_tokens", str(args.needle_max_new_tokens)])
@@ -488,23 +931,155 @@ def main() -> int:
                     continue
 
                 label = f"{run_name} (seed={seed})" if multi_seed else run_name
+                if (
+                    args.append
+                    and args.skip_completed_success
+                    and _task_is_completed_successfully(
+                        manifest=manifest,
+                        run_dir=run_dir,
+                        task=task,
+                    )
+                ):
+                    print(f"Skipping {task} for {label}: already marked success with CSV artifacts.")
+                    _mark_task_status(
+                        manifest_path,
+                        manifest,
+                        task=task,
+                        status="success",
+                        cmd=cmd,
+                        log_path=log_path,
+                        returncode=0,
+                    )
+                    execution_rows.append(
+                        {
+                            "timestamp": _now_iso(),
+                            "run_id": run_id,
+                            "run_name": run_name,
+                            "seed": int(seed),
+                            "replica_id": int(replica_id),
+                            "task": task,
+                            "status": "skipped",
+                            "failure_type": "",
+                            "returncode": 0,
+                            "log_path": str(log_path),
+                        }
+                    )
+                    continue
+
                 print(f"Running {task} for {label}")
-                try:
-                    if args.append:
-                        # Append logs for long-running/resumed runs.
-                        log_path.parent.mkdir(parents=True, exist_ok=True)
-                        with open(log_path, "a") as f:
-                            result = subprocess.run(
-                                cmd, stdout=f, stderr=subprocess.STDOUT, text=True
+                total_attempts = max(int(args.max_retries), 0) + 1
+                for attempt_idx in range(1, total_attempts + 1):
+                    _mark_task_status(
+                        manifest_path,
+                        manifest,
+                        task=task,
+                        status="running",
+                        cmd=cmd,
+                        log_path=log_path,
+                        attempt_idx=attempt_idx,
+                    )
+                    log_path.parent.mkdir(parents=True, exist_ok=True)
+                    log_mode = "a" if (args.append or attempt_idx > 1) else "w"
+                    with open(log_path, log_mode, encoding="utf-8") as f:
+                        if attempt_idx > 1:
+                            f.write(
+                                f"\n[RETRY] attempt={attempt_idx}/{total_attempts} at {_now_iso()}\n"
                             )
-                        if result.returncode != 0:
-                            raise RuntimeError(f"Task failed: {' '.join(cmd)}")
-                    else:
-                        run_task(cmd, log_path)
-                except RuntimeError as exc:
-                    print(str(exc))
+                        result = subprocess.run(
+                            cmd,
+                            stdout=f,
+                            stderr=subprocess.STDOUT,
+                            text=True,
+                        )
+                    returncode = int(result.returncode)
+                    if returncode == 0:
+                        _mark_task_status(
+                            manifest_path,
+                            manifest,
+                            task=task,
+                            status="success",
+                            cmd=cmd,
+                            log_path=log_path,
+                            returncode=returncode,
+                            attempt_idx=attempt_idx,
+                        )
+                        execution_rows.append(
+                            {
+                                "timestamp": _now_iso(),
+                                "run_id": run_id,
+                                "run_name": run_name,
+                                "seed": int(seed),
+                                "replica_id": int(replica_id),
+                                "task": task,
+                                "status": "success",
+                                "failure_type": "",
+                                "returncode": int(returncode),
+                                "attempt": int(attempt_idx),
+                                "log_path": str(log_path),
+                            }
+                        )
+                        break
+
+                    failure_type = _classify_failure(log_path=log_path, returncode=returncode)
+                    err_msg = f"Task failed: {' '.join(cmd)}"
+                    _mark_task_status(
+                        manifest_path,
+                        manifest,
+                        task=task,
+                        status="failed",
+                        cmd=cmd,
+                        log_path=log_path,
+                        returncode=returncode,
+                        error=err_msg,
+                        failure_type=failure_type,
+                        attempt_idx=attempt_idx,
+                    )
+                    if attempt_idx <= int(args.max_retries):
+                        print(
+                            "Task failed (will retry): "
+                            f"run_id={run_id} task={task} attempt={attempt_idx}/{total_attempts} "
+                            f"failure_type={failure_type} returncode={returncode}"
+                        )
+                        if float(args.retry_backoff_sec) > 0:
+                            time.sleep(float(args.retry_backoff_sec))
+                        continue
+
+                    execution_rows.append(
+                        {
+                            "timestamp": _now_iso(),
+                            "run_id": run_id,
+                            "run_name": run_name,
+                            "seed": int(seed),
+                            "replica_id": int(replica_id),
+                            "task": task,
+                            "status": "failed",
+                            "failure_type": str(failure_type),
+                            "returncode": int(returncode),
+                            "attempt": int(attempt_idx),
+                            "log_path": str(log_path),
+                        }
+                    )
+                    print(
+                        "Task failed: "
+                        f"run_id={run_id} task={task} failure_type={failure_type} returncode={returncode}"
+                    )
+                    should_continue = False
+                    if args.failure_policy == "continue_all":
+                        should_continue = True
+                    elif args.failure_policy == "continue_on_oom" and failure_type == "oom":
+                        should_continue = True
+
+                    if should_continue:
+                        print(
+                            "Continuing after failure due to policy: "
+                            f"policy={args.failure_policy} run_id={run_id} task={task}"
+                        )
+                        break
+
+                    _flush_summary(1)
                     return 1
 
+    _flush_summary(0)
     return 0
 
 

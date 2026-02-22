@@ -12,7 +12,7 @@
 参见 `AGENT_TASKLIST.md` 的 “Repository Layout”。
 
 ## 当前进展
-进度追踪以 `lang.md` 为准；历史记录见 `development_record.md`。
+进度追踪以 `iteration.md` 为准；历史记录见 `development_record.md`。
 
 ## 文档与模板
 - 提示词模板：`docs/prompt_templates.md`
@@ -24,13 +24,13 @@
 
 ### 1) 远端最小验证（Smoke Test）
 ```bash
-cd /root/autodl-tmp/LLM_KVCache_Quantization
+cd /root/LLM_KVCache_Quantization
 /root/miniconda3/bin/python scripts/smoke_test.py --save_output
 ```
 
 ### 2) 一键复现论文最终表图（推荐）
 - 复现协议：`docs/final_experiment_protocol.md`
-- 当前最终验收目录（远端）：`/root/autodl-tmp/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/`
+- 当前最终验收目录（远端）：`/root/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/`
   - 表格：`.../tables/`
   - 图：`.../plots/`
   - LaTeX 表：`.../latex_tables/all_tables.tex`
