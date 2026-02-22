@@ -47,6 +47,7 @@ KV_MODE_ORDER: List[str] = [
     "int4_ours",
     "int4_ours_mixed",
     "int4_fused",
+    "kivi_style",
 ]
 
 KV_MODE_DISPLAY: Dict[str, str] = {
@@ -58,6 +59,7 @@ KV_MODE_DISPLAY: Dict[str, str] = {
     "int4_ours": "INT4-ours",
     "int4_ours_mixed": "INT4-ours-mixed",
     "int4_fused": "INT4-fused",
+    "kivi_style": "KIVI-style",
 }
 
 
