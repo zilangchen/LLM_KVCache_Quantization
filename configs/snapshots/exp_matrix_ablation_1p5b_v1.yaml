@@ -1,0 +1,281 @@
+# Phase 4 ablation experiment matrix — Qwen2.5-1.5B-Instruct only
+# Derived from: configs/exp_matrix.yaml (main experiment config)
+# Target: EMNLP 2026 (ARR submission)
+#
+# Purpose:
+#   Systematic ablation study on INT8 KV cache quantization for the primary
+#   1.5B model.  Each section isolates one design dimension to support the
+#   corresponding research question in the paper.
+#
+#   A. Calibration method comparison   (RQ1 — KL vs MSE vs Percentile)
+#   B. Temperature correction ablation (RQ2 — inv_tau ON vs OFF)
+#   C. Group size ablation             (group_size sweep: 16/32/64/128)
+#   D. Static vs adaptive scales       (use_static_scales variants)
+#
+# All runs: INT8, seq_len=4096, gen_len=64, batch=1 (unless noted).
+# Used by scripts/run_experiments.py
+#
+# Conventions (same as main exp_matrix.yaml):
+# - kv_mode: fp16 | int8_baseline | int8_ours | int4_baseline | int4_fused | mixed
+# - calib_strategy: none | percentile | kl_attn | mse
+# - decode_attn_impl: torch_ref | triton_fused
+# - use_attn_temperature: true/false (per-head inv_tau from calib file)
+# - clip_percentile_{k,v}: used during calibration or as fixed percentile in percentile mode
+# - group_size_{k,v}: grouping along head_dim (e.g., 16 for head_dim=128)
+# - seq_len: context length budget (tokens)
+# - gen_len: max_new_tokens
+
+project:
+  name: kv-cache-quant-qwen2p5-1p5b-ablation
+  model_id: Qwen/Qwen2.5-1.5B-Instruct
+  # Pinned model revision for strict reproducibility.
+  model_revision: 989aa7980e4cf806f80c7fef2b1adb7bc71aa306
+
+runtime:
+  seed: 1234
+  device: cuda
+  dtype: fp16
+  decoding:
+    temperature: 0.0
+    top_p: 1.0
+    top_k: 0
+  # Shared defaults for all runs unless overridden below.
+  quant_defaults:
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_selected_v3_quick.json
+    use_attn_temperature: true
+    use_static_scales: true
+    adaptive_static_scales: false
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    clip_percentile_k: 99.5
+    clip_percentile_v: 99.5
+    group_size_k: 16
+    group_size_v: 16
+  kernel_defaults:
+    decode_attn_impl: triton_fused
+
+matrix:
+  # =========================================================================
+  # A. Calibration method comparison (RQ1 core)
+  #    Three calibration strategies: KL-divergence, MSE, Percentile baseline.
+  # =========================================================================
+
+  # A-1: KL calibration (our method)
+  - run_name: ablation_calib_kl_4k
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_selected_v3_quick.json
+    use_attn_temperature: true
+    decode_attn_impl: triton_fused
+    group_size_k: 16
+    group_size_v: 16
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  # A-2: MSE calibration
+  - run_name: ablation_calib_mse_4k
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: mse
+    calib_file: artifacts/kv_calib_mse_1p5b_int8.json
+    use_attn_temperature: true
+    decode_attn_impl: triton_fused
+    group_size_k: 16
+    group_size_v: 16
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  # A-3: Percentile baseline (torch_ref for fair comparison — no fused kernel advantage)
+  - run_name: ablation_calib_percentile_4k
+    kv_mode: int8_baseline
+    quant_bits: 8
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    decode_attn_impl: torch_ref
+    group_size_k: 16
+    group_size_v: 16
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  # A-3b: Percentile with triton_fused (isolate decode_attn_impl confound)
+  - run_name: ablation_calib_percentile_fused_4k
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    decode_attn_impl: triton_fused
+    group_size_k: 16
+    group_size_v: 16
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  # A-4: KIVI-style baseline (asymmetric quantization, for 4-way calibration comparison)
+  - run_name: ablation_calib_kivi_4k
+    kv_mode: kivi_style
+    quant_bits: 8
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # B. Temperature correction ablation (RQ2 core)
+  #    KL calibration with inv_tau ON vs OFF.
+  # =========================================================================
+
+  # B-1: KL calib + inv_tau ON (same as A-1, listed explicitly for clarity)
+  - run_name: ablation_temp_on_4k
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_selected_v3_quick.json
+    use_attn_temperature: true
+    decode_attn_impl: triton_fused
+    group_size_k: 16
+    group_size_v: 16
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  # B-2: KL calib + inv_tau OFF
+  - run_name: ablation_temp_off_4k
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_selected_v3_quick.json
+    use_attn_temperature: false
+    decode_attn_impl: triton_fused
+    group_size_k: 16
+    group_size_v: 16
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # C. Group size ablation
+  #    Sweep group_size: 16, 32, 64, 128 (applied to both K and V).
+  #    KL calibration, use_attn_temperature=true, seq_len=4096.
+  # =========================================================================
+
+  # C-1: group_size = 16 (same as A-1 / B-1, listed explicitly for sweep)
+  - run_name: ablation_gs16_4k
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_selected_v3_quick.json
+    use_attn_temperature: true
+    decode_attn_impl: triton_fused
+    group_size_k: 16
+    group_size_v: 16
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  # C-2: group_size = 32
+  - run_name: ablation_gs32_4k
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_selected_v3_quick.json
+    use_attn_temperature: true
+    decode_attn_impl: triton_fused
+    group_size_k: 32
+    group_size_v: 32
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  # C-3: group_size = 64
+  - run_name: ablation_gs64_4k
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_selected_v3_quick.json
+    use_attn_temperature: true
+    decode_attn_impl: triton_fused
+    group_size_k: 64
+    group_size_v: 64
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  # C-4: group_size = 128
+  - run_name: ablation_gs128_4k
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_selected_v3_quick.json
+    use_attn_temperature: true
+    decode_attn_impl: triton_fused
+    group_size_k: 128
+    group_size_v: 128
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # D. Static vs adaptive scales
+  #    Both use KL calibration, group_size=16, seq_len=4096.
+  # =========================================================================
+
+  # D-1: Static scales (no adaptive safeguard)
+  - run_name: ablation_static_4k
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_selected_v3_quick.json
+    use_attn_temperature: true
+    use_static_scales: true
+    adaptive_static_scales: false
+    decode_attn_impl: triton_fused
+    group_size_k: 16
+    group_size_v: 16
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  # D-2: Adaptive static scales (runtime safeguard enabled)
+  - run_name: ablation_adaptive_4k
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_selected_v3_quick.json
+    use_attn_temperature: true
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    decode_attn_impl: triton_fused
+    group_size_k: 16
+    group_size_v: 16
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  # D-3: Dynamic scales (no static scales — per-group online computation)
+  - run_name: ablation_dynamic_4k
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_selected_v3_quick.json
+    use_attn_temperature: true
+    use_static_scales: false
+    decode_attn_impl: triton_fused
+    group_size_k: 16
+    group_size_v: 16
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
