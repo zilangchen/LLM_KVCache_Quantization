@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-F1: KL Calibration Script (scripts/calibrate_behavior.py)
+F1: Behavior-Aligned Calibration Script (scripts/calibrate_behavior.py)
+
+Supports KL divergence (default) and MSE loss functions for calibration
+via --loss_function {kl, mse}.
 
 Outputs:
   - artifacts/kv_calib_kl.json (static k/v scales + per-head inv_tau)
@@ -158,6 +161,7 @@ def compute_inv_tau(
     group_size: int,
     inv_tau_candidates: List[float],
     qmax: int,
+    loss_function: str = "kl",
 ) -> torch.Tensor:
     sm_scale = 1.0 / (head_dim ** 0.5)
     inv_tau_tensor = torch.ones((len(k_scales), num_heads), dtype=torch.float32)
@@ -170,7 +174,7 @@ def compute_inv_tau(
         scale_layer = k_scales[layer_idx]  # [kv_heads, num_groups]
         for head_idx in range(num_heads):
             kv_head = head_idx // kv_ratio
-            kl_accum = torch.zeros(len(inv_tau_candidates), dtype=torch.float32)
+            loss_accum = torch.zeros(len(inv_tau_candidates), dtype=torch.float32)
 
             for sample_idx in range(len(q_samples)):
                 q = q_samples[sample_idx][layer_idx][head_idx].float()  # [D]
@@ -190,12 +194,18 @@ def compute_inv_tau(
                 logits_scaled = logits_quant.unsqueeze(0) * inv_tau_candidates_t[:, None]
                 p_quant = torch.softmax(logits_scaled, dim=-1)
 
-                p_ref_safe = torch.clamp(p_ref, min=eps)
-                p_quant_safe = torch.clamp(p_quant, min=eps)
-                kl = (p_ref_safe * (torch.log(p_ref_safe) - torch.log(p_quant_safe))).sum(dim=-1)
-                kl_accum += kl
+                if loss_function == "mse":
+                    # MSE between FP16 and quantized attention distributions
+                    mse = ((p_ref.unsqueeze(0) - p_quant) ** 2).mean(dim=-1)
+                    loss_accum += mse
+                else:
+                    # KL divergence (default)
+                    p_ref_safe = torch.clamp(p_ref, min=eps)
+                    p_quant_safe = torch.clamp(p_quant, min=eps)
+                    kl = (p_ref_safe * (torch.log(p_ref_safe) - torch.log(p_quant_safe))).sum(dim=-1)
+                    loss_accum += kl
 
-            best_idx = torch.argmin(kl_accum).item()
+            best_idx = torch.argmin(loss_accum).item()
             inv_tau_tensor[layer_idx, head_idx] = inv_tau_candidates[best_idx]
 
     return inv_tau_tensor
@@ -215,20 +225,25 @@ def evaluate_quant_candidate(
     qmax: int,
     outlier_rescue_ratio: float = 0.0,
     mixed_rescue: bool = False,
+    loss_function: str = "kl",
 ) -> Dict[str, float]:
     """
     Evaluate one candidate quantization setting.
 
     Returns:
-      - mean_kl, p95_kl, max_kl over attention distributions
-      - k_clip_rate, v_clip_rate (fraction of elements clipped to int8 range)
-      - v_rel_l2_mean (value dequant relative L2 error, mean over heads/samples/layers)
+      When loss_function=="kl":
+        - mean_kl, p95_kl, max_kl over attention distributions
+      When loss_function=="mse":
+        - mean_mse, p95_mse, max_mse over attention distributions
+      Always:
+        - k_clip_rate, v_clip_rate (fraction of elements clipped to int8 range)
+        - v_rel_l2_mean (value dequant relative L2 error, mean over heads/samples/layers)
     """
     sm_scale = 1.0 / (head_dim ** 0.5)
     kv_ratio = num_heads // num_kv_heads
     eps = 1e-6
 
-    kl_values: List[float] = []
+    loss_values: List[float] = []
     v_rel_l2_values: List[float] = []
     k_clip_count = 0
     k_total_count = 0
@@ -282,24 +297,36 @@ def evaluate_quant_candidate(
                 logits_quant = (q @ k_deq.T) * sm_scale
                 p_quant = torch.softmax(logits_quant, dim=-1)
 
-                p_ref_safe = torch.clamp(p_ref, min=eps)
-                p_quant_safe = torch.clamp(p_quant, min=eps)
-                kl = (p_ref_safe * (torch.log(p_ref_safe) - torch.log(p_quant_safe))).sum().item()
-                kl_values.append(float(kl))
+                if loss_function == "mse":
+                    # MSE between FP16 and quantized attention distributions
+                    mse = ((p_ref - p_quant) ** 2).mean().item()
+                    loss_values.append(float(mse))
+                else:
+                    # KL divergence (default)
+                    p_ref_safe = torch.clamp(p_ref, min=eps)
+                    p_quant_safe = torch.clamp(p_quant, min=eps)
+                    kl = (p_ref_safe * (torch.log(p_ref_safe) - torch.log(p_quant_safe))).sum().item()
+                    loss_values.append(float(kl))
 
-    if kl_values:
-        mean_kl = float(np.mean(kl_values))
-        p95_kl = float(np.quantile(np.array(kl_values, dtype=np.float64), 0.95))
-        max_kl = float(np.max(kl_values))
+    if loss_values:
+        mean_loss = float(np.mean(loss_values))
+        p95_loss = float(np.quantile(np.array(loss_values, dtype=np.float64), 0.95))
+        max_loss = float(np.max(loss_values))
     else:
-        mean_kl = 0.0
-        p95_kl = 0.0
-        max_kl = 0.0
+        mean_loss = 0.0
+        p95_loss = 0.0
+        max_loss = 0.0
+
+    # Build result dict with appropriate key names based on loss function
+    if loss_function == "mse":
+        loss_key_prefix = "mse"
+    else:
+        loss_key_prefix = "kl"
 
     return {
-        "mean_kl": mean_kl,
-        "p95_kl": p95_kl,
-        "max_kl": max_kl,
+        f"mean_{loss_key_prefix}": mean_loss,
+        f"p95_{loss_key_prefix}": p95_loss,
+        f"max_{loss_key_prefix}": max_loss,
         "k_clip_rate": float(k_clip_count / max(k_total_count, 1)),
         "v_clip_rate": float(v_clip_count / max(v_total_count, 1)),
         "v_rel_l2_mean": float(np.mean(v_rel_l2_values)) if v_rel_l2_values else 0.0,
@@ -311,23 +338,32 @@ def select_best_trial(
     objective: str,
     max_k_clip_rate: float,
     max_v_clip_rate: float,
+    loss_function: str = "kl",
 ) -> Tuple[Dict[str, float], Dict[str, object]]:
     if not trials:
         raise ValueError("No candidate trials found for calibration selection.")
 
-    if objective == "mean_kl":
+    # Determine loss metric key prefix based on objective and loss_function.
+    # For explicit mean_kl/mean_mse objectives, the key is in the objective name.
+    # For "robust", derive from loss_function.
+    if objective == "mean_mse" or (objective == "robust" and loss_function == "mse"):
+        mean_key, p95_key = "mean_mse", "p95_mse"
+    else:
+        mean_key, p95_key = "mean_kl", "p95_kl"
+
+    if objective in ("mean_kl", "mean_mse"):
         ranked = sorted(
             trials,
             key=lambda x: (
-                x["mean_kl"],
-                x["p95_kl"],
+                x[mean_key],
+                x[p95_key],
                 x["k_clip_rate"] + x["v_clip_rate"],
                 x["group_size"],
                 x["clip_percentile"],
             ),
         )
         return ranked[0], {
-            "mode": "mean_kl",
+            "mode": objective,
             "constraints": None,
             "num_feasible": len(trials),
             "num_trials": len(trials),
@@ -343,8 +379,8 @@ def select_best_trial(
         ranked = sorted(
             feasible,
             key=lambda x: (
-                x["p95_kl"],
-                x["mean_kl"],
+                x[p95_key],
+                x[mean_key],
                 x["v_rel_l2_mean"],
                 x["group_size"],
                 x["clip_percentile"],
@@ -364,8 +400,8 @@ def select_best_trial(
         trials,
         key=lambda x: (
             x["k_clip_rate"] + x["v_clip_rate"],
-            x["p95_kl"],
-            x["mean_kl"],
+            x[p95_key],
+            x[mean_key],
             x["v_rel_l2_mean"],
             x["group_size"],
             x["clip_percentile"],
@@ -426,8 +462,19 @@ def validate_group_size(head_dim: int, group_size: int, name: str) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="KL calibration for KV cache quantization")
+    parser = argparse.ArgumentParser(description="Behavior-aligned calibration for KV cache quantization")
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
+    parser.add_argument(
+        "--loss_function",
+        type=str,
+        default="kl",
+        choices=["kl", "mse"],
+        help=(
+            "Loss function for calibration: "
+            "kl=KL divergence between attention distributions (default); "
+            "mse=mean squared error between attention distributions."
+        ),
+    )
     parser.add_argument(
         "--model_revision",
         type=str,
@@ -506,10 +553,11 @@ def main():
         "--search_objective",
         type=str,
         default="robust",
-        choices=["robust", "mean_kl"],
+        choices=["robust", "mean_kl", "mean_mse"],
         help=(
-            "Selection objective: robust=prefer low p95_kl under clip-rate constraints; "
-            "mean_kl=backward-compatible pure mean KL ranking."
+            "Selection objective: robust=prefer low p95 loss under clip-rate constraints; "
+            "mean_kl=backward-compatible pure mean KL ranking; "
+            "mean_mse=pure mean MSE ranking."
         ),
     )
     parser.add_argument(
@@ -690,6 +738,7 @@ def main():
                         qmax=qmax,
                         outlier_rescue_ratio=float(outlier_ratio),
                         mixed_rescue=bool(args.int4_mixed_rescue),
+                        loss_function=args.loss_function,
                     )
                     trial = {
                         "group_size": group_size,
@@ -703,11 +752,13 @@ def main():
                         and trial["v_clip_rate"] <= args.search_max_v_clip_rate
                     )
                     trials.append(trial)
+                    loss_pfx = "mse" if args.loss_function == "mse" else "kl"
                     print(
                         "  "
                         f"group_size={group_size:>4} clip={clip_p:>5} "
                         f"outlier_ratio={outlier_ratio:.4f}: "
-                        f"mean_kl={trial['mean_kl']:.6f} p95_kl={trial['p95_kl']:.6f} "
+                        f"mean_{loss_pfx}={trial[f'mean_{loss_pfx}']:.6f} "
+                        f"p95_{loss_pfx}={trial[f'p95_{loss_pfx}']:.6f} "
                         f"k_clip={trial['k_clip_rate']:.4f} v_clip={trial['v_clip_rate']:.4f} "
                         f"v_rel_l2={trial['v_rel_l2_mean']:.6f}"
                     )
@@ -717,6 +768,7 @@ def main():
             objective=args.search_objective,
             max_k_clip_rate=args.search_max_k_clip_rate,
             max_v_clip_rate=args.search_max_v_clip_rate,
+            loss_function=args.loss_function,
         )
         args.group_size_k = int(best["group_size"])
         args.group_size_v = int(best["group_size"])
@@ -725,11 +777,12 @@ def main():
         args.int4_outlier_ratio = float(best.get("outlier_rescue_ratio", args.int4_outlier_ratio))
         args.int4_mixed_rescue = bool(best.get("mixed_rescue", args.int4_mixed_rescue))
 
+        loss_pfx_sort = "mse" if args.loss_function == "mse" else "kl"
         trials_sorted = sorted(
             trials,
             key=lambda x: (
-                x["p95_kl"],
-                x["mean_kl"],
+                x[f"p95_{loss_pfx_sort}"],
+                x[f"mean_{loss_pfx_sort}"],
                 x["k_clip_rate"] + x["v_clip_rate"],
                 x.get("outlier_rescue_ratio", 0.0),
                 x["group_size"],
@@ -743,13 +796,15 @@ def main():
         with open(trials_csv_path, "w") as f:
             f.write(
                 "rank,group_size,clip_percentile,outlier_rescue_ratio,mixed_rescue,"
-                "mean_kl,p95_kl,max_kl,k_clip_rate,v_clip_rate,v_rel_l2_mean,feasible\n"
+                f"mean_{loss_pfx_sort},p95_{loss_pfx_sort},max_{loss_pfx_sort},"
+                "k_clip_rate,v_clip_rate,v_rel_l2_mean,feasible\n"
             )
             for t in trials_sorted:
                 f.write(
                     f"{t['rank']},{t['group_size']},{t['clip_percentile']},"
                     f"{t.get('outlier_rescue_ratio', 0.0)},{t.get('mixed_rescue', 0)},"
-                    f"{t['mean_kl']},{t['p95_kl']},{t['max_kl']},"
+                    f"{t[f'mean_{loss_pfx_sort}']},{t[f'p95_{loss_pfx_sort}']},"
+                    f"{t[f'max_{loss_pfx_sort}']},"
                     f"{t['k_clip_rate']},{t['v_clip_rate']},{t['v_rel_l2_mean']},"
                     f"{int(bool(t['feasible']))}\n"
                 )
@@ -771,9 +826,9 @@ def main():
                 "clip_percentile": float(best["clip_percentile"]),
                 "outlier_rescue_ratio": float(best.get("outlier_rescue_ratio", 0.0)),
                 "mixed_rescue": bool(best.get("mixed_rescue", 0)),
-                "mean_kl": float(best["mean_kl"]),
-                "p95_kl": float(best["p95_kl"]),
-                "max_kl": float(best["max_kl"]),
+                f"mean_{loss_pfx_sort}": float(best[f"mean_{loss_pfx_sort}"]),
+                f"p95_{loss_pfx_sort}": float(best[f"p95_{loss_pfx_sort}"]),
+                f"max_{loss_pfx_sort}": float(best[f"max_{loss_pfx_sort}"]),
                 "k_clip_rate": float(best["k_clip_rate"]),
                 "v_clip_rate": float(best["v_clip_rate"]),
                 "v_rel_l2_mean": float(best["v_rel_l2_mean"]),
@@ -791,8 +846,8 @@ def main():
     k_scales = scales_from_absmax_samples(k_absmax_samples, args.clip_percentile_k, qmax=qmax)
     v_scales = scales_from_absmax_samples(v_absmax_samples, args.clip_percentile_v, qmax=qmax)
 
-    # Compute inv_tau (KL minimization)
-    print("Computing per-head inv_tau...")
+    # Compute inv_tau (loss minimization)
+    print(f"Computing per-head inv_tau (loss_function={args.loss_function})...")
     inv_tau_candidates = [float(x) for x in args.inv_tau_candidates.split(",") if x.strip()]
     inv_tau = compute_inv_tau(
         q_samples=q_samples,
@@ -804,6 +859,7 @@ def main():
         group_size=args.group_size_k,
         inv_tau_candidates=inv_tau_candidates,
         qmax=qmax,
+        loss_function=args.loss_function,
     )
 
     # Save calibration file
@@ -811,6 +867,7 @@ def main():
         "version": 1,
         "model_id": args.model_id,
         "generated_at": datetime.now().isoformat(),
+        "loss_function": args.loss_function,
         "quant_bits": int(args.quant_bits),
         "qmax": int(qmax),
         "num_layers": num_layers,

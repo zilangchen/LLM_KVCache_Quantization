@@ -275,6 +275,7 @@ def generate_from_ids(
     decode_attn_impl: str = "triton_fused",
     allow_missing_calib: bool = False,
     stop_on_eos: bool = True,
+    quant_bits: Optional[int] = None,
 ) -> GenerationBatchOutput:
     """
     Batched generation loop using explicit prefill + token-by-token decode.
@@ -299,11 +300,13 @@ def generate_from_ids(
         "int4_fused",
         "int4_ours",
         "int4_ours_mixed",
+        "kivi_style",
     ]:
         raise ValueError(
             f"kv_mode='{kv_mode}' not supported. "
             "Choose from ['fp16', 'int8_baseline', 'int8_fused', 'int8_ours', "
-            "'int4_baseline', 'int4_fused', 'int4_ours', 'int4_ours_mixed']."
+            "'int4_baseline', 'int4_fused', 'int4_ours', 'int4_ours_mixed', "
+            "'kivi_style']."
         )
 
     if decode_attn_impl not in ["triton_fused", "torch_ref"]:
@@ -529,6 +532,16 @@ def generate_from_ids(
             outlier_rescue_ratio=outlier_rescue_ratio,
             mixed_rescue=mixed_rescue,
         )
+    elif kv_mode == "kivi_style":
+        from src.cache import KIVIStyleKVCache
+
+        kivi_quant_bits = quant_bits if quant_bits is not None else 8
+        kv_cache = KIVIStyleKVCache(
+            num_layers=num_layers,
+            device=model.device.type,
+            max_seq_len=max_cache_len,
+            quant_bits=kivi_quant_bits,
+        )
     else:
         raise ValueError(f"Unsupported kv_mode: {kv_mode}")
 
@@ -623,7 +636,7 @@ def generate_from_ids(
                 from src.engine.patch_model import INT8CacheWrapperContainer
 
                 current_past_key_values = INT8CacheWrapperContainer(kv_cache, num_layers)
-            elif kv_mode in ["int8_baseline", "int4_baseline"]:
+            elif kv_mode in ["int8_baseline", "int4_baseline", "kivi_style"]:
                 # For baseline modes, we dequantize BEFORE attention
                 current_past_key_values = []
                 for i in range(num_layers):

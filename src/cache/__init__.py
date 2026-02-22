@@ -10,6 +10,7 @@ Available caches:
 from src.cache.fp16_cache import FP16KVCache
 from src.cache.int8_cache import INT8KVCache
 from src.cache.int4_cache import INT4KVCache
+from src.cache.kivi_style_cache import KIVIStyleKVCache
 
-__all__ = ["FP16KVCache", "INT8KVCache", "INT4KVCache"]
+__all__ = ["FP16KVCache", "INT8KVCache", "INT4KVCache", "KIVIStyleKVCache"]
 

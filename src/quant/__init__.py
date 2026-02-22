@@ -19,10 +19,25 @@ from src.quant.int4_basic import (
     quantize_symmetric_int4,
 )
 
+from src.quant.asymmetric_quant import (
+    quantize_asymmetric,
+    dequantize_asymmetric,
+    quantize_asymmetric_per_channel,
+    dequantize_asymmetric_per_channel,
+    quantize_asymmetric_per_token,
+    dequantize_asymmetric_per_token,
+)
+
 __all__ = [
-    "quantize_symmetric_int8", 
+    "quantize_symmetric_int8",
     "dequantize_symmetric_int8",
     "quantize_symmetric_int8_with_scale",
     "quantize_symmetric_int4",
     "dequantize_symmetric_int4",
+    "quantize_asymmetric",
+    "dequantize_asymmetric",
+    "quantize_asymmetric_per_channel",
+    "dequantize_asymmetric_per_channel",
+    "quantize_asymmetric_per_token",
+    "dequantize_asymmetric_per_token",
 ]
