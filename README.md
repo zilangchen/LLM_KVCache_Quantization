@@ -29,7 +29,7 @@ cd /root/LLM_KVCache_Quantization
 ```
 
 ### 2) 一键复现论文最终表图（推荐）
-- 复现协议：`docs/final_experiment_protocol.md`
+- 复现协议：`experiment_sop.md`
 - 当前最终验收目录（远端）：`/root/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/`
   - 表格：`.../tables/`
   - 图：`.../plots/`

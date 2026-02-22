@@ -7,7 +7,7 @@
 - Project purpose: reproducible KV-cache quantization research pipeline for efficient LLM inference.
 - Tech stack: Python 3.12, PyTorch, Transformers, Triton, numpy/pandas/matplotlib.
 - Key modules: `src/cache/`, `src/quant/`, `src/kernels/`, `src/engine/`, `scripts/`.
-- Architecture docs: `objective.md`, `README.md`, `docs/final_experiment_protocol.md`.
+- Architecture docs: `objective.md`, `README.md`, `experiment_sop.md`.
 - Coding conventions: follow existing style in repo; prefer minimal diffs and explicit reproducibility metadata.
 
 ## Mandatory planning gate

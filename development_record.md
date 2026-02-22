@@ -1,4 +1,6 @@
 # <Cursor-AI 2026-02-21 21:09:15>
+> Note (2026-02-22): `.agent/` and `docs/final_experiment_protocol.md` mentions below are historical records. Canonical active paths are `.agents/` and `experiment_sop.md`.
+
 ## 修改目的
 项目全面审查与优化：数据同步、补齐单元测试、消融实验状态确认、论文章节对齐、代码质量提升。
 

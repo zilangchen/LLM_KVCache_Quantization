@@ -13,6 +13,7 @@
 - `scripts/export_tables_latex.py`：将 `aggregate_results.py` 产出的 `tables/*.csv` 导出为论文可直接引用的 LaTeX 表格（booktabs）
 - `scripts/generate_thesis_report.py`：基于 `tables/` 生成顶会写作所需的证据报告（`reports/claim_validation.csv`、`reports/statistical_decision_summary.csv`、`reports/paper_ready_summary.md`）
 - `scripts/check_run_completeness.py`：检查指定 `run_tag` 的 required/stress 任务是否完整，输出可机读 `completion_report.json`，并返回稳定退出码供自动补跑循环使用。
+- `scripts/run_final_journal_v1.sh`：第4周主线重跑一键入口（`fp16/int8_baseline/int8_ours`），默认读取 `configs/snapshots/exp_matrix_week4_final_journal_v1.yaml`，输出 `results/final_journal_v1/`。
 - 评测脚本支持 `--adaptive_static_scales`（仅 `int8_ours`）：在使用静态 scale 时按 token 自适应抬升 scale，降低长上下文 clip 风险。
 
 说明：
