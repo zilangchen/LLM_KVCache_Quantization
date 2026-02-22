@@ -22,6 +22,10 @@ artifacts/
 logs/
 *.log
 
+# Claude Code local config
+.claude/settings.local.json
+.claude/worktrees/
+
 # Sensitive server credentials
 docs/autodl_server.md
 
