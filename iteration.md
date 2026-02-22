@@ -154,6 +154,30 @@ Canonical agent workflow directory is `.agents/`.
 **未修复的 M 节残留问题**：
 - M5（kv_mode 字母序排序）、M6（pivot aggfunc="mean" 静默平均）、M7/M8（边界情况）— 低优先级，不阻塞
 
+#### O. 深度审查 — `scripts/eval_ruler.py` 评分逻辑（第七轮审查）
+
+> **严重警告**: eval_ruler.py 存在多个评分逻辑 bug，可能导致 RULER benchmark 结果不正确。在论文引用 RULER 数据前必须修复。
+
+- [ ] `[CRITICAL]` MK-NIAH `hits_exact` 计数器死代码 (L172-174): `pass` 语句不执行 `hits_exact += 1`，`hits_exact` 变量初始化后从未递增。当前 `exact_match` 改由 `all_present` 逻辑补位（L177-180），但设计意图不清——若要逐个键检查 exact match 则逻辑缺失
+- [ ] `[CRITICAL]` VT 多链评分仅评价第一条链 (L216, L442): 多链 VT 时 `expected_answers` 含 N 个值，但 `_score_case()` 调用 `_score_single_answer(prediction, case.expected_answers[0])` 只取第一个值。若 `ruler_vt_num_chains > 1`（默认=1 暂安全），其余链的答案被完全忽略
+- [ ] `[CRITICAL]` 上下文截断从右侧保留破坏 RULER 语义 (L546-554): `_truncate_prompt_ids()` 在 prompt 超 `context_len` 时执行 `ids = ids[-max_tokens:]`（保留末尾 question，丢弃前面的 context/haystack）。RULER 的核心是在长上下文中检索，截断 context 使 benchmark 退化为短上下文问题。应从左侧截断或直接报错拒绝
+- [ ] `[HIGH]` kivi_style quant_bits 推断为 16 (L985): `"int4" in "kivi_style"` 和 `"int8" in "kivi_style"` 均 False → fallback 到 16。CSV 中 quant_bits 字段错误（与 E5 同类问题，此处为 eval_ruler 实例）
+- [ ] `[MEDIUM]` CWE pred_words 未过滤空字符串 (L193): `truth_words` 通过 `if _normalize_text(a)` 过滤空串，但 `pred_words` 未做同样过滤。若模型输出仅含标点/空格，`pred_words` 可能含空字符串导致意外 set 匹配
+- [ ] `[LOW]` `_token_f1()` 分母过度保护 (L140-141): `max(1, len(pred_tokens))` 在 `common=0` 时冗余（0/1=0 已安全），代码意图不清
+
+#### P. 深度审查 — 测试覆盖质量（第七轮审查）
+
+> test_kivi_cache.py / test_asymmetric_quant.py / test_aggregate_results_stats.py 覆盖率评估
+
+- [ ] `[HIGH]` B1 修复验证不完整 (test_kivi_cache.py L233-242): `test_clear()` 仅检查 `get_seq_len()==0`，未验证 `_k_scale_initialized` 状态或 clear→re-append 时 K-scale 是否重新计算（B1 核心场景）
+- [ ] `[HIGH]` K decode 量化误差无测试: prefill 阶段计算 K per-channel scale 后，decode 新 token 用相同 scale 量化的误差从未被测试。这是 KIVI 区别于对称量化的核心特性
+- [ ] `[MEDIUM]` 缺少 float16 输入测试: 所有测试用 float32，但生产环境用 float16。`_make_cache()` 默认 `dtype=torch.float32`，而 `KIVIStyleKVCache` 默认 `dtype=torch.float16`
+- [ ] `[MEDIUM]` 缺少 per-channel/per-token 轴语义验证 (test_asymmetric_quant.py): 测试验证 shape 正确但不验证"同一 channel 的不同 token 共享同一 scale"的核心语义
+- [ ] `[MEDIUM]` C1/C2 修复缺少边界值测试: 无 `percentile=50.0`（应拒绝）、`percentile=50.01`（应通过）、`percentile=100.1`（应拒绝）的显式测试
+- [ ] `[MEDIUM]` 统计测试缺少混合符号 sign-flip 场景 (test_aggregate_results_stats.py): 仅测试全正差异（p=2/16=0.125），缺少正负混合的 p-value 计算验证
+- [ ] `[LOW]` 缺少单 token、batch=0、head_dim=1 等极端边界测试
+- [ ] `[LOW]` 缺少多轮 clear→append 循环测试（生产中常见的 batch 间重用 cache 场景）
+
 ---
 
 ## Approved Plans
@@ -163,25 +187,25 @@ Canonical agent workflow directory is `.agents/`.
 
 ### Plan: EMNLP 2026 Phase 4 — MSE 校准 + 消融（仅 1.5B）
 - **批准日期**：2026-02-23
-- **前置条件**：⚠️ 先修复 TODO Backlog A 节 MSE 校准缺陷
-- **状态**：待执行
+- **前置条件**：✅ A 节 MSE 校准缺陷已修复
+- **状态**：执行中
 - **内容**：
-  - [ ] 生成 MSE 校准产物：`artifacts/kv_calib_mse_1p5b_int8.json` + `artifacts/kv_calib_mse_1p5b_int4.json`
-  - [ ] 创建消融配置：KL vs MSE vs percentile / inv_tau on/off / group_size 16/32/64/128 / static vs adaptive
+  - [x] 生成 MSE 校准产物：`artifacts/kv_calib_mse_1p5b_int8.json` + `artifacts/kv_calib_mse_1p5b_int4.json` — ✅ 完成 2026-02-23 06:03
+  - [x] 创建消融配置：14 runs ablation matrix — ✅ 完成 commit f07422d
   - [ ] 运行消融实验矩阵（needle/PPL/LongBench，5 seeds，1.5B only）
 
 ### Plan: EMNLP 2026 Phase 5 — 全矩阵实验
 - **批准日期**：2026-02-23
-- **前置条件**：⚠️ 先修复 TODO Backlog B-F 节所有 CRITICAL/HIGH 问题
+- **前置条件**：✅ B-F 节 CRITICAL/HIGH 已修复
 - **状态**：待执行
 - **内容**：
-  - [ ] 更新 7B/8B 配置：保留 batch=1,2,4,8,16 吞吐量；FP16 删 b24/b32 避免 OOM；添加 KIVI 条目
+  - [x] 更新 7B/8B 配置：保留 batch=1,2,4,8,16 吞吐量；FP16 删 b24/b32 避免 OOM；添加 KIVI 条目 — ✅ commit f07422d
   - [ ] 1.5B KIVI 补跑（6 运行 × 5 seeds × 4 tasks）
   - [ ] Qwen2.5-7B 全矩阵（全 kv_modes × 5 seeds × 4 tasks + 吞吐量）
   - [ ] LLaMA-3.1-8B 全矩阵（同上）
   - [ ] 3 模型延迟/显存 profiling
-  - [ ] 修复 `export_tables_latex.py` (L41-61)：KV_MODE_ORDER/DISPLAY 缺 kivi_style
-  - [ ] 扩展 `generate_thesis_report.py` (L59)：claims C5-C8（INT4/KIVI/跨模型）
+  - [x] 修复 `export_tables_latex.py`：KV_MODE_ORDER/DISPLAY 缺 kivi_style — ✅ commit 8bf9414
+  - [x] 扩展 `generate_thesis_report.py`：claims C7-C11 — ✅ commit 8bf9414
 
 ### Plan: EMNLP 2026 Phase 6 — 聚合 + 统计修复 + 论文准备
 - **批准日期**：2026-02-23
@@ -227,6 +251,21 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
 
 ## Timeline (Latest First)
+
+### 2026-02-23 06:19 | Phase 4.1: MSE Calibration Complete + Phase 5 Blockers Resolved
+- **Goal**: Generate MSE calibration artifacts for 1.5B model; fix remaining CRITICAL/HIGH blockers for Phase 5
+- **Changed files**:
+  - `scripts/eval_ppl.py`: Added kivi_style branch in build_kv_cache() + quant_bits parameter (L-1 fix)
+  - `scripts/aggregate_results.py`: Added KIVI significance pairings, longbench_official_macro, model_id in sig_specs/ruler_depth_keys (M-1/M-2/M-3/M-4 fix)
+  - `iteration.md`: Updated 20+ backlog checkboxes, Phase 4 plan status
+- **Remote GPU tasks**:
+  - MSE INT8 calibration: `calibrate_behavior.py --loss_function mse --search --quant_bits 8` → artifacts/kv_calib_mse_1p5b_int8.json (41KB)
+  - MSE INT4 calibration: `calibrate_behavior.py --loss_function mse --search --quant_bits 4 --int4_search` → artifacts/kv_calib_mse_1p5b_int4.json (64KB)
+  - INT8 best: g16/clip=99.5 (p95_mse=0.000956); INT4 best: g16 search across outlier_ratios
+- **Commits**: 03ed4a0 (eval_ppl+aggregate fix), 03d2e13 (docs), 9f41659 (backlog checkboxes)
+- **Pushed**: 8 commits to origin/main (36921e6..9f41659)
+- **Backlog status**: All CRITICAL=0, remaining HIGH=3 (non-blocking: A-5 doc, D-2 design, K-1 usability)
+- **Next**: Run ablation experiments (14 configs × 5 seeds × 3 tasks) on remote GPU
 
 ### 2026-02-23 23:30 | Phase 4-6 Prep: Bug Fixes + Config Updates + Claims Extension
 
