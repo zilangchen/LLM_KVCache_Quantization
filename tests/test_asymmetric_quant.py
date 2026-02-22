@@ -112,20 +112,23 @@ class TestAsymmetricQuantEdgeCases(unittest.TestCase):
         self.assertFalse(torch.isinf(x_hat).any())
 
     def test_percentile_clipping(self):
-        """Percentile clipping should reduce outlier influence."""
-        x = torch.randn(1, 2, 32, 16)
-        x[0, 0, 0, 0] = 100.0  # outlier
-        # Without clipping
+        """Percentile clipping should reduce outlier influence on the outlier row."""
+        # Use a larger head_dim so percentile clipping has meaningful effect
+        x = torch.randn(1, 2, 32, 128)
+        x[0, 0, 0, 0] = 100.0  # extreme outlier
+        # Without clipping — outlier dominates scale on that row
         q1, s1, zp1 = quantize_asymmetric(x, axis=-1, quant_bits=8, percentile=100.0)
         x1 = dequantize_asymmetric(q1, s1, zp1, axis=-1)
         # With clipping
         q2, s2, zp2 = quantize_asymmetric(x, axis=-1, quant_bits=8, percentile=99.0)
         x2 = dequantize_asymmetric(q2, s2, zp2, axis=-1)
-        # Non-outlier values should have better precision with clipping
-        mask = x.abs() < 5.0
-        err_no_clip = (x[mask] - x1[mask]).abs().mean()
-        err_clip = (x[mask] - x2[mask]).abs().mean()
-        self.assertLessEqual(err_clip.item(), err_no_clip.item() * 1.1)
+        # On the outlier row, non-outlier elements should improve with clipping
+        row = x[0, 0, 0, 1:]  # skip the outlier element itself
+        row1 = x1[0, 0, 0, 1:]
+        row2 = x2[0, 0, 0, 1:]
+        err_no_clip = (row - row1).abs().mean()
+        err_clip = (row - row2).abs().mean()
+        self.assertLess(err_clip.item(), err_no_clip.item())
 
 
 class TestPerChannelQuantization(unittest.TestCase):
