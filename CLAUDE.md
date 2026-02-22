@@ -95,6 +95,11 @@ python scripts/export_tables_latex.py --tables_dir results/<tag>/tables --out_di
 
 纯只读操作（读代码、搜索、分析日志、回答问题）不需要 Plan，可直接执行。
 
+### 4.4 Phase 闸门：启动下一 Phase 前必须清空待办
+
+在启动任何新 Phase（如 Phase 5）之前，**必须先解决 `iteration.md` 顶部待办清单中属于当前 Phase 的所有条目**。
+若某条目因外部依赖无法完成，须在 iteration.md 中标注原因并降级为下一 Phase 的待办，不得无声跳过。
+
 ---
 
 ## 5. 编码与实现标准
@@ -129,7 +134,20 @@ python scripts/export_tables_latex.py --tables_dir results/<tag>/tables --out_di
 
 每完成一个里程碑（functional unit），按顺序执行：
 
-### 7.1 iteration.md 追加记录
+### 7.1 Approved Plans 区块
+
+`iteration.md` 中维护三个独立区块（从上到下）：
+
+1. **TODO Backlog** — 缺陷、待修复项、代码审查发现（仅问题，不含执行方案）
+2. **Approved Plans** — 经讨论并被用户认可的阶段性执行计划（含前置条件、状态、checklist）
+3. **Timeline** — 实际执行记录（append-only）
+
+规则：
+- 当一个 Plan 被用户讨论并认可后，必须追加到 `## Approved Plans` 区块（不要放在 TODO Backlog 里）
+- 每条 Plan 记录：批准日期、Plan 名称、前置条件、状态（待执行/执行中/已完成）、具体 checklist
+- Plan 完成后将状态改为"已完成"并记录完成日期，不删除原记录
+
+### 7.2 iteration.md 追加记录
 
 ```markdown
 ### YYYY-MM-DD HH:MM | 标题
@@ -141,18 +159,18 @@ python scripts/export_tables_latex.py --tables_dir results/<tag>/tables --out_di
 - Risks / follow-ups:
 ```
 
-### 7.2 运行验证命令
+### 7.3 运行验证命令
 
 至少跑 `pytest tests/ -v`（如涉及相关模块）。
 
-### 7.3 提交规范
+### 7.4 提交规范
 
 - **禁止** `git add .` —— 必须按语义分组 add
 - commit message 前缀：`feat:` / `fix:` / `refactor:` / `test:` / `docs:` / `chore:`
 - commit 后把 hash 写入 iteration.md 对应条目
 - **不主动 push**，除非用户明确要求
 
-### 7.4 仓库卫生
+### 7.5 仓库卫生
 
 - `git status` 必须干净
 - 临时输出归档到 `artifacts/YYYY-MM-DD/<topic>/`
@@ -209,7 +227,48 @@ python scripts/export_tables_latex.py --tables_dir results/<tag>/tables --out_di
 
 ---
 
-## 12. 安全红线
+## 12. Agent 角色体系（Agent Teams 模式）
+
+本项目支持三种 Agent 角色协作开发。通过 Agent Teams 启动时自动生效。
+
+### 主管 Agent（Supervisor）
+- 最高权限，负责从 `objective.md` 拆解目标为任务，通过 Agent Teams 调度开发 Agent 和审查 Agent
+- 运行 `/auto-iterate` 模式驱动全局迭代循环
+- 仅在以下情况退出：目标全部达成 / 迭代上限 / 必须用户决策的硬阻塞 / 连续 2 轮无进展
+- 可授予其他 agent 高级权限（`mode: "bypassPermissions"`）
+
+### 开发 Agent（Developer）
+- 高级权限（由主管授予），执行编码、测试、修复、远程 GPU 任务
+- 运行 `$auto-iterate` 核心循环，自主调用 `$debug-iterate` / `$unit-commit` / `$repo-hygiene`
+- 不需要向用户确认，连续修不好的 bug 上报主管而非用户
+- 远程操作参考 `.agents/skills/remote-server/SKILL.md`
+
+### 代码审查 Agent（Reviewer）
+- 只读权限为主，可写入 `iteration.md` TODO Backlog
+- 通过 `git diff` / `git log` 监控变更，对每次提交进行增量审查
+- **空闲时主动对整个代码库进行深度全量审查**（按模块轮转：src/ → scripts/ → tests/ → configs/）
+- 发现问题按严重性（CRITICAL/HIGH/MEDIUM/LOW）记录到 TODO Backlog，通知主管
+- 审查重点：数值正确性、接口兼容性、边界情况、测试覆盖、配置一致性
+- **常驻运行**，仅在用户手动终止 / 主管发送 shutdown / 所有开发任务完成时退出
+
+### 协作流程
+```
+主管 → 拆解 objective.md 为任务
+  ├── spawn 开发 Agent → 编码/测试/提交
+  ├── spawn 审查 Agent → 审查变更 → 写 TODO
+  ├── 审查发现问题 → 主管分配修复任务 → 开发 Agent 修复
+  └── 循环直到目标达成
+```
+
+---
+
+## 13. 远程服务器
+
+所有 GPU 实验在 AutoDL 远程服务器上运行。连接方式、tmux 会话管理、代码同步（rsync）、日志获取等操作规范见 `.agents/skills/remote-server/SKILL.md`，每次需要远程操作时必须参考该文件。
+
+---
+
+## 14. 安全红线
 
 - 不提交密钥、凭证、服务器地址到 git
 - 不在代码中硬编码 API key / password
