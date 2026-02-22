@@ -597,7 +597,7 @@ def main() -> int:
         except ModuleNotFoundError as exc:
             if getattr(exc, "name", None) == "torch":
                 print("Error: torch is not installed in this environment.")
-                print("Run this on the GPU server (see AGENTS.md and .agent/skills/remote-server/SKILL.md),")
+                print("Run this on the GPU server (see AGENTS.md and .agents/skills/remote-server/SKILL.md),")
                 print("or rerun with --dry_run to preview commands.")
                 return 2
             raise

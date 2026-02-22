@@ -13,7 +13,7 @@
 ## Mandatory planning gate
 
 - For any non-trivial change (multi-file change, new feature, refactor, or unclear bug):
-  - Create or update an ExecPlan in `.agent/execplans/<YYYY-MM-DD>_<slug>.md` following `.agent/PLANS.md`.
+  - Create or update an ExecPlan in `.agents/execplans/<YYYY-MM-DD>_<slug>.md` following `.agents/PLANS.md`.
   - Present the plan in chat and WAIT for `APPROVE PLAN` before coding.
 
 ## Mandatory iteration log + commit workflow
