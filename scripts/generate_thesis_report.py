@@ -51,6 +51,8 @@ DEFAULT_PRACTICAL_THRESHOLDS: Dict[str, float] = {
     "kv_cache_mem_mb": 20.0,
     "perplexity": -0.5,  # allow <=0.5% relative degradation as practical non-inferiority bound.
     "needle_pass_rate": -1.0,  # allow <=1% relative degradation for non-inferiority.
+    "longbench_score": -1.0,  # allow <=1% relative degradation for non-inferiority.
+    "ruler_pass_rate": -1.0,  # allow <=1% relative degradation for non-inferiority.
 }
 
 
@@ -102,6 +104,30 @@ def _default_claims(target_seq_len: int) -> List[ClaimSpec]:
             target_seq_len=None,
             target_ppl_mode="kv_cache",
             target_chunk_size=128,
+        ),
+        ClaimSpec(
+            claim_id="C5",
+            title="INT8-ours is non-inferior to INT8-baseline on LongBench score.",
+            metric="longbench_score",
+            baseline_mode="int8_baseline",
+            challenger_mode="int8_ours",
+            min_gain_pct=-1.0,
+            require_q_significance=False,
+            target_seq_len=target_seq_len,
+            target_batch=1,
+            note="Week5 external-validity benchmark.",
+        ),
+        ClaimSpec(
+            claim_id="C6",
+            title="INT8-ours is non-inferior to INT8-baseline on RULER pass rate.",
+            metric="ruler_pass_rate",
+            baseline_mode="int8_baseline",
+            challenger_mode="int8_ours",
+            min_gain_pct=-1.0,
+            require_q_significance=False,
+            target_seq_len=target_seq_len,
+            target_batch=1,
+            note="Week5 external-validity benchmark.",
         ),
     ]
 
@@ -512,8 +538,12 @@ def build_markdown_report(
     n_fail = int((claim_validation.get("status", pd.Series(dtype=object)) == "FAIL").sum())
     n_inc = int((claim_validation.get("status", pd.Series(dtype=object)) == "INCONCLUSIVE").sum())
 
-    critical = stat_decisions[stat_decisions.get("decision", "") == "significant_contradiction"]
-    weak = stat_decisions[stat_decisions.get("decision", "") == "insufficient_pairs"]
+    if "decision" in stat_decisions.columns:
+        decision_series = stat_decisions["decision"].astype(str)
+    else:
+        decision_series = pd.Series("", index=stat_decisions.index, dtype=object)
+    critical = stat_decisions[decision_series == "significant_contradiction"]
+    weak = stat_decisions[decision_series == "insufficient_pairs"]
 
     lines = []
     lines.append("# Paper-Ready Evidence Summary")

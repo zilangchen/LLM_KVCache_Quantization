@@ -8,7 +8,7 @@ Outputs:
 
 This script is intentionally "dumb but robust": it infers which CSVs to load by
 filename prefixes produced by the repo's scripts (profile_latency, profile_memory,
-profile_ppl, profile_needle, needle_details).
+profile_ppl, profile_needle, profile_longbench, profile_ruler, needle_details).
 """
 
 from __future__ import annotations
@@ -177,6 +177,8 @@ def _strict_log_failures(runs_dir: Path, logs_dir: Path | None) -> List[str]:
         "profile_memory": "profile_memory_*.csv",
         "eval_ppl": "profile_ppl_*.csv",
         "eval_needle": "profile_needle_*.csv",
+        "eval_longbench": "profile_longbench_*.csv",
+        "eval_ruler": "profile_ruler_*.csv",
     }
     for run_dir in sorted(runs_dir.iterdir()):
         if not run_dir.is_dir():
@@ -286,6 +288,8 @@ def _strict_manifest_and_artifact_checks(
         "profile_memory": "profile_memory_*.csv",
         "eval_ppl": "profile_ppl_*.csv",
         "eval_needle": "profile_needle_*.csv",
+        "eval_longbench": "profile_longbench_*.csv",
+        "eval_ruler": "profile_ruler_*.csv",
     }
     for run_dir in sorted(runs_dir.iterdir()):
         if not run_dir.is_dir():
@@ -369,6 +373,8 @@ def _collect_execution_coverage(
         "profile_memory": "profile_memory_*.csv",
         "eval_ppl": "profile_ppl_*.csv",
         "eval_needle": "profile_needle_*.csv",
+        "eval_longbench": "profile_longbench_*.csv",
+        "eval_ruler": "profile_ruler_*.csv",
     }
     for run_dir in sorted(runs_dir.iterdir()):
         if not run_dir.is_dir():
@@ -1202,6 +1208,8 @@ def _main_claims_32k_table(
     memory_summary: pd.DataFrame,
     needle_summary: pd.DataFrame,
     ppl_summary: pd.DataFrame,
+    longbench_summary: pd.DataFrame,
+    ruler_summary: pd.DataFrame,
     *,
     target_seq_len: int = 32704,
 ) -> pd.DataFrame:
@@ -1222,11 +1230,15 @@ def _main_claims_32k_table(
     mem = memory_summary.copy()
     ned = needle_summary.copy()
     ppl = ppl_summary.copy()
+    lb = longbench_summary.copy()
+    rul = ruler_summary.copy()
 
     lat_seq = _pick_seq(lat, target_seq_len)
     mem_seq = _pick_seq(mem, target_seq_len)
     ned_seq = _pick_seq(ned, target_seq_len)
-    if lat_seq is None and mem_seq is None and ned_seq is None:
+    lb_seq = _pick_seq(lb, target_seq_len)
+    rul_seq = _pick_seq(rul, target_seq_len)
+    if lat_seq is None and mem_seq is None and ned_seq is None and lb_seq is None and rul_seq is None:
         return pd.DataFrame()
 
     if not lat.empty and "batch" in lat.columns:
@@ -1249,6 +1261,10 @@ def _main_claims_32k_table(
 
     if ned_seq is not None and "seq_len" in ned.columns:
         ned = ned[pd.to_numeric(ned["seq_len"], errors="coerce") == float(ned_seq)]
+    if lb_seq is not None and "seq_len" in lb.columns:
+        lb = lb[pd.to_numeric(lb["seq_len"], errors="coerce") == float(lb_seq)]
+    if rul_seq is not None and "seq_len" in rul.columns:
+        rul = rul[pd.to_numeric(rul["seq_len"], errors="coerce") == float(rul_seq)]
 
     # PPL: choose kv_cache row with maximal tokens_evaluated for each mode.
     if not ppl.empty and "ppl_mode" in ppl.columns:
@@ -1263,6 +1279,27 @@ def _main_claims_32k_table(
     mem_cols = [c for c in ["kv_mode", "gpu_mem_peak_mb_mean", "kv_cache_mem_mb_mean"] if c in mem.columns]
     ned_cols = [c for c in ["kv_mode", "needle_pass_rate_mean", "needle_exact_match_rate_mean"] if c in ned.columns]
     ppl_cols = [c for c in ["kv_mode", "perplexity_mean", "tokens_evaluated_mean"] if c in ppl.columns]
+    lb_cols = [
+        c
+        for c in [
+            "kv_mode",
+            "longbench_score_mean",
+            "longbench_f1_macro_mean",
+            "longbench_em_macro_mean",
+            "longbench_contains_macro_mean",
+        ]
+        if c in lb.columns
+    ]
+    rul_cols = [
+        c
+        for c in [
+            "kv_mode",
+            "ruler_pass_rate_mean",
+            "ruler_f1_mean_mean",
+            "ruler_contains_rate_mean",
+        ]
+        if c in rul.columns
+    ]
 
     if not lat_cols or not mem_cols:
         return pd.DataFrame()
@@ -1274,8 +1311,14 @@ def _main_claims_32k_table(
         out = out.merge(ned[ned_cols], on="kv_mode", how="outer")
     if ppl_cols:
         out = out.merge(ppl[ppl_cols], on="kv_mode", how="left")
+    if lb_cols:
+        out = out.merge(lb[lb_cols], on="kv_mode", how="left")
+    if rul_cols:
+        out = out.merge(rul[rul_cols], on="kv_mode", how="left")
 
-    out["claim_seq_len"] = int(lat_seq or mem_seq or ned_seq or target_seq_len)
+    out["claim_seq_len"] = int(
+        lat_seq or mem_seq or ned_seq or lb_seq or rul_seq or target_seq_len
+    )
     out = out.sort_values("kv_mode").reset_index(drop=True)
     return out
 
@@ -1775,6 +1818,263 @@ def main() -> int:
                     yerr="needle_exact_match_rate_ci95_half",
                 )
 
+    # LongBench (summary)
+    longbench = _read_csvs(runs_dir, ["profile_longbench_*.csv"])
+    longbench = _to_numeric(
+        longbench,
+        [
+            "seq_len",
+            "batch",
+            "seed",
+            "replica_id",
+            "ttft_ms",
+            "tpot_ms",
+            "tok_per_s",
+            "longbench_score",
+            "longbench_f1_macro",
+            "longbench_em_macro",
+            "longbench_contains_macro",
+            "longbench_task_count",
+            "longbench_sample_count",
+        ],
+    )
+    if "seed" not in longbench.columns and "run_id" in longbench.columns:
+        longbench["seed"] = longbench["run_id"].map(_extract_seed_from_run_id)
+    longbench = _to_numeric(longbench, ["seed"])
+    if args.strict:
+        strict_issues = _strict_missing_seed(longbench, table_name="longbench")
+        if strict_issues:
+            _print_strict_issues(strict_issues)
+            return 2
+    longbench_keys = [
+        c
+        for c in [
+            "model_id",
+            "hardware",
+            "kv_mode",
+            "seq_len",
+            "batch",
+            "group_size",
+            "clip_percentile",
+            "longbench_source",
+        ]
+        if c in longbench.columns
+    ]
+    longbench_summary = _agg_mean_std(
+        longbench,
+        longbench_keys,
+        [
+            "longbench_score",
+            "longbench_f1_macro",
+            "longbench_em_macro",
+            "longbench_contains_macro",
+            "longbench_task_count",
+            "longbench_sample_count",
+            "ttft_ms",
+            "tpot_ms",
+            "tok_per_s",
+        ],
+    )
+    if not longbench_summary.empty:
+        longbench_summary = _add_ci95_columns(longbench_summary)
+        _save_table(longbench_summary, tables_dir / "longbench_summary.csv")
+        if (
+            "seq_len" in longbench_summary.columns
+            and "longbench_score_mean" in longbench_summary.columns
+        ):
+            _plot_lines(
+                longbench_summary,
+                x="seq_len",
+                y="longbench_score_mean",
+                hue="kv_mode",
+                title="LongBench Score vs Context Len",
+                xlabel="Context length (tokens)",
+                ylabel="LongBench score (macro F1, %)",
+                out_path=plots_dir / "longbench_score_vs_context.png",
+                yerr="longbench_score_ci95_half",
+            )
+
+    longbench_task = _read_csvs(runs_dir, ["longbench_task_summary_*.csv"])
+    longbench_task = _to_numeric(
+        longbench_task,
+        [
+            "seq_len",
+            "gen_len",
+            "sample_count",
+            "exact_match_rate",
+            "contains_match_rate",
+            "f1_mean",
+            "seed",
+            "replica_id",
+        ],
+    )
+    if not longbench_task.empty and "seed" not in longbench_task.columns and "run_id" in longbench_task.columns:
+        longbench_task["seed"] = longbench_task["run_id"].map(_extract_seed_from_run_id)
+    longbench_task = _to_numeric(longbench_task, ["seed"])
+    if args.strict:
+        strict_issues = _strict_missing_seed(longbench_task, table_name="longbench_task")
+        if strict_issues:
+            _print_strict_issues(strict_issues)
+            return 2
+    longbench_task_keys = [
+        c
+        for c in ["task_name", "kv_mode", "seq_len", "gen_len", "run_name"]
+        if c in longbench_task.columns
+    ]
+    longbench_task_summary = _agg_mean_std(
+        longbench_task,
+        longbench_task_keys,
+        ["exact_match_rate", "contains_match_rate", "f1_mean", "sample_count"],
+    )
+    if not longbench_task_summary.empty:
+        longbench_task_summary = _add_ci95_columns(longbench_task_summary)
+        _save_table(longbench_task_summary, tables_dir / "longbench_task_summary.csv")
+
+    # RULER (summary)
+    ruler = _read_csvs(runs_dir, ["profile_ruler_*.csv"])
+    ruler = _to_numeric(
+        ruler,
+        [
+            "seq_len",
+            "batch",
+            "seed",
+            "replica_id",
+            "ttft_ms",
+            "tpot_ms",
+            "tok_per_s",
+            "ruler_num_cases",
+            "ruler_num_kv_pairs",
+            "ruler_depth_count",
+            "ruler_pass_rate",
+            "ruler_contains_rate",
+            "ruler_f1_mean",
+            "ruler_score",
+        ],
+    )
+    if "seed" not in ruler.columns and "run_id" in ruler.columns:
+        ruler["seed"] = ruler["run_id"].map(_extract_seed_from_run_id)
+    ruler = _to_numeric(ruler, ["seed"])
+    if args.strict:
+        strict_issues = _strict_missing_seed(ruler, table_name="ruler")
+        if strict_issues:
+            _print_strict_issues(strict_issues)
+            return 2
+    ruler_keys = [
+        c
+        for c in [
+            "model_id",
+            "hardware",
+            "kv_mode",
+            "seq_len",
+            "batch",
+            "group_size",
+            "clip_percentile",
+            "ruler_num_kv_pairs",
+        ]
+        if c in ruler.columns
+    ]
+    ruler_summary = _agg_mean_std(
+        ruler,
+        ruler_keys,
+        [
+            "ruler_pass_rate",
+            "ruler_contains_rate",
+            "ruler_f1_mean",
+            "ruler_score",
+            "ruler_num_cases",
+            "ruler_depth_count",
+            "ttft_ms",
+            "tpot_ms",
+            "tok_per_s",
+        ],
+    )
+    if not ruler_summary.empty:
+        ruler_summary = _add_ci95_columns(ruler_summary)
+        _save_table(ruler_summary, tables_dir / "ruler_summary.csv")
+        if "seq_len" in ruler_summary.columns and "ruler_pass_rate_mean" in ruler_summary.columns:
+            _plot_lines(
+                ruler_summary,
+                x="seq_len",
+                y="ruler_pass_rate_mean",
+                hue="kv_mode",
+                title="RULER Pass Rate vs Context Len",
+                xlabel="Context length (tokens)",
+                ylabel="RULER pass rate (%)",
+                out_path=plots_dir / "ruler_pass_rate_vs_context.png",
+                yerr="ruler_pass_rate_ci95_half",
+            )
+
+    ruler_depth = _read_csvs(runs_dir, ["ruler_depth_summary_*.csv"])
+    ruler_depth = _to_numeric(
+        ruler_depth,
+        [
+            "seq_len",
+            "gen_len",
+            "depth_ratio",
+            "sample_count",
+            "ruler_pass_rate",
+            "ruler_contains_rate",
+            "ruler_f1_mean",
+            "seed",
+            "replica_id",
+        ],
+    )
+    if not ruler_depth.empty and "seed" not in ruler_depth.columns and "run_id" in ruler_depth.columns:
+        ruler_depth["seed"] = ruler_depth["run_id"].map(_extract_seed_from_run_id)
+    ruler_depth = _to_numeric(ruler_depth, ["seed"])
+    if args.strict:
+        strict_issues = _strict_missing_seed(ruler_depth, table_name="ruler_depth")
+        if strict_issues:
+            _print_strict_issues(strict_issues)
+            return 2
+    ruler_depth_keys = [
+        c for c in ["kv_mode", "seq_len", "depth_ratio"] if c in ruler_depth.columns
+    ]
+    ruler_depth_summary = _agg_mean_std(
+        ruler_depth,
+        ruler_depth_keys,
+        ["ruler_pass_rate", "ruler_contains_rate", "ruler_f1_mean", "sample_count"],
+    )
+    if not ruler_depth_summary.empty:
+        ruler_depth_summary = _add_ci95_columns(ruler_depth_summary)
+        _save_table(ruler_depth_summary, tables_dir / "ruler_depth_summary.csv")
+
+    # RULER task summary (per-subtask metrics)
+    ruler_task = _read_csvs(runs_dir, ["ruler_task_summary_*.csv"])
+    ruler_task = _to_numeric(
+        ruler_task,
+        [
+            "seq_len",
+            "sample_count",
+            "ruler_pass_rate",
+            "ruler_contains_rate",
+            "ruler_f1_mean",
+            "seed",
+            "replica_id",
+        ],
+    )
+    if not ruler_task.empty and "seed" not in ruler_task.columns and "run_id" in ruler_task.columns:
+        ruler_task["seed"] = ruler_task["run_id"].map(_extract_seed_from_run_id)
+    ruler_task = _to_numeric(ruler_task, ["seed"])
+    if args.strict:
+        strict_issues = _strict_missing_seed(ruler_task, table_name="ruler_task")
+        if strict_issues:
+            _print_strict_issues(strict_issues)
+            return 2
+    ruler_task_keys = [
+        c
+        for c in ["ruler_task", "kv_mode", "seq_len"]
+        if c in ruler_task.columns
+    ]
+    ruler_task_summary = _agg_mean_std(
+        ruler_task,
+        ruler_task_keys,
+        ["ruler_pass_rate", "ruler_contains_rate", "ruler_f1_mean", "sample_count"],
+    )
+    if not ruler_task_summary.empty:
+        ruler_task_summary = _add_ci95_columns(ruler_task_summary)
+        _save_table(ruler_task_summary, tables_dir / "ruler_task_summary.csv")
+
     # Needle details (curve over depth)
     needle_details = _read_csvs(runs_dir, ["needle_details_*.csv"])
     needle_details = _to_numeric(needle_details, ["context_len", "depth", "passed"])
@@ -1828,6 +2128,20 @@ def main() -> int:
             "key_cols": ["seq_len"],
             "higher_is_better": True,
         },
+        {
+            "df": longbench,
+            "metric_col": "longbench_score",
+            "metric_name": "longbench_score",
+            "key_cols": ["seq_len", "longbench_source"],
+            "higher_is_better": True,
+        },
+        {
+            "df": ruler,
+            "metric_col": "ruler_pass_rate",
+            "metric_name": "ruler_pass_rate",
+            "key_cols": ["seq_len", "ruler_num_kv_pairs"],
+            "higher_is_better": True,
+        },
     ]
     for spec in sig_specs:
         sig_summary, paired_rows = _significance_summary(
@@ -1874,6 +2188,8 @@ def main() -> int:
                 "batch",
                 "ppl_mode",
                 "chunk_size",
+                "longbench_source",
+                "ruler_num_kv_pairs",
                 "n_pairs",
                 "n_unique_seeds",
                 "seed_min",
@@ -1953,6 +2269,26 @@ def main() -> int:
             higher_is_better=True,
         )
     )
+    gain_frames.append(
+        _relative_gain_table(
+            longbench_summary,
+            metric_col="longbench_score_mean",
+            metric_name="longbench_score",
+            key_cols=["seq_len", "longbench_source"],
+            pairings=pairings,
+            higher_is_better=True,
+        )
+    )
+    gain_frames.append(
+        _relative_gain_table(
+            ruler_summary,
+            metric_col="ruler_pass_rate_mean",
+            metric_name="ruler_pass_rate",
+            key_cols=["seq_len", "ruler_num_kv_pairs"],
+            pairings=pairings,
+            higher_is_better=True,
+        )
+    )
     gain_frames = [g for g in gain_frames if not g.empty]
     if gain_frames:
         gain_summary = pd.concat(gain_frames, ignore_index=True)
@@ -1963,6 +2299,8 @@ def main() -> int:
         memory_summary=memory_summary,
         needle_summary=needle_summary,
         ppl_summary=ppl_summary,
+        longbench_summary=longbench_summary,
+        ruler_summary=ruler_summary,
         target_seq_len=32704,
     )
     if not main_claims.empty:

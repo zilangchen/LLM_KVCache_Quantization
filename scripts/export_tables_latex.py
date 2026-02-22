@@ -10,6 +10,8 @@ Inputs (expected under --tables_dir):
   - memory_summary.csv
   - needle_summary.csv
   - ppl_summary.csv
+  - longbench_summary.csv
+  - ruler_summary.csv
 
 Outputs (written under --out_dir):
   - latency_tpot_vs_seq.tex
@@ -19,6 +21,8 @@ Outputs (written under --out_dir):
   - memory_gpu_peak_vs_seq.tex
   - needle_pass_rate_vs_seq.tex
   - ppl_summary.tex
+  - longbench_score_vs_seq.tex
+  - ruler_pass_rate_vs_seq.tex
   - all_tables.tex (\\input includes)
 
 Notes:
@@ -276,6 +280,68 @@ def export_ppl(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[Pa
     return paths
 
 
+def export_longbench(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[Path]:
+    paths: List[Path] = []
+    src = tables_dir / "longbench_summary.csv"
+    df = _read_csv(src)
+    if df.empty:
+        return paths
+
+    if "batch" in df.columns:
+        batch = pd.to_numeric(df["batch"], errors="coerce")
+        if (batch == 1).any():
+            df = df[batch == 1]
+
+    df = _sort_kv_mode(df)
+    df = _display_kv_mode(df)
+
+    pivot = _pivot_metric(df, "longbench_score_mean", round_digits=2)
+    if pivot.empty:
+        return paths
+    tabular = _to_latex_tabular(pivot, index=False)
+    label = f"{label_prefix}:longbench:score"
+    latex = _latex_table_env(
+        tabular,
+        caption="LongBench macro score vs context length (%)",
+        label=label,
+    )
+    out_path = out_dir / "longbench_score_vs_seq.tex"
+    _write(out_path, latex)
+    paths.append(out_path)
+    return paths
+
+
+def export_ruler(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[Path]:
+    paths: List[Path] = []
+    src = tables_dir / "ruler_summary.csv"
+    df = _read_csv(src)
+    if df.empty:
+        return paths
+
+    if "batch" in df.columns:
+        batch = pd.to_numeric(df["batch"], errors="coerce")
+        if (batch == 1).any():
+            df = df[batch == 1]
+
+    df = _sort_kv_mode(df)
+    df = _display_kv_mode(df)
+
+    pivot = _pivot_metric(df, "ruler_pass_rate_mean", round_digits=2)
+    if pivot.empty:
+        return paths
+    tabular = _to_latex_tabular(pivot, index=False)
+    label = f"{label_prefix}:ruler:pass_rate"
+    latex = _latex_table_env(
+        tabular,
+        caption="RULER pass rate vs context length (%)",
+        label=label,
+    )
+    out_path = out_dir / "ruler_pass_rate_vs_seq.tex"
+    _write(out_path, latex)
+    paths.append(out_path)
+    return paths
+
+
 def export_main_claims(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[Path]:
     paths: List[Path] = []
     src = tables_dir / "thesis_main_claims_32k.csv"
@@ -294,6 +360,8 @@ def export_main_claims(tables_dir: Path, out_dir: Path, *, label_prefix: str) ->
             "kv_cache_mem_mb_mean",
             "needle_pass_rate_mean",
             "needle_exact_match_rate_mean",
+            "longbench_score_mean",
+            "ruler_pass_rate_mean",
             "perplexity_mean",
         ]
         if c in df.columns
@@ -306,6 +374,8 @@ def export_main_claims(tables_dir: Path, out_dir: Path, *, label_prefix: str) ->
         ("kv_cache_mem_mb_mean", 0),
         ("needle_pass_rate_mean", 2),
         ("needle_exact_match_rate_mean", 2),
+        ("longbench_score_mean", 2),
+        ("ruler_pass_rate_mean", 2),
         ("perplexity_mean", 4),
     ]:
         if col in out.columns:
@@ -332,7 +402,18 @@ def export_relative_gain(tables_dir: Path, out_dir: Path, *, label_prefix: str) 
         return paths
 
     # Keep thesis-critical pairs and metrics for a compact table.
-    df = df[df["metric"].isin(["tpot_ms", "kv_cache_mem_mb", "perplexity", "needle_pass_rate"])]
+    df = df[
+        df["metric"].isin(
+            [
+                "tpot_ms",
+                "kv_cache_mem_mb",
+                "perplexity",
+                "needle_pass_rate",
+                "longbench_score",
+                "ruler_pass_rate",
+            ]
+        )
+    ]
     df = df[df["baseline_mode"].isin(["int8_baseline", "int4_fused"])]
     df = df[df["challenger_mode"].isin(["int8_ours", "int4_ours"])]
     if "seq_len" in df.columns:
@@ -400,6 +481,8 @@ def main() -> int:
     written += export_memory(tables_dir, out_dir, label_prefix=label_prefix)
     written += export_needle(tables_dir, out_dir, label_prefix=label_prefix)
     written += export_ppl(tables_dir, out_dir, label_prefix=label_prefix)
+    written += export_longbench(tables_dir, out_dir, label_prefix=label_prefix)
+    written += export_ruler(tables_dir, out_dir, label_prefix=label_prefix)
     written += export_main_claims(tables_dir, out_dir, label_prefix=label_prefix)
     written += export_relative_gain(tables_dir, out_dir, label_prefix=label_prefix)
 

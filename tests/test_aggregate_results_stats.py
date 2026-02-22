@@ -149,6 +149,85 @@ class TestAggregateResultsStats(unittest.TestCase):
             self.assertEqual(len(failures), 1)
             self.assertEqual(failures.iloc[0]["failure_category"], "oom")
 
+    def test_main_claims_table_includes_external_validity_metrics(self):
+        latency_summary = pd.DataFrame(
+            [
+                {
+                    "kv_mode": "int8_ours",
+                    "seq_len": 32704,
+                    "batch": 1,
+                    "gen_len": 64,
+                    "tpot_ms_mean": 4.5,
+                    "ttft_ms_mean": 12.0,
+                    "tok_per_s_mean": 220.0,
+                }
+            ]
+        )
+        memory_summary = pd.DataFrame(
+            [
+                {
+                    "kv_mode": "int8_ours",
+                    "seq_len": 32704,
+                    "batch": 1,
+                    "gen_len": 64,
+                    "gpu_mem_peak_mb_mean": 8120.0,
+                    "kv_cache_mem_mb_mean": 1530.0,
+                }
+            ]
+        )
+        needle_summary = pd.DataFrame(
+            [
+                {
+                    "kv_mode": "int8_ours",
+                    "seq_len": 32704,
+                    "needle_pass_rate_mean": 92.0,
+                    "needle_exact_match_rate_mean": 91.0,
+                }
+            ]
+        )
+        ppl_summary = pd.DataFrame(
+            [
+                {
+                    "kv_mode": "int8_ours",
+                    "ppl_mode": "kv_cache",
+                    "tokens_evaluated_mean": 1000000,
+                    "perplexity_mean": 8.12,
+                }
+            ]
+        )
+        longbench_summary = pd.DataFrame(
+            [
+                {
+                    "kv_mode": "int8_ours",
+                    "seq_len": 32704,
+                    "longbench_score_mean": 88.5,
+                }
+            ]
+        )
+        ruler_summary = pd.DataFrame(
+            [
+                {
+                    "kv_mode": "int8_ours",
+                    "seq_len": 32704,
+                    "ruler_pass_rate_mean": 90.4,
+                }
+            ]
+        )
+
+        out = agg._main_claims_32k_table(  # pylint: disable=protected-access
+            latency_summary=latency_summary,
+            memory_summary=memory_summary,
+            needle_summary=needle_summary,
+            ppl_summary=ppl_summary,
+            longbench_summary=longbench_summary,
+            ruler_summary=ruler_summary,
+            target_seq_len=32704,
+        )
+        self.assertEqual(len(out), 1)
+        row = out.iloc[0]
+        self.assertAlmostEqual(float(row["longbench_score_mean"]), 88.5, places=6)
+        self.assertAlmostEqual(float(row["ruler_pass_rate_mean"]), 90.4, places=6)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -18,6 +18,8 @@ TASK_TO_CSV_PATTERN = {
     "profile_memory": "profile_memory_*.csv",
     "eval_ppl": "profile_ppl_*.csv",
     "eval_needle": "profile_needle_*.csv",
+    "eval_longbench": "profile_longbench_*.csv",
+    "eval_ruler": "profile_ruler_*.csv",
 }
 
 

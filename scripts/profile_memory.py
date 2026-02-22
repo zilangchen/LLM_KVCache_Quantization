@@ -138,6 +138,7 @@ def main():
             "int4_fused",
             "int4_ours",
             "int4_ours_mixed",
+            "kivi_style",
         ],
     )
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
@@ -160,6 +161,12 @@ def main():
     parser.add_argument("--calib_strategy", type=str, default=None)
     parser.add_argument("--decode_attn_impl", type=str, default=None)
     parser.add_argument("--calib_file", type=str, default=None)
+    parser.add_argument(
+        "--quant_bits",
+        type=int,
+        default=None,
+        help="Override quant_bits for CSV output (needed for kivi_style which can be 4 or 8).",
+    )
     parser.add_argument(
         "--use_attn_temperature",
         dest="use_attn_temperature",
@@ -294,6 +301,7 @@ def main():
         decode_attn_impl=args.decode_attn_impl or "triton_fused",
         seed=args.seed,
         stop_on_eos=False,
+        quant_bits=getattr(args, 'quant_bits', None),
     )
 
     hardware = get_hardware_info()
@@ -312,8 +320,8 @@ def main():
         input_ids = input_ids.repeat(int(args.batch), 1)
         attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=model.device)
         out = generate_from_ids(
-            model=model, 
-            tokenizer=tokenizer, 
+            model=model,
+            tokenizer=tokenizer,
             input_ids=input_ids,
             attention_mask=attention_mask,
             max_new_tokens=args.gen_len,
@@ -330,6 +338,7 @@ def main():
             decode_attn_impl=args.decode_attn_impl or "triton_fused",
             seed=args.seed,
             stop_on_eos=False,
+            quant_bits=getattr(args, 'quant_bits', None),
         )
     finally:
         monitor.stop()
@@ -357,7 +366,7 @@ def main():
             "model_id": args.model_id,
             "run_name": args.run_name,
             "kv_mode": args.kv_mode,
-            "quant_bits": 4 if "int4" in args.kv_mode else (8 if "int8" in args.kv_mode else 16),
+            "quant_bits": getattr(args, 'quant_bits', None) or (4 if "int4" in args.kv_mode else (8 if "int8" in args.kv_mode else 16)),
             "clip_percentile": args.clip_percentile,
             "group_size": args.group_size,
             "dtype": str(model.dtype),

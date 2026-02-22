@@ -105,6 +105,7 @@ def main():
             "int4_fused",
             "int4_ours",
             "int4_ours_mixed",
+            "kivi_style",
         ],
     )
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
@@ -129,6 +130,12 @@ def main():
     parser.add_argument("--calib_strategy", type=str, default=None)
     parser.add_argument("--decode_attn_impl", type=str, default=None)
     parser.add_argument("--calib_file", type=str, default=None)
+    parser.add_argument(
+        "--quant_bits",
+        type=int,
+        default=None,
+        help="Override quant_bits for CSV output (needed for kivi_style which can be 4 or 8).",
+    )
     parser.add_argument(
         "--use_attn_temperature",
         dest="use_attn_temperature",
@@ -271,6 +278,7 @@ def main():
             decode_attn_impl=args.decode_attn_impl or "triton_fused",
             seed=args.seed,
             stop_on_eos=False,
+            quant_bits=getattr(args, 'quant_bits', None),
         )
 
     print(f"Profiling ({args.runs} runs)...")
@@ -306,14 +314,10 @@ def main():
             decode_attn_impl=args.decode_attn_impl or "triton_fused",
             seed=args.seed,
             stop_on_eos=False,
+            quant_bits=getattr(args, 'quant_bits', None),
         )
 
-        if "int4" in args.kv_mode:
-            quant_bits = 4
-        elif "int8" in args.kv_mode:
-            quant_bits = 8
-        else:
-            quant_bits = 16
+        quant_bits = getattr(args, 'quant_bits', None) or (4 if "int4" in args.kv_mode else (8 if "int8" in args.kv_mode else 16))
 
         prefill_tok_per_s = 0.0
         if out.ttft_ms > 0:

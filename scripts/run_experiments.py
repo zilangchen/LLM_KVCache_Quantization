@@ -31,6 +31,8 @@ TASK_TO_SCRIPT = {
     "profile_memory": "scripts/profile_memory.py",
     "eval_ppl": "scripts/eval_ppl.py",
     "eval_needle": "scripts/eval_needle.py",
+    "eval_longbench": "scripts/eval_longbench.py",
+    "eval_ruler": "scripts/eval_ruler.py",
 }
 
 TASK_TO_CSV_PATTERNS = {
@@ -38,6 +40,8 @@ TASK_TO_CSV_PATTERNS = {
     "profile_memory": "profile_memory_*.csv",
     "eval_ppl": "profile_ppl_*.csv",
     "eval_needle": "profile_needle_*.csv",
+    "eval_longbench": "profile_longbench_*.csv",
+    "eval_ruler": "profile_ruler_*.csv",
 }
 
 
@@ -116,6 +120,8 @@ def _existing_result_git_commits(run_dir: Path) -> List[str]:
         "profile_memory_*.csv",
         "profile_ppl_*.csv",
         "profile_needle_*.csv",
+        "profile_longbench_*.csv",
+        "profile_ruler_*.csv",
     ]
     for pattern in patterns:
         for path in run_dir.glob(pattern):
@@ -532,6 +538,15 @@ def main() -> int:
             "NOTE: kv_cache PPL can still be slow on large settings; reduce this if you hit time limits."
         ),
     )
+    parser.add_argument(
+        "--ppl_target_tokens",
+        type=int,
+        default=None,
+        help=(
+            "Pass through to eval_ppl.py --target_tokens. "
+            "When set, each run must evaluate at least this many tokens."
+        ),
+    )
     parser.add_argument("--needle_context_len", type=int, default=None)
     parser.add_argument(
         "--needle_num_depths",
@@ -556,6 +571,127 @@ def main() -> int:
         action="store_true",
         default=False,
         help="Pass through to eval_needle.py --report_exact_match (appendix metric only).",
+    )
+    parser.add_argument(
+        "--longbench_source",
+        type=str,
+        default="synthetic",
+        choices=["synthetic", "hf", "jsonl"],
+        help="Pass through to eval_longbench.py --longbench_source.",
+    )
+    parser.add_argument(
+        "--longbench_tasks",
+        type=str,
+        default=None,
+        help="Pass through to eval_longbench.py --longbench_tasks (comma-separated).",
+    )
+    parser.add_argument(
+        "--longbench_dataset_repo",
+        type=str,
+        default="THUDM/LongBench",
+        help="Pass through to eval_longbench.py --longbench_dataset_repo.",
+    )
+    parser.add_argument(
+        "--longbench_dataset_split",
+        type=str,
+        default="test",
+        help="Pass through to eval_longbench.py --longbench_dataset_split.",
+    )
+    parser.add_argument(
+        "--longbench_dataset_path",
+        type=str,
+        default=None,
+        help="Pass through to eval_longbench.py --longbench_dataset_path for jsonl source.",
+    )
+    parser.add_argument(
+        "--longbench_max_samples",
+        type=int,
+        default=32,
+        help="Pass through to eval_longbench.py --longbench_max_samples (per task).",
+    )
+    parser.add_argument(
+        "--longbench_max_new_tokens",
+        type=int,
+        default=64,
+        help="Pass through to eval_longbench.py --longbench_max_new_tokens.",
+    )
+    parser.add_argument(
+        "--longbench_context_len",
+        type=int,
+        default=None,
+        help="Pass through to eval_longbench.py --longbench_context_len.",
+    )
+    parser.add_argument(
+        "--longbench_allow_synthetic_fallback",
+        action="store_true",
+        default=False,
+        help="Pass through to eval_longbench.py --longbench_allow_synthetic_fallback.",
+    )
+    parser.add_argument(
+        "--ruler_num_cases",
+        type=int,
+        default=64,
+        help="Pass through to eval_ruler.py --ruler_num_cases.",
+    )
+    parser.add_argument(
+        "--ruler_num_kv_pairs",
+        type=int,
+        default=256,
+        help="Pass through to eval_ruler.py --ruler_num_kv_pairs.",
+    )
+    parser.add_argument(
+        "--ruler_depth_ratios",
+        type=str,
+        default="0.1,0.5,0.9",
+        help="Pass through to eval_ruler.py --ruler_depth_ratios.",
+    )
+    parser.add_argument(
+        "--ruler_max_new_tokens",
+        type=int,
+        default=32,
+        help="Pass through to eval_ruler.py --ruler_max_new_tokens.",
+    )
+    parser.add_argument(
+        "--ruler_context_len",
+        type=int,
+        default=None,
+        help="Pass through to eval_ruler.py --ruler_context_len.",
+    )
+    parser.add_argument(
+        "--ruler_tasks",
+        type=str,
+        default=None,
+        help="Pass through to eval_ruler.py --ruler_tasks (comma-separated).",
+    )
+    parser.add_argument(
+        "--ruler_mk_num_keys",
+        type=int,
+        default=4,
+        help="Pass through to eval_ruler.py --ruler_mk_num_keys.",
+    )
+    parser.add_argument(
+        "--ruler_vt_num_chains",
+        type=int,
+        default=1,
+        help="Pass through to eval_ruler.py --ruler_vt_num_chains.",
+    )
+    parser.add_argument(
+        "--ruler_vt_num_hops",
+        type=int,
+        default=4,
+        help="Pass through to eval_ruler.py --ruler_vt_num_hops.",
+    )
+    parser.add_argument(
+        "--ruler_cwe_freq",
+        type=int,
+        default=30,
+        help="Pass through to eval_ruler.py --ruler_cwe_freq.",
+    )
+    parser.add_argument(
+        "--ruler_cwe_num_words",
+        type=int,
+        default=10,
+        help="Pass through to eval_ruler.py --ruler_cwe_num_words.",
     )
     parser.add_argument(
         "--latency_runs",
@@ -720,6 +856,7 @@ def main() -> int:
             "int4_fused",
             "int4_ours",
             "int4_ours_mixed",
+            "kivi_style",
         ]:
             print(f"Skip unsupported kv_mode={kv_mode} for {run_name}")
             continue
@@ -870,6 +1007,9 @@ def main() -> int:
                     cmd.extend(["--run_name", str(run_name)])
                 if model_revision:
                     cmd.extend(["--model_revision", str(model_revision)])
+                run_quant_bits = run_entry.get("quant_bits", quant_defaults.get("quant_bits"))
+                if run_quant_bits is not None:
+                    cmd.extend(["--quant_bits", str(run_quant_bits)])
                 if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed"] and calib_file_path:
                     cmd.extend(["--calib_file", str(calib_file_path)])
                 if calib_params.get("calib_strategy"):
@@ -902,6 +1042,8 @@ def main() -> int:
                         cmd.extend(["--max_samples", str(args.ppl_max_samples)])
                     if args.ppl_chunk_size is not None:
                         cmd.extend(["--chunk_size", str(args.ppl_chunk_size)])
+                    if args.ppl_target_tokens is not None:
+                        cmd.extend(["--target_tokens", str(args.ppl_target_tokens)])
 
                 if task == "eval_needle":
                     cmd.extend(["--needle_max_new_tokens", str(args.needle_max_new_tokens)])
@@ -913,6 +1055,50 @@ def main() -> int:
                         cmd.extend(["--depth_batch", str(args.needle_depth_batch)])
                     if args.needle_report_exact_match:
                         cmd.append("--report_exact_match")
+
+                if task == "eval_longbench":
+                    cmd.extend(["--longbench_source", str(args.longbench_source)])
+                    cmd.extend(
+                        ["--longbench_dataset_repo", str(args.longbench_dataset_repo)]
+                    )
+                    cmd.extend(
+                        ["--longbench_dataset_split", str(args.longbench_dataset_split)]
+                    )
+                    cmd.extend(
+                        ["--longbench_max_samples", str(args.longbench_max_samples)]
+                    )
+                    cmd.extend(
+                        ["--longbench_max_new_tokens", str(args.longbench_max_new_tokens)]
+                    )
+                    if args.longbench_tasks:
+                        cmd.extend(["--longbench_tasks", str(args.longbench_tasks)])
+                    if args.longbench_dataset_path:
+                        cmd.extend(
+                            ["--longbench_dataset_path", str(args.longbench_dataset_path)]
+                        )
+                    if args.longbench_context_len is not None:
+                        cmd.extend(
+                            ["--longbench_context_len", str(args.longbench_context_len)]
+                        )
+                    if args.longbench_allow_synthetic_fallback:
+                        cmd.append("--longbench_allow_synthetic_fallback")
+
+                if task == "eval_ruler":
+                    cmd.extend(["--ruler_num_cases", str(args.ruler_num_cases)])
+                    cmd.extend(["--ruler_num_kv_pairs", str(args.ruler_num_kv_pairs)])
+                    cmd.extend(["--ruler_depth_ratios", str(args.ruler_depth_ratios)])
+                    cmd.extend(
+                        ["--ruler_max_new_tokens", str(args.ruler_max_new_tokens)]
+                    )
+                    if args.ruler_context_len is not None:
+                        cmd.extend(["--ruler_context_len", str(args.ruler_context_len)])
+                    if args.ruler_tasks is not None:
+                        cmd.extend(["--ruler_tasks", str(args.ruler_tasks)])
+                    cmd.extend(["--ruler_mk_num_keys", str(args.ruler_mk_num_keys)])
+                    cmd.extend(["--ruler_vt_num_chains", str(args.ruler_vt_num_chains)])
+                    cmd.extend(["--ruler_vt_num_hops", str(args.ruler_vt_num_hops)])
+                    cmd.extend(["--ruler_cwe_freq", str(args.ruler_cwe_freq)])
+                    cmd.extend(["--ruler_cwe_num_words", str(args.ruler_cwe_num_words)])
 
                 if task == "profile_latency":
                     cmd.extend(["--batch", str(batch)])

@@ -93,36 +93,45 @@ def maybe_to_dynamic_cache(past_key_values):
     return past_key_values
 
 
-def iter_token_ids(dataset, tokenizer, max_tokens):
+def iter_token_ids(dataset, tokenizer, max_tokens, *, allow_repeats: bool = False):
     sep_ids = tokenizer("\n\n", add_special_tokens=False).input_ids
     first_doc = True
     total_tokens = 0
+    while True:
+        produced_in_pass = False
+        for row in dataset:
+            if max_tokens is not None and total_tokens >= max_tokens:
+                return
 
-    for row in dataset:
-        if max_tokens is not None and total_tokens >= max_tokens:
-            break
+            text = row.get("text", "")
+            if not text or not text.strip():
+                continue
 
-        text = row.get("text", "")
-        if not text or not text.strip():
-            continue
+            ids = tokenizer(text, add_special_tokens=False).input_ids
+            if not ids:
+                continue
 
-        ids = tokenizer(text, add_special_tokens=False).input_ids
-        if not ids:
-            continue
+            if not first_doc and sep_ids:
+                ids = sep_ids + ids
+            first_doc = False
 
-        if not first_doc and sep_ids:
-            ids = sep_ids + ids
-        first_doc = False
+            if max_tokens is not None:
+                remaining = max_tokens - total_tokens
+                if remaining <= 0:
+                    return
+                if len(ids) > remaining:
+                    ids = ids[:remaining]
 
-        if max_tokens is not None:
-            remaining = max_tokens - total_tokens
-            if remaining <= 0:
-                break
-            if len(ids) > remaining:
-                ids = ids[:remaining]
+            if not ids:
+                continue
+            produced_in_pass = True
+            total_tokens += len(ids)
+            yield ids
 
-        total_tokens += len(ids)
-        yield ids
+        if max_tokens is None:
+            return
+        if not allow_repeats or not produced_in_pass:
+            return
 
 
 def load_calibration(
@@ -475,6 +484,28 @@ def main():
         help="Limit total tokens to max_samples * max_length",
     )
     parser.add_argument(
+        "--target_tokens",
+        type=int,
+        default=None,
+        help=(
+            "Hard lower bound on evaluated token count. "
+            "If max_samples is also set, the larger token budget is used."
+        ),
+    )
+    parser.add_argument(
+        "--allow_dataset_repeat",
+        dest="allow_dataset_repeat",
+        action="store_true",
+        default=True,
+        help="Allow repeating dataset stream when target_tokens exceeds one pass.",
+    )
+    parser.add_argument(
+        "--no_allow_dataset_repeat",
+        dest="allow_dataset_repeat",
+        action="store_false",
+        help="Disable dataset repeat even when target_tokens is set.",
+    )
+    parser.add_argument(
         "--chunk_size",
         type=int,
         default=128,
@@ -502,6 +533,7 @@ def main():
             "int4_fused",
             "int4_ours",
             "int4_ours_mixed",
+            "kivi_style",
         ],
     )
     parser.add_argument("--group_size", type=int, default=128)
@@ -513,6 +545,12 @@ def main():
     parser.add_argument("--calib_strategy", type=str, default=None)
     parser.add_argument("--decode_attn_impl", type=str, default=None)
     parser.add_argument("--calib_file", type=str, default=None)
+    parser.add_argument(
+        "--quant_bits",
+        type=int,
+        default=None,
+        help="Override quant_bits for CSV output (needed for kivi_style which can be 4 or 8).",
+    )
     parser.add_argument(
         "--use_attn_temperature",
         dest="use_attn_temperature",
@@ -658,10 +696,22 @@ def main():
     if stride > max_length:
         print("Invalid stride: stride must be <= max_length.")
         sys.exit(1)
+    if args.max_samples is not None and int(args.max_samples) <= 0:
+        print("Invalid max_samples: must be positive when provided.")
+        sys.exit(1)
+    if args.target_tokens is not None and int(args.target_tokens) <= 0:
+        print("Invalid target_tokens: must be positive when provided.")
+        sys.exit(1)
 
     max_tokens = None
     if args.max_samples:
         max_tokens = args.max_samples * max_length
+    if args.target_tokens is not None:
+        # next-token PPL evaluation has one fewer target than input tokens.
+        # Reserve +1 input token so evaluated targets can reach target_tokens exactly.
+        min_input_tokens = int(args.target_tokens) + 1
+        if max_tokens is None or int(max_tokens) < min_input_tokens:
+            max_tokens = min_input_tokens
 
     total_nll = torch.tensor(0.0, device=model.device)
     total_tokens = 0
@@ -670,7 +720,8 @@ def main():
 
     print(
         f"Evaluating PPL with {ppl_mode} mode "
-        f"(Window: {max_length}, Stride: {stride}, Chunk: {args.chunk_size})..."
+        f"(Window: {max_length}, Stride: {stride}, Chunk: {args.chunk_size}, "
+        f"TokenBudget: {max_tokens if max_tokens is not None else 'full-dataset'})..."
     )
     pbar = tqdm(desc="Evaluating PPL", unit="win")
     buffer_tokens = []
@@ -705,7 +756,12 @@ def main():
             hook_handles = _register_prefill_temperature_hooks(model, kv_cache.inv_tau)
 
     try:
-        for ids in iter_token_ids(test, tokenizer, max_tokens):
+        for ids in iter_token_ids(
+            test,
+            tokenizer,
+            max_tokens,
+            allow_repeats=bool(args.allow_dataset_repeat and args.target_tokens is not None),
+        ):
             if not ids:
                 continue
             buffer_tokens.extend(ids)
@@ -790,6 +846,13 @@ def main():
     if prev_end_loc <= 0 or total_tokens <= 0:
         print("No tokens were evaluated. Check dataset/tokenization.")
         sys.exit(1)
+    if args.target_tokens is not None and total_tokens < int(args.target_tokens):
+        print(
+            "Target token floor not met: "
+            f"evaluated={total_tokens}, target_tokens={int(args.target_tokens)}."
+        )
+        print("Tip: keep --allow_dataset_repeat enabled or reduce --target_tokens.")
+        sys.exit(2)
 
     seq_len = prev_end_loc
     ppl = torch.exp(total_nll / total_tokens)
@@ -812,7 +875,7 @@ def main():
             "run_id": f"ppl_{timestamp}",
             "model_id": args.model_id,
             "kv_mode": kv_mode_used,
-            "quant_bits": 4 if "int4" in kv_mode_used else (8 if "int8" in kv_mode_used else 16),
+            "quant_bits": getattr(args, 'quant_bits', None) or (4 if "int4" in kv_mode_used else (8 if "int8" in kv_mode_used else 16)),
             "clip_percentile": effective_clip_percentile,
             "group_size": effective_group_size,
             "dtype": str(model.dtype),
@@ -835,6 +898,7 @@ def main():
             "ppl_mode": ppl_mode,
             "tokens_evaluated": total_tokens,
             "chunk_size": int(args.chunk_size),
+            "target_tokens": int(args.target_tokens) if args.target_tokens is not None else "",
         }
         
         # Extended fields
@@ -842,7 +906,8 @@ def main():
             "run_id", "model_id", "kv_mode", "quant_bits", "clip_percentile", "group_size", 
             "dtype", "hardware", "seq_len", "gen_len", "batch", "ttft_ms", "tpot_ms",
             "tok_per_s", "gpu_mem_peak_mb", "timestamp", "git_commit", "seed", "replica_id",
-            "perplexity", "ppl_ci95_low", "ppl_ci95_high", "ppl_mode", "tokens_evaluated", "chunk_size"
+            "perplexity", "ppl_ci95_low", "ppl_ci95_high", "ppl_mode", "tokens_evaluated", "chunk_size",
+            "target_tokens"
         ]
         
         with open(path, "w", newline="") as f:
@@ -863,8 +928,10 @@ def main():
                     "add_special_tokens": False,
                     "separator": "\\n\\n",
                     "max_tokens": max_tokens,
+                    "target_tokens": args.target_tokens,
                     "window": max_length,
                     "stride": stride,
+                    "allow_dataset_repeat": bool(args.allow_dataset_repeat),
                 },
             },
         )
