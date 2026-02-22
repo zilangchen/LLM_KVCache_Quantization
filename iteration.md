@@ -15,18 +15,18 @@ Canonical agent workflow directory is `.agents/`.
 
 #### A. MSE 校准实现缺陷 — `scripts/calibrate_behavior.py`（阻塞 Phase 4）
 
-- [ ] `[CRITICAL]` MSE loss 维度语义错误 (L199-200): `compute_inv_tau()` 中 MSE 用 `.mean(dim=-1)` 而 KL 用 `.sum(dim=-1)`，导致 loss 聚合语义不一致（KL 累积发散 vs MSE 平均误差），inv_tau 选择会受序列长度偏置
-- [ ] `[CRITICAL]` MSE loss 全局 mean 无维度 (L302): `evaluate_quant_candidate()` 中 MSE 用 `.mean()` 无 dim 参数产生标量，而 KL 用 `.sum()`；两者尺度不可比，trial 排名不可靠
-- [ ] `[HIGH]` loss_accum 未除以样本数 (L177-206): `compute_inv_tau()` 中 MSE 和 KL 均累加但不除以样本数，导致不同 `--samples` 值下结果不可复现
-- [ ] `[HIGH]` MSE 无数值安全 clamp (L199): 不像 KL 路径有 `torch.clamp(min=eps)`，MSE 路径无防护，可能 NaN 传播
-- [ ] `[HIGH]` trial 排名受 loss 尺度影响 (L780-791): `p95_mse` vs `p95_kl` 尺度完全不同，搜索排名在不同序列长度下不可复现
-- [ ] `[MEDIUM]` 默认输出文件名硬编码为 `kl.json` (L487): MSE 校准也存到 `kv_calib_kl.json`，文件名误导
-- [ ] `[MEDIUM]` `select_best_trial()` 无 key 存在性校验 (L349-352): MSE 模式下访问 `mean_mse`/`p95_mse` 前无检查，可能 KeyError
+- [x] `[CRITICAL]` MSE loss 维度语义错误 (L199-200) — ✅ 已修复 commit 20095fb
+- [x] `[CRITICAL]` MSE loss 全局 mean 无维度 (L302) — ✅ 已修复 commit 20095fb
+- [x] `[HIGH]` loss_accum 未除以样本数 (L177-206) — ✅ 已修复 commit 20095fb
+- [x] `[HIGH]` MSE 无数值安全 clamp (L199) — ✅ 已修复 commit 20095fb
+- [ ] `[HIGH]` trial 排名受 loss 尺度影响 (L780-791): `p95_mse` vs `p95_kl` 尺度完全不同，搜索排名在不同序列长度下不可复现（注：MSE 搜索内部排名一致，跨 loss_function 不可比是预期行为，降级为文档问题）
+- [x] `[MEDIUM]` 默认输出文件名硬编码为 `kl.json` — ✅ 已修复 commit 20095fb
+- [x] `[MEDIUM]` `select_best_trial()` 无 key 存在性校验 — ✅ 已修复 commit 20095fb
 - [ ] `[MEDIUM]` MSE loss 语义未文档化 (L6, L234-239): 无 docstring 说明 MSE 是位置平均还是全局平均
 
 #### B. KIVI Cache 实现 — `src/cache/kivi_style_cache.py`
 
-- [ ] `[CRITICAL]` K-scale/zp 在 `clear()` 后状态不一致 (L134-151, L280-284): `clear()` 重置 `_k_scale_initialized` 但不清除旧的 `_k_scale`/`_k_zp` tensor；若 batch size 变化，prefill 后 shape 不匹配
+- [x] `[CRITICAL]` K-scale/zp 在 `clear()` 后状态不一致 — ✅ 已修复 commit 20095fb
 - [ ] `[MEDIUM]` decode K 量化与 prefill K 量化 device 一致性未强制 (L220-231): 若输入 k 与 cache device 不同会静默失败
 - [ ] `[MEDIUM]` V buffer shape 一致性未校验 (L126-131): 仅校验 K buffer 的 batch/heads/head_dim，不校验 V buffer
 - [ ] `[MEDIUM]` `append()` 无输入 tensor shape 校验 (L187-245): 若传入转置 tensor（如 [B,D,H,S]）不会报错但量化结果错误
@@ -35,24 +35,24 @@ Canonical agent workflow directory is `.agents/`.
 
 #### C. 非对称量化模块 — `src/quant/asymmetric_quant.py`
 
-- [ ] `[CRITICAL]` percentile < 50 时 quantile_lo > quantile_hi (L56-57): 公式 `(100 - percentile)/100` 在 percentile<50 时翻转 min/max，量化静默产生错误结果；当前测试均用 percentile>=99 未覆盖
-- [ ] `[CRITICAL]` 无 percentile 范围校验 (L55): 接受任意 percentile 值（含负数/0/50 等），无 `(50, 100]` 范围检查
+- [x] `[CRITICAL]` percentile < 50 时 quantile_lo > quantile_hi — ✅ 已修复 commit 20095fb
+- [x] `[CRITICAL]` 无 percentile 范围校验 — ✅ 已修复 commit 20095fb
 - [ ] `[MEDIUM]` float16 输入精度损失 (L58-59): quantile 在 float32 计算后转回 float16，scale/zp 精度下降
 - [ ] `[LOW]` dequantize 函数无输入类型校验 (L74-95): 传入错误 dtype 静默产生错误结果
 
 #### D. Engine 集成 — `src/engine/generate_loop.py`
 
-- [ ] `[HIGH]` `generate()` 函数缺少 `quant_bits` 参数 (L761-779): 高层 API 无法指定 KIVI INT4 vs INT8，始终默认 INT8
+- [x] `[HIGH]` `generate()` 函数缺少 `quant_bits` 参数 — ✅ 已修复 commit 20095fb
 - [ ] `[HIGH]` decode 阶段 KIVI 走 dequant→re-quant 路径 (L635-678): 每步 dequant 全量 cache 后取最后 token re-quant 回 cache，引入不必要的精度损失
 - [ ] `[MEDIUM]` KIVI kv_mode 未校验 quant_bits∈{4,8} (L294-310): 无效 quant_bits 延迟到 KIVIStyleKVCache.__init__ 才报错
 - [ ] `[LOW]` docstring 未说明 KIVI 模式行为 (L258-292): 无 KIVI 模式的参数说明和约束文档
 
 #### E. 评测脚本集成（跨脚本）
 
-- [ ] `[CRITICAL]` `export_tables_latex.py` KV_MODE_DISPLAY 缺 kivi_style (L52-61): LaTeX 表格显示原始 "kivi_style" 而非 "KIVI-style"
-- [ ] `[CRITICAL]` `export_tables_latex.py` KV_MODE_ORDER 缺 kivi_style (L41-50): KIVI 排序位置错误（默认 9999）
-- [ ] `[HIGH]` `eval_longbench.py` 引用未定义 logger (L440): JSONL 文件缺失时 NameError 崩溃而非 warning
-- [ ] `[HIGH]` `generate_thesis_report.py` 缺少 KIVI claims C5-C8 (L59+): KIVI 结果永远不会被自动验证为可发表 claim
+- [x] `[CRITICAL]` `export_tables_latex.py` KV_MODE_DISPLAY 缺 kivi_style — ✅ 已修复 commit 8bf9414
+- [x] `[CRITICAL]` `export_tables_latex.py` KV_MODE_ORDER 缺 kivi_style — ✅ 已修复 commit 8bf9414
+- [x] `[HIGH]` `eval_longbench.py` 引用未定义 logger — ✅ 已修复 commit 20095fb
+- [x] `[HIGH]` `generate_thesis_report.py` 缺少 KIVI claims — ✅ 已修复 commit 8bf9414 (C7-C11)
 - [ ] `[MEDIUM]` 所有 eval 脚本 quant_bits fallback 将 KIVI 记录为 16 (eval_ppl L878 / eval_needle L467 / eval_longbench L833 / eval_ruler L985 / profile_latency L320 / profile_memory L369): `"int4" in "kivi_style"` 和 `"int8" in "kivi_style"` 均为 False，fallback 到 16
 - [ ] `[MEDIUM]` `eval_longbench.py` 指标单位不一致 (L807-808): detail CSV 用 [0,1]，summary CSV 乘 100 变 [0,100]，下游聚合可能混淆
 - [ ] `[MEDIUM]` `eval_longbench.py` 自实现 Rouge-L 可能与官方 LongBench 不一致 (L206-219): 自实现 token-level LCS 与 THUDM 官方评测脚本可能有差异
@@ -61,17 +61,17 @@ Canonical agent workflow directory is `.agents/`.
 
 #### F. 实验配置矩阵一致性
 
-- [ ] `[HIGH]` 1.5B 配置完全缺失 KIVI-style 条目: `exp_matrix_week5_external_validity_v1.yaml` 无 6 条 KIVI 运行（7B/8B 各有 6 条），跨模型对比不完整
-- [ ] `[HIGH]` 7B/8B 配置完全缺失吞吐量 batch scaling 条目: 1.5B 有 42 条 throughput 运行，7B/8B 为 0
-- [ ] `[HIGH]` 7B/8B 配置缺失 INT4 长上下文运行: 1.5B 有 `int4_baseline_long`/`int4_ours_long`，7B/8B 无
+- [x] `[HIGH]` 1.5B 配置完全缺失 KIVI-style 条目 — ✅ 已修复 commit f07422d (exp_matrix.yaml +13 KIVI)
+- [x] `[HIGH]` 7B/8B 配置完全缺失吞吐量 batch scaling 条目 — ✅ 已修复 commit f07422d (7B/8B +35 throughput each)
+- [x] `[HIGH]` 7B/8B 配置缺失 INT4 长上下文运行 — ✅ 已修复 commit f07422d (7B/8B +5 long-ctx INT4/KIVI)
 - [ ] `[MEDIUM]` 7B/8B 长上下文仅 3 条 vs 1.5B 的 18 条: 缺失 KIVI 长上下文、INT4 长上下文、多种 INT8-ours 变体
 - [ ] `[MEDIUM]` 1.5B 校准文件命名不一致 (`kv_calib_kl_selected_v3_quick.json` vs 7B/8B 的 `kv_calib_kl_qwen25_7b_int8.json`): 命名约定不统一
 - [ ] `[LOW]` 1.5B 配置头部注释缺少 `kivi_style` kv_mode 和 `kivi_asymmetric` calib_strategy
 
 #### G. 消融配置审查 — `configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml`（第二轮审查）
 
-- [ ] `[HIGH]` 消融 A-3 (percentile) 使用 `decode_attn_impl: torch_ref` 而 A-1/A-2 用 `triton_fused` — 引入 decode impl 混淆因子，不公平对比校准方法；应统一为 `torch_ref` 或 `triton_fused`
-- [ ] `[HIGH]` 消融 A 节缺少 KIVI-style 作为第四对比项 — 计划中 RQ1 为"KL vs MSE vs Percentile vs KIVI"四方对比，当前仅三方
+- [x] `[HIGH]` 消融 A-3 decode_attn_impl 混淆因子 — ✅ 已修复 commit f07422d (添加 A-3b percentile_fused 对比项)
+- [x] `[HIGH]` 消融 A 节缺少 KIVI-style — ✅ 已修复 commit f07422d (添加 A-4 kivi_style 条目)
 - [ ] `[MEDIUM]` 消融 A-2 (MSE) 使用 `use_attn_temperature: true` — MSE 校准的 inv_tau 可能不可信（见 A 节 MSE 缺陷），若 inv_tau 质量差会使 MSE 看起来更差，混淆校准方法本身的效果
 - [ ] `[MEDIUM]` 消融 D 节缺少 dynamic scales 变体 — 计划中为 "static vs adaptive vs dynamic" 三方对比，当前仅 static 和 adaptive 两方（缺 `use_static_scales: false` 的 dynamic 变体）
 - [ ] `[MEDIUM]` 所有消融仅 `seq_len=4096` — 计划中消融需 4K/8K/16K/32K 多长度点以支撑长上下文鲁棒性论证
@@ -98,7 +98,7 @@ Canonical agent workflow directory is `.agents/`.
 
 **新发现问题**：
 
-- [ ] `[CRITICAL]` `calibrate_behavior.py` L633: `--calib_out` default 改为 `None` 但 `Path(args.calib_out)` 未处理 None — 不指定 `--calib_out` 时必然 `TypeError: expected str, bytes or os.PathLike, not NoneType` 崩溃。帮助文本说"Defaults to artifacts/kv_calib_{loss_function}.json"但缺少实际的 fallback 逻辑代码
+- [x] `[CRITICAL]` `calibrate_behavior.py` `--calib_out` None fallback — ✅ 验证确认已有 fallback 逻辑（L643-645），误报
 - [ ] `[MEDIUM]` `calibrate_behavior.py` MSE clamping 语义偏差：MSE 路径对 `p_ref`/`p_quant` 执行 `clamp(min=eps)` 后再计算差的平方。对 MSE 而言 clamp 不防 NaN（MSE 不含 log），反而将原始值为 0 的概率人为提升为 eps，改变了真实误差度量。不会导致崩溃但使 MSE 与 KL 的 clamping 语义不对称
 - [ ] `[LOW]` `eval_longbench.py` logger 定义位置：`logger = logging.getLogger(__name__)` 在 `import` 块中间（介于 `traceback` 和 `from collections import defaultdict` 之间），不符合 PEP 8 import 分组规范（标准库 → 第三方 → 本地，中间不穿插代码）；功能无影响
 
@@ -121,7 +121,7 @@ Canonical agent workflow directory is `.agents/`.
 
 #### L. 深度审查 — `scripts/run_experiments.py`（第五轮审查）
 
-- [ ] `[CRITICAL]` `eval_ppl.py` build_kv_cache() 缺失 kivi_style 分支 (eval_ppl.py L228-309): kivi_style 落入 INT8 默认分支，返回 INT8KVCache 而非 KIVIStyleKVCache — PPL 评测结果为错误的 INT8 baseline 而非 KIVI
+- [x] `[CRITICAL]` `eval_ppl.py` build_kv_cache() 缺失 kivi_style 分支 — ✅ 已修复 commit 03ed4a0
 - [ ] `[MEDIUM]` skip_completed_success 状态不一致 (L1134 vs L1147): manifest 记录 "success" 但 execution_rows 记录 "skipped"，追踪混淆
 - [ ] `[MEDIUM]` subprocess.run 无异常捕获 (L1174-1179): FileNotFoundError/OSError 会导致整个 run_experiments 崩溃而不清理 manifest
 - [ ] `[MEDIUM]` kv_mode 无效值静默跳过 (L850-862): 无全局汇总报告哪些 run 因 kv_mode 无效被跳过
@@ -131,10 +131,10 @@ Canonical agent workflow directory is `.agents/`.
 
 #### M. 深度审查 — `scripts/aggregate_results.py`（第五轮审查）
 
-- [ ] `[CRITICAL]` kivi_style 完全缺失显著性配对 (L2103-2159): pairings 仅含 `(int8_baseline, int8_ours)` 和 `(int4_fused, int4_ours)`，无 kivi_style 对比。kivi_style 数据被 groupby 保留但永远不进入显著性检验 → 论文 Claims C9/C10 "INT8-ours vs KIVI" 无法统计验证
-- [ ] `[HIGH]` longbench_official_macro 未被聚合 (L1823-1876): `_to_numeric()` 列表中虽有 `longbench_score` 但缺少 `longbench_official_macro`；聚合汇总中无该列 → 官方指标 macro-average 的 Bootstrap CI 和显著性检验无法产出
-- [ ] `[HIGH]` 显著性分析缺失 model_id/hardware 分组 (L2103-2159): sig_specs 的 key_cols 不含 model_id 和 hardware → 跨模型实验结果混淆，不同模型的配对被错误合并，n_pairs 虚高
-- [ ] `[HIGH]` RULER 深度分析缺失 model_id (L2031): ruler_depth_keys 仅含 `["kv_mode", "seq_len", "depth_ratio"]` → 跨模型 RULER 深度数据混合
+- [x] `[CRITICAL]` kivi_style 完全缺失显著性配对 — ✅ 已修复 commit 03ed4a0
+- [x] `[HIGH]` longbench_official_macro 未被聚合 — ✅ 已修复 commit 03ed4a0
+- [x] `[HIGH]` 显著性分析缺失 model_id/hardware 分组 — ✅ 已修复 commit 03ed4a0
+- [x] `[HIGH]` RULER 深度分析缺失 model_id — ✅ 已修复 commit 03ed4a0
 - [ ] `[MEDIUM]` kv_mode 使用字母序排序而非语义顺序 (L552, L585, L648, L1322): 表格中 int4_baseline 出现在 int8_baseline 之前，不符合论文叙述（先 INT8 后 INT4）
 - [ ] `[MEDIUM]` 显著性配对数据可能被 aggfunc="mean" 静默平均 (L998): pivot_table 对多 replica 自动平均，如果同 seed 有重复数据，n_pairs 会被虚高估计
 - [ ] `[LOW]` Bootstrap CI 单样本情况返回 (value, value) 无警告 (L1059-1060): 无法区分单样本 CI 与真正精确的无变异情况
