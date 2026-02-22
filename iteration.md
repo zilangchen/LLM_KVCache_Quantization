@@ -38,8 +38,8 @@ This file is the only progress tracker for the repository.
   - `docs/final_experiment_protocol.md`
   - `docs/final_results_summary.md`
   - `docs/thesis_preflight_checklist.md`
-  - `.agent/skills/reproducibility/SKILL.md`
-  - `.agent/skills/long-running-task/SKILL.md`
+  - `.agents/skills/reproducibility/SKILL.md`
+  - `.agents/skills/long-running-task/SKILL.md`
   - `iteration.md`
 - Commands:
   - replace `/root/autodl-tmp/LLM_KVCache_Quantization` -> `/root/LLM_KVCache_Quantization` in active docs
@@ -55,22 +55,22 @@ This file is the only progress tracker for the repository.
 
 ### 2026-02-22 10:46 | Skill Directory Unification
 - Goal: unify skill directories to a single canonical path and verify no active duplicate references remain.
-- Scope: migrate `.agents/skills/*` into `.agent/skills/*`; remove `.agents`; run redundancy scan on active files.
+- Scope: migrate `.agents/skills/*` into `.agents/skills/*`; remove `.agents`; run redundancy scan on active files.
 - Changed files:
   - `iteration.md`
-  - `.agent/skills/debug-iterate/SKILL.md` (moved)
-  - `.agent/skills/execplan/SKILL.md` (moved)
-  - `.agent/skills/repo-hygiene/SKILL.md` (moved)
-  - `.agent/skills/unit-commit/SKILL.md` (moved)
+  - `.agents/skills/debug-iterate/SKILL.md` (moved)
+  - `.agents/skills/execplan/SKILL.md` (moved)
+  - `.agents/skills/repo-hygiene/SKILL.md` (moved)
+  - `.agents/skills/unit-commit/SKILL.md` (moved)
 - Commands:
-  - `mv .agents/skills/{debug-iterate,execplan,repo-hygiene,unit-commit} .agent/skills/`
+  - `mv .agents/skills/{debug-iterate,execplan,repo-hygiene,unit-commit} .agents/skills/`
   - `rmdir .agents/skills && rmdir .agents`
   - `rg -n "\\.agents/" ...` and policy-keyword scans on active files
 - Outputs:
-  - single skill root: `.agent/skills/`
+  - single skill root: `.agents/skills/`
   - no active `.agents/` path references
 - Validation:
-  - `.agent/skills/` contains 7 skills; `.agents/` no longer exists
+  - `.agents/skills/` contains 7 skills; `.agents/` no longer exists
 - Risks / follow-ups:
   - `development_record.md` is still historical and contains old path references by design
 
@@ -82,7 +82,7 @@ This file is the only progress tracker for the repository.
   - `README.md`
   - `objective.md`
   - `iteration.md`
-  - `.agent/skills/long-running-task/SKILL.md`
+  - `.agents/skills/long-running-task/SKILL.md`
 - Commands:
   - `rg -n "lang\\.md|AGENT_README\\.md|agent_tools/agent_cli" ...`
   - file migration and archive operations (see `development_history/archive_20260222_agent_pipeline_cleanup/MANIFEST.md`)
