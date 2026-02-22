@@ -428,24 +428,47 @@ def _load_jsonl_samples(
     tasks_set = set(tasks)
     counts: Dict[str, int] = defaultdict(int)
     samples: List[LongBenchSample] = []
-    with open(path, "r", encoding="utf-8") as f:
-        for line_idx, line in enumerate(f, start=1):
-            text = line.strip()
-            if not text:
-                continue
-            row = json.loads(text)
-            if not isinstance(row, dict):
-                continue
-            task_name = str(row.get("task", row.get("task_name", "generic"))).strip() or "generic"
-            if tasks_set and task_name not in tasks_set:
-                continue
-            if counts[task_name] >= max_samples:
-                continue
-            sample = _extract_generic_sample(row, task_name, sample_id=f"jsonl_{line_idx}")
-            if sample is None:
-                continue
-            counts[task_name] += 1
-            samples.append(sample)
+
+    # Determine file list: directory of per-task JSONL files, or a single file
+    if path.is_dir():
+        files_to_load: List[tuple] = []  # (filepath, task_name_override)
+        for task in tasks:
+            candidate = path / f"{task}.jsonl"
+            if candidate.exists():
+                files_to_load.append((candidate, task))
+            else:
+                logger.warning("JSONL file not found for task '%s' in %s", task, path)
+        if not files_to_load:
+            raise FileNotFoundError(
+                f"No matching JSONL files found in {path} for tasks {tasks}"
+            )
+    else:
+        files_to_load = [(path, None)]  # single file, infer task from content
+
+    for filepath, task_override in files_to_load:
+        with open(filepath, "r", encoding="utf-8") as f:
+            for line_idx, line in enumerate(f, start=1):
+                text = line.strip()
+                if not text:
+                    continue
+                row = json.loads(text)
+                if not isinstance(row, dict):
+                    continue
+                if task_override is not None:
+                    task_name = task_override
+                else:
+                    task_name = str(
+                        row.get("dataset", row.get("task", row.get("task_name", "generic")))
+                    ).strip() or "generic"
+                if tasks_set and task_name not in tasks_set:
+                    continue
+                if counts[task_name] >= max_samples:
+                    continue
+                sample = _extract_generic_sample(row, task_name, sample_id=f"jsonl_{task_name}_{line_idx}")
+                if sample is None:
+                    continue
+                counts[task_name] += 1
+                samples.append(sample)
     return samples
 
 
