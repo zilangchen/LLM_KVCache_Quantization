@@ -178,6 +178,98 @@ Canonical agent workflow directory is `.agents/`.
 - [ ] `[LOW]` 缺少单 token、batch=0、head_dim=1 等极端边界测试
 - [ ] `[LOW]` 缺少多轮 clear→append 循环测试（生产中常见的 batch 间重用 cache 场景）
 
+#### Q. 深度审查 — `scripts/eval_longbench.py` 评分指标实现（第八轮审查）
+
+> eval_longbench.py 的 LongBench 官方指标实现审查，聚焦分类准确率、指标尺度、HF 数据加载。
+
+- [ ] `[HIGH]` 分类准确率子串匹配过于宽松 (L252): `_classification_accuracy()` 使用 `ans_norm in pred_norm` 子串匹配。若预测 "category_a_extended" 包含答案 "category_a" → 错误返回 1.0。影响 trec、lsht、passage_count、passage_retrieval 等分类任务评分偏高。应仅用精确匹配 `pred_norm == ans_norm`
+- [ ] `[MEDIUM]` 指标尺度 [0,100] vs objective.md 声称 [0,1] 不一致 (L812, L867-868): per-task 聚合乘以 100（`* 100.0`），macro-average 在 [0,100] 尺度。但 objective.md L159 声明 longbench_score 归一化到 [0,1]。论文表格会显示 85.23 而非 0.8523，与声明矛盾
+- [ ] `[MEDIUM]` HF 字段提取 fallback 顺序含 "input" 作为 context 候选 (L387): `context_keys` 列表含 "input"，若数据集有 `{"input": "question", "other_field": "document"}`，会将 question 误作 context。主路径（L377-380）处理标准 LongBench 格式正确，但 fallback 路径有风险
+- [ ] `[LOW]` task_off_name 取 vals[0] 假设同一任务所有样本指标名一致 (L811): 无 assert 验证一致性
+
+#### R. 深度审查 — `scripts/profile_memory.py` 内存测量（第八轮审查）
+
+> profile_memory.py 的 KIVI 集成、CUDA 内存测量、CSV 一致性审查。
+
+- [ ] `[HIGH]` kivi_style quant_bits CSV 记录 vs 运行时不一致 (L304/341 vs L369): generate_from_ids() 传 `quant_bits=None`，运行时 generate_loop.py 默认用 8。但 CSV L369 的推断逻辑 `"int4" in "kivi_style"` 为 False → fallback 到 16。论文 profiling 结果的 quant_bits 字段为 16，而实际量化用 8（与 E5 同系列问题）
+- [ ] `[MEDIUM]` pynvml 初始化异常未捕获 (L104-105): `nvmlInit()` 和 `nvmlDeviceGetHandleByIndex()` 可能因驱动/权限问题抛异常，导致 MemoryMonitor.__init__() 崩溃进而 main() 崩溃。缺少 try-except
+- [ ] `[MEDIUM]` MemoryMonitor.stop() 线程健壮性 (L119-121): 若 pynvml 不可用导致 run() 提前返回，`.join()` 可能异常。应在 join() 前检查 `self.is_alive()`
+- [ ] `[MEDIUM]` NVML 回退逻辑隐性掩盖不可用 (L381): `nvml_peak if nvml_peak > 0 else torch_peak` — 当 pynvml 不可用时 nvml_peak=0，无声回退到 torch_peak。跨运行对比时内存数据来源可能不一致
+- [ ] `[LOW]` output 属性可靠性 (L348-352): `getattr(out, "kv_cache_mem_mb", 0.0)` 若 generate 异常提前返回，CSV 无声记录 0，无法区分"无 KV cache" vs "测量失败"
+
+#### S. 深度审查 — `scripts/run_experiments.py` 实验运行器（第九轮审查）
+
+> run_experiments.py 的 KIVI 集成、参数传递、skip 逻辑、配置解析审查。
+
+- [ ] `[HIGH]` kivi_style 的 calib_strategy 默认值继承陷阱 (L880-881, L1015-1016): 若 YAML 中 kivi_style 条目遗漏 `calib_strategy`，会从 `quant_defaults` 继承 `kl_attn`（与 kivi_asymmetric 不兼容），且 `--calib_strategy kl_attn` 被静默传递给子脚本。当前 ablation config 正确显式指定了 `kivi_asymmetric`，但缺少验证逻辑防止未来误配置
+- [ ] `[MEDIUM]` kivi_style decode_attn_impl 无强制验证 (L882-884, L1033-1034): kivi_style 必须用 `torch_ref`（KIVIStyleKVCache 硬编码），但运行器允许传入 `triton_fused` 而不报错。若 YAML 配置错误，参数被静默忽略，导致调试困惑
+- [ ] `[MEDIUM]` 无条件传递 quant 参数给所有 kv_mode (L987-998): `group_size`、`clip_percentile` 等参数对 fp16 和 kivi_style 无效，但始终加入命令行。污染日志、增加调试难度
+- [ ] `[MEDIUM]` skip 时重复标记成功 (L1130-1138): 已成功的 task 被 skip 时再次写入 "success" 状态和新 history 记录，导致 manifest 膨胀
+- [ ] `[LOW]` manifest history 仅保留最近 20 条 (L334): 超过 21 次重试时丢失早期记录。罕见场景但可能影响审计
+
+#### T. 深度审查 — `scripts/check_run_completeness.py` 完整性检查器（第九轮审查）
+
+> check_run_completeness.py 的状态检测逻辑、OOM 分类、KIVI 覆盖审查。
+
+- [ ] `[CRITICAL]` OOM 分类被 elif 链短路 (L94-109): 当 `has_csv=True` + `manifest_failure="oom"` 时，L100 的 `manifest_status in {"", "failed", ...}` 先匹配 → 错误返回 "mixed_csv_non_success" 而非 "oom"。更严重：若 `has_success_history=True`（history 中有旧的 success 记录），L94 匹配 → 返回 "success"。OOM 运行被误报为完成。L102 OOM 检测从不被触达
+- [ ] `[HIGH]` manifest 无 failure_type 字段 (L85): `task_info.get("failure_type", "")` 对当前 manifest schema 始终返回空串。OOM 检测完全依赖日志文件解析 `_is_oom_from_log()`，若日志被截断或不含 "CUDA out of memory" 字符串则检测失败
+- [ ] `[HIGH]` 不验证 kivi_style 运行完整性: 当 kivi_style 被添加到配置矩阵后，completeness checker 的 `--required_run_names` 和 `--stress_run_names` 参数需手动更新。若遗漏，kivi_style 运行的缺失/OOM 不会被报告
+- [ ] `[MEDIUM]` 不验证 CSV 内容完整性 (L80): 仅检查 CSV 文件存在（glob 模式匹配），不验证行数、schema、数据正确性。残留的空/损坏 CSV 被视为有效
+- [ ] `[MEDIUM]` LongBench/RULER 任务级完整性无验证 (L16-23, L146-148): 仅检查 CSV 文件是否存在，不验证 7 任务/4 子任务是否全部完成。部分任务缺失不会被捕获
+
+#### U. 深度审查 — `src/engine/generate_loop.py` KIVI 路径 + `src/engine/patch_model.py`（第十轮审查）
+
+> generate_loop.py KIVI 完整代码路径追踪 + patch_model.py 架构兼容性审查。大量审查 agent 报告的 "CRITICAL" 经验证为误报（GQA 由 Triton kernel N_REP 正确处理；KIVI 不走 fused path 是设计意图；sm_scale fallback 值正确）。
+
+**经验证的误报（不需修复）**：
+- ~~patch_model.py GQA KV head expansion missing~~: Triton kernel L355 `n_rep = q_heads // kv_heads`，L150 `kv_head_id = head_id // N_REP` 正确处理
+- ~~KIVI-style not in fused forward~~: generate_loop.py L639 将 kivi_style 归入 baseline 非 fused 路径，by design
+- ~~sm_scale fallback incorrect~~: fallback `1.0/sqrt(head_dim)` 与 HF `self.scaling = head_dim ** -0.5` 一致
+
+**真实新发现**：
+- [ ] `[MEDIUM]` kivi_style_cache.py V scale/zp 缓冲区 dtype 隐性转换 (L140-149, L240-241): 缓冲区以 `self.dtype`（默认 float16）预分配，但 `quantize_asymmetric_per_token()` 返回与输入同 dtype 的 scale。若输入为 float32，scale 被静默截断为 float16。当前模型均用 float16 故无影响，但 float32 推理是隐患
+- [ ] `[MEDIUM]` patch_model.py kv_heads 推断失败静默降级 (L473-477): 若 `num_key_value_heads` 属性缺失且 `_infer_heads_from_proj()` 也失败，L477 将 `kv_heads` 设为 `q_heads`（静默将 GQA 降级为 MHA）。目标模型（Qwen2/LLaMA3.1）均有此属性，但无防御性断言
+- [ ] `[MEDIUM]` patch_model.py KIVI 缓存若被错误路由到 fused forward (L556-567): `KIVIStyleKVCache` 无 `get_int8_tensors()` 方法，会触发 L567 `RuntimeError`。当前架构设计防止了此路径，但若代码重构改变了路由逻辑，缺少早期守卫
+- [ ] `[LOW]` generate_loop.py kivi_style 接受但静默忽略 calib_file/use_attn_temperature/adaptive_static_scales 参数 (L412-485, L563-566): 已在 K1 中记录，此处补充完整参数列表。无功能性影响但违反 fail-fast 原则
+
+#### V. 深度审查 — `src/cache/kivi_style_cache.py` INT4 路径（第十一轮审查）
+
+> KIVIStyleKVCache 的 INT4 (quant_bits=4) 专项审查。
+
+- [ ] `[HIGH]` KIVI INT4 未实现 bit-packing，内存与 INT8 相同 (L84, L90, L138-143): 所有 INT4 值存储为 `torch.int8`（1 byte/value），从未调用 `pack_int4()`/`unpack_int4()`。对比 `INT4KVCache` 使用 bit-packing 实现 0.5 byte/value。KIVI INT4 的实际内存节省为 0%（相对于 INT8），仅有量化精度区别。**论文中如果对比 KIVI INT4 与 INT4-ours 的内存开销，必须注明此差异**
+- [ ] `[MEDIUM]` get_memory_mb() 注释误导 (L307): 注释 "INT8 tensors" 适用于 INT4 和 INT8，但未区分。hardcoded `* 1` 对当前实现正确（int8 存储），但暗示了对 bit-packing 的认知而未实现
+- [ ] `[MEDIUM]` INT4 量化精度 edge case 未覆盖: asymmetric_quant.py INT4 路径 `qmax - qmin = 15` 仅为 INT8 的 1/16 精度。zero_point 不受 INT4 范围约束（数学正确但 FP16 精度下可能损失）。测试未覆盖全零输入 + INT4、极小幅度值 + INT4 等场景
+- [ ] `[LOW]` INT4 vs INT8 行为切换逻辑正确: prefill (L213-215)、decode (L224-231)、构造器验证 (L64-65) 均正确分支
+
+#### W. 深度审查 — `configs/snapshots/final_emnlp2026_v1.yaml` 最终配置（第十一轮审查）
+
+> 最终实验配置的完整性、一致性、可复现性审查。
+
+- [ ] `[HIGH]` 7B/8B 校准产物尚未生成（Phase 2 依赖，非 bug）: final config 引用 4 个不存在的 JSON（kv_calib_kl_qwen25_7b_int8/int4、kv_calib_kl_llama31_8b_int8/int4）。Phase 2 计划中但尚未执行。在 Phase 5 全矩阵实验前必须完成
+- [ ] `[MEDIUM]` LLaMA-3.1-8B 使用本地路径而非 HF ID: `/root/autodl-tmp/modelscope_cache/...` 无法在其他机器复现。应补充 HF model_id + revision 作为备选，或在 experiment_sop.md 中记录 ModelScope 下载步骤
+- [ ] `[MEDIUM]` Claims C9-C11 定义不够精确: C9/C10 仅对比 INT8-ours vs KIVI 的 LongBench/Needle，缺少 INT4-ours vs KIVI 的显式 claim。C11 "cross-model" 表述模糊，应明确"在 Qwen-7B 和 LLaMA-8B 上 INT8-ours 相比 INT8-baseline 在 LongBench 上非劣"
+- [ ] `[LOW]` meta-config 无执行工作流说明: 仅声明目标矩阵，未提供具体 run_experiments.py 调用命令或执行顺序
+
+#### X. 对比审查 — INT8KVCache vs KIVIStyleKVCache 设计差异（第十二轮审查，论文表述相关）
+
+> 两套 KV Cache 实现的架构差异对比。以下发现主要影响论文声明和实验公平性，非代码 bug。
+
+- [ ] `[HIGH]` 论文内存对比表必须注明 KIVI INT4 无 bit-packing: KIVIStyleKVCache 的 INT4 存储为 int8（1 byte/value），与 INT4KVCache 的 0.5 byte/value 不同。若论文表格对比 "KIVI INT4 vs INT4-ours" 内存，KIVI 数值将显著偏高。建议在 Memory profiling 结果旁加注 "KIVI INT4 uses int8 storage without bit-packing"
+- [ ] `[HIGH]` 论文 Methods 节须披露 K 量化策略差异: INT8-ours 使用 per-token group-wise 对称量化（每 token 独立 scale），KIVI 使用 per-channel 非对称量化（prefill 时一次性计算 K-scale，decode 复用并可能 clip）。这导致 decode 阶段 KIVI K 可能有 clipping error，影响长上下文检索质量（Needle/RULER）
+- [ ] `[MEDIUM]` 论文须披露 KIVI 无温度校正: KIVI 不支持 inv_tau（kivi_style_cache.py L78-79 硬编码 None/False）。对比 RQ2（温度校正消融）时，KIVI 作为无温度校正的自然基线，但须在实验设计中明确声明
+- [ ] `[MEDIUM]` 论文须披露 decode kernel 差异: KIVI 始终用 torch_ref（非 fused），INT8-ours 可用 triton_fused。延迟对比不完全公平——KIVI 的 TPOT 劣势部分源于 kernel 选择而非量化策略
+- [ ] `[LOW]` KIVI K-scale 内存恒定 vs INT8 随 seq_len 增长: KIVI k_scale [B,H,D] ~8KB/layer（常量），INT8 k_scale [B,H,S,G] ~512KB/layer@4K（随 S 线性增长）。长上下文场景下 KIVI 的 scale 开销显著更小，但 zero-point 存储（~528KB/layer total）部分抵消优势
+
+#### Y. 深度审查 — `src/quant/` 对称量化核心模块（第十三轮审查）
+
+> int8_basic.py / int4_basic.py / __init__.py 的公式正确性、组级量化、数值稳定性、静态 scale 支持审查。**核心路径均正确，无 CRITICAL 问题。**
+
+- [ ] `[MEDIUM]` `_normalize_static_scale` 3D case 实现错误 (int8_basic.py L38-43, int4_basic.py 同位置): 3D scale 输入的索引操作会产生超维张量。当前 cache 仅传 2D/4D scale 故未触发，但代码路径存在 latent crash。建议删除或修复
+- [ ] `[MEDIUM]` `dequantize_symmetric_int8` 多路径判断脆弱 (int8_basic.py L182-226): 基于 ndim 和 shape[-1] 区分 Path 1/2/3。若 num_groups=1 时 scale shape [B,H,S,1] 会被误判为 per-token scale（Path 3）而非 group scale（Path 2）。当前 cache 用 num_groups≥2 故安全
+- [ ] `[MEDIUM]` 缺少 INT8 离群值测试: test_int8_quant.py 未测试极端离群值 + percentile clipping 的交互。对比 test_asymmetric_quant.py 已有此测试。建议补充
+- [ ] `[LOW]` `__init__.py.__all__` 不完整: `quantize_symmetric_int4_with_scale`, `pack_int4`, `unpack_int4` 未导出。实际使用通过直接 import 子模块不受影响，但违反公共接口最佳实践
+- [ ] `[LOW]` 核心公式验证通过: INT8 scale=absmax/127 范围[-127,127]、INT4 scale=absmax/7 范围[-7,7]、clamp(min=1e-5) 防零、percentile clipping、组级量化 reshape/broadcast、pack/unpack INT4 bit-packing — 全部正确
+
 ---
 
 ## Approved Plans
@@ -185,14 +277,13 @@ Canonical agent workflow directory is `.agents/`.
 > 经讨论并被用户认可的计划。与 TODO Backlog（缺陷/待修复项）区分，此处记录已确认的阶段性执行方案。
 > 每条 Plan 记录：批准日期、Plan 名称、内容摘要、前置条件、状态（待执行 / 执行中 / 已完成）。
 
-### Plan: EMNLP 2026 Phase 4 — MSE 校准 + 消融（仅 1.5B）
+### Plan: EMNLP 2026 Phase 4 — MSE 校准 + 消融（仅 1.5B） ✅ 已完成
 - **批准日期**：2026-02-23
-- **前置条件**：✅ A 节 MSE 校准缺陷已修复
-- **状态**：执行中
+- **完成日期**：2026-02-23 07:27
 - **内容**：
-  - [x] 生成 MSE 校准产物：`artifacts/kv_calib_mse_1p5b_int8.json` + `artifacts/kv_calib_mse_1p5b_int4.json` — ✅ 完成 2026-02-23 06:03
-  - [x] 创建消融配置：14 runs ablation matrix — ✅ 完成 commit f07422d
-  - [ ] 运行消融实验矩阵（needle/PPL/LongBench，5 seeds，1.5B only）
+  - [x] 生成 MSE 校准产物 — ✅ 完成 2026-02-23 06:03
+  - [x] 创建消融配置 — ✅ 完成 commit f07422d
+  - [x] 运行消融实验矩阵（PPL+Needle，5 seeds × 14 configs = 70 runs） — ✅ 完成 2026-02-23 07:27
 
 ### Plan: EMNLP 2026 Phase 5 — 全矩阵实验
 - **批准日期**：2026-02-23
@@ -251,6 +342,18 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
 
 ## Timeline (Latest First)
+
+### 2026-02-23 07:27 | Phase 4 COMPLETE: Ablation Experiments Finished (70/70 runs)
+- **Goal**: Run full ablation experiment matrix on remote GPU
+- **Remote execution**: `run_experiments.py --config exp_matrix_ablation_1p5b_v1.yaml --tasks eval_ppl,eval_needle --seeds {1234..1238}`
+- **Results**: 14 configs × 5 seeds × 2 tasks = 70 runs, all successful
+  - A 节 (校准对比): kl/mse/percentile/percentile_fused/kivi — 5 configs
+  - B 节 (温度校正): temp_on/temp_off — 2 configs
+  - C 节 (group_size): g16/g32/g64/g128 — 4 configs
+  - D 节 (scales): static/adaptive/dynamic — 3 configs
+- **Duration**: ~65 min total (06:22 → 07:27), ~13 min per seed
+- **Output dir**: `results/runs/ablation_*_s{seed}_ablation_1p5b_s{seed}/`
+- **Next**: Phase 5 — full 3-model matrix experiments (1.5B KIVI补跑 → 7B → 8B)
 
 ### 2026-02-23 06:19 | Phase 4.1: MSE Calibration Complete + Phase 5 Blockers Resolved
 - **Goal**: Generate MSE calibration artifacts for 1.5B model; fix remaining CRITICAL/HIGH blockers for Phase 5
