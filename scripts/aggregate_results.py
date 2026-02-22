@@ -1831,6 +1831,7 @@ def main() -> int:
             "tpot_ms",
             "tok_per_s",
             "longbench_score",
+            "longbench_official_macro",
             "longbench_f1_macro",
             "longbench_em_macro",
             "longbench_contains_macro",
@@ -1865,6 +1866,7 @@ def main() -> int:
         longbench_keys,
         [
             "longbench_score",
+            "longbench_official_macro",
             "longbench_f1_macro",
             "longbench_em_macro",
             "longbench_contains_macro",
@@ -2028,7 +2030,7 @@ def main() -> int:
             _print_strict_issues(strict_issues)
             return 2
     ruler_depth_keys = [
-        c for c in ["kv_mode", "seq_len", "depth_ratio"] if c in ruler_depth.columns
+        c for c in ["model_id", "kv_mode", "seq_len", "depth_ratio"] if c in ruler_depth.columns
     ]
     ruler_depth_summary = _agg_mean_std(
         ruler_depth,
@@ -2103,6 +2105,8 @@ def main() -> int:
     pairings = [
         ("int8_baseline", "int8_ours"),
         ("int4_fused", "int4_ours"),
+        ("kivi_style", "int8_ours"),       # Claims C9/C10: INT8-ours vs KIVI
+        ("kivi_style", "int8_baseline"),   # completeness: INT8-baseline vs KIVI
     ]
     sig_frames = []
     sig_pair_rows = []
@@ -2111,35 +2115,35 @@ def main() -> int:
             "df": latency,
             "metric_col": "tpot_ms",
             "metric_name": "tpot_ms",
-            "key_cols": ["seq_len", "gen_len", "batch"],
+            "key_cols": ["model_id", "seq_len", "gen_len", "batch"],
             "higher_is_better": False,
         },
         {
             "df": ppl,
             "metric_col": "perplexity",
             "metric_name": "perplexity",
-            "key_cols": ["seq_len", "ppl_mode", "chunk_size"],
+            "key_cols": ["model_id", "seq_len", "ppl_mode", "chunk_size"],
             "higher_is_better": False,
         },
         {
             "df": needle,
             "metric_col": "needle_pass_rate",
             "metric_name": "needle_pass_rate",
-            "key_cols": ["seq_len"],
+            "key_cols": ["model_id", "seq_len"],
             "higher_is_better": True,
         },
         {
             "df": longbench,
             "metric_col": "longbench_score",
             "metric_name": "longbench_score",
-            "key_cols": ["seq_len", "longbench_source"],
+            "key_cols": ["model_id", "seq_len", "longbench_source"],
             "higher_is_better": True,
         },
         {
             "df": ruler,
             "metric_col": "ruler_pass_rate",
             "metric_name": "ruler_pass_rate",
-            "key_cols": ["seq_len", "ruler_num_kv_pairs"],
+            "key_cols": ["model_id", "seq_len", "ruler_num_kv_pairs"],
             "higher_is_better": True,
         },
     ]

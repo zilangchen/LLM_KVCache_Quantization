@@ -52,7 +52,7 @@ except ImportError:
     except ImportError:
         HAS_DYNAMIC_CACHE = False
 from datasets import load_dataset
-from src.cache import FP16KVCache, INT8KVCache, INT4KVCache
+from src.cache import FP16KVCache, INT8KVCache, INT4KVCache, KIVIStyleKVCache
 from src.engine.patch_model import apply_int8_fused_patch
 from src.engine.generate_loop import _register_prefill_temperature_hooks
 from src.utils.hf import resolve_pretrained_path
@@ -238,6 +238,7 @@ def build_kv_cache(
     adaptive_static_k: bool,
     adaptive_static_v: bool,
     decode_attn_impl: str | None,
+    quant_bits: int | None = None,
 ):
     num_layers = getattr(model.config, "num_hidden_layers", 28)
     (
@@ -287,6 +288,14 @@ def build_kv_cache(
             adaptive_static_v=adaptive_static_v,
             outlier_rescue_ratio=outlier_rescue_ratio,
             mixed_rescue=mixed_rescue or kv_mode == "int4_ours_mixed",
+        ), group_size, clip_percentile
+
+    if kv_mode == "kivi_style":
+        kivi_quant_bits = quant_bits if quant_bits is not None else 8
+        return KIVIStyleKVCache(
+            num_layers=num_layers,
+            device=model.device.type,
+            quant_bits=kivi_quant_bits,
         ), group_size, clip_percentile
 
     if kv_mode in ["int8_fused", "int8_ours"]:
@@ -744,6 +753,7 @@ def main():
             args.adaptive_static_k,
             args.adaptive_static_v,
             args.decode_attn_impl,
+            quant_bits=args.quant_bits,
         )
         if (
             args.kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed"]
