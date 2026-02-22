@@ -18,12 +18,14 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 import random
 import re
 import string
 import subprocess
 import sys
 import traceback
+
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
@@ -33,6 +35,8 @@ from typing import Dict, Iterable, List, Sequence
 import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
+logger = logging.getLogger(__name__)
 
 script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent

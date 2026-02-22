@@ -45,6 +45,11 @@ def quantize_asymmetric(
         raise ValueError(f"Input tensor must be float, got {tensor.dtype}")
     if quant_bits not in (4, 8):
         raise ValueError(f"quant_bits must be 4 or 8, got {quant_bits}")
+    if not (50.0 < percentile <= 100.0):
+        raise ValueError(
+            f"percentile must be in (50.0, 100.0], got {percentile}. "
+            "Values <= 50 invert min/max and produce silent errors."
+        )
 
     if quant_bits == 8:
         qmin, qmax = -128, 127

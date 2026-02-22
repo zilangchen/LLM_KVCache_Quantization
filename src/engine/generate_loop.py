@@ -777,6 +777,7 @@ def generate(
     decode_attn_impl: str = "triton_fused",
     allow_missing_calib: bool = False,
     stop_on_eos: bool = True,
+    quant_bits: int = 8,
 ) -> GenerationOutput:
     """
     Custom generation loop with prefill + token-by-token decode.
@@ -837,6 +838,7 @@ def generate(
         decode_attn_impl=decode_attn_impl,
         allow_missing_calib=allow_missing_calib,
         stop_on_eos=stop_on_eos,
+        quant_bits=quant_bits,
     )
 
     generated_tokens = batch_out.generated_ids[0].tolist()

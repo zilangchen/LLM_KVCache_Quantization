@@ -281,6 +281,9 @@ class KIVIStyleKVCache:
         """Clear cache contents but keep buffers allocated."""
         self._layer_seq_lens = [0] * self.num_layers
         self._k_scale_initialized = [False] * self.num_layers
+        # Reset K scale/zp so stale values from a previous batch don't persist.
+        self._k_scale = [None] * self.num_layers
+        self._k_zp = [None] * self.num_layers
         self._seq_len = 0
 
     def release(self) -> None:

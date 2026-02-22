@@ -195,8 +195,12 @@ def compute_inv_tau(
                 p_quant = torch.softmax(logits_scaled, dim=-1)
 
                 if loss_function == "mse":
-                    # MSE between FP16 and quantized attention distributions
-                    mse = ((p_ref.unsqueeze(0) - p_quant) ** 2).mean(dim=-1)
+                    # MSE between FP16 and quantized attention distributions.
+                    # Use .sum(dim=-1) for consistency with KL (both aggregate
+                    # the full distribution; normalisation cancels in argmin).
+                    p_ref_clamped = torch.clamp(p_ref, min=eps)
+                    p_quant_clamped = torch.clamp(p_quant, min=eps)
+                    mse = ((p_ref_clamped.unsqueeze(0) - p_quant_clamped) ** 2).sum(dim=-1)
                     loss_accum += mse
                 else:
                     # KL divergence (default)
@@ -205,6 +209,10 @@ def compute_inv_tau(
                     kl = (p_ref_safe * (torch.log(p_ref_safe) - torch.log(p_quant_safe))).sum(dim=-1)
                     loss_accum += kl
 
+            # Normalise by sample count so result is independent of --samples.
+            num_samples = len(q_samples)
+            if num_samples > 0:
+                loss_accum /= num_samples
             best_idx = torch.argmin(loss_accum).item()
             inv_tau_tensor[layer_idx, head_idx] = inv_tau_candidates[best_idx]
 
@@ -298,8 +306,11 @@ def evaluate_quant_candidate(
                 p_quant = torch.softmax(logits_quant, dim=-1)
 
                 if loss_function == "mse":
-                    # MSE between FP16 and quantized attention distributions
-                    mse = ((p_ref - p_quant) ** 2).mean().item()
+                    # MSE: use .sum() for consistency with KL (same scale
+                    # across loss functions makes trial ranking comparable).
+                    p_ref_safe = torch.clamp(p_ref, min=eps)
+                    p_quant_safe = torch.clamp(p_quant, min=eps)
+                    mse = ((p_ref_safe - p_quant_safe) ** 2).sum().item()
                     loss_values.append(float(mse))
                 else:
                     # KL divergence (default)
@@ -350,6 +361,15 @@ def select_best_trial(
         mean_key, p95_key = "mean_mse", "p95_mse"
     else:
         mean_key, p95_key = "mean_kl", "p95_kl"
+
+    # Validate that loss keys exist in trial data.
+    if trials and mean_key not in trials[0]:
+        available = [k for k in trials[0] if k.startswith("mean_") or k.startswith("p95_")]
+        raise KeyError(
+            f"Loss key '{mean_key}' not found in trial data. "
+            f"Available loss keys: {available}. "
+            f"Check that --loss_function matches the objective."
+        )
 
     if objective in ("mean_kl", "mean_mse"):
         ranked = sorted(
@@ -484,7 +504,15 @@ def main():
     parser.add_argument("--samples", type=int, default=16)
     parser.add_argument("--seq_len", type=int, default=512)
     parser.add_argument("--out_dir", type=str, default="results/calibration")
-    parser.add_argument("--calib_out", type=str, default="artifacts/kv_calib_kl.json")
+    parser.add_argument(
+        "--calib_out",
+        type=str,
+        default=None,
+        help=(
+            "Output path for calibration JSON. "
+            "Defaults to artifacts/kv_calib_{loss_function}.json."
+        ),
+    )
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--run_name", type=str, default=None)
     parser.add_argument("--seed", type=int, default=1234)
@@ -611,6 +639,9 @@ def main():
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Default output path reflects loss function to avoid overwriting.
+    if args.calib_out is None:
+        args.calib_out = f"artifacts/kv_calib_{args.loss_function}.json"
     calib_out_path = Path(args.calib_out)
     calib_out_path.parent.mkdir(parents=True, exist_ok=True)
 
