@@ -496,6 +496,9 @@ Canonical agent workflow directory is `.agents/`.
   - `test_eval_longbench_classification_policy`: 2 skipped（当前环境缺 eval_longbench 依赖）
   - `test_generate_thesis_report`: 受本地环境缺 `pandas` 阻塞
   - `compileall`: 通过
+- **Commits**:
+  - `04d89bd` fix: close backlog deltas for phase5v2 runtime and claim audits
+  - `212cdf5` docs: update backlog checklist and timeline for delta fixes
 - **Risks / follow-ups**:
   - 需在远端标准环境重跑 `tests/test_generate_thesis_report.py`
   - AB1/AB2（RULER 子任务分拆、多模型分层表）仍未关闭，后续在聚合脚本继续推进
