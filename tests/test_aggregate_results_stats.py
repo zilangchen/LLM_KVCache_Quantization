@@ -245,6 +245,38 @@ class TestAggregateResultsStats(unittest.TestCase):
         self.assertAlmostEqual(float(row["longbench_score_mean"]), 88.5, places=6)
         self.assertAlmostEqual(float(row["ruler_pass_rate_mean"]), 90.4, places=6)
 
+    def test_export_per_model_layered_tables(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            tables_dir = root / "tables"
+            tables_dir.mkdir(parents=True, exist_ok=True)
+            source = pd.DataFrame(
+                [
+                    {
+                        "model_id": "Qwen/Qwen2.5-1.5B-Instruct",
+                        "kv_mode": "int8_ours",
+                        "seq_len": 4096,
+                        "needle_pass_rate_mean": 91.2,
+                    },
+                    {
+                        "model_id": "meta-llama/Llama-3.1-8B-Instruct",
+                        "kv_mode": "int8_ours",
+                        "seq_len": 4096,
+                        "needle_pass_rate_mean": 92.6,
+                    },
+                ]
+            )
+            source.to_csv(tables_dir / "needle_summary.csv", index=False)
+
+            manifest = agg._export_per_model_layered_tables(tables_dir)  # pylint: disable=protected-access
+            self.assertEqual(len(manifest), 2)
+            self.assertTrue(
+                (tables_dir / "per_model" / "Qwen__Qwen2.5-1.5B-Instruct" / "needle_summary.csv").exists()
+            )
+            self.assertTrue(
+                (tables_dir / "per_model" / "meta-llama__Llama-3.1-8B-Instruct" / "needle_summary.csv").exists()
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
