@@ -195,6 +195,54 @@ class TestGenerateThesisReport(unittest.TestCase):
         g3 = gate[gate["gate_id"] == "G3"].iloc[0]
         self.assertEqual(g3["status"], "FAIL")
 
+    def test_claim_validation_filters_target_models(self):
+        rel = pd.DataFrame(
+            [
+                {
+                    "metric": "longbench_score",
+                    "baseline_mode": "int8_baseline",
+                    "challenger_mode": "int8_ours",
+                    "model_id": "Qwen/Qwen2.5-1.5B-Instruct",
+                    "seq_len": 32704,
+                    "batch": 1,
+                    "gain_pct": 9.0,
+                },
+                {
+                    "metric": "longbench_score",
+                    "baseline_mode": "int8_baseline",
+                    "challenger_mode": "int8_ours",
+                    "model_id": "Qwen/Qwen2.5-7B-Instruct",
+                    "seq_len": 32704,
+                    "batch": 1,
+                    "gain_pct": 1.5,
+                },
+            ]
+        )
+        claims = [
+            gtr.ClaimSpec(
+                claim_id="C11",
+                title="Cross-model",
+                metric="longbench_score",
+                baseline_mode="int8_baseline",
+                challenger_mode="int8_ours",
+                min_gain_pct=0.0,
+                require_q_significance=False,
+                target_seq_len=32704,
+                target_batch=1,
+                target_model_ids=["Qwen/Qwen2.5-7B-Instruct"],
+            )
+        ]
+        out = gtr.build_claim_validation(
+            relative_gain=rel,
+            significance=pd.DataFrame(),
+            claims=claims,
+            alpha=0.05,
+        )
+        self.assertEqual(len(out), 1)
+        row = out.iloc[0]
+        self.assertEqual(row["status"], "PASS")
+        self.assertAlmostEqual(float(row["observed_gain_pct"]), 1.5, places=6)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -50,6 +50,19 @@ def get_git_commit() -> str:
         return "unknown"
 
 
+def _resolve_quant_bits(kv_mode: str, quant_bits_arg: int | None) -> int:
+    if quant_bits_arg is not None:
+        return int(quant_bits_arg)
+    mode = str(kv_mode)
+    if mode == "kivi_style":
+        return 8
+    if "int4" in mode:
+        return 4
+    if "int8" in mode:
+        return 8
+    return 16
+
+
 def _resolve_out_dir(out_dir_arg: str) -> Path:
     out_dir = Path(out_dir_arg)
     if not out_dir.is_absolute():
@@ -464,7 +477,10 @@ def main():
             "model_id": args.model_id,
             "run_name": args.run_name,
             "kv_mode": args.kv_mode,
-            "quant_bits": getattr(args, 'quant_bits', None) or (4 if "int4" in args.kv_mode else (8 if "int8" in args.kv_mode else 16)),
+            "quant_bits": _resolve_quant_bits(
+                args.kv_mode,
+                getattr(args, "quant_bits", None),
+            ),
             "clip_percentile": args.clip_percentile,
             "group_size": args.group_size,
             "dtype": str(model.dtype),

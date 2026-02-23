@@ -51,6 +51,19 @@ def get_git_commit() -> str:
         return "unknown"
 
 
+def _resolve_quant_bits(kv_mode: str, quant_bits_arg: int | None) -> int:
+    if quant_bits_arg is not None:
+        return int(quant_bits_arg)
+    mode = str(kv_mode)
+    if mode == "kivi_style":
+        return 8
+    if "int4" in mode:
+        return 4
+    if "int8" in mode:
+        return 8
+    return 16
+
+
 def _resolve_out_dir(out_dir_arg: str) -> Path:
     out_dir = Path(out_dir_arg)
     if not out_dir.is_absolute():
@@ -230,6 +243,11 @@ def main():
 
     normalize_kv_params(args)
     set_seed(seed=args.seed, deterministic=True)
+    runtime_quant_bits = (
+        _resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
+        if args.kv_mode == "kivi_style"
+        else getattr(args, "quant_bits", None)
+    )
 
     print(f"Loading {args.model_id}...")
     model_path = resolve_pretrained_path(args.model_id, revision=args.model_revision)
@@ -278,7 +296,7 @@ def main():
             decode_attn_impl=args.decode_attn_impl or "triton_fused",
             seed=args.seed,
             stop_on_eos=False,
-            quant_bits=getattr(args, 'quant_bits', None),
+            quant_bits=runtime_quant_bits,
         )
 
     print(f"Profiling ({args.runs} runs)...")
@@ -314,10 +332,10 @@ def main():
             decode_attn_impl=args.decode_attn_impl or "triton_fused",
             seed=args.seed,
             stop_on_eos=False,
-            quant_bits=getattr(args, 'quant_bits', None),
+            quant_bits=runtime_quant_bits,
         )
 
-        quant_bits = getattr(args, 'quant_bits', None) or (4 if "int4" in args.kv_mode else (8 if "int8" in args.kv_mode else 16))
+        quant_bits = _resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
 
         prefill_tok_per_s = 0.0
         if out.ttft_ms > 0:
