@@ -1991,7 +1991,7 @@ def main() -> int:
                 x="seq_len",
                 y="longbench_score_mean",
                 hue="kv_mode",
-                title="LongBench Score vs Context Len",
+                title="LongBench Official-Metric Macro vs Context Len",
                 xlabel="Context length (tokens)",
                 ylabel="LongBench score (official-metric macro, 0-1)",
                 out_path=plots_dir / "longbench_score_vs_context.png",
@@ -2149,6 +2149,7 @@ def main() -> int:
         ruler_task,
         [
             "seq_len",
+            "batch",
             "sample_count",
             "ruler_pass_rate",
             "ruler_contains_rate",
@@ -2159,6 +2160,8 @@ def main() -> int:
     )
     if not ruler_task.empty and "seed" not in ruler_task.columns and "run_id" in ruler_task.columns:
         ruler_task["seed"] = ruler_task["run_id"].map(_extract_seed_from_run_id)
+    if "ruler_task" not in ruler_task.columns and "task_name" in ruler_task.columns:
+        ruler_task["ruler_task"] = ruler_task["task_name"]
     ruler_task = _to_numeric(ruler_task, ["seed"])
     if args.strict:
         strict_issues = _strict_missing_seed(ruler_task, table_name="ruler_task")
@@ -2167,7 +2170,7 @@ def main() -> int:
             return 2
     ruler_task_keys = [
         c
-        for c in ["ruler_task", "kv_mode", "seq_len"]
+        for c in ["model_id", "hardware", "ruler_task", "kv_mode", "seq_len", "batch"]
         if c in ruler_task.columns
     ]
     ruler_task_summary = _agg_mean_std(
@@ -2178,6 +2181,7 @@ def main() -> int:
     if not ruler_task_summary.empty:
         ruler_task_summary = _add_ci95_columns(ruler_task_summary)
         _save_table(ruler_task_summary, tables_dir / "ruler_task_summary.csv")
+        _save_table(ruler_task_summary, tables_dir / "ruler_subtask_summary.csv")
 
     # Needle details (curve over depth)
     needle_details = _read_csvs(runs_dir, ["needle_details_*.csv"])
