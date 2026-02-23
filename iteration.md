@@ -20,7 +20,7 @@ Canonical agent workflow directory is `.agents/`.
 **关键 HIGH（影响论文质量）**：
 - ~~**AC1** generate_thesis_report.py C11 跨模型验证只取最佳单行，非逐模型验证~~ — ✅ 已修复（本分支：逐模型判定 + 聚合全模型门禁）
 - ~~**AB1** aggregate_results.py RULER 缺子任务分拆表~~ — ✅ 已修复（本分支：新增 `ruler_subtask_summary.csv`）
-- **AB2** aggregate_results.py 多模型缺分层对比表
+- ~~**AB2** aggregate_results.py 多模型缺分层对比表~~ — ✅ 已修复（本分支：自动导出 `tables/per_model/<model>/...` 分层表）
 - ~~**AE1-2** 测试覆盖：KIVI zp 传播/asymmetric 公式~~ — ✅ 已修复（PR #5）
 - **AE3-4** 测试覆盖：calibrate 无测试/端到端集成缺失（仍未修复）
 - ~~**AF-N2** eval_longbench.py `_classification_accuracy()` 语义变化需确认（新 CRITICAL）~~ — ✅ 已修复（本分支：补口径文档与CSV审计字段）
@@ -317,7 +317,7 @@ Canonical agent workflow directory is `.agents/`.
 > KIVI baseline 支持、多模型分层表、LongBench/RULER 聚合完整性审查。
 
 - [x] `[HIGH]` RULER 聚合缺少子任务分拆 (aggregate_results.py:1936-2078): ✅ 已修复（本分支：保留 `ruler_task_summary.csv` 并新增同口径 `ruler_subtask_summary.csv`，按 `ruler_task` 输出四子任务聚合）
-- [ ] `[HIGH]` 多模型对比缺少分层表 (aggregate_results.py 全局): model_id 作为 groupby key 参与聚合，但产出表不分层——无法快速查看"INT8-ours 在 1.5B vs 7B vs 8B 上的对比"。论文 Table 需要 per-model 独立行
+- [x] `[HIGH]` 多模型对比缺少分层表 (aggregate_results.py 全局): ✅ 已修复（本分支：新增 `_export_per_model_layered_tables()`，含 `per_model_table_manifest.csv`）
 - [ ] `[MEDIUM]` LongBench 聚合同时包含 3 个近义指标 (aggregate_results.py:1867-1874): `longbench_score`、`longbench_official_macro`、`longbench_f1_macro` 同时聚合。需确认哪个是 objective.md 定义的 primary endpoint（应为 `longbench_score`）。多指标并存增加混淆风险
 - [ ] `[MEDIUM]` KIVI quant_bits 在 pairings 中未区分 INT8/INT4 (aggregate_results.py:2105-2110): pairings 列表 `("kivi_style", "int8_ours")` 未指定 kivi 的 quant_bits。若结果 CSV 中混合了 kivi_int8 和 kivi_int4 行，统计检验可能混用两种精度的数据
 - [ ] `[MEDIUM]` kv_mode 显示顺序依赖默认排序 (aggregate_results.py:705-732): 绘图/表格中 kv_mode 未定义固定显示顺序，使用 Python 默认字符串排序。建议定义 `KV_MODE_DISPLAY_ORDER` 常量确保论文一致性
@@ -474,6 +474,29 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-02-24 03:05 | Phase5v2 聚合修复增量：AB2 多模型分层表导出
+
+- **Goal**: 关闭 AB2（多模型缺分层表），让论文对比可直接按模型取表
+- **Changed files**:
+  - `scripts/aggregate_results.py`:
+    - 新增 `_slugify_model_id()` 与 `_export_per_model_layered_tables()`
+    - 聚合结束后自动导出 `tables/per_model/<model_slug>/<table>.csv`
+    - 新增 `per_model_table_manifest.csv` 记录分层导出清单
+  - `tests/test_aggregate_results_stats.py`:
+    - 新增 `test_export_per_model_layered_tables` 覆盖分层导出行为
+  - `iteration.md`: 勾选 AB2 与关键 HIGH 汇总
+- **Commands**:
+  - `python3.12 -m compileall -f scripts tests`
+  - `python3.12 -m unittest tests/test_aggregate_results_stats.py`（本地环境缺 pandas，未通过）
+- **Validation**:
+  - compileall：通过
+  - `aggregate_results.py` 语法检查通过
+  - `tests/test_aggregate_results_stats.py` 受本地缺 `pandas` 阻塞（需远端补跑）
+- **Risks / follow-ups**:
+  - 需在远端标准环境补跑 `tests/test_aggregate_results_stats.py`
+
+---
+
 ### 2026-02-24 03:02 | Phase5v2 聚合修复增量：LongBench 图口径与 RULER 子任务分拆
 
 - **Goal**: 继续处理 review/backlog，关闭 LongBench 图口径歧义与 AB1（RULER 子任务分拆）
@@ -492,7 +515,7 @@ Canonical agent workflow directory is `.agents/`.
   - LongBench 图文本检查通过：无 `macro F1` 旧文案；标题与 y 轴均为 official-metric 口径
   - compileall：通过
 - **Risks / follow-ups**:
-  - AB2（多模型分层对比表）仍未关闭
+  - AB2 已在 03:05 里程碑关闭；后续关注远端实际产表验证
 
 ---
 
@@ -523,7 +546,7 @@ Canonical agent workflow directory is `.agents/`.
   - `212cdf5` docs: update backlog checklist and timeline for delta fixes
 - **Risks / follow-ups**:
   - 需在远端标准环境重跑 `tests/test_generate_thesis_report.py`
-  - AB2（多模型分层对比表）仍未关闭，后续在聚合脚本继续推进
+  - AB2 已关闭；如需论文版式拆分（分页/分表）在 export_tables_latex.py 继续推进
 
 ---
 
