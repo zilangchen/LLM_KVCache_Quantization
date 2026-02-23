@@ -15,10 +15,11 @@
 
 project:
   name: kv-cache-quant-llama31-8b
-  # Downloaded via modelscope; use local path on remote.
-  # HF model_id kept for reference: meta-llama/Llama-3.1-8B-Instruct
-  model_id: /root/autodl-tmp/modelscope_cache/LLM-Research/Meta-Llama-3___1-8B-Instruct
-  model_revision: null  # local path, no HF revision needed
+  # HF model_id is canonical; remote server uses local_model_path override.
+  model_id: meta-llama/Llama-3.1-8B-Instruct
+  # Local path on AutoDL remote (used by run_experiments.py --model_path override):
+  # /root/autodl-tmp/modelscope_cache/LLM-Research/Meta-Llama-3___1-8B-Instruct
+  model_revision: null
 
 runtime:
   seed: 1234

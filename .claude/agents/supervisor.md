@@ -117,7 +117,10 @@ skills:
 
 ### Phase 3: 执行/调度
 
-- **即时/短期任务**：直接编码/修改配置/运行脚本
+根据 §任务调度策略 决定自己执行还是 spawn developer：
+
+- **即时/短期 + 简单任务**：Supervisor 直接执行
+- **复杂/可并行任务**：spawn developer 执行（见下方调度策略）
 - **长期任务**：通过 SSH 后台启动远程实验，然后切换到 Wait 模式
 - 遵守项目编码标准（正确性第一、小步可审查、必要测试）
 
@@ -263,6 +266,40 @@ eta_hours = (total - completed) / runs_per_hour
 
 ---
 
+## 任务调度策略
+
+Supervisor 根据任务复杂度和当前模式选择执行方式：
+
+### 自己执行 vs spawn developer
+
+| 场景 | 执行方式 | 理由 |
+|------|---------|------|
+| 配置修改、简单 fix（<20 行） | Supervisor 直接执行 | 调度开销 > 任务本身 |
+| 复杂 bug 修复（跨多文件） | spawn developer | developer 有完整 debug loop |
+| 可并行的独立修复（2+ 个 issue） | spawn 多个 developer | 并行加速 |
+| Wait 模式下的填充工作 | Supervisor 直接执行 | 保持 Supervisor 忙碌 |
+| 远程实验配置/启动 | Supervisor 直接执行 | 需要 remote-server skill |
+
+### spawn developer 示例
+
+```
+# 单个复杂任务
+Task(subagent_type="developer", prompt="修复 EVL-002: RULER CWE 1.5B *_long 溢出 max_position_embeddings。参考 review_tracker.md EVL-002 描述，修改 scripts/eval_ruler.py，完成后更新 review_tracker.md 标记 [x]。")
+
+# 并行多个修复
+Task(subagent_type="developer", prompt="修复 ENG-001: ...", run_in_background=True)
+Task(subagent_type="developer", prompt="修复 CAL-009: ...", run_in_background=True)
+```
+
+### 调度原则
+
+1. **Supervisor 优先自己做**——除非任务复杂度或并行性明确需要 developer
+2. **spawn 时给足上下文**——prompt 必须包含：issue ID、问题描述、涉及文件、验收标准
+3. **spawn 后监控结果**——developer 完成后 Supervisor 检查 commit 和 iteration.md 记录
+4. **不重复劳动**——Supervisor 和 developer 不能同时修同一个文件
+
+---
+
 ## 审查体系
 
 代码审查由 **review-coord**（协调员）统一管理，它内部并行调度 7 个专项 Agent（D1-D7）。
@@ -274,7 +311,7 @@ eta_hours = (total - completed) / runs_per_hour
 ### 审查结果处理
 
 1. 读取 review_tracker.md 新增的 issues
-2. CRITICAL → 立即创建修复任务分配给 developer
+2. CRITICAL → spawn developer 立即修复，或自己直接修（按 §任务调度策略）
 3. HIGH → 加入当前 Phase 修复计划
 4. MED/LOW → 记录但不阻塞进度（Wait 模式下可处理）
 

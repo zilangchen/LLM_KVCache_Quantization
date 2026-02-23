@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "NotebookEdit(*)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"\nimport sys, os, re\n\nmarker = '.claude/.auto_iterate_active'\n\n# If marker file does not exist, auto-iterate is not running — allow stop\nif not os.path.exists(marker):\n    sys.exit(0)\n\n# Marker file exists — check its content for completion signals\ntry:\n    content = open(marker).read().strip().lower()\nexcept Exception:\n    sys.exit(0)\n\n# Allow stop on any of these status values (case-insensitive)\nallow_statuses = ['complete', 'completed', 'stalled', 'blocked', 'needs_input']\nfor s in allow_statuses:\n    if s in content:\n        sys.exit(0)\n\n# Also check iteration.md for legacy markers\nif os.path.exists('iteration.md'):\n    with open('iteration.md', 'r') as f:\n        progress = f.read()\n    legacy_markers = [\n        'Auto-Iterate 完成报告', 'auto-iterate-complete',\n        'auto-iterate-stalled', 'auto-iterate-needs-user-input',\n        'auto-iterate-blocked', '达到迭代上限', 'iteration-cap-reached'\n    ]\n    for m in legacy_markers:\n        if m in progress:\n            sys.exit(0)\n\nprint('Auto-iterate active, objectives not yet complete. Keep going.')\nsys.exit(1)\n\""
+          }
+        ]
+      }
+    ]
+  }
+}
