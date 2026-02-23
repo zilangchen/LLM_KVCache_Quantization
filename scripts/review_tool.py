@@ -21,9 +21,9 @@ from pathlib import Path
 TRACKER = Path(__file__).resolve().parent.parent / "review_tracker.md"
 
 ISSUE_RE = re.compile(
-    r'^- \[([ x])\] \*\*(\w+-\d+)\*\* `\[(\w+)\]` (.+)$'
+    r'^- \[([ x])\] \*\*([A-Z]+-\d+)\*\* `\[(\w+)\]` (.+)$'
 )
-SECTION_RE = re.compile(r'^### ([A-Z]{1,2})\. (.+?)(?:\s*—\s*`.+`)?$')
+SECTION_RE = re.compile(r'^### ([A-Z]{1,3})\. (.+?)(?:\s*—\s*`.+`)?$')
 
 SEV_ORDER = {"CRIT": 0, "HIGH": 1, "MED": 2, "LOW": 3}
 SEV_FULL = {"CRIT": "CRITICAL", "HIGH": "HIGH", "MED": "MEDIUM", "LOW": "LOW"}

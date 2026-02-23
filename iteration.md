@@ -115,7 +115,7 @@ Canonical agent workflow directory is `.agents/`.
   - `grep review.yaml *.md .claude/agents/*.md`: 零残留引用 ✅
   - `wc -l review_tracker.md`: 291 lines (vs 3951 原 YAML, 93% 压缩) ✅
 - **Net effect**: 删除 ~4809 行 (YAML + 3 scripts)，新增 ~400 行 (markdown + 1 script)。92% 减少。
-- **Commit**: 04d534a
+- **Commit**: 73c9472 (initial), then renumbered (see below)
 
 ### 2026-02-23 17:29 | Phase 5v2 启动 — 合并验证 + 质量并行评测
 
