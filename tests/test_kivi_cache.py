@@ -159,6 +159,23 @@ class TestKIVICacheDecodeAppend(unittest.TestCase):
         # K scale should NOT change after decode
         self.assertTrue(torch.equal(cache._k_scale[0], k_scale_after_prefill))
 
+    def test_decode_token_error_with_prefill_scale_is_bounded(self):
+        """Decode token quantization with reused prefill scale should stay bounded."""
+        cache = self._make_cache(quant_bits=8)
+        B, H, D = 1, 2, 16
+        torch.manual_seed(0)
+        k_prefill = torch.randn(B, H, 16, D)
+        v_prefill = torch.randn(B, H, 16, D)
+        cache.append(0, k_prefill, v_prefill)
+
+        k_dec = torch.randn(B, H, 1, D)
+        v_dec = torch.randn(B, H, 1, D)
+        cache.append(0, k_dec, v_dec)
+        k_out, _ = cache.get_kv(0)
+        k_last = k_out[:, :, -1:, :]
+        rel_err = (k_last - k_dec).abs().mean() / (k_dec.abs().mean() + 1e-8)
+        self.assertLess(rel_err.item(), 0.10)
+
     def test_v_scale_independent_per_token(self):
         """Each V token should have its own scale."""
         cache = self._make_cache()
@@ -231,15 +248,24 @@ class TestKIVICacheInterface(unittest.TestCase):
         return KIVIStyleKVCache(**defaults)
 
     def test_clear(self):
-        """clear() should reset seq_len but keep buffers."""
+        """clear() should reset seq_len/scales and support re-append."""
         cache = self._make_cache()
         k = torch.randn(1, 2, 8, 16)
         v = torch.randn(1, 2, 8, 16)
         cache.append(0, k, v)
         self.assertEqual(cache.get_seq_len(), 8)
+        self.assertTrue(cache._k_scale_initialized[0])
 
         cache.clear()
         self.assertEqual(cache.get_seq_len(), 0)
+        self.assertFalse(cache._k_scale_initialized[0])
+        self.assertIsNone(cache._k_scale[0])
+        self.assertIsNone(cache._k_zp[0])
+
+        # Re-append should reinitialize K scale without crashing.
+        cache.append(0, k, v)
+        self.assertTrue(cache._k_scale_initialized[0])
+        self.assertEqual(cache.get_seq_len(), 8)
 
     def test_release(self):
         """release() should free all buffers."""
@@ -299,6 +325,56 @@ class TestKIVICacheInterface(unittest.TestCase):
             cache.append(-1, k, v)
         with self.assertRaises(ValueError):
             cache.append(2, k, v)  # num_layers=2, so layer_id=2 is out of range
+
+    def test_invalid_shape_raises(self):
+        cache = self._make_cache()
+        # Wrong rank
+        with self.assertRaises(ValueError):
+            cache.append(0, torch.randn(1, 2, 16), torch.randn(1, 2, 16))
+        # K/V mismatch
+        with self.assertRaises(ValueError):
+            cache.append(0, torch.randn(1, 2, 4, 16), torch.randn(1, 3, 4, 16))
+        # Transposed-like mismatch after cache is initialized
+        cache.append(0, torch.randn(1, 2, 4, 16), torch.randn(1, 2, 4, 16))
+        with self.assertRaises(ValueError):
+            cache.append(0, torch.randn(1, 16, 2, 4), torch.randn(1, 16, 2, 4))
+
+    def test_zero_batch_raises(self):
+        cache = self._make_cache()
+        with self.assertRaises(ValueError):
+            cache.append(0, torch.randn(0, 2, 4, 16), torch.randn(0, 2, 4, 16))
+
+    def test_float16_input_supported(self):
+        cache = self._make_cache(dtype=torch.float16)
+        k = torch.randn(1, 2, 8, 16, dtype=torch.float16)
+        v = torch.randn(1, 2, 8, 16, dtype=torch.float16)
+        cache.append(0, k, v)
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.dtype, torch.float16)
+        self.assertEqual(v_out.dtype, torch.float16)
+
+    def test_multi_clear_append_cycles(self):
+        cache = self._make_cache()
+        for _ in range(3):
+            k = torch.randn(1, 2, 4, 16)
+            v = torch.randn(1, 2, 4, 16)
+            cache.append(0, k, v)
+            self.assertEqual(cache.get_seq_len(), 4)
+            cache.clear()
+            self.assertEqual(cache.get_seq_len(), 0)
+
+    def test_int4_storage_is_bit_packed(self):
+        cache = self._make_cache(quant_bits=4)
+        k = torch.randn(1, 2, 8, 16)
+        v = torch.randn(1, 2, 8, 16)
+        cache.append(0, k, v)
+        # Stored head_dim should be packed to D/2.
+        self.assertEqual(cache._k_cache[0].shape[-1], 8)
+        self.assertEqual(cache._v_cache[0].shape[-1], 8)
+        # Dequantized output shape should remain original D.
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.shape[-1], 16)
+        self.assertEqual(v_out.shape[-1], 16)
 
 
 class TestKIVICacheInit(unittest.TestCase):

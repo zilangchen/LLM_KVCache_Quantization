@@ -97,6 +97,15 @@ class INT8CacheWrapperContainer:
     then passes past_key_values[layer_idx] to each attention layer.
     """
     def __init__(self, cache_engine, num_layers):
+        if not (
+            hasattr(cache_engine, "get_int8_tensors")
+            or hasattr(cache_engine, "get_int4_tensors")
+        ):
+            raise TypeError(
+                "INT8CacheWrapperContainer requires an INT8/INT4 fused cache engine. "
+                f"Got {type(cache_engine).__name__}. "
+                "If you are using kivi_style or fp16, route through the non-fused decode path."
+            )
         self.engine = cache_engine
         self.num_layers = num_layers
         # Create per-layer wrappers
@@ -473,11 +482,12 @@ def _resolve_attn_shape_meta(attn_module) -> Tuple[int, int, int]:
         q_heads = _infer_heads_from_proj(attn_module, "q_proj", head_dim)
     if kv_heads is None:
         kv_heads = _infer_heads_from_proj(attn_module, "k_proj", head_dim)
-    if kv_heads is None:
-        kv_heads = q_heads
 
     if q_heads is None or kv_heads is None:
-        raise ValueError("Unable to resolve attention head metadata for fused decode.")
+        raise ValueError(
+            "Unable to resolve attention head metadata for fused decode. "
+            "Expected explicit num_heads/num_key_value_heads or inferable q_proj/k_proj dimensions."
+        )
 
     q_heads = int(q_heads)
     kv_heads = int(kv_heads)
