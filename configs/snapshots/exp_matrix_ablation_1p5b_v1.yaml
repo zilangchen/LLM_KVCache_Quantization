@@ -83,7 +83,9 @@ matrix:
     quant_bits: 8
     calib_strategy: mse
     calib_file: artifacts/kv_calib_mse_1p5b_int8.json
-    use_attn_temperature: true
+    # Keep temperature OFF for MSE branch to avoid conflating calibration quality
+    # with potentially noisy inv_tau estimates under non-KL objectives.
+    use_attn_temperature: false
     decode_attn_impl: triton_fused
     group_size_k: 16
     group_size_v: 16

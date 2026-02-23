@@ -28,6 +28,23 @@ class TestAggregateResultsStats(unittest.TestCase):
         # Exact two-sided sign-flip p-value for n=4 all-positive diffs is 2/16.
         self.assertAlmostEqual(p_value, 0.125, places=12)
 
+    def test_exact_signflip_pvalue_mixed_signs(self):
+        diffs = np.array([3.0, 2.0, -1.0, 0.5], dtype=np.float64)
+        p_value, method, n_perm = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            diffs, n_permutations=5000, seed=1234
+        )
+        self.assertEqual(method, "exact_signflip")
+        self.assertEqual(n_perm, 16)
+
+        observed = abs(float(np.mean(diffs)))
+        n = len(diffs)
+        idx = np.arange(1 << n, dtype=np.uint32)[:, None]
+        bits = ((idx >> np.arange(n, dtype=np.uint32)) & 1).astype(np.int8)
+        signs = bits * 2 - 1
+        perm_means = np.abs((signs * diffs[None, :]).mean(axis=1))
+        expected_p = float(np.mean(perm_means >= (observed - 1e-12)))
+        self.assertAlmostEqual(p_value, expected_p, places=12)
+
     def test_bootstrap_ci_contains_mean(self):
         values = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float64)
         low, high = agg._bootstrap_ci_mean(  # pylint: disable=protected-access

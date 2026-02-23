@@ -78,6 +78,19 @@ def get_git_commit() -> str:
         return "unknown"
 
 
+def _resolve_quant_bits(kv_mode: str, quant_bits_arg: int | None) -> int:
+    if quant_bits_arg is not None:
+        return int(quant_bits_arg)
+    mode = str(kv_mode)
+    if mode == "kivi_style":
+        return 8
+    if "int4" in mode:
+        return 4
+    if "int8" in mode:
+        return 8
+    return 16
+
+
 def maybe_to_dynamic_cache(past_key_values):
     """
     Transformers versions differ on whether model forward accepts legacy tuples.
@@ -885,7 +898,10 @@ def main():
             "run_id": f"ppl_{timestamp}",
             "model_id": args.model_id,
             "kv_mode": kv_mode_used,
-            "quant_bits": getattr(args, 'quant_bits', None) or (4 if "int4" in kv_mode_used else (8 if "int8" in kv_mode_used else 16)),
+            "quant_bits": _resolve_quant_bits(
+                kv_mode_used,
+                getattr(args, "quant_bits", None),
+            ),
             "clip_percentile": effective_clip_percentile,
             "group_size": effective_group_size,
             "dtype": str(model.dtype),

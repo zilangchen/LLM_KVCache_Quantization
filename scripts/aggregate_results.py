@@ -25,6 +25,65 @@ import numpy as np
 import pandas as pd
 
 
+KV_MODE_ORDER: List[str] = [
+    "fp16",
+    "int8_baseline",
+    "int8_ours",
+    "int8_fused",
+    "int4_baseline",
+    "int4_ours",
+    "int4_ours_mixed",
+    "int4_fused",
+    "kivi_style",
+]
+_KV_MODE_RANK = {mode: idx for idx, mode in enumerate(KV_MODE_ORDER)}
+
+
+def _kv_mode_rank(value: object) -> int:
+    return _KV_MODE_RANK.get(str(value), len(KV_MODE_ORDER))
+
+
+def _sort_by_kv_mode(
+    df: pd.DataFrame,
+    *,
+    col: str = "kv_mode",
+    extra_cols: List[str] | None = None,
+) -> pd.DataFrame:
+    if df.empty or col not in df.columns:
+        return df
+    out = df.copy()
+    out["_kv_mode_rank"] = out[col].map(_kv_mode_rank)
+    sort_cols = ["_kv_mode_rank", col]
+    if extra_cols:
+        sort_cols.extend([c for c in extra_cols if c in out.columns])
+    out = out.sort_values(sort_cols, kind="stable").reset_index(drop=True)
+    return out.drop(columns=["_kv_mode_rank"])
+
+
+def _iter_grouped(df: pd.DataFrame, hue: str) -> List[tuple[object, pd.DataFrame]]:
+    groups = list(df.groupby(hue))
+    if hue == "kv_mode":
+        groups.sort(key=lambda item: (_kv_mode_rank(item[0]), str(item[0])))
+    else:
+        groups.sort(key=lambda item: str(item[0]))
+    return groups
+
+
+def _count_duplicate_groups(
+    df: pd.DataFrame,
+    group_cols: List[str],
+) -> tuple[int, int]:
+    if df.empty or not group_cols:
+        return 0, 0
+    counts = df.groupby(group_cols, dropna=False).size()
+    dup = counts[counts > 1]
+    if dup.empty:
+        return 0, 0
+    duplicate_groups = int(dup.shape[0])
+    duplicate_extra_rows = int((dup - 1).sum())
+    return duplicate_groups, duplicate_extra_rows
+
+
 def _read_csvs(runs_dir: Path, patterns: Iterable[str]) -> pd.DataFrame:
     frames: List[pd.DataFrame] = []
     for pattern in patterns:
@@ -549,7 +608,7 @@ def _build_throughput_capacity_summary(
         work_latency = pd.DataFrame(columns=["kv_mode", "batch"])
 
     rows = []
-    for kv_mode, sub in sorted(work_attempts.groupby("kv_mode")):
+    for kv_mode, sub in _iter_grouped(work_attempts, "kv_mode"):
         attempted_batches = sorted(int(x) for x in sub["batch"].dropna().unique())
         successful_batches = sorted(
             int(x)
@@ -582,7 +641,7 @@ def _build_throughput_capacity_summary(
         )
     if not rows:
         return pd.DataFrame()
-    return pd.DataFrame(rows).sort_values(["kv_mode"]).reset_index(drop=True)
+    return _sort_by_kv_mode(pd.DataFrame(rows))
 
 
 def _annotate_batch_curve_with_capacity(
@@ -645,7 +704,7 @@ def _annotate_batch_curve_with_capacity(
     if missing_rows:
         out = pd.concat([out, pd.DataFrame(missing_rows)], ignore_index=True)
     if "batch" in out.columns:
-        out = out.sort_values(["kv_mode", "batch"]).reset_index(drop=True)
+        out = _sort_by_kv_mode(out, extra_cols=["batch"])
     return out
 
 
@@ -679,7 +738,7 @@ def _plot_batch_with_capacity(
 
     plt.figure(figsize=(8, 5))
     color_map = {}
-    for label, sub in sorted(measured.groupby(hue)):
+    for label, sub in _iter_grouped(measured, hue):
         sub = sub.sort_values(x)
         if yerr and yerr in sub.columns:
             cont = plt.errorbar(
@@ -734,7 +793,7 @@ def _plot_batch_with_capacity(
     # Missing / OOM markers.
     if {"point_status", "status_reason"}.issubset(plot_df.columns):
         missing = plot_df[plot_df["point_status"] == "missing"]
-        for mode, sub_miss in sorted(missing.groupby(hue)):
+        for mode, sub_miss in _iter_grouped(missing, hue):
             mode_str = str(mode)
             mode_measured = measured[measured[hue] == mode]
             if mode_measured.empty:
@@ -788,7 +847,7 @@ def _plot_lines(
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     plt.figure(figsize=(8, 5))
-    for label, sub in sorted(df.groupby(hue)):
+    for label, sub in _iter_grouped(df, hue):
         sub = sub.sort_values(x)
         if yerr and yerr in sub.columns:
             plt.errorbar(
@@ -896,9 +955,27 @@ def _significance_summary(
 
         n_pairs = int(diff.size)
         n_unique_seeds = int(seed_series.nunique())
+        dup_groups = int(
+            pd.to_numeric(
+                sub.get("duplicate_groups_collapsed", pd.Series([0])),
+                errors="coerce",
+            )
+            .fillna(0)
+            .max()
+        )
+        dup_rows = int(
+            pd.to_numeric(
+                sub.get("duplicate_extra_rows_collapsed", pd.Series([0])),
+                errors="coerce",
+            )
+            .fillna(0)
+            .max()
+        )
 
         row["n_pairs"] = n_pairs
         row["n_unique_seeds"] = n_unique_seeds
+        row["duplicate_groups_collapsed"] = dup_groups
+        row["duplicate_extra_rows_collapsed"] = dup_rows
         row["seed_min"] = float(seed_series.min()) if not seed_series.empty else np.nan
         row["seed_max"] = float(seed_series.max()) if not seed_series.empty else np.nan
         row["higher_is_better"] = bool(higher_is_better)
@@ -991,6 +1068,13 @@ def _build_paired_metric_rows(
         sub = work[work["kv_mode"].isin([base_mode, challenger_mode])]
         if sub.empty:
             continue
+        dup_groups, dup_rows = _count_duplicate_groups(sub, keys + ["seed", "kv_mode"])
+        if dup_groups > 0:
+            print(
+                "Warning: significance pairing collapsed duplicate rows by mean "
+                f"(metric={metric_name}, base={base_mode}, challenger={challenger_mode}, "
+                f"duplicate_groups={dup_groups}, duplicate_extra_rows={dup_rows})."
+            )
         pivot = sub.pivot_table(
             index=keys + ["seed"],
             columns="kv_mode",
@@ -1022,6 +1106,8 @@ def _build_paired_metric_rows(
         paired["diff"] = diff
         paired["favorable_diff"] = favorable_diff
         paired["gain_pct"] = gain_pct
+        paired["duplicate_groups_collapsed"] = int(dup_groups)
+        paired["duplicate_extra_rows_collapsed"] = int(dup_rows)
         rows.append(paired)
 
     if not rows:
@@ -1168,6 +1254,12 @@ def _relative_gain_table(
     sub = sub.dropna(subset=[metric_col])
     if sub.empty:
         return pd.DataFrame()
+    dup_groups, dup_rows = _count_duplicate_groups(sub, keep + ["kv_mode"])
+    if dup_groups > 0:
+        print(
+            "Warning: relative gain aggregation collapsed duplicate rows by mean "
+            f"(metric={metric_name}, duplicate_groups={dup_groups}, duplicate_extra_rows={dup_rows})."
+        )
 
     pivot = sub.pivot_table(index=keep, columns="kv_mode", values=metric_col, aggfunc="mean")
     out_frames: List[pd.DataFrame] = []
@@ -1196,6 +1288,8 @@ def _relative_gain_table(
         row["delta_abs"] = delta_abs
         row["delta_pct"] = delta_pct
         row["gain_pct"] = gain_pct
+        row["duplicate_groups_collapsed"] = int(dup_groups)
+        row["duplicate_extra_rows_collapsed"] = int(dup_rows)
         out_frames.append(row)
 
     if not out_frames:
@@ -1319,7 +1413,7 @@ def _main_claims_32k_table(
     out["claim_seq_len"] = int(
         lat_seq or mem_seq or ned_seq or lb_seq or rul_seq or target_seq_len
     )
-    out = out.sort_values("kv_mode").reset_index(drop=True)
+    out = _sort_by_kv_mode(out)
     return out
 
 
@@ -1342,6 +1436,12 @@ def _speedup_vs_reference(
     sub = sub.dropna(subset=[metric_col])
     if sub.empty:
         return pd.DataFrame()
+    dup_groups, dup_rows = _count_duplicate_groups(sub, keep + ["kv_mode"])
+    if dup_groups > 0:
+        print(
+            "Warning: speedup aggregation collapsed duplicate rows by mean "
+            f"(metric={metric_col}, duplicate_groups={dup_groups}, duplicate_extra_rows={dup_rows})."
+        )
     pivot = sub.pivot_table(index=keep, columns="kv_mode", values=metric_col, aggfunc="mean")
     if reference_mode not in pivot.columns:
         return pd.DataFrame()
@@ -1361,6 +1461,8 @@ def _speedup_vs_reference(
         tmp["reference_mode"] = reference_mode
         tmp["challenger_mode"] = mode
         tmp["metric"] = metric_col
+        tmp["duplicate_groups_collapsed"] = int(dup_groups)
+        tmp["duplicate_extra_rows_collapsed"] = int(dup_rows)
         rows.append(tmp)
 
     if not rows:
@@ -1891,7 +1993,7 @@ def main() -> int:
                 hue="kv_mode",
                 title="LongBench Score vs Context Len",
                 xlabel="Context length (tokens)",
-                ylabel="LongBench score (macro F1, %)",
+                ylabel="LongBench score (official-metric macro, 0-1)",
                 out_path=plots_dir / "longbench_score_vs_context.png",
                 yerr="longbench_score_ci95_half",
             )

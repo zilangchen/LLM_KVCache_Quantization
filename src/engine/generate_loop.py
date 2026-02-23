@@ -289,6 +289,8 @@ def generate_from_ids(
       fused decode does NOT support
       padding/variable context lengths. For safety, when batch>1 we require
       attention_mask to be all ones (no padding).
+    - kv_mode="kivi_style" supports quant_bits {4, 8} only and always runs
+      torch_ref decode attention (non-fused path).
     """
     # Validate inputs
     if kv_mode not in [
@@ -314,6 +316,48 @@ def generate_from_ids(
             f"decode_attn_impl='{decode_attn_impl}' not supported. "
             "Choose from ['triton_fused', 'torch_ref']."
         )
+
+    if kv_mode == "kivi_style":
+        import warnings
+
+        kivi_quant_bits = 8 if quant_bits is None else int(quant_bits)
+        if kivi_quant_bits not in (4, 8):
+            raise ValueError(
+                f"kv_mode='kivi_style' requires quant_bits in {{4, 8}}, got {kivi_quant_bits}"
+            )
+        quant_bits = kivi_quant_bits
+
+        ignored_fields = []
+        if calib_file is not None:
+            ignored_fields.append("calib_file")
+        if use_attn_temperature:
+            ignored_fields.append("use_attn_temperature")
+        if use_static_scales:
+            ignored_fields.append("use_static_scales")
+        if adaptive_static_scales:
+            ignored_fields.append("adaptive_static_scales")
+        if adaptive_static_margin != 1.0:
+            ignored_fields.append("adaptive_static_margin")
+        if not adaptive_static_k:
+            ignored_fields.append("adaptive_static_k")
+        if not adaptive_static_v:
+            ignored_fields.append("adaptive_static_v")
+        if allow_missing_calib:
+            ignored_fields.append("allow_missing_calib")
+        if ignored_fields:
+            warnings.warn(
+                "kv_mode='kivi_style' ignores calibration/static-scale parameters: "
+                + ", ".join(sorted(ignored_fields)),
+                UserWarning,
+            )
+
+        if decode_attn_impl != "torch_ref":
+            warnings.warn(
+                f"kv_mode='kivi_style' forces decode_attn_impl='torch_ref' "
+                f"(got {decode_attn_impl!r}).",
+                UserWarning,
+            )
+            decode_attn_impl = "torch_ref"
 
     if not torch.cuda.is_available():
         raise RuntimeError(
@@ -348,16 +392,6 @@ def generate_from_ids(
             raise ValueError(
                 "Batched generation requires attention_mask to be all ones (no padding). "
                 f"Got batch={batch_size} kv_mode={kv_mode}."
-            )
-
-    if kv_mode in ["int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"] and batch_size > 1:
-        # Extra explicit guardrail for fused decode.
-        if not torch.all(attention_mask == 1).item():
-            raise ValueError(
-                "kv_mode=int8_fused/int8_ours/int4_fused/int4_ours/int4_ours_mixed "
-                "with batch>1 does not support "
-                "padding/variable context lengths. "
-                "Provide equal-length prompts and attention_mask of all ones."
             )
 
     # Apply patch if needed
@@ -535,12 +569,11 @@ def generate_from_ids(
     elif kv_mode == "kivi_style":
         from src.cache import KIVIStyleKVCache
 
-        kivi_quant_bits = quant_bits if quant_bits is not None else 8
         kv_cache = KIVIStyleKVCache(
             num_layers=num_layers,
             device=model.device.type,
             max_seq_len=max_cache_len,
-            quant_bits=kivi_quant_bits,
+            quant_bits=int(quant_bits),
         )
     else:
         raise ValueError(f"Unsupported kv_mode: {kv_mode}")
@@ -670,6 +703,8 @@ def generate_from_ids(
             ):
                 if outputs.past_key_values is not None:
                     for i, (k, v) in enumerate(outputs.past_key_values):
+                        # Only append the newly produced token when model returns full cache.
+                        # This avoids re-quantizing historical tokens already stored in kv_cache.
                         if k.shape[2] > 1:
                             k_new = k[:, :, -1:, :]
                             v_new = v[:, :, -1:, :]
@@ -791,7 +826,7 @@ def generate(
         tokenizer: HuggingFace tokenizer
         prompt: Input text prompt
         max_new_tokens: Maximum number of tokens to generate
-        kv_mode: KV cache mode (fp16/int8/int4 variants)
+        kv_mode: KV cache mode (fp16/int8/int4 variants, plus kivi_style)
         group_size: Group size for quantization
         clip_percentile: Percentile for quantization clipping
         seed: Random seed for reproducibility
@@ -804,10 +839,12 @@ def generate(
             adaptive max with observed per-token scales.
         adaptive_static_k: Apply adaptive static-scale safeguard on K.
         adaptive_static_v: Apply adaptive static-scale safeguard on V.
-        decode_attn_impl: Decode attention implementation for fused kv modes
+        decode_attn_impl: Decode attention implementation for fused kv modes.
+            For kv_mode='kivi_style', torch_ref is enforced.
             - "triton_fused" (mainline, fast)
             - "torch_ref" (reference, correctness/ablation)
         allow_missing_calib: If True, int8_ours will warn+fallback when calib is missing.
+        quant_bits: Quantization bits. Used by kv_mode='kivi_style' (must be 4 or 8).
 
     Returns:
         GenerationOutput with generated text and timing statistics

@@ -27,6 +27,7 @@ from src.quant.asymmetric_quant import (
     quantize_asymmetric_per_channel,
     quantize_asymmetric_per_token,
 )
+from src.quant.int4_basic import pack_int4, unpack_int4
 
 
 class KIVIStyleKVCache:
@@ -71,6 +72,9 @@ class KIVIStyleKVCache:
         self.quant_bits = quant_bits
         self.k_percentile = k_percentile
         self.v_percentile = v_percentile
+        self.bit_packed = bool(quant_bits == 4)
+        # Keep scale/zp in float32 to avoid silent precision truncation.
+        self._scale_dtype = torch.float32
 
         # Used by patch_model.py routing — KIVI always uses torch_ref.
         self.decode_attn_impl = "torch_ref"
@@ -80,7 +84,8 @@ class KIVIStyleKVCache:
 
         self._min_capacity = 256
 
-        # K cache: quantized tokens + per-channel scale/zp (computed at prefill)
+        # K cache: quantized tokens + per-channel scale/zp (computed at prefill).
+        # For quant_bits=4, K/V values are bit-packed as uint8 payloads in int8 tensors.
         self._k_cache: List[Optional[Tensor]] = [None] * num_layers  # int8
         self._k_scale: List[Optional[Tensor]] = [None] * num_layers  # [B, H, D]
         self._k_zp: List[Optional[Tensor]] = [None] * num_layers  # [B, H, D]
@@ -121,13 +126,39 @@ class KIVIStyleKVCache:
 
         capacity = self._layer_capacity[layer_id]
         k_buf = self._k_cache[layer_id]
+        v_buf = self._v_cache[layer_id]
+        vs_buf = self._v_scale[layer_id]
+        vzp_buf = self._v_zp[layer_id]
 
         # Check shape consistency if buffers exist
         if k_buf is not None:
-            if k_buf.shape[0] != batch or k_buf.shape[1] != heads or k_buf.shape[3] != head_dim:
+            if (
+                k_buf.shape[0] != batch
+                or k_buf.shape[1] != heads
+                or k_buf.shape[3] != head_dim
+            ):
                 raise ValueError(
                     f"Inconsistent shape for layer {layer_id}: "
                     f"existing K={k_buf.shape}, incoming=({batch}, {heads}, *, {head_dim})"
+                )
+            if (
+                v_buf is None
+                or vs_buf is None
+                or vzp_buf is None
+                or v_buf.shape[0] != batch
+                or v_buf.shape[1] != heads
+                or v_buf.shape[3] != head_dim
+                or vs_buf.shape[0] != batch
+                or vs_buf.shape[1] != heads
+                or vzp_buf.shape[0] != batch
+                or vzp_buf.shape[1] != heads
+            ):
+                raise ValueError(
+                    f"Inconsistent V buffers for layer {layer_id}: "
+                    f"V={None if v_buf is None else tuple(v_buf.shape)}, "
+                    f"V_scale={None if vs_buf is None else tuple(vs_buf.shape)}, "
+                    f"V_zp={None if vzp_buf is None else tuple(vzp_buf.shape)}, "
+                    f"incoming=({batch}, {heads}, *, {head_dim})"
                 )
 
         # First allocation
@@ -142,10 +173,10 @@ class KIVIStyleKVCache:
                 (batch, heads, new_capacity, head_dim), device=self.device, dtype=torch.int8
             )
             self._v_scale[layer_id] = torch.empty(
-                (batch, heads, new_capacity), device=self.device, dtype=self.dtype
+                (batch, heads, new_capacity), device=self.device, dtype=self._scale_dtype
             )
             self._v_zp[layer_id] = torch.empty(
-                (batch, heads, new_capacity), device=self.device, dtype=self.dtype
+                (batch, heads, new_capacity), device=self.device, dtype=self._scale_dtype
             )
             self._layer_capacity[layer_id] = new_capacity
             return
@@ -166,10 +197,10 @@ class KIVIStyleKVCache:
             (batch, heads, new_capacity, head_dim), device=self.device, dtype=torch.int8
         )
         new_vs = torch.empty(
-            (batch, heads, new_capacity), device=self.device, dtype=self.dtype
+            (batch, heads, new_capacity), device=self.device, dtype=self._scale_dtype
         )
         new_vzp = torch.empty(
-            (batch, heads, new_capacity), device=self.device, dtype=self.dtype
+            (batch, heads, new_capacity), device=self.device, dtype=self._scale_dtype
         )
 
         if old_len > 0:
@@ -200,49 +231,94 @@ class KIVIStyleKVCache:
         """
         if layer_id < 0 or layer_id >= self.num_layers:
             raise ValueError(f"layer_id {layer_id} out of range [0, {self.num_layers})")
+        if not isinstance(k, torch.Tensor) or not isinstance(v, torch.Tensor):
+            raise TypeError(f"k and v must be tensors, got {type(k)} / {type(v)}")
+        if k.ndim != 4 or v.ndim != 4:
+            raise ValueError(
+                f"k/v must be 4D tensors [B,H,S,D], got k={tuple(k.shape)} v={tuple(v.shape)}"
+            )
+        if tuple(k.shape) != tuple(v.shape):
+            raise ValueError(
+                f"k/v shape mismatch: k={tuple(k.shape)} vs v={tuple(v.shape)}"
+            )
+        if not k.is_floating_point() or not v.is_floating_point():
+            raise ValueError(f"k/v must be floating point, got {k.dtype} / {v.dtype}")
 
         batch, heads, new_seq_len, head_dim = k.shape
+        if batch <= 0:
+            raise ValueError("batch size must be > 0")
+        if heads <= 0 or new_seq_len <= 0 or head_dim <= 0:
+            raise ValueError(
+                f"Invalid k/v shape values: heads={heads}, new_seq_len={new_seq_len}, head_dim={head_dim}"
+            )
+        if self.bit_packed and head_dim % 2 != 0:
+            raise ValueError(
+                f"KIVI INT4 bit packing requires even head_dim, got {head_dim}"
+            )
+
+        target_device = torch.device(self.device)
+        if k.device.type != target_device.type or v.device.type != target_device.type:
+            raise ValueError(
+                f"Device mismatch: cache_device={target_device}, k.device={k.device}, v.device={v.device}"
+            )
+        if (
+            target_device.index is not None
+            and (k.device.index != target_device.index or v.device.index != target_device.index)
+        ):
+            raise ValueError(
+                f"Device index mismatch: cache_device={target_device}, k.device={k.device}, v.device={v.device}"
+            )
+
         old_len = self._layer_seq_lens[layer_id]
         target_len = old_len + new_seq_len
 
-        self._ensure_capacity(layer_id, batch, heads, head_dim, target_len)
-
         # --- K: per-channel quantization ---
         if not self._k_scale_initialized[layer_id]:
-            # Prefill: compute per-channel scale from all incoming K tokens
-            q_k, k_scale, k_zp = quantize_asymmetric_per_channel(
+            # Prefill: compute per-channel scale from all incoming K tokens.
+            q_k_full, k_scale, k_zp = quantize_asymmetric_per_channel(
                 k, quant_bits=self.quant_bits, percentile=self.k_percentile
             )
-            self._k_scale[layer_id] = k_scale.to(self.device)
-            self._k_zp[layer_id] = k_zp.to(self.device)
+            self._k_scale[layer_id] = k_scale.to(device=target_device, dtype=self._scale_dtype)
+            self._k_zp[layer_id] = k_zp.to(device=target_device, dtype=self._scale_dtype)
             self._k_scale_initialized[layer_id] = True
         else:
-            # Decode: reuse prefill scale, quantize with existing scale/zp
+            # Decode: reuse prefill scale and zero-point.
             k_scale = self._k_scale[layer_id]  # [B, H, D]
             k_zp = self._k_zp[layer_id]  # [B, H, D]
-            # Manual quantize using existing scale/zp
+            if k_scale is None or k_zp is None:
+                raise RuntimeError(
+                    f"K scale/zp not initialized for layer {layer_id} during decode append."
+                )
             if self.quant_bits == 8:
                 qmin, qmax_val = -128, 127
             else:
                 qmin, qmax_val = -8, 7
-            # scale: [B, H, D] → need to unsqueeze for [B, H, S, D]
             s = k_scale.unsqueeze(2)  # [B, H, 1, D]
             zp = k_zp.unsqueeze(2)  # [B, H, 1, D]
-            q_k = torch.round((k - zp) / s).clamp(qmin, qmax_val).to(torch.int8)
+            q_k_full = torch.round((k.float() - zp) / s).clamp(qmin, qmax_val).to(torch.int8)
 
-        self._k_cache[layer_id][:, :, old_len:target_len, :] = q_k.to(self.device)
+        q_k_store = pack_int4(q_k_full) if self.bit_packed else q_k_full
 
         # --- V: per-token quantization ---
-        q_v, v_scale, v_zp = quantize_asymmetric_per_token(
+        q_v_full, v_scale, v_zp = quantize_asymmetric_per_token(
             v, quant_bits=self.quant_bits, percentile=self.v_percentile
         )
-        self._v_cache[layer_id][:, :, old_len:target_len, :] = q_v.to(self.device)
-        self._v_scale[layer_id][:, :, old_len:target_len] = v_scale.to(self.device)
-        self._v_zp[layer_id][:, :, old_len:target_len] = v_zp.to(self.device)
+        q_v_store = pack_int4(q_v_full) if self.bit_packed else q_v_full
+
+        storage_head_dim = int(q_k_store.shape[-1])
+        self._ensure_capacity(layer_id, batch, heads, storage_head_dim, target_len)
+
+        self._k_cache[layer_id][:, :, old_len:target_len, :] = q_k_store.to(target_device)
+        self._v_cache[layer_id][:, :, old_len:target_len, :] = q_v_store.to(target_device)
+        self._v_scale[layer_id][:, :, old_len:target_len] = v_scale.to(
+            device=target_device, dtype=self._scale_dtype
+        )
+        self._v_zp[layer_id][:, :, old_len:target_len] = v_zp.to(
+            device=target_device, dtype=self._scale_dtype
+        )
 
         self._layer_seq_lens[layer_id] = target_len
-        if layer_id == 0:
-            self._seq_len = target_len
+        self._seq_len = max(self._layer_seq_lens)
 
     def get_kv(self, layer_id: int) -> Tuple[Tensor, Tensor]:
         """
@@ -254,28 +330,40 @@ class KIVIStyleKVCache:
         Returns:
             Tuple of (k, v) tensors in self.dtype
         """
+        if layer_id < 0 or layer_id >= self.num_layers:
+            raise ValueError(f"layer_id {layer_id} out of range [0, {self.num_layers})")
         if self._k_cache[layer_id] is None:
             raise ValueError(f"Cache for layer {layer_id} is empty")
 
         seq_len = self._layer_seq_lens[layer_id]
+        if seq_len <= 0:
+            raise ValueError(f"Cache for layer {layer_id} has no tokens")
 
-        # Dequantize K (per-channel)
+        # Dequantize K (per-channel).
         q_k = self._k_cache[layer_id][:, :, :seq_len, :]
+        if self.bit_packed:
+            q_k = unpack_int4(q_k)
         k_scale = self._k_scale[layer_id]
         k_zp = self._k_zp[layer_id]
+        if k_scale is None or k_zp is None:
+            raise RuntimeError(f"K scale/zp missing for layer {layer_id}")
         k = dequantize_asymmetric_per_channel(q_k, k_scale, k_zp).to(self.dtype)
 
-        # Dequantize V (per-token)
+        # Dequantize V (per-token).
         q_v = self._v_cache[layer_id][:, :, :seq_len, :]
+        if self.bit_packed:
+            q_v = unpack_int4(q_v)
         v_scale = self._v_scale[layer_id][:, :, :seq_len]
         v_zp = self._v_zp[layer_id][:, :, :seq_len]
+        if v_scale is None or v_zp is None:
+            raise RuntimeError(f"V scale/zp missing for layer {layer_id}")
         v = dequantize_asymmetric_per_token(q_v, v_scale, v_zp).to(self.dtype)
 
         return k, v
 
     def get_seq_len(self) -> int:
         """Return current sequence length."""
-        return self._seq_len
+        return int(max(self._layer_seq_lens)) if self._layer_seq_lens else 0
 
     def clear(self) -> None:
         """Clear cache contents but keep buffers allocated."""
@@ -304,14 +392,14 @@ class KIVIStyleKVCache:
         total_bytes = 0
         for i in range(self.num_layers):
             if self._k_cache[i] is not None:
-                # INT8 tensors (K and V)
-                total_bytes += self._k_cache[i].numel() * 1
-                total_bytes += self._v_cache[i].numel() * 1
-                # K scale/zp (per-channel, shape [B, H, D])
+                # Quantized payload (int8 storage; INT4 uses bit-packed int8 payload).
+                total_bytes += self._k_cache[i].numel() * self._k_cache[i].element_size()
+                total_bytes += self._v_cache[i].numel() * self._v_cache[i].element_size()
+                # K scale/zp (per-channel, shape [B, H, D]).
                 if self._k_scale[i] is not None:
                     total_bytes += self._k_scale[i].numel() * self._k_scale[i].element_size()
                     total_bytes += self._k_zp[i].numel() * self._k_zp[i].element_size()
-                # V scale/zp (per-token, shape [B, H, S])
+                # V scale/zp (per-token, shape [B, H, S]).
                 if self._v_scale[i] is not None:
                     total_bytes += self._v_scale[i].numel() * self._v_scale[i].element_size()
                     total_bytes += self._v_zp[i].numel() * self._v_zp[i].element_size()

@@ -56,22 +56,29 @@ def quantize_asymmetric(
     else:
         qmin, qmax = -8, 7
 
-    # Compute min/max along the specified axis
+    axis = int(axis)
+    if axis < 0:
+        axis += tensor.ndim
+    if axis < 0 or axis >= tensor.ndim:
+        raise ValueError(f"axis out of range for tensor.ndim={tensor.ndim}: {axis}")
+
+    # Compute min/max in float32 for stable scale/zero-point estimation.
+    tensor_f = tensor.float()
     if percentile < 100.0:
         quantile_lo = max(0.0, min((100.0 - percentile) / 100.0, 1.0))
         quantile_hi = max(0.0, min(percentile / 100.0, 1.0))
-        t_min = torch.quantile(tensor.float(), quantile_lo, dim=axis, keepdim=True).to(tensor.dtype)
-        t_max = torch.quantile(tensor.float(), quantile_hi, dim=axis, keepdim=True).to(tensor.dtype)
+        t_min = torch.quantile(tensor_f, quantile_lo, dim=axis, keepdim=True)
+        t_max = torch.quantile(tensor_f, quantile_hi, dim=axis, keepdim=True)
     else:
-        t_min = tensor.amin(dim=axis, keepdim=True)
-        t_max = tensor.amax(dim=axis, keepdim=True)
+        t_min = tensor_f.amin(dim=axis, keepdim=True)
+        t_max = tensor_f.amax(dim=axis, keepdim=True)
 
     # Compute scale and zero_point
     scale = (t_max - t_min).clamp(min=1e-5) / (qmax - qmin)
     zero_point = t_min - qmin * scale
 
     # Quantize
-    quantized = torch.round((tensor - zero_point) / scale).clamp(qmin, qmax).to(torch.int8)
+    quantized = torch.round((tensor_f - zero_point) / scale).clamp(qmin, qmax).to(torch.int8)
 
     return quantized, scale.squeeze(axis), zero_point.squeeze(axis)
 
@@ -94,7 +101,32 @@ def dequantize_asymmetric(
     Returns:
         Dequantized tensor in scale.dtype
     """
-    # Unsqueeze scale and zero_point to broadcast correctly
+    if quantized.dtype != torch.int8:
+        raise ValueError(f"quantized must be torch.int8, got {quantized.dtype}")
+    if not scale.is_floating_point():
+        raise ValueError(f"scale must be floating point, got {scale.dtype}")
+    if not zero_point.is_floating_point():
+        raise ValueError(f"zero_point must be floating point, got {zero_point.dtype}")
+    if scale.shape != zero_point.shape:
+        raise ValueError(
+            f"scale and zero_point shape mismatch: {tuple(scale.shape)} vs {tuple(zero_point.shape)}"
+        )
+
+    axis = int(axis)
+    if axis < 0:
+        axis += quantized.ndim
+    if axis < 0 or axis >= quantized.ndim:
+        raise ValueError(f"axis out of range for quantized.ndim={quantized.ndim}: {axis}")
+
+    expected = list(quantized.shape)
+    expected.pop(axis)
+    if tuple(expected) != tuple(scale.shape):
+        raise ValueError(
+            f"scale/zero_point shape {tuple(scale.shape)} incompatible with "
+            f"quantized shape {tuple(quantized.shape)} and axis={axis}"
+        )
+
+    # Unsqueeze scale and zero_point to broadcast correctly.
     s = scale.unsqueeze(axis)
     zp = zero_point.unsqueeze(axis)
     return quantized.to(s.dtype) * s + zp

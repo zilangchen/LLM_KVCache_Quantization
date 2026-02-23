@@ -122,6 +122,19 @@ def _split_csv(text: str | None) -> List[str]:
     return [x.strip() for x in str(text).split(",") if x.strip()]
 
 
+def _resolve_quant_bits(kv_mode: str, quant_bits_arg: int | None) -> int:
+    if quant_bits_arg is not None:
+        return int(quant_bits_arg)
+    mode = str(kv_mode)
+    if mode == "kivi_style":
+        return 8
+    if "int4" in mode:
+        return 4
+    if "int8" in mode:
+        return 8
+    return 16
+
+
 def _normalize_text(text: str) -> str:
     text = str(text).strip().lower()
     text = text.translate(str.maketrans("", "", string.punctuation))
@@ -249,7 +262,7 @@ def _classification_accuracy(pred: str, answers: Sequence[str]) -> float:
     pred_norm = _normalize_text(pred)
     for ans in answers:
         ans_norm = _normalize_text(ans)
-        if ans_norm and (pred_norm == ans_norm or ans_norm in pred_norm):
+        if ans_norm and pred_norm == ans_norm:
             return 1.0
     return 0.0
 
@@ -384,7 +397,9 @@ def _extract_generic_sample(row: Dict[str, object], fallback_task: str, sample_i
         question = "Based on the text above, provide the answer."
     else:
         # Generic fallback
-        context_keys = ["context", "article", "passage", "document", "text", "input"]
+        # Never use "input" as context fallback: for many HF datasets this is the
+        # question/instruction field and will inflate metric noise.
+        context_keys = ["context", "article", "passage", "document", "text"]
         for k in context_keys:
             v = row.get(k)
             if isinstance(v, str) and v.strip():
@@ -808,8 +823,14 @@ def main() -> None:
         em = float(np.mean([v["exact_match"] for v in vals]) * 100.0)
         contains = float(np.mean([v["contains_match"] for v in vals]) * 100.0)
         f1 = float(np.mean([v["f1"] for v in vals]) * 100.0)
-        task_off_name = str(vals[0].get("official_metric_name", "f1"))
-        task_off_val = float(np.mean([v["official_metric_value"] for v in vals]) * 100.0)
+        metric_names = {str(v.get("official_metric_name", "f1")) for v in vals}
+        if len(metric_names) != 1:
+            raise RuntimeError(
+                f"Inconsistent official metric names for task '{task_name}': {sorted(metric_names)}"
+            )
+        task_off_name = str(next(iter(metric_names)))
+        # LongBench official macro is tracked in [0, 1] to match objective.md.
+        task_off_val = float(np.mean([v["official_metric_value"] for v in vals]))
         em_macro.append(em)
         contains_macro.append(contains)
         f1_macro.append(f1)
@@ -834,7 +855,7 @@ def main() -> None:
             }
         )
 
-    quant_bits = getattr(args, 'quant_bits', None) or (4 if "int4" in args.kv_mode else (8 if "int8" in args.kv_mode else 16))
+    quant_bits = _resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
 
     summary_row = {
         "run_id": f"longbench_{timestamp}",

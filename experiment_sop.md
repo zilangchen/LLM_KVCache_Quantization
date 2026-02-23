@@ -35,6 +35,27 @@ bash scripts/run_final_journal_v1.sh
 - 模型：`Qwen/Qwen2.5-1.5B-Instruct`
 - 模型 revision（已 pin）：`989aa7980e4cf806f80c7fef2b1adb7bc71aa306`
 
+多模型扩展（Phase5v2）固定模型入口：
+- `Qwen/Qwen2.5-7B-Instruct`（HF revision 见 `configs/snapshots/final_emnlp2026_v1.yaml`）
+- `meta-llama/Llama-3.1-8B-Instruct`（首选 HF ID；远端若使用 ModelScope 缓存路径，需在日志里同时记录 `hf_model_id + local_model_path`）
+
+## 1.1) Phase5v2 重启与 legacy 规则（强制）
+- 旧 Phase5 中包含 `eval_longbench` / `eval_ruler` 的结果全部归档为 legacy，不得混入新聚合
+- 新运行目录固定：`results/phase5v2/{runs,logs,tables,plots}`
+- 新 run_tag 固定：`phase5v2_<model>_s<seed>`
+- 调度策略固定：
+  - quality：`1.5B / 7B / 8B` 三模型并行
+  - throughput：各模型独占 GPU 串行
+- 聚合命令固定：
+```bash
+python3 scripts/aggregate_results.py \
+  --runs_dir "${BASE_DIR}/runs" \
+  --logs_dir "${BASE_DIR}/logs" \
+  --tables_dir "${BASE_DIR}/tables" \
+  --plots_dir "${BASE_DIR}/plots" \
+  --strict
+```
+
 ## 2) 缓存与离线（强烈建议）
 
 把 HF / datasets / triton cache 都写到数据盘，并在模型/数据缓存齐全后启用离线，避免网络波动：
