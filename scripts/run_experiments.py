@@ -44,6 +44,18 @@ TASK_TO_CSV_PATTERNS = {
     "eval_ruler": "profile_ruler_*.csv",
 }
 
+SUPPORTED_KV_MODES = {
+    "fp16",
+    "int8_baseline",
+    "int8_fused",
+    "int8_ours",
+    "int4_baseline",
+    "int4_fused",
+    "int4_ours",
+    "int4_ours_mixed",
+    "kivi_style",
+}
+
 
 def _now_iso() -> str:
     return datetime.now().isoformat()
@@ -234,6 +246,7 @@ def _init_manifest(
     replica_id: int,
     model_id: str,
     model_revision: str | None,
+    run_quant_bits: int | None,
     args: argparse.Namespace,
     append_mode: bool,
     git_commit_full: str,
@@ -248,16 +261,36 @@ def _init_manifest(
             "tasks": {},
             "append_history": [],
         }
+    elif append_mode:
+        # In append mode, keep run identity immutable and fail fast on mismatches.
+        identity_pairs = [
+            ("run_id", run_id),
+            ("run_name", run_name),
+            ("run_tag", run_tag),
+            ("kv_mode", kv_mode),
+            ("seed", int(seed)),
+            ("replica_id", int(replica_id)),
+            ("model_id", model_id),
+        ]
+        for key, expected in identity_pairs:
+            existing = manifest.get(key, expected)
+            if existing != expected:
+                raise ValueError(
+                    f"append blocked: manifest {key} mismatch "
+                    f"(existing={existing!r}, incoming={expected!r})"
+                )
 
     manifest["updated_at"] = now
-    manifest["run_id"] = run_id
-    manifest["run_name"] = run_name
-    manifest["run_tag"] = run_tag
-    manifest["kv_mode"] = kv_mode
-    manifest["seed"] = int(seed)
-    manifest["replica_id"] = int(replica_id)
-    manifest["model_id"] = model_id
-    manifest["model_revision"] = model_revision
+    manifest["run_id"] = manifest.get("run_id", run_id)
+    manifest["run_name"] = manifest.get("run_name", run_name)
+    manifest["run_tag"] = manifest.get("run_tag", run_tag)
+    manifest["kv_mode"] = manifest.get("kv_mode", kv_mode)
+    manifest["seed"] = int(manifest.get("seed", int(seed)))
+    manifest["replica_id"] = int(manifest.get("replica_id", int(replica_id)))
+    manifest["model_id"] = manifest.get("model_id", model_id)
+    manifest["model_revision"] = manifest.get("model_revision", model_revision)
+    if run_quant_bits is not None:
+        manifest["quant_bits"] = int(manifest.get("quant_bits", int(run_quant_bits)))
     manifest["git_commit"] = git_commit_full[:8] if git_commit_full else "unknown"
     manifest["git_commit_full"] = git_commit_full
     manifest["env_hash"] = env_info.get("env_hash", "unknown")
@@ -272,6 +305,13 @@ def _init_manifest(
         manifest["append_history"].append(
             {
                 "timestamp": now,
+                "run_id": run_id,
+                "run_name": run_name,
+                "run_tag": run_tag,
+                "seed": int(seed),
+                "replica_id": int(replica_id),
+                "kv_mode": kv_mode,
+                "quant_bits": int(run_quant_bits) if run_quant_bits is not None else None,
                 "tasks": args.tasks,
                 "config": args.config,
             }
@@ -393,7 +433,7 @@ def resolve_quant_params(run_entry: Dict, quant_defaults: Dict) -> Dict[str, flo
     }
 
 
-def resolve_calib_params(run_entry: Dict, quant_defaults: Dict) -> Dict[str, object]:
+def resolve_calib_params(run_entry: Dict, quant_defaults: Dict, kv_mode: str) -> Dict[str, object]:
     calib_file = run_entry.get("calib_file", quant_defaults.get("calib_file"))
     use_attn_temperature = run_entry.get(
         "use_attn_temperature", quant_defaults.get("use_attn_temperature", False)
@@ -413,7 +453,10 @@ def resolve_calib_params(run_entry: Dict, quant_defaults: Dict) -> Dict[str, obj
     adaptive_static_v = run_entry.get(
         "adaptive_static_v", quant_defaults.get("adaptive_static_v", True)
     )
-    calib_strategy = run_entry.get("calib_strategy", quant_defaults.get("calib_strategy"))
+    default_calib_strategy = (
+        "kivi_asymmetric" if kv_mode == "kivi_style" else quant_defaults.get("calib_strategy")
+    )
+    calib_strategy = run_entry.get("calib_strategy", default_calib_strategy)
     return {
         "calib_file": calib_file,
         "use_attn_temperature": use_attn_temperature,
@@ -792,6 +835,29 @@ def main() -> int:
         run_name_filter = None
 
     matrix = config.get("matrix", [])
+    if not isinstance(matrix, list) or len(matrix) == 0:
+        print(
+            "Error: config matrix is empty or invalid. "
+            "Expected a non-empty list under key 'matrix'."
+        )
+        return 2
+
+    invalid_kv_modes: List[str] = []
+    for idx, entry in enumerate(matrix):
+        if not isinstance(entry, dict):
+            print(f"Error: matrix[{idx}] must be a mapping, got {type(entry).__name__}.")
+            return 2
+        run_name = entry.get("run_name")
+        if run_name_filter and run_name not in run_name_filter:
+            continue
+        kv_mode = entry.get("kv_mode", "fp16")
+        if kv_mode not in SUPPORTED_KV_MODES:
+            invalid_kv_modes.append(f"{run_name or f'index={idx}'}:{kv_mode}")
+    if invalid_kv_modes:
+        print("Error: found unsupported kv_mode entries:")
+        for item in invalid_kv_modes:
+            print(f"  - {item}")
+        return 2
     run_tag = args.run_tag.strip() if args.run_tag else datetime.now().strftime("%Y%m%d_%H%M%S")
     if args.run_tag:
         if not run_tag:
@@ -847,19 +913,9 @@ def main() -> int:
             continue
 
         kv_mode = run_entry.get("kv_mode", "fp16")
-        if kv_mode not in [
-            "fp16",
-            "int8_baseline",
-            "int8_fused",
-            "int8_ours",
-            "int4_baseline",
-            "int4_fused",
-            "int4_ours",
-            "int4_ours_mixed",
-            "kivi_style",
-        ]:
-            print(f"Skip unsupported kv_mode={kv_mode} for {run_name}")
-            continue
+        if kv_mode not in SUPPORTED_KV_MODES:
+            print(f"Error: unsupported kv_mode={kv_mode} for {run_name}")
+            return 2
 
         seq_len = run_entry.get("seq_len", 1024)
         gen_len = run_entry.get("gen_len", 128)
@@ -878,10 +934,37 @@ def main() -> int:
             return 2
 
         quant_params = resolve_quant_params(run_entry, quant_defaults)
-        calib_params = resolve_calib_params(run_entry, quant_defaults)
-        decode_attn_impl = run_entry.get(
-            "decode_attn_impl", kernel_defaults.get("decode_attn_impl")
-        )
+        run_quant_bits = run_entry.get("quant_bits", quant_defaults.get("quant_bits"))
+        calib_params = resolve_calib_params(run_entry, quant_defaults, kv_mode=kv_mode)
+        decode_attn_impl = run_entry.get("decode_attn_impl")
+        if decode_attn_impl is None:
+            decode_attn_impl = "torch_ref" if kv_mode == "kivi_style" else kernel_defaults.get(
+                "decode_attn_impl"
+            )
+
+        if kv_mode == "kivi_style":
+            if run_quant_bits is None:
+                run_quant_bits = 8
+            if int(run_quant_bits) not in (4, 8):
+                print(
+                    f"Error: run_name={run_name} kv_mode=kivi_style requires quant_bits in {{4,8}}, "
+                    f"got {run_quant_bits!r}."
+                )
+                return 2
+            calib_strategy = str(calib_params.get("calib_strategy") or "").strip()
+            if calib_strategy not in {"", "kivi_asymmetric"}:
+                print(
+                    f"Error: run_name={run_name} kv_mode=kivi_style requires calib_strategy=kivi_asymmetric, "
+                    f"got {calib_strategy!r}."
+                )
+                return 2
+            if "decode_attn_impl" in run_entry and decode_attn_impl and str(decode_attn_impl) != "torch_ref":
+                print(
+                    f"Error: run_name={run_name} kv_mode=kivi_style requires decode_attn_impl=torch_ref, "
+                    f"got {decode_attn_impl!r}."
+                )
+                return 2
+            decode_attn_impl = "torch_ref"
 
         calib_file_path = None
         calib_file = calib_params.get("calib_file")
@@ -937,21 +1020,26 @@ def main() -> int:
                     if not ok:
                         print(f"Error: {reason}")
                         return 2
-                manifest = _init_manifest(
-                    manifest_path,
-                    run_id=run_id,
-                    run_name=run_name,
-                    run_tag=run_tag,
-                    kv_mode=kv_mode,
-                    seed=int(seed),
-                    replica_id=int(replica_id),
-                    model_id=model_id,
-                    model_revision=model_revision,
-                    args=args,
-                    append_mode=bool(args.append),
-                    git_commit_full=git_commit_full,
-                    env_info=env_info,
-                )
+                try:
+                    manifest = _init_manifest(
+                        manifest_path,
+                        run_id=run_id,
+                        run_name=run_name,
+                        run_tag=run_tag,
+                        kv_mode=kv_mode,
+                        seed=int(seed),
+                        replica_id=int(replica_id),
+                        model_id=model_id,
+                        model_revision=model_revision,
+                        run_quant_bits=int(run_quant_bits) if run_quant_bits is not None else None,
+                        args=args,
+                        append_mode=bool(args.append),
+                        git_commit_full=git_commit_full,
+                        env_info=env_info,
+                    )
+                except ValueError as exc:
+                    print(f"Error: {exc}")
+                    return 2
             else:
                 manifest = {}
 
@@ -984,18 +1072,6 @@ def main() -> int:
                     str(seq_len),
                     "--gen_len",
                     str(gen_len),
-                    "--group_size",
-                    str(quant_params["group_size"]),
-                    "--clip_percentile",
-                    str(quant_params["clip_percentile"]),
-                    "--group_size_k",
-                    str(quant_params["group_size_k"]),
-                    "--group_size_v",
-                    str(quant_params["group_size_v"]),
-                    "--clip_percentile_k",
-                    str(quant_params["clip_percentile_k"]),
-                    "--clip_percentile_v",
-                    str(quant_params["clip_percentile_v"]),
                     "--seed",
                     str(seed),
                     "--replica_id",
@@ -1003,11 +1079,35 @@ def main() -> int:
                     "--out_dir",
                     str(run_dir),
                 ]
+                if kv_mode in {
+                    "int8_baseline",
+                    "int8_fused",
+                    "int8_ours",
+                    "int4_baseline",
+                    "int4_fused",
+                    "int4_ours",
+                    "int4_ours_mixed",
+                }:
+                    cmd.extend(
+                        [
+                            "--group_size",
+                            str(quant_params["group_size"]),
+                            "--clip_percentile",
+                            str(quant_params["clip_percentile"]),
+                            "--group_size_k",
+                            str(quant_params["group_size_k"]),
+                            "--group_size_v",
+                            str(quant_params["group_size_v"]),
+                            "--clip_percentile_k",
+                            str(quant_params["clip_percentile_k"]),
+                            "--clip_percentile_v",
+                            str(quant_params["clip_percentile_v"]),
+                        ]
+                    )
                 if run_name:
                     cmd.extend(["--run_name", str(run_name)])
                 if model_revision:
                     cmd.extend(["--model_revision", str(model_revision)])
-                run_quant_bits = run_entry.get("quant_bits", quant_defaults.get("quant_bits"))
                 if run_quant_bits is not None:
                     cmd.extend(["--quant_bits", str(run_quant_bits)])
                 if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed"] and calib_file_path:
@@ -1131,7 +1231,7 @@ def main() -> int:
                         manifest_path,
                         manifest,
                         task=task,
-                        status="success",
+                        status="skipped",
                         cmd=cmd,
                         log_path=log_path,
                         returncode=0,
@@ -1171,13 +1271,48 @@ def main() -> int:
                             f.write(
                                 f"\n[RETRY] attempt={attempt_idx}/{total_attempts} at {_now_iso()}\n"
                             )
-                        result = subprocess.run(
-                            cmd,
-                            stdout=f,
-                            stderr=subprocess.STDOUT,
-                            text=True,
-                        )
-                    returncode = int(result.returncode)
+                        try:
+                            result = subprocess.run(
+                                cmd,
+                                stdout=f,
+                                stderr=subprocess.STDOUT,
+                                text=True,
+                            )
+                            returncode = int(result.returncode)
+                        except OSError as exc:
+                            f.write(f"\n[ERROR] Failed to launch subprocess: {exc}\n")
+                            returncode = 127
+                            failure_type = "spawn_error"
+                            err_msg = f"Task failed to launch: {' '.join(cmd)} ({exc})"
+                            _mark_task_status(
+                                manifest_path,
+                                manifest,
+                                task=task,
+                                status="failed",
+                                cmd=cmd,
+                                log_path=log_path,
+                                returncode=returncode,
+                                error=err_msg,
+                                failure_type=failure_type,
+                                attempt_idx=attempt_idx,
+                            )
+                            execution_rows.append(
+                                {
+                                    "timestamp": _now_iso(),
+                                    "run_id": run_id,
+                                    "run_name": run_name,
+                                    "seed": int(seed),
+                                    "replica_id": int(replica_id),
+                                    "task": task,
+                                    "status": "failed",
+                                    "failure_type": failure_type,
+                                    "returncode": int(returncode),
+                                    "attempt": int(attempt_idx),
+                                    "log_path": str(log_path),
+                                }
+                            )
+                            _flush_summary(1)
+                            return 1
                     if returncode == 0:
                         _mark_task_status(
                             manifest_path,

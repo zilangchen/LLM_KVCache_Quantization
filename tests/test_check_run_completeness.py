@@ -185,6 +185,103 @@ class TestCheckRunCompleteness(unittest.TestCase):
             report = json.loads(out_json.read_text(encoding="utf-8"))
             self.assertGreater(len(report["unexpected_failures"]), 0)
 
+    def test_oom_not_overridden_by_success_history_when_csv_exists(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            runs_dir = root / "runs"
+            logs_dir = root / "logs"
+            out_json = root / "report.json"
+            run_tag = "rt_oom_csv"
+
+            run_id = f"req_oom_{run_tag}"
+            run_dir = runs_dir / run_id
+            _write(run_dir / "profile_latency_ok.csv", "x\n1\n")
+            _write(
+                run_dir / "run_manifest.json",
+                json.dumps(
+                    {
+                        "run_name": "req_oom",
+                        "run_tag": run_tag,
+                        "tasks": {
+                            "profile_latency": {
+                                "status": "failed",
+                                "failure_type": "oom",
+                                "history": [{"status": "success"}],
+                            },
+                        },
+                    }
+                ),
+            )
+            _write(logs_dir / run_id / "profile_latency.log", "CUDA out of memory\n")
+
+            cmd = [
+                sys.executable,
+                str(SCRIPT_PATH),
+                "--runs_dir",
+                str(runs_dir),
+                "--logs_dir",
+                str(logs_dir),
+                "--run_tag",
+                run_tag,
+                "--tasks",
+                "profile_latency",
+                "--required_run_names",
+                "req_oom",
+                "--out_json",
+                str(out_json),
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 1, msg=result.stdout + "\n" + result.stderr)
+            report = json.loads(out_json.read_text(encoding="utf-8"))
+            self.assertEqual(len(report["oom_registry"]), 1)
+            self.assertIn("req_oom", report["missing_required_run_names"])
+
+    def test_empty_csv_marked_invalid(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            runs_dir = root / "runs"
+            logs_dir = root / "logs"
+            out_json = root / "report.json"
+            run_tag = "rt_empty_csv"
+
+            run_id = f"req_empty_{run_tag}"
+            run_dir = runs_dir / run_id
+            _write(run_dir / "profile_latency_ok.csv", "col\n")
+            _write(
+                run_dir / "run_manifest.json",
+                json.dumps(
+                    {
+                        "run_name": "req_empty",
+                        "run_tag": run_tag,
+                        "tasks": {
+                            "profile_latency": {"status": "success"},
+                        },
+                    }
+                ),
+            )
+            _write(logs_dir / run_id / "profile_latency.log", "done\n")
+
+            cmd = [
+                sys.executable,
+                str(SCRIPT_PATH),
+                "--runs_dir",
+                str(runs_dir),
+                "--logs_dir",
+                str(logs_dir),
+                "--run_tag",
+                run_tag,
+                "--tasks",
+                "profile_latency",
+                "--required_run_names",
+                "req_empty",
+                "--out_json",
+                str(out_json),
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 2, msg=result.stdout + "\n" + result.stderr)
+            report = json.loads(out_json.read_text(encoding="utf-8"))
+            self.assertGreater(len(report["unexpected_failures"]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -965,3 +965,54 @@ matrix:
     seq_len: 8192
     gen_len: 128
     batch: 16
+
+  # --- KIVI-style INT4 throughput ---
+  - run_name: kivi_style_int4_throughput_8k_b1
+    kv_mode: kivi_style
+    quant_bits: 4
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 1
+
+  - run_name: kivi_style_int4_throughput_8k_b2
+    kv_mode: kivi_style
+    quant_bits: 4
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 2
+
+  - run_name: kivi_style_int4_throughput_8k_b4
+    kv_mode: kivi_style
+    quant_bits: 4
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 4
+
+  - run_name: kivi_style_int4_throughput_8k_b8
+    kv_mode: kivi_style
+    quant_bits: 4
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 8
+
+  - run_name: kivi_style_int4_throughput_8k_b16
+    kv_mode: kivi_style
+    quant_bits: 4
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 16
