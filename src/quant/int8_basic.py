@@ -36,9 +36,19 @@ def _normalize_static_scale(
     elif scale.ndim == 5:
         scale_view = scale
     elif scale.ndim == 3 and scale.shape[-1] == num_groups:
-        # Assume [H, num_groups, 1] or [1, H, num_groups]
-        if scale.shape[0] == heads:
-            scale_view = scale[:, None, :][None, :, None, :, None]
+        # Supported:
+        # - [B, H, G]
+        # - [1, H, G]
+        # - [H, 1, G] (legacy)
+        # - [H, G, 1] (legacy)
+        if scale.shape[0] == batch and scale.shape[1] == heads:
+            scale_view = scale[:, :, None, :, None]
+        elif scale.shape[0] == 1 and scale.shape[1] == heads:
+            scale_view = scale.expand(batch, heads, num_groups)[:, :, None, :, None]
+        elif scale.shape[0] == heads and scale.shape[1] == 1:
+            scale_view = scale[:, 0, :][None, :, None, :, None]
+        elif scale.shape[0] == heads and scale.shape[1] == num_groups and scale.shape[2] == 1:
+            scale_view = scale[..., 0][None, :, None, :, None]
         else:
             raise ValueError(f"Unsupported scale shape: {scale.shape}")
     else:
@@ -213,14 +223,23 @@ def dequantize_symmetric_int8(
         
         return decoded_reshaped.view(B, H, S, D)
 
-    if scale.ndim == quantized.ndim and scale.shape[-1] != 1:
-        # Group-wise scale stored as [B, H, S, num_groups]
+    if scale.ndim == quantized.ndim:
+        # Group-wise scale stored as [B, H, S, num_groups] (including num_groups==1).
         B, H, S, D = quantized.shape
         num_groups = scale.shape[-1]
+        if num_groups <= 0 or D % num_groups != 0:
+            raise ValueError(
+                f"Invalid scale shape for group-wise dequantization: "
+                f"quantized={tuple(quantized.shape)}, scale={tuple(scale.shape)}"
+            )
+        if num_groups == 1:
+            return quantized.to(scale.dtype) * scale
         group_size = D // num_groups
         q_reshaped = quantized.view(B, H, S, num_groups, group_size)
         decoded_reshaped = q_reshaped.to(scale.dtype) * scale.unsqueeze(-1)
         return decoded_reshaped.view(B, H, S, D)
 
-    # Per-token/per-head scale: [B, H, S, 1] (broadcasts over D)
-    return quantized.to(scale.dtype) * scale
+    raise ValueError(
+        f"Unsupported scale rank for dequantize_symmetric_int8: "
+        f"quantized.ndim={quantized.ndim}, scale.ndim={scale.ndim}"
+    )

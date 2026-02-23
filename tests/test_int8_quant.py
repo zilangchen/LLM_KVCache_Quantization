@@ -132,6 +132,19 @@ class TestPercentileClipping(unittest.TestCase):
             "Clipping should reduce scale",
         )
 
+    def test_outlier_clipping_improves_non_outlier_reconstruction(self):
+        x = torch.randn(1, 1, 1, 128, dtype=torch.float16)
+        x[0, 0, 0, 0] = 120.0
+        q_noclip, s_noclip = quantize_symmetric_int8(x, percentile=100.0, group_size=128)
+        y_noclip = dequantize_symmetric_int8(q_noclip, s_noclip)
+        q_clip, s_clip = quantize_symmetric_int8(x, percentile=99.0, group_size=128)
+        y_clip = dequantize_symmetric_int8(q_clip, s_clip)
+
+        # Exclude the outlier itself and compare average reconstruction error.
+        err_noclip = (x[..., 1:] - y_noclip[..., 1:]).abs().mean()
+        err_clip = (x[..., 1:] - y_clip[..., 1:]).abs().mean()
+        self.assertLess(err_clip.item(), err_noclip.item())
+
     def test_percentile_values(self):
         x = torch.randn(1, 2, 4, 128, dtype=torch.float16)
         for pct in [99.0, 99.5, 99.9, 100.0]:
@@ -176,6 +189,13 @@ class TestStaticScale(unittest.TestCase):
             x, scale, self.group_size
         )
         self.assertEqual(q.dtype, torch.int8)
+        y = dequantize_symmetric_int8(q, s_out)
+        self.assertEqual(y.shape, x.shape)
+
+    def test_with_3d_scale(self):
+        x = torch.randn(self.B, self.H, self.S, self.D, dtype=torch.float16)
+        scale = torch.full((self.B, self.H, self.num_groups), 0.01, dtype=torch.float16)
+        q, s_out = quantize_symmetric_int8_with_scale(x, scale, self.group_size)
         y = dequantize_symmetric_int8(q, s_out)
         self.assertEqual(y.shape, x.shape)
 

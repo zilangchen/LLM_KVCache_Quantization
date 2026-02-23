@@ -16,7 +16,10 @@ from src.quant.int8_basic import (
 
 from src.quant.int4_basic import (
     dequantize_symmetric_int4,
+    pack_int4,
     quantize_symmetric_int4,
+    quantize_symmetric_int4_with_scale,
+    unpack_int4,
 )
 
 from src.quant.asymmetric_quant import (
@@ -34,6 +37,9 @@ __all__ = [
     "quantize_symmetric_int8_with_scale",
     "quantize_symmetric_int4",
     "dequantize_symmetric_int4",
+    "quantize_symmetric_int4_with_scale",
+    "pack_int4",
+    "unpack_int4",
     "quantize_asymmetric",
     "dequantize_asymmetric",
     "quantize_asymmetric_per_channel",

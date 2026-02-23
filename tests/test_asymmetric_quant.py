@@ -82,6 +82,24 @@ class TestAsymmetricQuantBasic(unittest.TestCase):
         with self.assertRaises(ValueError):
             quantize_asymmetric(x, axis=-1, quant_bits=3)
 
+    def test_percentile_bounds(self):
+        x = torch.randn(1, 2, 4, 8)
+        with self.assertRaises(ValueError):
+            quantize_asymmetric(x, axis=-1, quant_bits=8, percentile=50.0)
+        # 50.01 is the minimum allowed value and should pass.
+        q, scale, zp = quantize_asymmetric(x, axis=-1, quant_bits=8, percentile=50.01)
+        self.assertEqual(q.shape, x.shape)
+        self.assertEqual(scale.shape, (1, 2, 4))
+        self.assertEqual(zp.shape, (1, 2, 4))
+        with self.assertRaises(ValueError):
+            quantize_asymmetric(x, axis=-1, quant_bits=8, percentile=100.1)
+
+    def test_float16_input_keeps_high_precision_scale(self):
+        x = torch.randn(1, 2, 4, 16, dtype=torch.float16)
+        _, scale, zp = quantize_asymmetric(x, axis=-1, quant_bits=8, percentile=99.9)
+        self.assertEqual(scale.dtype, torch.float32)
+        self.assertEqual(zp.dtype, torch.float32)
+
 
 class TestAsymmetricQuantEdgeCases(unittest.TestCase):
     """Edge cases: all zeros, constant values, outliers."""
@@ -152,6 +170,16 @@ class TestPerChannelQuantization(unittest.TestCase):
         x_hat = dequantize_asymmetric_per_channel(q, scale, zp)
         self.assertEqual(x_hat.shape, x.shape)
 
+    def test_per_channel_semantics_match_manual_min_max(self):
+        x = torch.randn(1, 2, 8, 16)
+        _, scale, zp = quantize_asymmetric_per_channel(x, quant_bits=8, percentile=100.0)
+        manual_min = x.float().amin(dim=2)
+        manual_max = x.float().amax(dim=2)
+        expected_scale = (manual_max - manual_min).clamp(min=1e-5) / 255.0
+        expected_zp = manual_min + 128.0 * expected_scale
+        self.assertTrue(torch.allclose(scale, expected_scale, atol=1e-5, rtol=1e-4))
+        self.assertTrue(torch.allclose(zp, expected_zp, atol=1e-5, rtol=1e-4))
+
     def test_per_channel_round_trip(self):
         """Per-channel round-trip should have reasonable error."""
         torch.manual_seed(123)
@@ -195,6 +223,16 @@ class TestPerTokenQuantization(unittest.TestCase):
         rel_err = (x - x_hat).abs().mean() / x.abs().mean()
         self.assertLess(rel_err.item(), 0.05)
 
+    def test_per_token_semantics_match_manual_min_max(self):
+        x = torch.randn(1, 2, 8, 16)
+        _, scale, zp = quantize_asymmetric_per_token(x, quant_bits=8, percentile=100.0)
+        manual_min = x.float().amin(dim=-1)
+        manual_max = x.float().amax(dim=-1)
+        expected_scale = (manual_max - manual_min).clamp(min=1e-5) / 255.0
+        expected_zp = manual_min + 128.0 * expected_scale
+        self.assertTrue(torch.allclose(scale, expected_scale, atol=1e-5, rtol=1e-4))
+        self.assertTrue(torch.allclose(zp, expected_zp, atol=1e-5, rtol=1e-4))
+
     def test_per_token_int4(self):
         """INT4 per-token quantization should work."""
         x = torch.randn(1, 2, 8, 16)
@@ -234,6 +272,29 @@ class TestZeroPoint(unittest.TestCase):
         x_hat = dequantize_asymmetric_per_token(q, scale, zp)
         rel_err = (x - x_hat).abs().mean() / x.abs().mean()
         self.assertLess(rel_err.item(), 0.05)
+
+
+class TestDequantizeValidation(unittest.TestCase):
+    def test_dequant_invalid_quantized_dtype(self):
+        q = torch.ones(1, 2, 3, 4, dtype=torch.int16)
+        scale = torch.ones(1, 2, 3, dtype=torch.float32)
+        zp = torch.zeros(1, 2, 3, dtype=torch.float32)
+        with self.assertRaises(ValueError):
+            dequantize_asymmetric(q, scale, zp, axis=-1)
+
+    def test_dequant_invalid_scale_dtype(self):
+        q = torch.ones(1, 2, 3, 4, dtype=torch.int8)
+        scale = torch.ones(1, 2, 3, dtype=torch.int32)
+        zp = torch.zeros(1, 2, 3, dtype=torch.float32)
+        with self.assertRaises(ValueError):
+            dequantize_asymmetric(q, scale, zp, axis=-1)
+
+    def test_dequant_shape_mismatch(self):
+        q = torch.ones(1, 2, 3, 4, dtype=torch.int8)
+        scale = torch.ones(1, 2, 2, dtype=torch.float32)
+        zp = torch.zeros(1, 2, 2, dtype=torch.float32)
+        with self.assertRaises(ValueError):
+            dequantize_asymmetric(q, scale, zp, axis=-1)
 
 
 if __name__ == "__main__":

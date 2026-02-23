@@ -5,6 +5,12 @@ F1: Behavior-Aligned Calibration Script (scripts/calibrate_behavior.py)
 Supports KL divergence (default) and MSE loss functions for calibration
 via --loss_function {kl, mse}.
 
+Loss semantics:
+  - KL path uses probability-safe clamping before log to avoid numerical issues.
+  - MSE path compares raw attention probabilities without clamping.
+  - KL and MSE absolute values are different scales; ranking is only comparable
+    within the same loss_function.
+
 Outputs:
   - artifacts/kv_calib_kl.json (static k/v scales + per-head inv_tau)
   - results/calibration/calibration_stats.csv (optional stats)
@@ -196,11 +202,8 @@ def compute_inv_tau(
 
                 if loss_function == "mse":
                     # MSE between FP16 and quantized attention distributions.
-                    # Use .sum(dim=-1) for consistency with KL (both aggregate
-                    # the full distribution; normalisation cancels in argmin).
-                    p_ref_clamped = torch.clamp(p_ref, min=eps)
-                    p_quant_clamped = torch.clamp(p_quant, min=eps)
-                    mse = ((p_ref_clamped.unsqueeze(0) - p_quant_clamped) ** 2).sum(dim=-1)
+                    # We intentionally avoid clamping here to preserve true squared error.
+                    mse = ((p_ref.unsqueeze(0) - p_quant) ** 2).sum(dim=-1)
                     loss_accum += mse
                 else:
                     # KL divergence (default)
@@ -243,6 +246,7 @@ def evaluate_quant_candidate(
         - mean_kl, p95_kl, max_kl over attention distributions
       When loss_function=="mse":
         - mean_mse, p95_mse, max_mse over attention distributions
+        - NOTE: MSE values are not numerically comparable to KL values
       Always:
         - k_clip_rate, v_clip_rate (fraction of elements clipped to int8 range)
         - v_rel_l2_mean (value dequant relative L2 error, mean over heads/samples/layers)
@@ -306,11 +310,8 @@ def evaluate_quant_candidate(
                 p_quant = torch.softmax(logits_quant, dim=-1)
 
                 if loss_function == "mse":
-                    # MSE: use .sum() for consistency with KL (same scale
-                    # across loss functions makes trial ranking comparable).
-                    p_ref_safe = torch.clamp(p_ref, min=eps)
-                    p_quant_safe = torch.clamp(p_quant, min=eps)
-                    mse = ((p_ref_safe - p_quant_safe) ** 2).sum().item()
+                    # MSE uses raw softmax probabilities (no clamping required).
+                    mse = ((p_ref - p_quant) ** 2).sum().item()
                     loss_values.append(float(mse))
                 else:
                     # KL divergence (default)
@@ -357,6 +358,8 @@ def select_best_trial(
     # Determine loss metric key prefix based on objective and loss_function.
     # For explicit mean_kl/mean_mse objectives, the key is in the objective name.
     # For "robust", derive from loss_function.
+    # NOTE: KL and MSE are different numeric scales; ranking is only meaningful
+    # within one selected loss_function.
     if objective == "mean_mse" or (objective == "robust" and loss_function == "mse"):
         mean_key, p95_key = "mean_mse", "p95_mse"
     else:
