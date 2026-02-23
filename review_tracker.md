@@ -1,6 +1,6 @@
 # Code Review Tracker
 
-> 273 issues | 74 fixed + 2 false_positive | 197 open (0 CRIT, 44 HIGH, 112 MED, 41 LOW)
+> 280 issues | 81 fixed + 2 false_positive | 197 open (0 CRIT, 42 HIGH, 114 MED, 41 LOW)
 > Phase Gate: **CLEAR** — all CRITICAL resolved
 > Last updated: 2026-02-24
 
@@ -59,16 +59,16 @@
 - [ ] **AGG-015** `[LOW]` 精确枚举阈值 n=16 硬编码 (L1092-1107)
 - [ ] **AGG-016** `[MED]` 显著性 pairings 遗漏 `("int4_baseline", "int4_ours")` (L2207-2212): INT8 有 baseline-vs-ours 配对，INT4 仅有 `("int4_fused", "int4_ours")`。若 Phase5v2 不含 int4_fused 运行，则 INT4 无任何显著性比较
 - [ ] **AGG-017** `[MED]` `_export_per_model_layered_tables()` bare `except` 吞掉 CSV 读取错误 (aggregate_results.py): 空 `except:` 捕获所有异常（包括 CSV 格式损坏、权限错误），静默跳过该模型的表导出。应至少 `except Exception as e:` 并 log warning。 — D2 incremental, confidence: 90%
-- [ ] **AGG-018** `[HIGH]` _add_ci95_columns 使用 z=1.96 而非 t 分位数，n=5 时 CI 偏窄 29% (aggregate_results.py:148-150): 固定乘数 1.96（正态分布）用于 count<=5 的小样本。df=4 时 t 分位数为 2.776，当前 CI 半宽仅为真实值的 70%。影响所有 summary 表（latency/memory/ppl/needle/longbench/ruler）的 CI 列和图表 error bar。 — D1 EXP rotation, confidence: 95%
-- [ ] **AGG-019** `[HIGH]` sign-flip p 值定义在 exact 与 MC 分支间不一致 (aggregate_results.py:1249-1258): exact 分支 (n<=16) 不含 +1 修正可产出 p=0.0；MC 分支 (n>16) 含 Phipson-Smyth +1 修正保证 p>0。当 n 从 16 增到 17 时可能出现 p 值跳变。p=0 在 BH-FDR 调整时产生 q=0，统计学上不规范。 — D1 EXP rotation, confidence: 92%
-- [ ] **AGG-020** `[HIGH]` _read_csvs() bare except 静默跳过损坏 CSV 文件 (aggregate_results.py:93-96): `except Exception: continue` 无日志无计数。若 CSV 因编码/截断/权限损坏，数据被完全丢弃。小样本统计下丢失 1 个 seed 显著改变结论。严格模式也不检查加载文件数 vs 预期。 — D2/D5/D7 EXP rotation, confidence: 95%
+- [x] **AGG-018** `[HIGH]` ~~_add_ci95_columns z=1.96 → t 分位数~~ **FIXED** — 改用 _t_critical(df) 函数（scipy + fallback lookup table），n≤1 返回 NaN（同时修复 AGG-027）
+- [x] **AGG-019** `[HIGH]` ~~sign-flip exact/MC 分支 p 值不一致~~ **FIXED** — exact 分支加 Phipson-Smyth +1 修正: p=(exceed+1)/(n_enum+1)，与 MC 分支一致
+- [x] **AGG-020** `[HIGH]` ~~_read_csvs() bare except 静默跳过~~ **FIXED** — 改为 `except Exception as exc: logger.warning("Skipped unreadable CSV ...")`
 - [ ] **AGG-021** `[HIGH]` _main_claims_32k_table 混合 outer/left merge 产生幽灵行或丢失数据 (aggregate_results.py:1467-1477): latency+memory 用 outer merge（可能产生 NaN 幽灵行），ppl/longbench/ruler 用 left merge（可能丢弃不在 latency 中的 kv_mode 数据）。无 merge 后行数 sanity check。 — D2 EXP rotation, confidence: 85%
 - [ ] **AGG-022** `[HIGH]` _build_paired_metric_rows pivot_table aggfunc="mean" 静默折叠重复 seed 观测 (aggregate_results.py:1144-1153): 重复 (key, seed, kv_mode) 行被均值折叠，仅 print() 警告（非 logging）。折叠后 paired test 的独立性假设被违反，p-value 可能不可靠。 — D2 EXP rotation, confidence: 85%
-- [ ] **AGG-023** `[HIGH]` relative_gain pairings 缺少 kivi_style → C9/C10 永远 INCONCLUSIVE (aggregate_results.py:2390-2396): significance pairings 含 ("kivi_style","int8_ours")，但 relative_gain pairings 不含。generate_thesis_report C9/C10 需要 relative_gain 行证据，永远找不到 → 返回 INCONCLUSIVE。 — D4/D5 EXP rotation, confidence: 98%
-- [ ] **AGG-024** `[HIGH]` relative_gain key_cols 不含 model_id → C11 跨模型过滤失效 (aggregate_results.py:2398-2466): 所有 _relative_gain_table 调用的 key_cols 不含 "model_id"。generate_thesis_report C11 的 target_model_ids 过滤因 "model_id" 列不存在而跳过，claim 实际评估所有模型混合后的聚合值。 — D4 EXP rotation, confidence: 95%
-- [ ] **AGG-025** `[HIGH]` _main_claims_32k_table 多模型场景 merge on kv_mode 产生笛卡尔积 (aggregate_results.py:1438-1483): lat_cols 不含 model_id，多模型 summary 中同一 kv_mode 有多行。merge on="kv_mode" 产生 N*M 行笛卡尔积，导致 LaTeX 表重复行、论文 main claims 膨胀。 — D4 EXP rotation, confidence: 92%
+- [x] **AGG-023** `[HIGH]` ~~relative_gain pairings 缺少 kivi_style~~ **FIXED** — 添加 ("kivi_style","int8_ours") 和 ("kivi_style","int8_baseline") 到 pairings 列表
+- [x] **AGG-024** `[HIGH]` ~~relative_gain key_cols 不含 model_id~~ **FIXED** — 所有 7 个 _relative_gain_table 调用的 key_cols 增加 "model_id" 前缀
+- [x] **AGG-025** `[HIGH]` ~~_main_claims_32k_table merge on kv_mode 笛卡尔积~~ **FIXED** — 动态 merge_keys 包含 model_id（当存在时），所有列列表和 merge/drop_duplicates 均使用 model_id
 - [ ] **AGG-026** `[HIGH]` gain_pct 与 diff 基于不同样本量计算 (aggregate_results.py:1156-1190): baseline=0 时 gain_pct=NaN，dropna(subset=...) 不含 gain_pct 列所以 NaN 行保留。但 _significance_summary 对 gain_pct 做额外 dropna，导致 gain_pct_mean 基于 n-k 样本而 diff_mean 基于 n 样本，n_pairs 不匹配。 — D1/D5 EXP rotation, confidence: 85%
-- [ ] **AGG-027** `[MED]` _add_ci95_columns count=1 时 CI 半宽强制为 0，产生误导性零宽度 CI (aggregate_results.py:150): `ci_half.where(cnt > 1, 0.0)` 使单 seed 行显示 [mean, mean] 区间，读者误以为完美精确。应标记为 NaN 或注明 count=1。 — D2/D5 EXP rotation, confidence: 95%
+- [x] **AGG-027** `[MED]` ~~count=1 时 CI 半宽 0.0 → NaN~~ **FIXED** — AGG-018 修复中一并处理，ci_half.where(cnt > 1, np.nan) 替代原 0.0
 - [ ] **AGG-028** `[MED]` _to_numeric errors="coerce" 将非数值静默转 NaN，无 warning (aggregate_results.py:107-111): 对所有指标列使用 `pd.to_numeric(errors="coerce")`，异常字符串（"N/A"、"err"、空串）变 NaN 后被 groupby 忽略。5-seed 小样本下丢失 1 个点显著影响结论。 — D2 EXP rotation, confidence: 90%
 - [ ] **AGG-029** `[MED]` gain_pct_mean（跨 seed 配对差均值）vs gain_pct（聚合均值上的单点增益）定义不同 (generate_thesis_report.py:586 vs 356): significance_summary 用 gain_pct_mean，claim_validation 用 gain_pct。Jensen's inequality 下两者不等。同一 claim 在两个表中可能给出矛盾的 practical_pass。 — D4 EXP rotation, confidence: 88%
 - [ ] **AGG-030** `[MED]` _main_claims_32k_table latency 或 memory 为空即返回完全空表 (aggregate_results.py:1464-1467): 若 latency 数据缺失，即使 needle/ppl/longbench/ruler 完整，main claims 表也为空。无 warning。 — D2 EXP rotation, confidence: 90%

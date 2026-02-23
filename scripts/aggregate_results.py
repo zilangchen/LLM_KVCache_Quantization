@@ -22,8 +22,41 @@ from typing import Dict, Iterable, List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+import logging
 import pandas as pd
 
+try:
+    from scipy.stats import t as _t_dist
+    def _t_critical(df: int, alpha: float = 0.05) -> float:
+        """Return two-tailed t critical value for given df and alpha."""
+        return float(_t_dist.ppf(1.0 - alpha / 2.0, df))
+except ImportError:
+    # Fallback lookup table for t_{0.975, df} (two-tailed 95% CI).
+    _T_TABLE = {
+        1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
+        6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
+        15: 2.131, 20: 2.086, 25: 2.060, 30: 2.042, 40: 2.021,
+        60: 2.000, 120: 1.980,
+    }
+    def _t_critical(df: int, alpha: float = 0.05) -> float:
+        if alpha != 0.05:
+            return 1.96  # fallback for non-standard alpha
+        if df in _T_TABLE:
+            return _T_TABLE[df]
+        # Interpolate between nearest known df values
+        keys = sorted(_T_TABLE.keys())
+        if df < keys[0]:
+            return _T_TABLE[keys[0]]
+        if df > keys[-1]:
+            return 1.96
+        for i in range(len(keys) - 1):
+            if keys[i] <= df <= keys[i + 1]:
+                lo, hi = keys[i], keys[i + 1]
+                frac = (df - lo) / (hi - lo)
+                return _T_TABLE[lo] * (1 - frac) + _T_TABLE[hi] * frac
+        return 1.96
+
+logger = logging.getLogger(__name__)
 
 KV_MODE_ORDER: List[str] = [
     "fp16",
@@ -92,7 +125,8 @@ def _read_csvs(runs_dir: Path, patterns: Iterable[str]) -> pd.DataFrame:
         for path in sorted(runs_dir.rglob(pattern)):
             try:
                 df = pd.read_csv(path)
-            except Exception:
+            except Exception as exc:
+                logger.warning("Skipped unreadable CSV %s: %s", path, exc)
                 continue
             try:
                 df["source_file"] = str(path.relative_to(runs_dir))
@@ -146,8 +180,11 @@ def _add_ci95_columns(df: pd.DataFrame) -> pd.DataFrame:
         cnt = pd.to_numeric(out[cnt_col], errors="coerce")
         mean = pd.to_numeric(out[col], errors="coerce")
         sem = std / np.sqrt(cnt.clip(lower=1))
-        ci_half = 1.96 * sem
-        ci_half = ci_half.where(cnt > 1, 0.0)
+        # Use t-distribution critical value instead of fixed z=1.96.
+        # For small n (e.g. n=5, df=4), t_{0.975}=2.776 vs z=1.96.
+        t_crit = cnt.apply(lambda n: _t_critical(max(1, int(n) - 1)) if n > 1 else 0.0)
+        ci_half = t_crit * sem
+        ci_half = ci_half.where(cnt > 1, np.nan)
         out[f"{prefix}_ci95_half"] = ci_half
         out[f"{prefix}_ci95_low"] = mean - ci_half
         out[f"{prefix}_ci95_high"] = mean + ci_half
@@ -1247,7 +1284,8 @@ def _paired_signflip_pvalue(
         bits = ((idx >> np.arange(n, dtype=np.uint32)) & 1).astype(np.int8)
         signs = bits * 2 - 1
         perm_means = np.abs((signs * arr[None, :]).mean(axis=1))
-        p_value = float(np.mean(perm_means >= (observed - 1e-12)))
+        exceed = int(np.count_nonzero(perm_means >= (observed - 1e-12)))
+        p_value = float((exceed + 1) / (n_enum + 1))
         return p_value, "exact_signflip", int(n_enum)
 
     n_perm = max(2000, int(n_permutations))
@@ -1429,19 +1467,24 @@ def _main_claims_32k_table(
     # PPL: choose kv_cache row with maximal tokens_evaluated for each mode.
     if not ppl.empty and "ppl_mode" in ppl.columns:
         ppl = ppl[ppl["ppl_mode"] == "kv_cache"]
+    # Determine merge keys: include model_id when available to avoid cartesian product.
+    _has_mid = "model_id" in lat.columns or "model_id" in mem.columns
+    merge_keys = ["model_id", "kv_mode"] if _has_mid else ["kv_mode"]
     if not ppl.empty and "tokens_evaluated_mean" in ppl.columns:
+        dedup_cols = [c for c in merge_keys if c in ppl.columns]
         ppl = (
             ppl.sort_values("tokens_evaluated_mean", ascending=False)
-            .drop_duplicates(subset=["kv_mode"], keep="first")
+            .drop_duplicates(subset=dedup_cols, keep="first")
         )
 
-    lat_cols = [c for c in ["kv_mode", "tpot_ms_mean", "ttft_ms_mean", "tok_per_s_mean"] if c in lat.columns]
-    mem_cols = [c for c in ["kv_mode", "gpu_mem_peak_mb_mean", "kv_cache_mem_mb_mean"] if c in mem.columns]
-    ned_cols = [c for c in ["kv_mode", "needle_pass_rate_mean", "needle_exact_match_rate_mean"] if c in ned.columns]
-    ppl_cols = [c for c in ["kv_mode", "perplexity_mean", "tokens_evaluated_mean"] if c in ppl.columns]
+    _id_prefix = ["model_id"] if _has_mid else []
+    lat_cols = [c for c in _id_prefix + ["kv_mode", "tpot_ms_mean", "ttft_ms_mean", "tok_per_s_mean"] if c in lat.columns]
+    mem_cols = [c for c in _id_prefix + ["kv_mode", "gpu_mem_peak_mb_mean", "kv_cache_mem_mb_mean"] if c in mem.columns]
+    ned_cols = [c for c in _id_prefix + ["kv_mode", "needle_pass_rate_mean", "needle_exact_match_rate_mean"] if c in ned.columns]
+    ppl_cols = [c for c in _id_prefix + ["kv_mode", "perplexity_mean", "tokens_evaluated_mean"] if c in ppl.columns]
     lb_cols = [
         c
-        for c in [
+        for c in _id_prefix + [
             "kv_mode",
             "longbench_score_mean",
             "longbench_f1_macro_mean",
@@ -1452,7 +1495,7 @@ def _main_claims_32k_table(
     ]
     rul_cols = [
         c
-        for c in [
+        for c in _id_prefix + [
             "kv_mode",
             "ruler_pass_rate_mean",
             "ruler_f1_mean_mean",
@@ -1464,17 +1507,24 @@ def _main_claims_32k_table(
     if not lat_cols or not mem_cols:
         return pd.DataFrame()
 
+    _mk = [c for c in merge_keys if c in lat.columns and c in mem.columns]
+    if not _mk:
+        _mk = ["kv_mode"]
     out = lat[lat_cols].copy()
     if mem_cols:
-        out = out.merge(mem[mem_cols], on="kv_mode", how="outer")
+        out = out.merge(mem[mem_cols], on=_mk, how="outer")
     if ned_cols:
-        out = out.merge(ned[ned_cols], on="kv_mode", how="outer")
+        _nk = [c for c in merge_keys if c in out.columns and c in ned[ned_cols].columns]
+        out = out.merge(ned[ned_cols], on=_nk or ["kv_mode"], how="outer")
     if ppl_cols:
-        out = out.merge(ppl[ppl_cols], on="kv_mode", how="left")
+        _pk = [c for c in merge_keys if c in out.columns and c in ppl[ppl_cols].columns]
+        out = out.merge(ppl[ppl_cols], on=_pk or ["kv_mode"], how="left")
     if lb_cols:
-        out = out.merge(lb[lb_cols], on="kv_mode", how="left")
+        _lk = [c for c in merge_keys if c in out.columns and c in lb[lb_cols].columns]
+        out = out.merge(lb[lb_cols], on=_lk or ["kv_mode"], how="left")
     if rul_cols:
-        out = out.merge(rul[rul_cols], on="kv_mode", how="left")
+        _rk = [c for c in merge_keys if c in out.columns and c in rul[rul_cols].columns]
+        out = out.merge(rul[rul_cols], on=_rk or ["kv_mode"], how="left")
 
     out["claim_seq_len"] = int(
         lat_seq or mem_seq or ned_seq or lb_seq or rul_seq or target_seq_len
@@ -2393,6 +2443,8 @@ def main() -> int:
         ("int4_ours", "int4_ours_mixed"),
         ("fp16", "int8_ours"),
         ("fp16", "int4_ours"),
+        ("kivi_style", "int8_ours"),
+        ("kivi_style", "int8_baseline"),
     ]
     gain_frames = []
     gain_frames.append(
@@ -2400,7 +2452,7 @@ def main() -> int:
             latency_summary,
             metric_col="tpot_ms_mean",
             metric_name="tpot_ms",
-            key_cols=["seq_len", "gen_len", "batch"],
+            key_cols=["model_id", "seq_len", "gen_len", "batch"],
             pairings=pairings,
             higher_is_better=False,
         )
@@ -2410,7 +2462,7 @@ def main() -> int:
             latency_summary,
             metric_col="tok_per_s_mean",
             metric_name="tok_per_s",
-            key_cols=["seq_len", "gen_len", "batch"],
+            key_cols=["model_id", "seq_len", "gen_len", "batch"],
             pairings=pairings,
             higher_is_better=True,
         )
@@ -2420,7 +2472,7 @@ def main() -> int:
             memory_summary,
             metric_col="kv_cache_mem_mb_mean",
             metric_name="kv_cache_mem_mb",
-            key_cols=["seq_len", "gen_len", "batch"],
+            key_cols=["model_id", "seq_len", "gen_len", "batch"],
             pairings=pairings,
             higher_is_better=False,
         )
@@ -2430,7 +2482,7 @@ def main() -> int:
             ppl_summary,
             metric_col="perplexity_mean",
             metric_name="perplexity",
-            key_cols=["seq_len", "ppl_mode", "chunk_size"],
+            key_cols=["model_id", "seq_len", "ppl_mode", "chunk_size"],
             pairings=pairings,
             higher_is_better=False,
         )
@@ -2440,7 +2492,7 @@ def main() -> int:
             needle_summary,
             metric_col="needle_pass_rate_mean",
             metric_name="needle_pass_rate",
-            key_cols=["seq_len"],
+            key_cols=["model_id", "seq_len"],
             pairings=pairings,
             higher_is_better=True,
         )
@@ -2450,7 +2502,7 @@ def main() -> int:
             longbench_summary,
             metric_col="longbench_score_mean",
             metric_name="longbench_score",
-            key_cols=["seq_len", "longbench_source"],
+            key_cols=["model_id", "seq_len", "longbench_source"],
             pairings=pairings,
             higher_is_better=True,
         )
@@ -2460,7 +2512,7 @@ def main() -> int:
             ruler_summary,
             metric_col="ruler_pass_rate_mean",
             metric_name="ruler_pass_rate",
-            key_cols=["seq_len", "ruler_num_kv_pairs"],
+            key_cols=["model_id", "seq_len", "ruler_num_kv_pairs"],
             pairings=pairings,
             higher_is_better=True,
         )

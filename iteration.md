@@ -81,6 +81,7 @@ Canonical agent workflow directory is `.agents/`.
 2. Every entry must include goal, changed files, commands run, outputs, and result quality.
 3. If blocked, write explicit blocker and next action.
 4. Keep entries concise and auditable; avoid vague summaries.
+5. Timeline 保留最近 **15 条**。超出时将最旧条目归档到 `development_history/iteration_archive_202602.md`。
 
 ## Entry Template
 
@@ -94,6 +95,22 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
 
 ## Timeline (Latest First)
+
+### 2026-02-24 05:20 | HIGH priority 修复 — aggregate_results.py 统计与数据完整性 (6+1 fixes)
+
+- **Goal**: 修复 aggregate_results.py 中 7 个 HIGH/MED 审查问题
+- **Changed files**: `scripts/aggregate_results.py`, `review_tracker.md`
+- **Fixes**:
+  - AGG-018: CI 从 z=1.96 改为 t 分位数（_t_critical 函数，scipy + fallback lookup table）
+  - AGG-019: exact sign-flip 分支加 Phipson-Smyth +1 修正，与 MC 分支一致
+  - AGG-020: _read_csvs bare except → logger.warning 记录损坏 CSV
+  - AGG-023: relative_gain pairings 补充 kivi_style 配对（C9/C10 claim 支持）
+  - AGG-024: relative_gain 所有 7 个调用的 key_cols 加 model_id
+  - AGG-025: _main_claims_32k_table 动态 merge_keys 含 model_id，消除笛卡尔积
+  - AGG-027: count=1 时 CI 半宽从 0.0 改为 NaN（随 AGG-018 修复）
+- **Validation**: `python -m py_compile scripts/aggregate_results.py` — COMPILE OK
+- **review_tracker.md**: 280 issues | 81 fixed + 2 FP | 197 open (0 CRIT, 42 HIGH, 114 MED, 41 LOW)
+- **Commit**: 4876498
 
 ### 2026-02-24 05:10 | Supervisor 审查追踪清理 — Phase Gate 解除阻塞
 
@@ -156,6 +173,30 @@ Canonical agent workflow directory is `.agents/`.
 - **Net effect**: 删除 ~4809 行 (YAML + 3 scripts)，新增 ~400 行 (markdown + 1 script)。92% 减少。
 - **Commit**: 73c9472 (initial), then renumbered (see below)
 
+### 2026-02-24 04:48 | review-coord 持续守护模式改造 + start_agents.sh 修复
+- **Goal**: 将 review-coord Agent 从单次审查模式改造为持续运行守护式 Agent，同时修复 start_agents.sh 的三个问题（RVW-010, RVW-015）
+- **Changed files**:
+  - `.claude/agents/review-coord.md`: 完整重写（162→192 行）
+    - 新增持续运行事件循环（变更检测→决定行动→执行审查→智能休眠）
+    - 新增状态管理（last_reviewed_commit, reviewed_modules, cycle_count）
+    - 审查范围 7→10 模块覆盖全部有效代码
+    - 新增自适应休眠策略（不硬编码，agent 自决策）
+    - 新增变更打断深度审查的处理规则
+  - `scripts/start_agents.sh`: 三处修复
+    - L5: 硬编码路径→动态 `$(cd "$(dirname "$0")/.." && pwd)`（RVW-010）
+    - L16+L28: `reviewer`→`review-coord`（RVW-015）
+    - L33: 启动 prompt 更新为持续审查模式措辞
+- **Commands**:
+  - `grep -c 'reviewer' scripts/start_agents.sh` → 0
+  - `wc -l .claude/agents/review-coord.md` → 192
+- **Validation**:
+  - review-coord.md 包含完整事件循环伪代码、10 模块定义、休眠策略 ✅
+  - start_agents.sh 无硬编码路径、无 `reviewer` 引用 ✅
+  - review-coord 注意事项明确"持续运行，仅在用户终止/supervisor shutdown 时退出" ✅
+- **Risks / follow-ups**:
+  - review_tracker.md 中 RVW-010、RVW-015 应标记为 fixed
+  - AGENTS.md 中若有引用旧 reviewer agent 的描述需同步更新
+
 ### 2026-02-23 17:29 | Phase 5v2 启动 — 合并验证 + 质量并行评测
 
 - **Goal**: 验证 Codex 修复合并完整性，同步远端代码，启动 3 模型并行质量评测
@@ -184,32 +225,6 @@ Canonical agent workflow directory is `.agents/`.
   - autodl-tmp 仅 2.4GB，不要在该分区写新数据
   - 质量评测预计 80-100h 墙钟；完成后启动吞吐串行
   - **监控命令**: `ssh -p 31867 root@region-42.seetacloud.com 'tmux ls; ls results/phase5v2/runs/ | wc -l; nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader'`
-
----
-
-### 2026-02-24 04:48 | review-coord 持续守护模式改造 + start_agents.sh 修复
-- **Goal**: 将 review-coord Agent 从单次审查模式改造为持续运行守护式 Agent，同时修复 start_agents.sh 的三个问题（RVW-010, RVW-015）
-- **Changed files**:
-  - `.claude/agents/review-coord.md`: 完整重写（162→192 行）
-    - 新增持续运行事件循环（变更检测→决定行动→执行审查→智能休眠）
-    - 新增状态管理（last_reviewed_commit, reviewed_modules, cycle_count）
-    - 审查范围 7→10 模块覆盖全部有效代码
-    - 新增自适应休眠策略（不硬编码，agent 自决策）
-    - 新增变更打断深度审查的处理规则
-  - `scripts/start_agents.sh`: 三处修复
-    - L5: 硬编码路径→动态 `$(cd "$(dirname "$0")/.." && pwd)`（RVW-010）
-    - L16+L28: `reviewer`→`review-coord`（RVW-015）
-    - L33: 启动 prompt 更新为持续审查模式措辞
-- **Commands**:
-  - `grep -c 'reviewer' scripts/start_agents.sh` → 0
-  - `wc -l .claude/agents/review-coord.md` → 192
-- **Validation**:
-  - review-coord.md 包含完整事件循环伪代码、10 模块定义、休眠策略 ✅
-  - start_agents.sh 无硬编码路径、无 `reviewer` 引用 ✅
-  - review-coord 注意事项明确"持续运行，仅在用户终止/supervisor shutdown 时退出" ✅
-- **Risks / follow-ups**:
-  - review_tracker.md 中 RVW-010、RVW-015 应标记为 fixed
-  - AGENTS.md 中若有引用旧 reviewer agent 的描述需同步更新
 
 ### 2026-02-23 16:11 | PR-4 配置与文档收口：I/W/X 全量关闭
 - **Goal**: 收口 final config / objective / SOP / preflight 文档口径，关闭 I/W/X backlog
@@ -247,5 +262,133 @@ Canonical agent workflow directory is `.agents/`.
 - **Risks / follow-ups**:
   - 需在可用 numpy/pandas 的环境重跑 PR-2 单测，补齐 CI 证据
 
+### 2026-02-23 07:27 | Phase 4 COMPLETE: Ablation Experiments Finished (70/70 runs)
+- **Goal**: Run full ablation experiment matrix on remote GPU
+- **Remote execution**: `run_experiments.py --config exp_matrix_ablation_1p5b_v1.yaml --tasks eval_ppl,eval_needle --seeds {1234..1238}`
+- **Results**: 14 configs × 5 seeds × 2 tasks = 70 runs, all successful
+  - A 节 (校准对比): kl/mse/percentile/percentile_fused/kivi — 5 configs
+  - B 节 (温度校正): temp_on/temp_off — 2 configs
+  - C 节 (group_size): g16/g32/g64/g128 — 4 configs
+  - D 节 (scales): static/adaptive/dynamic — 3 configs
+- **Duration**: ~65 min total (06:22 → 07:27), ~13 min per seed
+- **Output dir**: `results/runs/ablation_*_s{seed}_ablation_1p5b_s{seed}/`
+- **Next**: Phase 5 — full 3-model matrix experiments (1.5B KIVI补跑 → 7B → 8B)
+
+### 2026-02-23 06:19 | Phase 4.1: MSE Calibration Complete + Phase 5 Blockers Resolved
+- **Goal**: Generate MSE calibration artifacts for 1.5B model; fix remaining CRITICAL/HIGH blockers for Phase 5
+- **Changed files**:
+  - `scripts/eval_ppl.py`: Added kivi_style branch in build_kv_cache() + quant_bits parameter (L-1 fix)
+  - `scripts/aggregate_results.py`: Added KIVI significance pairings, longbench_official_macro, model_id in sig_specs/ruler_depth_keys (M-1/M-2/M-3/M-4 fix)
+  - `iteration.md`: Updated 20+ backlog checkboxes, Phase 4 plan status
+- **Remote GPU tasks**:
+  - MSE INT8 calibration: `calibrate_behavior.py --loss_function mse --search --quant_bits 8` → artifacts/kv_calib_mse_1p5b_int8.json (41KB)
+  - MSE INT4 calibration: `calibrate_behavior.py --loss_function mse --search --quant_bits 4 --int4_search` → artifacts/kv_calib_mse_1p5b_int4.json (64KB)
+  - INT8 best: g16/clip=99.5 (p95_mse=0.000956); INT4 best: g16 search across outlier_ratios
+- **Commits**: 03ed4a0 (eval_ppl+aggregate fix), 03d2e13 (docs), 9f41659 (backlog checkboxes)
+- **Pushed**: 8 commits to origin/main (36921e6..9f41659)
+- **Backlog status**: All CRITICAL=0, remaining HIGH=3 (non-blocking: A-5 doc, D-2 design, K-1 usability)
+- **Next**: Run ablation experiments (14 configs × 5 seeds × 3 tasks) on remote GPU
+
+### 2026-02-23 23:30 | Phase 4-6 Prep: Bug Fixes + Config Updates + Claims Extension
+
+- **Goal**: Resolve all CRITICAL/HIGH backlog items blocking Phase 4-6, update configs for full matrix, extend thesis report claims.
+- **Changed files (BUG FIXES)**:
+  - `scripts/calibrate_behavior.py`: Fixed MSE loss aggregation (.mean→.sum), clamp(min=eps), loss_accum normalization, --calib_out default, select_best_trial key check
+  - `src/cache/kivi_style_cache.py`: Fixed clear() to reset _k_scale/_k_zp
+  - `src/quant/asymmetric_quant.py`: Added percentile range validation (50, 100]
+  - `src/engine/generate_loop.py`: Added quant_bits to generate() API
+  - `scripts/eval_longbench.py`: Added logging import + logger
+- **Changed files (CONFIG UPDATES)**:
+  - `configs/exp_matrix.yaml`: +13 KIVI entries, -2 FP16 b24/b32
+  - `configs/snapshots/exp_matrix_qwen25_7b_v1.yaml`: +40 entries (long INT4/KIVI + throughput)
+  - `configs/snapshots/exp_matrix_llama31_8b_v1.yaml`: +40 entries (same)
+  - `configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml`: Created, 14 runs
+  - `configs/snapshots/final_emnlp2026_v1.yaml`: Created meta-config
+- **Changed files (FEATURE)**:
+  - `scripts/export_tables_latex.py`: +kivi_style to KV_MODE_ORDER/DISPLAY
+  - `scripts/generate_thesis_report.py`: +claims C7-C11
+  - `CLAUDE.md`: +Phase gate rule (§4.4), +remote server section (§12)
+- **Verification**: compileall 0 errors; all YAML parse OK; 11 ClaimSpecs; 86+14+67+67 matrix runs
+- **Backlog resolved**: A1-A4/A6-A7, B1, C1-C2, D1, E1-E4, F1-F3, G1-G2/G4, J1
+- **Commit**: pending
+- **Next**: commit → rsync → MSE calibration → ablation
+
+### 2026-02-23 22:00 | 项目监管审查：全面代码质量审查
+- **Goal**: 作为监管 agent，对当前代码库所有新增/修改模块进行全面审查，发现潜在问题并归档到待办清单
+- **Scope**: 6 个并行审查 agent 分别检查 KIVI cache、asymmetric quant、generate_loop、eval 脚本集成、MSE 校准、配置矩阵一致性
+- **审查模块与发现数量**:
+  - `src/cache/kivi_style_cache.py`: 4 CRITICAL + 3 MEDIUM + 3 LOW
+  - `src/quant/asymmetric_quant.py`: 2 CRITICAL + 2 MEDIUM + 1 LOW
+  - `src/engine/generate_loop.py`: 2 HIGH + 1 MEDIUM + 1 LOW
+  - 评测脚本集成（9 个脚本）: 2 CRITICAL + 2 HIGH + 4 MEDIUM + 1 LOW
+  - `scripts/calibrate_behavior.py` MSE: 3 CRITICAL + 4 HIGH + 3 MEDIUM
+  - 配置矩阵一致性（3 YAML）: 3 HIGH + 2 MEDIUM + 1 LOW
+- **关键发现（阻塞性）**:
+  1. MSE 校准实现有根本性 loss 语义错误（mean vs sum 不一致），产物不可信 → 阻塞 Phase 4
+  2. percentile < 50 时非对称量化公式翻转 min/max，静默产生错误结果 → 需添加范围校验
+  3. export_tables_latex.py 完全缺失 KIVI 显示名和排序 → 阻塞论文表格
+  4. eval_longbench.py 引用未定义 logger → 特定条件下 NameError 崩溃
+  5. 1.5B 配置缺失 KIVI 条目，7B/8B 缺失吞吐量条目 → 跨模型对比不完整
+  6. generate() 高层 API 无法指定 KIVI quant_bits → INT4 KIVI 不可用
+- **产出**: 全部问题已写入 `iteration.md` TODO Backlog A-F 节（按模块分类、按严重性排序）
+- **Validation**: 审查基于 6 个专业 agent 的独立代码阅读，每个 agent 逐行分析源码
+- **Risks / follow-ups**:
+  - 所有 CRITICAL/HIGH 问题必须在 Phase 4/5 启动前修复
+  - MSE 校准需完整重写 loss 聚合逻辑后才能生成可信产物
+  - 建议开发 agent 优先修复 A 节（MSE）和 C 节（percentile 校验），因为这两个影响数值正确性
+
+### 2026-02-23 | Phase 1-Pre/3/4.1: KIVI Baseline + MSE Calibration + Multi-Model Configs
+
+- **Goal**: Implement KIVI-style asymmetric KV cache baseline (Phase 3), MSE calibration loss (Phase 4.1), per-model config files (Phase 0.5), and integrate into all eval scripts. Part of EMNLP 2026 Milestone K-Q execution plan.
+- **Changed files (NEW)**:
+  - `src/quant/asymmetric_quant.py`: Asymmetric INT8/INT4 quantization with per-channel and per-token axis support, zero-point.
+  - `src/cache/kivi_style_cache.py`: `KIVIStyleKVCache` class implementing KIVI paper's per-channel K + per-token V asymmetric quantization.
+  - `tests/test_asymmetric_quant.py`: 15 unit tests covering round-trip error, edge cases, INT8/INT4.
+  - `tests/test_kivi_cache.py`: 17 unit tests covering basic append/get, prefill+decode pattern, K scale persistence.
+  - `configs/snapshots/exp_matrix_qwen25_7b_v1.yaml`: Qwen2.5-7B config.
+  - `configs/snapshots/exp_matrix_llama31_8b_v1.yaml`: LLaMA-3.1-8B config.
+- **Changed files (MODIFIED)**:
+  - `src/cache/__init__.py`, `src/quant/__init__.py`: Added exports.
+  - `src/engine/generate_loop.py`: Added `kivi_style` kv_mode + `quant_bits` parameter.
+  - 7 eval/profile scripts: Added `kivi_style` to `--kv_mode` choices + `--quant_bits` passthrough.
+  - `scripts/calibrate_behavior.py`: Added `--loss_function {kl,mse}`, MSE loss path.
+- **Verification**: `python3 -m compileall -f scripts/ src/ tests/` → all 34 files compile clean, 0 errors.
+- **Next**: Remote validation → calibration artifacts → ablation → full matrix.
+
+### 2026-02-23 | LongBench Official Metrics + Objective Refinement (Round 2)
+
+- **Goal**: Add LongBench official per-task metrics (Rouge-L, Accuracy, Edit Similarity); change `longbench_score` from uniform token-F1 to official metric macro-average; add snapshot governance rule.
+- **Changed files**:
+  - `scripts/eval_longbench.py`: Added `TASK_OFFICIAL_METRIC` mapping, `_lcs_length()`, `_rouge_l()`, `_edit_similarity()`, `_classification_accuracy()`, `_compute_official_metric()`. Changed `longbench_score` to `official_macro`.
+  - `objective.md`: LongBench 主表协议, Primary Endpoint #1 改为 official-metric macro, 新增 snapshot governance rule.
+- **Verification**: `python3 -m py_compile scripts/eval_longbench.py` → OK
+- **Risks / follow-ups**:
+  - Rouge-L LCS computation is O(n*m) on token lists; mitigated by short LongBench answers.
+
+### 2026-02-23 | RULER 4-Subtask Rewrite + LongBench 7-Task Extension + Objective Review
+- **Goal**: Rewrite RULER eval to implement 4 genuine subtasks (S-NIAH, MK-NIAH, VT, CWE); extend LongBench to 7 tasks; update objective.md.
+- **Changed files**:
+  - `scripts/eval_ruler.py` (full rewrite: 4 RULER subtask generators + task-level scoring)
+  - `scripts/eval_longbench.py` (fix HF field extraction; update default tasks to 7)
+  - `scripts/run_experiments.py` (add new RULER args)
+  - `scripts/aggregate_results.py` (add ruler_task_summary aggregation)
+  - `objective.md` (PPL 1M tokens, ARR window, revision pin, RULER description, primary endpoints)
+- **Key decisions**:
+  - RULER: self-implemented task generators following NVIDIA/RULER taxonomy
+  - LongBench: 7 tasks = narrativeqa, dureader, hotpotqa, gov_report, vcsum, trec, lcc
+  - Primary endpoints capped at 5: LongBench F1-macro, RULER macro-accuracy, Needle pass rate, PPL, TPOT
+- **Validation**: All modified scripts pass `python3 -m py_compile`
+
+### 2026-02-22 17:24 | Week5 External-Validity Chain + Remote Smoke Closure
+- **Goal**: Complete Week5 engineering upgrade (LongBench/RULER integration + PPL token-floor hardening) and verify the full experiment-to-report pipeline on Remote-Server.
+- **Changed files**: `scripts/eval_ruler.py`, `eval_ppl.py`, `run_experiments.py`, `check_run_completeness.py`, `aggregate_results.py`, `export_tables_latex.py`, `generate_thesis_report.py`, runner shell script, config snapshot, 1 test file
+- **Outputs**:
+  - remote smoke package: `results/week5_smoke_remote_r2/` (runs/logs/tables/plots/latex/reports)
+  - new aggregated artifacts: `longbench_summary.csv`, `ruler_summary.csv`, `ruler_depth_summary.csv`, `longbench_task_summary.csv`
+- **Validation**:
+  - remote smoke: 4/4 tasks success, strict aggregation + latex export + report generation all passed
+  - fixed two real defects: eval_ppl token-floor off-by-one, generate_thesis_report crash on missing `decision` column
+- **Risks / follow-ups**:
+  - local numpy broken (`libcblas.3.dylib` missing); numpy-dependent local tests remain blocked
 
 > 更早的条目见 `development_history/iteration_archive_202602.md`
