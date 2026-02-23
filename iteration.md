@@ -862,3 +862,41 @@ Canonical agent workflow directory is `.agents/`.
 | 002 | 2026-01-22 | Doc/script/matrix drift causes reproducibility confusion | Aligning `development_record.md` with code and matrix | Enforce single entrypoint and config snapshots | Tracked |
 | 003 | 2026-02-08 | Full-concat PPL tokenization creates long warnings and possible memory waste | Running `scripts/eval_ppl.py` | Use chunk/stream tokenization and record `max_length/stride` | Resolved |
 | 004 | 2026-02-08 | Long remote runs break with direct SSH sessions | Remote `eval_ppl.py` validation | Use tmux background sessions and persisted logs | Tracked |
+
+### 2026-02-24 02:31 | Phase5v2 AG1/AG2/AG3 全量修复与轻量补跑工具
+- Goal: complete Phase5v2 RULER-long robustness fixes with unified budget semantics, prelaunch risk warning, per-case resilience, and lightweight delta-repair runner.
+- Scope:
+  - AG1: fix RULER CWE long-context overflow with unified runtime budget.
+  - AG2: add `run_experiments.py` task-aware RULER prelaunch warning.
+  - AG3: add per-case try/except in `eval_ruler.py` so single-case failures no longer drop whole run.
+  - add lightweight `repair_phase5v2_ruler_light.py` for failed/missing `eval_ruler` delta reruns.
+- Changed files:
+  - `scripts/eval_ruler.py`
+  - `scripts/run_experiments.py`
+  - `configs/snapshots/exp_matrix_qwen25_7b_v1.yaml`
+  - `scripts/repair_phase5v2_ruler_light.py`
+  - `tests/test_eval_ruler_length_guard.py`
+  - `tests/test_run_experiments_resilience.py`
+- Commands:
+  - `python3.12 -m unittest tests/test_eval_ruler_length_guard.py`
+  - `python3.12 -m unittest tests/test_run_experiments_resilience.py`
+  - `python3.12 -m unittest tests/test_aggregate_results_stats.py`
+  - `python3.12 -m compileall -f /Users/chenzilang/.codex/worktrees/af44/LLM_KVCache_Quantization/src /Users/chenzilang/.codex/worktrees/af44/LLM_KVCache_Quantization/scripts /Users/chenzilang/.codex/worktrees/af44/LLM_KVCache_Quantization/tests`
+  - `python3.12 scripts/repair_phase5v2_ruler_light.py --help`
+- Outputs:
+  - `run_experiments` now emits RULER truncation warning when `requested_context_len + ruler_peak_gen_tokens` exceeds effective total budget.
+  - `eval_ruler` now computes per-case effective prompt budget from runtime `gen_tokens_case`, `seq_len+gen_len`, and `model.config.max_position_embeddings`.
+  - `eval_ruler` now records case-level error rows and summary error counters (`case_total/case_success_count/case_error_count/case_error_rate`).
+  - lightweight repair script generates and optionally executes delta rerun commands; archives failed `eval_ruler.log` into `logs_legacy_failures/`.
+  - corrected misleading 7B snapshot comment to match runtime-resolved model limit behavior.
+- Validation:
+  - `tests/test_run_experiments_resilience.py`: PASS (12 tests)
+  - `tests/test_eval_ruler_length_guard.py`: PASS with SKIP in local env (4 skipped due unavailable heavy deps for importing `eval_ruler`)
+  - `tests/test_aggregate_results_stats.py`: BLOCKED in local env (`ModuleNotFoundError: pandas` under `/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12`)
+  - `compileall`: PASS for `src/`, `scripts/`, `tests/`
+- Commits:
+  - `502bc08` fix: harden ruler budget guard and prelaunch checks
+  - `1c76dd3` test: add ruler length-guard and precheck regressions
+- Risks / follow-ups:
+  - local environment cannot run pandas-dependent tests; run `tests/test_aggregate_results_stats.py` on remote conda env (`/root/miniconda3/bin/python`) before final PR merge gate.
+  - proceed with remote hot-switch and `repair_phase5v2_ruler_light.py` dry-run/execute after current quality sessions finish.
