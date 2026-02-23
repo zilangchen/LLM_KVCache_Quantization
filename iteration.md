@@ -19,7 +19,7 @@ Canonical agent workflow directory is `.agents/`.
 
 **关键 HIGH（影响论文质量）**：
 - ~~**AC1** generate_thesis_report.py C11 跨模型验证只取最佳单行，非逐模型验证~~ — ✅ 已修复（本分支：逐模型判定 + 聚合全模型门禁）
-- **AB1** aggregate_results.py RULER 缺子任务分拆表
+- ~~**AB1** aggregate_results.py RULER 缺子任务分拆表~~ — ✅ 已修复（本分支：新增 `ruler_subtask_summary.csv`）
 - **AB2** aggregate_results.py 多模型缺分层对比表
 - ~~**AE1-2** 测试覆盖：KIVI zp 传播/asymmetric 公式~~ — ✅ 已修复（PR #5）
 - **AE3-4** 测试覆盖：calibrate 无测试/端到端集成缺失（仍未修复）
@@ -316,7 +316,7 @@ Canonical agent workflow directory is `.agents/`.
 
 > KIVI baseline 支持、多模型分层表、LongBench/RULER 聚合完整性审查。
 
-- [ ] `[HIGH]` RULER 聚合缺少子任务分拆 (aggregate_results.py:1936-2078): 仅聚合 `ruler_pass_rate`/`ruler_score` 等整体指标，缺少 S-NIAH / MK-NIAH / VT / CWE 四个子任务的独立宏平均。论文若需声称"4 个子任务上的鲁棒性"，需补充 `ruler_subtask_summary.csv`
+- [x] `[HIGH]` RULER 聚合缺少子任务分拆 (aggregate_results.py:1936-2078): ✅ 已修复（本分支：保留 `ruler_task_summary.csv` 并新增同口径 `ruler_subtask_summary.csv`，按 `ruler_task` 输出四子任务聚合）
 - [ ] `[HIGH]` 多模型对比缺少分层表 (aggregate_results.py 全局): model_id 作为 groupby key 参与聚合，但产出表不分层——无法快速查看"INT8-ours 在 1.5B vs 7B vs 8B 上的对比"。论文 Table 需要 per-model 独立行
 - [ ] `[MEDIUM]` LongBench 聚合同时包含 3 个近义指标 (aggregate_results.py:1867-1874): `longbench_score`、`longbench_official_macro`、`longbench_f1_macro` 同时聚合。需确认哪个是 objective.md 定义的 primary endpoint（应为 `longbench_score`）。多指标并存增加混淆风险
 - [ ] `[MEDIUM]` KIVI quant_bits 在 pairings 中未区分 INT8/INT4 (aggregate_results.py:2105-2110): pairings 列表 `("kivi_style", "int8_ours")` 未指定 kivi 的 quant_bits。若结果 CSV 中混合了 kivi_int8 和 kivi_int4 行，统计检验可能混用两种精度的数据
@@ -474,6 +474,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-02-24 03:02 | Phase5v2 聚合修复增量：LongBench 图口径与 RULER 子任务分拆
+
+- **Goal**: 继续处理 review/backlog，关闭 LongBench 图口径歧义与 AB1（RULER 子任务分拆）
+- **Changed files**:
+  - `scripts/aggregate_results.py`:
+    - LongBench 图标题改为 `LongBench Official-Metric Macro vs Context Len`
+    - 保持 y 轴 `LongBench score (official-metric macro, 0-1)`
+    - RULER 子任务聚合新增导出 `ruler_subtask_summary.csv`（保留 `ruler_task_summary.csv`）
+    - `ruler_task` 聚合分组键补充 `model_id/hardware/batch`
+    - 向后兼容旧列名：若仅有 `task_name` 自动映射到 `ruler_task`
+  - `iteration.md`: 勾选 AB1，更新关键 HIGH 列表与 follow-up
+- **Commands**:
+  - `rg -n \"macro F1|official-metric|LongBench\" scripts/aggregate_results.py`
+  - `python3.12 -m compileall -f scripts tests`
+- **Validation**:
+  - LongBench 图文本检查通过：无 `macro F1` 旧文案；标题与 y 轴均为 official-metric 口径
+  - compileall：通过
+- **Risks / follow-ups**:
+  - AB2（多模型分层对比表）仍未关闭
+
+---
+
 ### 2026-02-24 02:46 | Phase5v2 补充修复：任务清单增量收口（C11 + skip 语义 + memory 审计）
 
 - **Goal**: 按用户要求“顺便修复任务清单问题”，优先关闭对 Phase5v2 运行与论文审计影响最大的未完成项
@@ -501,7 +523,7 @@ Canonical agent workflow directory is `.agents/`.
   - `212cdf5` docs: update backlog checklist and timeline for delta fixes
 - **Risks / follow-ups**:
   - 需在远端标准环境重跑 `tests/test_generate_thesis_report.py`
-  - AB1/AB2（RULER 子任务分拆、多模型分层表）仍未关闭，后续在聚合脚本继续推进
+  - AB2（多模型分层对比表）仍未关闭，后续在聚合脚本继续推进
 
 ---
 
