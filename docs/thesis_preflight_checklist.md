@@ -72,7 +72,20 @@
 - `gates/gate3_verify_int8_ours.log`
 - （若含 INT4）`gates/gate3_verify_int4_fused.log`、`gates/gate3_verify_int4_ours.log`
 
-## 8) 一键自检命令（生成后执行）
+## 8) 口径一致性额外检查（Phase5v2）
+- [ ] 旧 Phase5 中包含 `eval_longbench` / `eval_ruler` 的运行已标记 legacy，且未参与新聚合
+- [ ] 新聚合只读取 `results/phase5v2/runs` 与 `results/phase5v2/logs`
+- [ ] quality 运行总数 = `107 × 5 = 535`
+- [ ] throughput 运行总数 = `113 × 5 = 565`
+- [ ] LongBench 图 y 轴标签为 `official-metric macro`（非 `macro F1`）
+
+## 9) 论文披露检查（KIVI 对照）
+- [ ] Methods 明确写出：KIVI-style INT4 当前未 bit-packing（int8 容器存储）
+- [ ] Methods 明确写出：KIVI-style 不使用 `inv_tau` 温度校正
+- [ ] Systems 明确写出：KIVI-style decode 固定 `torch_ref`，INT8-ours 可用 `triton_fused`
+- [ ] C11 结论文本明确限定为 Qwen-7B / LLaMA-3.1-8B 两模型
+
+## 10) 一键自检命令（生成后执行）
 
 ```bash
 cd /root/LLM_KVCache_Quantization

@@ -35,8 +35,6 @@ models:
     calibration_artifacts:
       int8_kl: "artifacts/kv_calib_kl_selected_v3_quick.json"
       int4_kl: "artifacts/kv_calib_kl_int4_selected.json"
-      int8_mse: "artifacts/kv_calib_mse_1p5b_int8.json"
-      int4_mse: "artifacts/kv_calib_mse_1p5b_int4.json"
     model_revision: "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
 
   - name: "Qwen2.5-7B-Instruct"
@@ -53,7 +51,9 @@ models:
     calibration_artifacts:
       int8_kl: "artifacts/kv_calib_kl_llama31_8b_int8.json"
       int4_kl: "artifacts/kv_calib_kl_llama31_8b_int4.json"
-    model_revision: null  # local path on remote, no HF revision
+    hf_model_id: "meta-llama/Llama-3.1-8B-Instruct"
+    local_model_path: "/root/autodl-tmp/modelscope_cache/LLM-Research/Meta-Llama-3___1-8B-Instruct"
+    model_revision: null  # local path on remote; use hf_model_id when cross-machine reproducing
 
 kv_modes:
   - fp16
@@ -69,12 +69,15 @@ benchmarks:
   - ppl       # PPL WikiText-2 (chunk=128, target_tokens=1M)
   - longbench # LongBench 7-task official-metric macro
   - ruler     # RULER 4-subtask macro-accuracy
+  - latency   # TTFT/TPOT
+  - memory    # gpu_mem_peak_mb / kv_cache_mem_mb
+  - throughput # tok/s vs batch scaling
 
 ablation_dimensions:
   - calibration_method: [kl_attn, mse, percentile]
   - temperature_correction: [on, off]
   - group_size: [16, 32, 64, 128]
-  - scale_strategy: [static, adaptive]
+  - scale_strategy: [static, adaptive, dynamic]
 
 seeds:
   quality_eval: [1234, 1235, 1236, 1237, 1238]
@@ -89,11 +92,23 @@ claims:
   - C6: "INT8-ours is non-inferior to INT8-baseline on RULER pass rate"
   - C7: "INT4-ours is non-inferior to INT4-baseline on Needle pass rate"
   - C8: "INT4-ours is non-inferior to INT4-baseline on PPL"
-  - C9: "INT8-ours is non-inferior to KIVI-style on LongBench score"
-  - C10: "INT8-ours is non-inferior to KIVI-style on Needle pass rate"
-  - C11: "INT8-ours is non-inferior to INT8-baseline on LongBench across extended models"
+  - C9: "INT8-ours is non-inferior to KIVI-style on LongBench/Needle (primary comparison)"
+  - C10: "INT4-ours vs KIVI-style is reported as exploratory (quality + memory + TPOT)"
+  - C11: "On Qwen-7B and Llama-3.1-8B, INT8-ours is non-inferior to INT8-baseline on LongBench"
 
 results_output: "results/emnlp_final/"
+
+execution_workflow:
+  old_phase5_policy: "legacy_only_for_ruler_and_longbench"
+  phase5v2_base_dir: "results/phase5v2/"
+  phase5v2_run_tag_template:
+    - "phase5v2_1p5b_s{seed}"
+    - "phase5v2_7b_s{seed}"
+    - "phase5v2_8b_s{seed}"
+  phase5v2_strategy:
+    quality: "1.5B / 7B / 8B 三模型并行"
+    throughput: "各模型独占 GPU 串行"
+  aggregate_entrypoint: "python3 scripts/aggregate_results.py --runs_dir ${BASE_DIR}/runs --logs_dir ${BASE_DIR}/logs --tables_dir ${BASE_DIR}/tables --plots_dir ${BASE_DIR}/plots --strict"
 
 statistical_framework:
   confidence_interval: "Bootstrap 95% CI"
