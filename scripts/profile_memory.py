@@ -56,6 +56,19 @@ def get_git_commit() -> str:
         return "unknown"
 
 
+def _resolve_quant_bits(kv_mode: str, quant_bits_arg: int | None) -> int:
+    if quant_bits_arg is not None:
+        return int(quant_bits_arg)
+    mode = str(kv_mode)
+    if mode == "kivi_style":
+        return 8
+    if "int4" in mode:
+        return 4
+    if "int8" in mode:
+        return 8
+    return 16
+
+
 def _resolve_out_dir(out_dir_arg: str) -> Path:
     out_dir = Path(out_dir_arg)
     if not out_dir.is_absolute():
@@ -100,25 +113,39 @@ class MemoryMonitor(threading.Thread):
         self.stop_signal = False
         self.peak_mem = 0
         self.history = []
+        self.source = "torch_fallback"
+        self.init_error = ""
+        self.handle = None
         if pynvml:
-            pynvml.nvmlInit()
-            self.handle = pynvml.nvmlDeviceGetHandleByIndex(device_id)
-        else:
-            self.handle = None
+            try:
+                pynvml.nvmlInit()
+                self.handle = pynvml.nvmlDeviceGetHandleByIndex(device_id)
+                self.source = "nvml"
+            except Exception as exc:
+                self.handle = None
+                self.source = "torch_fallback"
+                self.init_error = f"{type(exc).__name__}: {exc}"
 
     def run(self):
         if not self.handle:
             return
         while not self.stop_signal:
-            info = pynvml.nvmlDeviceGetMemoryInfo(self.handle)
-            used_mb = info.used / 1024 / 1024
-            self.peak_mem = max(self.peak_mem, used_mb)
-            self.history.append(used_mb)
+            try:
+                info = pynvml.nvmlDeviceGetMemoryInfo(self.handle)
+                used_mb = info.used / 1024 / 1024
+                self.peak_mem = max(self.peak_mem, used_mb)
+                self.history.append(used_mb)
+            except Exception as exc:
+                self.init_error = f"{type(exc).__name__}: {exc}"
+                self.source = "torch_fallback"
+                self.handle = None
+                break
             time.sleep(self.interval)
 
     def stop(self):
         self.stop_signal = True
-        self.join()
+        if self.is_alive():
+            self.join()
 
 def main():
     global _LAST_ARGS
@@ -260,6 +287,11 @@ def main():
 
     normalize_kv_params(args)
     set_seed(seed=args.seed, deterministic=True)
+    runtime_quant_bits = (
+        _resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
+        if args.kv_mode == "kivi_style"
+        else getattr(args, "quant_bits", None)
+    )
 
     print(f"Loading {args.model_id}...")
     model_path = resolve_pretrained_path(args.model_id, revision=args.model_revision)
@@ -301,7 +333,7 @@ def main():
         decode_attn_impl=args.decode_attn_impl or "triton_fused",
         seed=args.seed,
         stop_on_eos=False,
-        quant_bits=getattr(args, 'quant_bits', None),
+        quant_bits=runtime_quant_bits,
     )
 
     hardware = get_hardware_info()
@@ -338,7 +370,7 @@ def main():
             decode_attn_impl=args.decode_attn_impl or "triton_fused",
             seed=args.seed,
             stop_on_eos=False,
-            quant_bits=getattr(args, 'quant_bits', None),
+            quant_bits=runtime_quant_bits,
         )
     finally:
         monitor.stop()
@@ -349,6 +381,8 @@ def main():
     kv_cache_seq_len = int(getattr(out, "kv_cache_seq_len", 0))
     print(f"Torch Peak: {torch_peak:.2f} MB")
     print(f"NVML Peak: {nvml_peak:.2f} MB")
+    if monitor.init_error:
+        print(f"NVML unavailable, fallback to torch peak ({monitor.init_error})")
     print(f"KV Cache (resident): {kv_cache_mem_mb:.2f} MB")
     print(f"KV Cache (seq_len): {kv_cache_seq_len}")
 
@@ -361,12 +395,14 @@ def main():
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / f"profile_memory_{args.kv_mode}_{timestamp.replace(':','-')}.csv"
         
+        gpu_peak = float(nvml_peak) if nvml_peak > 0 else float(torch_peak)
+        gpu_peak_source = "nvml" if nvml_peak > 0 else "torch_peak"
         row = {
             "run_id": f"mem_{timestamp}",
             "model_id": args.model_id,
             "run_name": args.run_name,
             "kv_mode": args.kv_mode,
-            "quant_bits": getattr(args, 'quant_bits', None) or (4 if "int4" in args.kv_mode else (8 if "int8" in args.kv_mode else 16)),
+            "quant_bits": _resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None)),
             "clip_percentile": args.clip_percentile,
             "group_size": args.group_size,
             "dtype": str(model.dtype),
@@ -378,7 +414,8 @@ def main():
             "tpot_ms": round(out.tpot_ms, 2),
             "tok_per_s": round(out.tok_per_s, 2),
             "tok_per_s_per_seq": round(out.tok_per_s_per_seq, 2),
-            "gpu_mem_peak_mb": round(nvml_peak if nvml_peak > 0 else torch_peak, 2), # Prefer NVML if avail
+            "gpu_mem_peak_mb": round(gpu_peak, 2),
+            "gpu_mem_peak_source": gpu_peak_source,
             "torch_peak_mb": round(torch_peak, 2),
             "nvml_peak_mb": round(nvml_peak, 2),
             "kv_cache_mem_mb": round(kv_cache_mem_mb, 2),
@@ -399,7 +436,7 @@ def main():
         fields = [
             "run_id", "model_id", "run_name", "kv_mode", "quant_bits", "clip_percentile", "group_size",
             "dtype", "hardware", "seq_len", "gen_len", "batch", "ttft_ms", "tpot_ms",
-            "tok_per_s", "tok_per_s_per_seq", "gpu_mem_peak_mb", "torch_peak_mb", "nvml_peak_mb", "kv_cache_mem_mb",
+            "tok_per_s", "tok_per_s_per_seq", "gpu_mem_peak_mb", "gpu_mem_peak_source", "torch_peak_mb", "nvml_peak_mb", "kv_cache_mem_mb",
             "kv_cache_seq_len", "timestamp", "git_commit", "seed", "replica_id"
         ]
         

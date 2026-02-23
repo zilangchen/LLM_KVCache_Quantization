@@ -41,6 +41,7 @@ class ClaimSpec:
     target_batch: Optional[int] = None
     target_ppl_mode: Optional[str] = None
     target_chunk_size: Optional[int] = None
+    target_model_ids: Optional[List[str]] = None
     note: str = ""
 
 
@@ -189,7 +190,11 @@ def _default_claims(target_seq_len: int) -> List[ClaimSpec]:
             require_q_significance=False,
             target_seq_len=target_seq_len,
             target_batch=1,
-            note="Cross-model robustness (7B/8B); validated per-model in aggregation.",
+            target_model_ids=[
+                "Qwen/Qwen2.5-7B-Instruct",
+                "meta-llama/Llama-3.1-8B-Instruct",
+            ],
+            note="Cross-model robustness (7B/8B only); filtered by model_id.",
         ),
     ]
 
@@ -255,6 +260,9 @@ def _apply_optional_filters(df: pd.DataFrame, claim: ClaimSpec) -> pd.DataFrame:
 
     if claim.target_ppl_mode is not None and "ppl_mode" in out.columns:
         out = out[out["ppl_mode"].astype(str) == str(claim.target_ppl_mode)]
+    if claim.target_model_ids and "model_id" in out.columns:
+        target_models = {str(m) for m in claim.target_model_ids}
+        out = out[out["model_id"].astype(str).isin(target_models)]
 
     if "seq_len" in out.columns:
         seq_target = _nearest_seq_value(out, claim.target_seq_len)

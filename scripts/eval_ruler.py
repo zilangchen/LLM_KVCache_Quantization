@@ -123,6 +123,19 @@ def _normalize_text(text: str) -> str:
     return text
 
 
+def _resolve_quant_bits(kv_mode: str, quant_bits_arg: int | None) -> int:
+    if quant_bits_arg is not None:
+        return int(quant_bits_arg)
+    mode = str(kv_mode)
+    if mode == "kivi_style":
+        return 8
+    if "int4" in mode:
+        return 4
+    if "int8" in mode:
+        return 8
+    return 16
+
+
 def _token_f1(pred: str, truth: str) -> float:
     pred_tokens = _normalize_text(pred).split()
     truth_tokens = _normalize_text(truth).split()
@@ -137,8 +150,8 @@ def _token_f1(pred: str, truth: str) -> float:
         common += min(c, truth_counts.get(tok, 0))
     if common <= 0:
         return 0.0
-    precision = common / max(1, len(pred_tokens))
-    recall = common / max(1, len(truth_tokens))
+    precision = common / len(pred_tokens)
+    recall = common / len(truth_tokens)
     if precision + recall <= 0:
         return 0.0
     return (2.0 * precision * recall) / (precision + recall)
@@ -162,16 +175,12 @@ def _score_multi_answer(prediction: str, answers: List[str]) -> Dict[str, float]
     if not answers:
         return {"exact_match": 0.0, "contains_match": 0.0, "f1": 0.0}
     pred_norm = _normalize_text(prediction)
-    hits_exact = 0
     hits_contains = 0
     f1_sum = 0.0
     for ans in answers:
         ans_norm = _normalize_text(ans)
         if ans_norm and ans_norm in pred_norm:
             hits_contains += 1
-        if pred_norm == ans_norm or (ans_norm and ans_norm in pred_norm):
-            # For multi-key, "exact" = all individual values present
-            pass
         f1_sum += _token_f1(prediction, ans)
     n = len(answers)
     # Check if ALL answers are present (strict multi-key exact match)
@@ -190,7 +199,7 @@ def _score_set_answer(prediction: str, answers: List[str]) -> Dict[str, float]:
 
     Extracts words from prediction, computes set overlap with expected answers.
     """
-    pred_words = set(_normalize_text(prediction).split())
+    pred_words = set(w for w in _normalize_text(prediction).split() if w)
     truth_words = set(_normalize_text(a) for a in answers if _normalize_text(a))
     if not truth_words:
         return {"exact_match": 0.0, "contains_match": 0.0, "f1": 0.0}
@@ -209,11 +218,10 @@ def _score_case(case: RulerCase, prediction: str) -> Dict[str, float]:
     """Dispatch scoring based on task type."""
     if case.task_name == "cwe":
         return _score_set_answer(prediction, case.expected_answers)
-    elif case.task_name == "mk_niah":
+    if case.task_name in {"mk_niah", "vt"} and len(case.expected_answers) > 1:
         return _score_multi_answer(prediction, case.expected_answers)
-    else:
-        # s_niah, vt: single answer
-        return _score_single_answer(prediction, case.expected_answers[0])
+    # s_niah and single-chain vt
+    return _score_single_answer(prediction, case.expected_answers[0])
 
 
 # ---------------------------------------------------------------------------
@@ -549,7 +557,15 @@ def _truncate_prompt_ids(
     ids = tokenizer(prompt, add_special_tokens=False).input_ids
     truncated = False
     if max_tokens > 0 and len(ids) > max_tokens:
-        ids = ids[-max_tokens:]
+        # Keep most of the context prefix while preserving a small question tail.
+        # This avoids dropping the entire haystack (right-keep truncation) when
+        # prompts slightly exceed the context budget.
+        tail_keep = min(128, max_tokens // 8)
+        head_keep = max_tokens - tail_keep
+        if head_keep <= 0:
+            ids = ids[:max_tokens]
+        else:
+            ids = ids[:head_keep] + ids[-tail_keep:]
         truncated = True
     return torch.tensor([ids], dtype=torch.long), truncated
 
@@ -756,6 +772,11 @@ def main() -> None:
 
     normalize_kv_params(args)
     set_seed(seed=args.seed, deterministic=True)
+    runtime_quant_bits = (
+        _resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
+        if args.kv_mode == "kivi_style"
+        else getattr(args, "quant_bits", None)
+    )
 
     tasks = _parse_tasks(args.ruler_tasks)
     depth_ratios = _parse_depth_ratios(args.ruler_depth_ratios)
@@ -878,7 +899,7 @@ def main() -> None:
             adaptive_static_v=args.adaptive_static_v,
             decode_attn_impl=args.decode_attn_impl or "triton_fused",
             stop_on_eos=True,
-            quant_bits=getattr(args, 'quant_bits', None),
+            quant_bits=runtime_quant_bits,
         )
 
         pred_text = tokenizer.decode(
@@ -982,7 +1003,7 @@ def main() -> None:
         )
 
     # ---- Summary row (backward compatible schema) ----
-    quant_bits = getattr(args, 'quant_bits', None) or (4 if "int4" in args.kv_mode else (8 if "int8" in args.kv_mode else 16))
+    quant_bits = _resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
 
     overall_pass_rate = round(
         float(np.mean(task_exact_rates)) if task_exact_rates else 0.0, 4
