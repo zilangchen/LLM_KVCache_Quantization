@@ -3,7 +3,7 @@ name: review-contract
 description: >
   接口契约审查专项 Agent（D4）。守护稳定 API 不被破坏，追踪函数签名变化、
   行为语义变化、跨文件配置对齐、向后兼容性。
-model: opus
+model: sonnet
 permissionMode: default
 tools: Read, Edit, Write, Glob, Grep, Bash
 ---

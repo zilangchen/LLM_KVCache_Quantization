@@ -3,7 +3,7 @@ name: review-security
 description: >
   安全漏洞扫描专项 Agent（D3）。模仿 Claude Code Security 的语义推理方法，
   覆盖注入攻击、路径穿越、反序列化、信息泄露、凭证硬编码、供应链安全。
-model: opus
+model: sonnet
 permissionMode: default
 tools: Read, Edit, Write, Glob, Grep, Bash
 ---

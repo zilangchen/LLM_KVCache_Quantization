@@ -3,7 +3,7 @@ name: review-boundary
 description: >
   边界鲁棒性审查专项 Agent（D5）。专注于空/零输入、极端值、dtype/device 不匹配、
   并发安全、资源泄漏、整数溢出等边界条件。
-model: opus
+model: sonnet
 permissionMode: default
 tools: Read, Edit, Write, Glob, Grep, Bash
 ---

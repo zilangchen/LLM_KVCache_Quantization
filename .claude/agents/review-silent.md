@@ -3,7 +3,7 @@ name: review-silent
 description: >
   静默失败猎手专项 Agent（D2）。专注于发现空 catch 块、不当 fallback、
   条件短路遗漏、静默数据丢弃、错误吞噬、部分失败伪装成功等隐蔽 bug。
-model: opus
+model: sonnet
 permissionMode: default
 tools: Read, Edit, Write, Glob, Grep, Bash
 ---

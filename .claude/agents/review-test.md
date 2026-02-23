@@ -3,7 +3,7 @@ name: review-test
 description: >
   测试覆盖审查专项 Agent（D6）。评估新代码是否有测试、bug 修复是否有回归测试、
   关键路径覆盖率、测试质量与隔离性。按影响 1-10 评分。
-model: opus
+model: sonnet
 permissionMode: default
 tools: Read, Edit, Write, Glob, Grep, Bash
 ---

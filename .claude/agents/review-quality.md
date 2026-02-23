@@ -3,7 +3,7 @@ name: review-quality
 description: >
   代码质量审查专项 Agent（D7）。专注于死代码、重复代码、命名规范、
   注释准确性、圈复杂度、魔法数字等可维护性问题。
-model: opus
+model: sonnet
 permissionMode: default
 tools: Read, Edit, Write, Glob, Grep, Bash
 ---

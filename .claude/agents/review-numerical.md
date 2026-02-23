@@ -3,7 +3,7 @@ name: review-numerical
 description: >
   数值正确性审查专项 Agent（D1）。专注于量化误差传播、loss 语义、
   shape/dtype 对齐、NaN/Inf 防护、精度损失、确定性/可复现性。
-model: opus
+model: sonnet
 permissionMode: default
 tools: Read, Edit, Write, Glob, Grep, Bash
 ---
