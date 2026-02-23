@@ -43,8 +43,8 @@ Canonical agent workflow directory is `.agents/`.
   - [x] 启动质量并行评测（3 tmux sessions: q_1p5b/q_7b/q_8b） — ✅ 2026-02-23 17:23
   - [x] Cherry-pick Codex RULER 修复到 main（5 commits: b7f4c36→4dbc227） — ✅ 2026-02-24 04:34
   - [x] rsync 修复到远端 — ✅ 2026-02-24 04:38
-  - [x] repair int4_baseline_long eval_ruler — ✅ 2026-02-24 05:21（结果已移至 phase5v2/runs/）
-  - [ ] repair int4_fused_long eval_ruler — 🔄 运行中（PID 734608，预计 ~05:55 完成）
+  - [x] repair int4_baseline_long eval_ruler — ✅ 2026-02-24 05:22 (success, rc=0)
+  - [x] repair int4_fused_long eval_ruler — ✅ 2026-02-24 06:35 (success, rc=0)
   - [ ] 质量评测完成（535 runs: 1.5B×215 + 7B×160 + 8B×160）
   - [ ] 吞吐串行评测（565 runs: 1.5B×240 + 7B×200 + 8B×200）（质量完成后启动）
   - [ ] 3 模型延迟/显存 profiling
@@ -96,6 +96,21 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
 
 ## Timeline (Latest First)
+
+### 2026-02-24 06:35 | RULER-long Repair 完成（int4_baseline_long + int4_fused_long）
+
+- **Goal**: 修复 seed 1234 的 2 个 RULER 32K eval_ruler 失败（CWE 子任务 prompt 溢出）
+- **Root cause**: 旧代码 `32704 + 128 = 32832 > max_position_embeddings=32768`，修复后用 `_effective_prompt_budget()` 动态调整
+- **Commands**:
+  - `run_experiments.py --run_names int4_baseline_long --run_tag phase5v2r1_1p5b_s1234 --append`
+  - `run_experiments.py --run_names int4_fused_long --run_tag phase5v2r1_1p5b_s1234 --append`
+- **Results**:
+  - int4_baseline_long: success, rc=0, 256 cases, CWE f1=0.50
+  - int4_fused_long: success, rc=0, 256 cases, CWE f1=0.43
+  - 两者 pass_rate≈0 是 int4 基础量化在 32K 的预期表现
+- **Output**: `results/phase5v2/runs/{int4_baseline,int4_fused}_long_s1234_phase5v2r1_1p5b_s1234/`
+- **Validation**: manifest status=success, 4 CSV 文件生成
+- **Risks / follow-ups**: 聚合时需用 repair 版（tag=phase5v2r1）替代原始失败版
 
 ### 2026-02-24 05:48 | 全仓库代码审查修复 Wave 1 — 90+ issues 批量修复
 
