@@ -141,7 +141,15 @@ def _read_csvs(runs_dir: Path, patterns: Iterable[str]) -> pd.DataFrame:
 def _to_numeric(df: pd.DataFrame, cols: Iterable[str]) -> pd.DataFrame:
     for col in cols:
         if col in df.columns:
+            before_na = int(df[col].isna().sum())
             df[col] = pd.to_numeric(df[col], errors="coerce")
+            after_na = int(df[col].isna().sum())
+            coerced = after_na - before_na
+            if coerced > 0:
+                logger.warning(
+                    "_to_numeric: %d value(s) in column '%s' coerced to NaN.",
+                    coerced, col,
+                )
     return df
 
 
@@ -236,7 +244,8 @@ def _export_per_model_layered_tables(tables_dir: Path) -> pd.DataFrame:
             continue
         try:
             df = pd.read_csv(csv_path)
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to read CSV %s: %s", csv_path.name, exc)
             continue
         if df.empty or "model_id" not in df.columns:
             continue
@@ -1049,9 +1058,20 @@ def _significance_summary(
             group_key = (group_key,)
         row = {col: val for col, val in zip(group_cols, group_key)}
 
-        diff = pd.to_numeric(sub["diff"], errors="coerce").dropna().to_numpy(dtype=np.float64)
+        _diff_s = pd.to_numeric(sub["diff"], errors="coerce")
+        _gain_s = pd.to_numeric(sub["gain_pct"], errors="coerce")
+        # Use a joint mask so diff and gain_pct are based on exactly the same rows.
+        _joint_valid = _diff_s.notna() & _gain_s.notna()
+        diff = _diff_s[_joint_valid].to_numpy(dtype=np.float64)
+        gain = _gain_s[_joint_valid].to_numpy(dtype=np.float64)
+        if int(_diff_s.notna().sum()) != int(_joint_valid.sum()):
+            logger.warning(
+                "gain_pct had %d extra NaN rows vs diff; using joint mask (%d rows) "
+                "for consistent sample size.",
+                int(_diff_s.notna().sum()) - int(_joint_valid.sum()),
+                int(_joint_valid.sum()),
+            )
         favorable = pd.to_numeric(sub["favorable_diff"], errors="coerce").dropna().to_numpy(dtype=np.float64)
-        gain = pd.to_numeric(sub["gain_pct"], errors="coerce").dropna().to_numpy(dtype=np.float64)
         base_val = pd.to_numeric(sub["baseline_value"], errors="coerce").dropna().to_numpy(dtype=np.float64)
         chall_val = pd.to_numeric(sub["challenger_value"], errors="coerce").dropna().to_numpy(dtype=np.float64)
         seed_series = pd.to_numeric(sub["seed"], errors="coerce").dropna()
@@ -1173,10 +1193,11 @@ def _build_paired_metric_rows(
             continue
         dup_groups, dup_rows = _count_duplicate_groups(sub, keys + ["seed", "kv_mode"])
         if dup_groups > 0:
-            print(
-                "Warning: significance pairing collapsed duplicate rows by mean "
-                f"(metric={metric_name}, base={base_mode}, challenger={challenger_mode}, "
-                f"duplicate_groups={dup_groups}, duplicate_extra_rows={dup_rows})."
+            logger.warning(
+                "Significance pairing collapsed duplicate rows by mean "
+                "(metric=%s, base=%s, challenger=%s, "
+                "duplicate_groups=%d, duplicate_extra_rows=%d).",
+                metric_name, base_mode, challenger_mode, dup_groups, dup_rows,
             )
         pivot = sub.pivot_table(
             index=keys + ["seed"],
@@ -1360,9 +1381,10 @@ def _relative_gain_table(
         return pd.DataFrame()
     dup_groups, dup_rows = _count_duplicate_groups(sub, keep + ["kv_mode"])
     if dup_groups > 0:
-        print(
-            "Warning: relative gain aggregation collapsed duplicate rows by mean "
-            f"(metric={metric_name}, duplicate_groups={dup_groups}, duplicate_extra_rows={dup_rows})."
+        logger.warning(
+            "Relative gain aggregation collapsed duplicate rows by mean "
+            "(metric=%s, duplicate_groups=%d, duplicate_extra_rows=%d).",
+            metric_name, dup_groups, dup_rows,
         )
 
     pivot = sub.pivot_table(index=keep, columns="kv_mode", values=metric_col, aggfunc="mean")
@@ -1505,12 +1527,23 @@ def _main_claims_32k_table(
     ]
 
     if not lat_cols or not mem_cols:
+        missing = []
+        if not lat_cols:
+            missing.append("latency")
+        if not mem_cols:
+            missing.append("memory")
+        logger.warning(
+            "_main_claims_32k_table: returning empty DataFrame because %s "
+            "columns are missing or empty.",
+            " and ".join(missing),
+        )
         return pd.DataFrame()
 
     _mk = [c for c in merge_keys if c in lat.columns and c in mem.columns]
     if not _mk:
         _mk = ["kv_mode"]
     out = lat[lat_cols].copy()
+    _pre_merge_rows = len(out)
     if mem_cols:
         out = out.merge(mem[mem_cols], on=_mk, how="outer")
     if ned_cols:
@@ -1525,6 +1558,21 @@ def _main_claims_32k_table(
     if rul_cols:
         _rk = [c for c in merge_keys if c in out.columns and c in rul[rul_cols].columns]
         out = out.merge(rul[rul_cols], on=_rk or ["kv_mode"], how="left")
+
+    _post_merge_rows = len(out)
+    if _post_merge_rows > _pre_merge_rows * 2:
+        logger.warning(
+            "_main_claims_32k_table: merge expanded rows from %d to %d "
+            "(>2x), possible ghost rows from mismatched keys.",
+            _pre_merge_rows,
+            _post_merge_rows,
+        )
+    elif _post_merge_rows != _pre_merge_rows:
+        logger.info(
+            "_main_claims_32k_table: row count changed from %d to %d after merges.",
+            _pre_merge_rows,
+            _post_merge_rows,
+        )
 
     out["claim_seq_len"] = int(
         lat_seq or mem_seq or ned_seq or lb_seq or rul_seq or target_seq_len
@@ -1554,9 +1602,10 @@ def _speedup_vs_reference(
         return pd.DataFrame()
     dup_groups, dup_rows = _count_duplicate_groups(sub, keep + ["kv_mode"])
     if dup_groups > 0:
-        print(
-            "Warning: speedup aggregation collapsed duplicate rows by mean "
-            f"(metric={metric_col}, duplicate_groups={dup_groups}, duplicate_extra_rows={dup_rows})."
+        logger.warning(
+            "Speedup aggregation collapsed duplicate rows by mean "
+            "(metric=%s, duplicate_groups=%d, duplicate_extra_rows=%d).",
+            metric_col, dup_groups, dup_rows,
         )
     pivot = sub.pivot_table(index=keep, columns="kv_mode", values=metric_col, aggfunc="mean")
     if reference_mode not in pivot.columns:
@@ -2326,6 +2375,7 @@ def main() -> int:
     # Significance / paired-difference summaries by seed.
     pairings = [
         ("int8_baseline", "int8_ours"),
+        ("int4_baseline", "int4_ours"),
         ("int4_fused", "int4_ours"),
         ("kivi_style", "int8_ours"),       # Claims C9/C10: INT8-ours vs KIVI
         ("kivi_style", "int8_baseline"),   # completeness: INT8-baseline vs KIVI

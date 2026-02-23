@@ -60,6 +60,17 @@ _LAST_ARGS: argparse.Namespace | None = None
 RULER_TASKS = ["s_niah", "mk_niah", "vt", "cwe"]
 
 # ---------------------------------------------------------------------------
+# Truncation strategy constants for _truncate_prompt_ids()
+# ---------------------------------------------------------------------------
+# When a prompt exceeds the token budget, we preserve a small tail portion
+# (the question/instruction) and fill the rest with the context prefix.
+# TRUNCATION_TAIL_MAX: absolute upper bound on tail tokens to keep.
+# TRUNCATION_TAIL_RATIO: fraction of total budget allocated to the tail.
+# Effective tail size = min(TRUNCATION_TAIL_MAX, budget * TRUNCATION_TAIL_RATIO).
+TRUNCATION_TAIL_MAX: int = 128
+TRUNCATION_TAIL_RATIO: float = 1.0 / 8.0
+
+# ---------------------------------------------------------------------------
 # Noise generation
 # ---------------------------------------------------------------------------
 
@@ -123,6 +134,8 @@ def _normalize_text(text: str) -> str:
     return text
 
 
+# DEPRECATED: local copy kept for standalone execution.  Canonical version
+# lives in ``src.utils.repro.resolve_quant_bits``; update there first.
 def _resolve_quant_bits(kv_mode: str, quant_bits_arg: int | None) -> int:
     if quant_bits_arg is not None:
         return int(quant_bits_arg)
@@ -560,7 +573,7 @@ def _truncate_prompt_ids(
         # Keep most of the context prefix while preserving a small question tail.
         # This avoids dropping the entire haystack (right-keep truncation) when
         # prompts slightly exceed the context budget.
-        tail_keep = min(128, max_tokens // 8)
+        tail_keep = min(TRUNCATION_TAIL_MAX, int(max_tokens * TRUNCATION_TAIL_RATIO))
         head_keep = max_tokens - tail_keep
         if head_keep <= 0:
             ids = ids[:max_tokens]
@@ -825,43 +838,49 @@ def main() -> None:
     rng = random.Random(int(args.seed))
 
     for task_name in tasks:
-        if task_name == "s_niah":
-            all_cases.extend(_build_s_niah_cases(
-                num_cases=num_cases,
-                depth_ratios=depth_ratios,
-                context_len=context_len,
-                tokenizer=tokenizer,
-                rng=rng,
-            ))
-        elif task_name == "mk_niah":
-            all_cases.extend(_build_mk_niah_cases(
-                num_cases=num_cases,
-                depth_ratios=depth_ratios,
-                context_len=context_len,
-                num_keys=int(args.ruler_mk_num_keys),
-                tokenizer=tokenizer,
-                rng=rng,
-            ))
-        elif task_name == "vt":
-            all_cases.extend(_build_vt_cases(
-                num_cases=num_cases,
-                depth_ratios=depth_ratios,
-                context_len=context_len,
-                num_chains=int(args.ruler_vt_num_chains),
-                num_hops=int(args.ruler_vt_num_hops),
-                tokenizer=tokenizer,
-                rng=rng,
-            ))
-        elif task_name == "cwe":
-            all_cases.extend(_build_cwe_cases(
-                num_cases=num_cases,
-                depth_ratios=depth_ratios,
-                context_len=context_len,
-                freq_cw=int(args.ruler_cwe_freq),
-                num_cw=int(args.ruler_cwe_num_words),
-                tokenizer=tokenizer,
-                rng=rng,
-            ))
+        try:
+            if task_name == "s_niah":
+                all_cases.extend(_build_s_niah_cases(
+                    num_cases=num_cases,
+                    depth_ratios=depth_ratios,
+                    context_len=context_len,
+                    tokenizer=tokenizer,
+                    rng=rng,
+                ))
+            elif task_name == "mk_niah":
+                all_cases.extend(_build_mk_niah_cases(
+                    num_cases=num_cases,
+                    depth_ratios=depth_ratios,
+                    context_len=context_len,
+                    num_keys=int(args.ruler_mk_num_keys),
+                    tokenizer=tokenizer,
+                    rng=rng,
+                ))
+            elif task_name == "vt":
+                all_cases.extend(_build_vt_cases(
+                    num_cases=num_cases,
+                    depth_ratios=depth_ratios,
+                    context_len=context_len,
+                    num_chains=int(args.ruler_vt_num_chains),
+                    num_hops=int(args.ruler_vt_num_hops),
+                    tokenizer=tokenizer,
+                    rng=rng,
+                ))
+            elif task_name == "cwe":
+                all_cases.extend(_build_cwe_cases(
+                    num_cases=num_cases,
+                    depth_ratios=depth_ratios,
+                    context_len=context_len,
+                    freq_cw=int(args.ruler_cwe_freq),
+                    num_cw=int(args.ruler_cwe_num_words),
+                    tokenizer=tokenizer,
+                    rng=rng,
+                ))
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"  [WARN] Case generation failed for task '{task_name}': "
+                f"{type(exc).__name__}: {exc}. Skipping this task."
+            )
 
     if not all_cases:
         raise RuntimeError("No RULER cases generated.")
@@ -890,6 +909,9 @@ def main() -> None:
     case_total = int(len(all_cases))
     case_success_count = 0
     case_error_count = 0
+    # Initialise base_total_budget; updated per-case inside the loop via
+    # _effective_prompt_budget(). The initial value is used only for the
+    # summary row if all cases error out (guarded by the success check below).
     base_total_budget = min(int(args.seq_len) + int(args.gen_len), max_model_len)
 
     for idx, case in enumerate(all_cases):
@@ -1040,9 +1062,12 @@ def main() -> None:
         vals = task_scores.get(task_name, [])
         if not vals:
             continue
-        exact_rate = float(np.mean([v["exact_match"] for v in vals]) * 100.0)
-        contains_rate = float(np.mean([v["contains_match"] for v in vals]) * 100.0)
-        f1_mean = float(np.mean([v["f1"] for v in vals]) * 100.0)
+        # Use nanmean defensively: if a scoring function ever returns NaN
+        # (e.g. edge-case inputs), individual NaN values are ignored rather
+        # than poisoning the entire task aggregate.
+        exact_rate = float(np.nanmean([v["exact_match"] for v in vals]) * 100.0)
+        contains_rate = float(np.nanmean([v["contains_match"] for v in vals]) * 100.0)
+        f1_mean = float(np.nanmean([v["f1"] for v in vals]) * 100.0)
         task_exact_rates.append(exact_rate)
         task_rows.append(
             {
@@ -1069,9 +1094,9 @@ def main() -> None:
 
     for depth_ratio in sorted(depth_scores.keys()):
         vals = depth_scores[depth_ratio]
-        exact_rate = float(np.mean([v["exact_match"] for v in vals]) * 100.0)
-        contains_rate = float(np.mean([v["contains_match"] for v in vals]) * 100.0)
-        f1_mean = float(np.mean([v["f1"] for v in vals]) * 100.0)
+        exact_rate = float(np.nanmean([v["exact_match"] for v in vals]) * 100.0)
+        contains_rate = float(np.nanmean([v["contains_match"] for v in vals]) * 100.0)
+        f1_mean = float(np.nanmean([v["f1"] for v in vals]) * 100.0)
         depth_exact_rates.append(exact_rate)
         depth_contains_rates.append(contains_rate)
         depth_f1_scores.append(f1_mean)

@@ -6,16 +6,37 @@ Supports KL divergence (default) and MSE loss functions for calibration
 via --loss_function {kl, mse}.
 
 Loss semantics:
-  - KL path uses probability-safe clamping before log to avoid numerical issues.
-  - MSE path compares raw attention probabilities without clamping.
-  - KL and MSE absolute values are different scales; ranking is only comparable
-    within the same loss_function.
+  - KL divergence: D_KL(p_ref || p_quant) summed over the attention distribution.
+    Uses probability-safe clamping (eps=1e-6) before log to avoid numerical issues.
+    Units: nats (natural log). Typical range: 1e-5 to 1e-1 for well-quantized models.
+  - MSE: sum of squared differences between FP16 and quantized attention probabilities,
+    i.e. sum((p_ref - p_quant)^2). No clamping is applied because softmax outputs are
+    already in [0,1] and subtraction cannot produce inf/NaN.
+    Units: squared probability. Typical range: 1e-8 to 1e-3.
+  - IMPORTANT: KL and MSE absolute values are on fundamentally different scales.
+    Trial rankings (--search) are only comparable within the same loss_function.
+    Do NOT compare mean_kl values with mean_mse values across runs.
 
 Outputs:
-  - artifacts/kv_calib_kl.json (static k/v scales + per-head inv_tau)
+  - artifacts/kv_calib_{loss_function}.json (static k/v scales + per-head inv_tau)
   - results/calibration/calibration_stats.csv (optional stats)
   - results/calibration/search_trials.csv (if --search)
   - results/calibration/outlier_profile.png (optional plot)
+
+Default output path:
+  - artifacts/kv_calib_kl.json   (when --loss_function kl)
+  - artifacts/kv_calib_mse.json  (when --loss_function mse)
+  Note: generate_loop.py expects 'artifacts/kv_calib_kl.json' for int8_ours and
+  'artifacts/kv_calib_kl_int4_selected.json' for int4_ours. If your default output
+  path differs, pass --calib_file explicitly to generate_loop or rename the output.
+
+Version history:
+  - v1 (current): MSE path does NOT clamp attention probabilities before computing
+    squared error. Earlier prototypes clamped p_ref/p_quant to [eps, 1] before MSE,
+    which introduced a positive bias when both distributions had near-zero entries.
+    Clamping was removed to preserve true squared error semantics. Calibration
+    artifacts produced by older clamped code are not numerically reproducible with
+    the current code; re-run calibration to regenerate.
 """
 
 import argparse
@@ -202,7 +223,9 @@ def compute_inv_tau(
 
                 if loss_function == "mse":
                     # MSE between FP16 and quantized attention distributions.
-                    # We intentionally avoid clamping here to preserve true squared error.
+                    # CAL-009/CAL-016: We intentionally avoid clamping here to
+                    # preserve true squared error. Clamping was removed because
+                    # it introduced a positive bias (see module docstring).
                     mse = ((p_ref.unsqueeze(0) - p_quant) ** 2).sum(dim=-1)
                     loss_accum += mse
                 else:
@@ -216,6 +239,22 @@ def compute_inv_tau(
             num_samples = len(q_samples)
             if num_samples > 0:
                 loss_accum /= num_samples
+
+            # CAL-017: Detect NaN in loss_accum which could silently corrupt
+            # inv_tau selection (argmin of NaN is undefined).
+            if torch.isnan(loss_accum).any():
+                import warnings
+                nan_count = int(torch.isnan(loss_accum).sum().item())
+                warnings.warn(
+                    f"NaN detected in loss_accum at layer={layer_idx}, head={head_idx}: "
+                    f"{nan_count}/{len(inv_tau_candidates)} candidates are NaN. "
+                    "Falling back to inv_tau=1.0 for this head. "
+                    "This may indicate numerical issues in the calibration data.",
+                    RuntimeWarning,
+                )
+                inv_tau_tensor[layer_idx, head_idx] = 1.0
+                continue
+
             best_idx = torch.argmin(loss_accum).item()
             inv_tau_tensor[layer_idx, head_idx] = inv_tau_candidates[best_idx]
 
@@ -240,6 +279,15 @@ def evaluate_quant_candidate(
 ) -> Dict[str, float]:
     """
     Evaluate one candidate quantization setting.
+
+    NOTE (CAL-015): This function intentionally does NOT apply inv_tau (per-head
+    attention temperature scaling). inv_tau is computed *after* the best
+    (clip_percentile, group_size) is selected by the search, because inv_tau
+    depends on the chosen k_scales. Including inv_tau during candidate evaluation
+    would create a circular dependency: inv_tau needs scales, but scales are what
+    we are selecting here. Therefore, this function measures raw quantization
+    distortion without temperature correction, which is the correct signal for
+    hyperparameter search.
 
     Returns:
       When loss_function=="kl":
@@ -310,7 +358,13 @@ def evaluate_quant_candidate(
                 p_quant = torch.softmax(logits_quant, dim=-1)
 
                 if loss_function == "mse":
-                    # MSE uses raw softmax probabilities (no clamping required).
+                    # CAL-016: MSE uses raw softmax probabilities (no clamping).
+                    # Softmax outputs are in [0,1], so squared differences are
+                    # bounded and cannot produce inf. Unlike KL, MSE treats
+                    # over-estimation and under-estimation symmetrically and does
+                    # not penalise near-zero probabilities disproportionately.
+                    # Earlier versions clamped to [eps,1] before MSE, which added
+                    # a positive bias; that clamping was removed in version 1.
                     mse = ((p_ref - p_quant) ** 2).sum().item()
                     loss_values.append(float(mse))
                 else:
@@ -352,14 +406,41 @@ def select_best_trial(
     max_v_clip_rate: float,
     loss_function: str = "kl",
 ) -> Tuple[Dict[str, float], Dict[str, object]]:
+    """Select the best trial from a list of candidate quantization settings.
+
+    LIMITATION (CAL-006): All trials are ranked within a single loss_function.
+    KL divergence (nats) and MSE (squared probability) have fundamentally
+    different numeric scales, so rankings produced under --loss_function kl
+    are NOT comparable with rankings produced under --loss_function mse.
+    If you need cross-loss comparison, normalize scores to z-scores or
+    percentile ranks externally.
+
+    Args:
+        trials: List of trial dicts from evaluate_quant_candidate, each
+            containing loss metrics, clip rates, and hyperparameters.
+        objective: Selection objective ('robust', 'mean_kl', 'mean_mse').
+        max_k_clip_rate: Maximum allowed K clip rate for feasibility (robust).
+        max_v_clip_rate: Maximum allowed V clip rate for feasibility (robust).
+        loss_function: The loss function used to generate trials ('kl' or 'mse').
+            Must match the loss_function used during evaluate_quant_candidate.
+
+    Returns:
+        Tuple of (best_trial_dict, selection_metadata_dict).
+
+    Raises:
+        ValueError: If trials is empty.
+        KeyError: If expected loss keys are missing from trial data.
+    """
     if not trials:
         raise ValueError("No candidate trials found for calibration selection.")
 
     # Determine loss metric key prefix based on objective and loss_function.
     # For explicit mean_kl/mean_mse objectives, the key is in the objective name.
     # For "robust", derive from loss_function.
-    # NOTE: KL and MSE are different numeric scales; ranking is only meaningful
-    # within one selected loss_function.
+    # WARNING: KL and MSE produce different numeric scales. Rankings are ONLY
+    # meaningful when all trials use the same loss_function. Mixing trials from
+    # different loss functions in one select_best_trial call will produce
+    # misleading rankings.
     if objective == "mean_mse" or (objective == "robust" and loss_function == "mse"):
         mean_key, p95_key = "mean_mse", "p95_mse"
     else:
@@ -648,6 +729,25 @@ def main():
     calib_out_path = Path(args.calib_out)
     calib_out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # CAL-007: Warn if default output path doesn't match generate_loop.py defaults.
+    # generate_loop.py expects:
+    #   int8_ours  -> artifacts/kv_calib_kl.json
+    #   int4_ours  -> artifacts/kv_calib_kl_int4_selected.json
+    # If the user didn't set --calib_out explicitly, check for mismatches.
+    _gl_int8_default = "artifacts/kv_calib_kl.json"
+    _gl_int4_default = "artifacts/kv_calib_kl_int4_selected.json"
+    _calib_out_str = str(calib_out_path)
+    if _calib_out_str not in (_gl_int8_default, _gl_int4_default):
+        import warnings
+        warnings.warn(
+            f"Calibration output path '{_calib_out_str}' does not match "
+            f"generate_loop.py defaults (int8_ours: '{_gl_int8_default}', "
+            f"int4_ours: '{_gl_int4_default}'). "
+            "You will need to pass --calib_file explicitly when running "
+            "generate_loop, or rename/symlink the output file.",
+            UserWarning,
+        )
+
     print(f"Loading {args.model_id}...")
     model_path = resolve_pretrained_path(args.model_id, revision=args.model_revision)
     tokenizer = AutoTokenizer.from_pretrained(
@@ -811,6 +911,12 @@ def main():
         args.int4_outlier_ratio = float(best.get("outlier_rescue_ratio", args.int4_outlier_ratio))
         args.int4_mixed_rescue = bool(best.get("mixed_rescue", args.int4_mixed_rescue))
 
+        # CAL-014: The sort key uses absolute loss values. Since MSE and KL
+        # operate on different numeric scales (MSE ~ 1e-8..1e-3, KL ~ 1e-5..1e-1),
+        # the search grid exploration and ranking behaviour differ between the two.
+        # For example, a group_size that produces tiny MSE differences may show
+        # large KL differences, leading to different "best" candidates.
+        # This is expected; users should pick one loss function consistently.
         loss_pfx_sort = "mse" if args.loss_function == "mse" else "kl"
         trials_sorted = sorted(
             trials,
@@ -896,7 +1002,14 @@ def main():
         loss_function=args.loss_function,
     )
 
-    # Save calibration file
+    # Save calibration file.
+    # CAL-008: loss_function is always included so downstream loaders
+    # (e.g. generate_loop.py) can validate compatibility.
+    # The field value is always a lowercase string: "kl" or "mse".
+    # CAL-009: version=1 indicates current format (no MSE clamping).
+    # See module docstring for version history and clamping rationale.
+    # CAL-013: inv_tau shape is [num_layers, num_heads] and is explicitly
+    # recorded so loaders can validate dimensions before use.
     calib_payload = {
         "version": 1,
         "model_id": args.model_id,
@@ -915,6 +1028,7 @@ def main():
         "k_scale": [k.tolist() for k in k_scales],
         "v_scale": [v.tolist() for v in v_scales],
         "inv_tau": inv_tau.tolist(),
+        "inv_tau_shape": list(inv_tau.shape),  # [num_layers, num_heads]
         "inv_tau_candidates": inv_tau_candidates,
         "int4_outlier_ratio": float(args.int4_outlier_ratio),
         "int4_mixed_rescue": bool(args.int4_mixed_rescue),

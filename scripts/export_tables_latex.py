@@ -33,10 +33,24 @@ Notes:
 from __future__ import annotations
 
 import argparse
+import logging
+import re
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
 import pandas as pd
+
+logger = logging.getLogger(__name__)
+
+
+def _sanitize_label(text: str) -> str:
+    """Remove or replace characters that are unsafe inside LaTeX \\label{}."""
+    # Strip backslashes and braces which would break \label{...}
+    text = re.sub(r'[{}\\#$%&^~]', '', text)
+    # Collapse whitespace to underscores
+    text = re.sub(r'\s+', '_', text.strip())
+    return text
+
 
 KV_MODE_ORDER: List[str] = [
     "fp16",
@@ -66,7 +80,8 @@ KV_MODE_DISPLAY: Dict[str, str] = {
 def _read_csv(path: Path) -> pd.DataFrame:
     try:
         return pd.read_csv(path)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to read CSV %s: %s", path, exc)
         return pd.DataFrame()
 
 
@@ -104,6 +119,15 @@ def _pivot_metric(
     sub[index_col] = pd.to_numeric(sub[index_col], errors="coerce")
     sub[metric_col] = pd.to_numeric(sub[metric_col], errors="coerce")
     sub = sub.dropna(subset=[index_col, columns_col, metric_col])
+
+    # Warn if model_id column exists: groupby will silently average across models.
+    if "model_id" in df.columns and df["model_id"].nunique() > 1:
+        logger.warning(
+            "pivot of '%s' contains %d distinct model_id values; "
+            "groupby().mean() will average across models. Consider filtering first.",
+            metric_col,
+            df["model_id"].nunique(),
+        )
 
     # Handle duplicates defensively (e.g., multiple clip/group configs in one tables_dir).
     sub = (
@@ -156,9 +180,27 @@ def _write(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def export_latency(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[Path]:
+def _export_profile_table(
+    tables_dir: Path,
+    out_dir: Path,
+    *,
+    label_prefix: str,
+    csv_name: str,
+    label_category: str,
+    metrics: List[tuple],
+) -> List[Path]:
+    """Shared logic for exporting latency / memory profile tables.
+
+    Parameters
+    ----------
+    csv_name : str
+        Filename under *tables_dir* (e.g. ``"latency_summary.csv"``).
+    label_category : str
+        Category token inserted into ``\\label`` (e.g. ``"latency"``).
+    metrics : list of (metric_col, filename, caption, round_digits) tuples.
+    """
     paths: List[Path] = []
-    src = tables_dir / "latency_summary.csv"
+    src = tables_dir / csv_name
     df = _read_csv(src)
     if df.empty:
         return paths
@@ -174,55 +216,46 @@ def export_latency(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> Lis
     df = _sort_kv_mode(df)
     df = _display_kv_mode(df)
 
-    for metric, fname, caption, digits in [
-        ("tpot_ms_mean", "latency_tpot_vs_seq.tex", "TPOT vs context length (ms/token)", 2),
-        ("tok_per_s_mean", "latency_tok_per_s_vs_seq.tex", "Throughput vs context length (tok/s)", 2),
-        ("ttft_ms_mean", "latency_ttft_vs_seq.tex", "TTFT vs context length (ms)", 2),
-    ]:
+    for metric, fname, caption, digits in metrics:
         pivot = _pivot_metric(df, metric, round_digits=digits)
         if pivot.empty:
             continue
         tabular = _to_latex_tabular(pivot, index=False)
-        label = f"{label_prefix}:latency:{metric}"
+        label = f"{label_prefix}:{label_category}:{metric}"
         latex = _latex_table_env(tabular, caption=caption, label=label)
         out_path = out_dir / fname
         _write(out_path, latex)
         paths.append(out_path)
     return paths
+
+
+def export_latency(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[Path]:
+    return _export_profile_table(
+        tables_dir,
+        out_dir,
+        label_prefix=label_prefix,
+        csv_name="latency_summary.csv",
+        label_category="latency",
+        metrics=[
+            ("tpot_ms_mean", "latency_tpot_vs_seq.tex", "TPOT vs context length (ms/token)", 2),
+            ("tok_per_s_mean", "latency_tok_per_s_vs_seq.tex", "Throughput vs context length (tok/s)", 2),
+            ("ttft_ms_mean", "latency_ttft_vs_seq.tex", "TTFT vs context length (ms)", 2),
+        ],
+    )
 
 
 def export_memory(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[Path]:
-    paths: List[Path] = []
-    src = tables_dir / "memory_summary.csv"
-    df = _read_csv(src)
-    if df.empty:
-        return paths
-
-    # Default thesis tables assume batch=1 and fixed curve gen_len=64.
-    if "batch" in df.columns:
-        df = df[pd.to_numeric(df["batch"], errors="coerce") == 1]
-    if "gen_len" in df.columns:
-        gen = pd.to_numeric(df["gen_len"], errors="coerce")
-        if (gen == 64).any():
-            df = df[gen == 64]
-
-    df = _sort_kv_mode(df)
-    df = _display_kv_mode(df)
-
-    for metric, fname, caption, digits in [
-        ("kv_cache_mem_mb_mean", "memory_kv_cache_mem_vs_seq.tex", "KV cache resident memory vs context length (MB)", 0),
-        ("gpu_mem_peak_mb_mean", "memory_gpu_peak_vs_seq.tex", "Peak GPU memory vs context length (MB)", 0),
-    ]:
-        pivot = _pivot_metric(df, metric, round_digits=digits)
-        if pivot.empty:
-            continue
-        tabular = _to_latex_tabular(pivot, index=False)
-        label = f"{label_prefix}:memory:{metric}"
-        latex = _latex_table_env(tabular, caption=caption, label=label)
-        out_path = out_dir / fname
-        _write(out_path, latex)
-        paths.append(out_path)
-    return paths
+    return _export_profile_table(
+        tables_dir,
+        out_dir,
+        label_prefix=label_prefix,
+        csv_name="memory_summary.csv",
+        label_category="memory",
+        metrics=[
+            ("kv_cache_mem_mb_mean", "memory_kv_cache_mem_vs_seq.tex", "KV cache resident memory vs context length (MB)", 0),
+            ("gpu_mem_peak_mb_mean", "memory_gpu_peak_vs_seq.tex", "Peak GPU memory vs context length (MB)", 0),
+        ],
+    )
 
 
 def export_needle(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[Path]:
@@ -472,7 +505,7 @@ def main() -> int:
 
     tables_dir = Path(args.tables_dir)
     out_dir = Path(args.out_dir)
-    label_prefix = str(args.label_prefix).strip() or "tab"
+    label_prefix = _sanitize_label(str(args.label_prefix).strip()) or "tab"
 
     if not tables_dir.exists():
         print(f"tables_dir not found: {tables_dir}")

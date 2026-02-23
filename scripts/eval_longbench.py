@@ -36,8 +36,6 @@ import numpy as np
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-logger = logging.getLogger(__name__)
-
 script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
@@ -51,6 +49,8 @@ from src.utils.repro import (
     set_seed,
     write_config_snapshot,
 )
+
+logger = logging.getLogger(__name__)
 
 EXIT_OOM = 73
 EXIT_EXCEPTION = 74
@@ -122,6 +122,8 @@ def _split_csv(text: str | None) -> List[str]:
     return [x.strip() for x in str(text).split(",") if x.strip()]
 
 
+# DEPRECATED: local copy kept for standalone execution.  Canonical version
+# lives in ``src.utils.repro.resolve_quant_bits``; update there first.
 def _resolve_quant_bits(kv_mode: str, quant_bits_arg: int | None) -> int:
     if quant_bits_arg is not None:
         return int(quant_bits_arg)
@@ -224,7 +226,29 @@ def _lcs_length(x: List[str], y: List[str]) -> int:
 
 
 def _rouge_l(pred: str, truth: str) -> float:
-    """Rouge-L F1 score based on token-level LCS."""
+    """Rouge-L F1 score based on token-level LCS.
+
+    Implementation note (EVL-017):
+        This is a simplified Rouge-L that operates on whitespace-tokenised,
+        normalised text (lowercased, punctuation stripped).  Differences from
+        the official THUDM/LongBench evaluation script
+        (``LongBench/eval.py``):
+
+        1. **Tokenisation**: Official LongBench uses language-aware sentence
+           splitting (Chinese character segmentation via ``jieba`` for zh
+           tasks, whitespace for en tasks) before computing LCS.  This
+           implementation always uses ``_normalize_text().split()`` which
+           does not perform Chinese segmentation, so zh Rouge-L values may
+           differ from the official leaderboard.
+        2. **Stemming / stop-words**: Neither implementation applies stemming
+           or stop-word removal, so this is consistent.
+        3. **Multi-reference**: The caller takes ``max`` over references,
+           matching official behaviour.
+
+        For English-only evaluation the two implementations are functionally
+        equivalent.  If Chinese task fidelity is critical, consider using
+        the ``rouge-chinese`` package or ``jieba``-based tokenisation.
+    """
     pred_tokens = _normalize_text(pred).split()
     truth_tokens = _normalize_text(truth).split()
     if not pred_tokens and not truth_tokens:

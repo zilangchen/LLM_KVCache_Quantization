@@ -13,8 +13,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import fcntl
+import os
 import re
 import sys
+import tempfile
+import warnings
 from collections import defaultdict
 from pathlib import Path
 
@@ -40,7 +44,7 @@ def parse_tracker(path: Path) -> list[dict]:
     current_section_title = ""
 
     with open(path, "r", encoding="utf-8") as f:
-        for line in f:
+        for lineno, line in enumerate(f, 1):
             line = line.rstrip("\n")
 
             # Section header
@@ -63,14 +67,14 @@ def parse_tracker(path: Path) -> list[dict]:
                     resolution = rest[idx + len(" — fixed commit "):]
                     rest = rest[:idx]
                     status = "fixed"
-                elif " — fixed" in rest:
-                    rest = rest.replace(" — fixed", "")
+                elif rest.endswith(" — fixed"):
+                    rest = rest[: -len(" — fixed")]
                     status = "fixed"
-                elif " — false_positive" in rest:
-                    rest = rest.replace(" — false_positive", "")
+                elif rest.endswith(" — false_positive"):
+                    rest = rest[: -len(" — false_positive")]
                     status = "false_positive"
-                elif " — wont_fix" in rest:
-                    rest = rest.replace(" — wont_fix", "")
+                elif rest.endswith(" — wont_fix"):
+                    rest = rest[: -len(" — wont_fix")]
                     status = "wont_fix"
                 elif checkbox == "x":
                     status = "fixed"
@@ -85,6 +89,14 @@ def parse_tracker(path: Path) -> list[dict]:
                     "commit": resolution.strip() if resolution else "",
                 })
                 continue
+
+            # RVW-003: Warn about lines that look like issues but don't match
+            if line.startswith("- [") and current_section:
+                warnings.warn(
+                    f"{path}:{lineno}: issue-like line did not match "
+                    f"ISSUE_RE: {line!r}",
+                    stacklevel=1,
+                )
 
     return issues
 
@@ -118,15 +130,28 @@ def cmd_stats(issues: list[dict]) -> int:
 
 def cmd_phase_gate(issues: list[dict]) -> int:
     blockers = [i for i in issues if i["status"] == "open" and i["severity"] == "CRIT"]
-    if not blockers:
+    high_open = [i for i in issues if i["status"] == "open" and i["severity"] == "HIGH"]
+
+    if blockers:
+        print(f"PHASE GATE: BLOCKED ({len(blockers)} CRITICAL open)")
+        for i in blockers:
+            print(f"  {i['id']}: {i['title'][:80]}")
+
+    if high_open:
+        print(f"WARNING: {len(high_open)} HIGH severity issues still open:")
+        for i in high_open:
+            print(f"  {i['id']}: {i['title'][:80]}")
+
+    if blockers:
+        return 1
+
+    if not high_open:
         print("PHASE GATE: CLEAR")
         print("No blocking CRITICAL issues.")
-        return 0
-
-    print(f"PHASE GATE: BLOCKED ({len(blockers)} CRITICAL open)")
-    for i in blockers:
-        print(f"  {i['id']}: {i['title'][:80]}")
-    return 1
+    else:
+        print("PHASE GATE: CLEAR (with warnings)")
+        print("No blocking CRITICAL issues, but HIGH issues remain.")
+    return 0
 
 
 def cmd_open(issues: list[dict], sev: str | None = None, section: str | None = None) -> int:
@@ -136,6 +161,15 @@ def cmd_open(issues: list[dict], sev: str | None = None, section: str | None = N
         # Accept both short and full names
         sev_map = {"CRITICAL": "CRIT", "HIGH": "HIGH", "MEDIUM": "MED", "LOW": "LOW"}
         target = sev_map.get(sev_upper, sev_upper)
+        valid_sevs = set(SEV_ORDER.keys())
+        if target not in valid_sevs:
+            print(
+                f"ERROR: invalid severity '{sev}'. "
+                f"Valid values: {', '.join(sorted(valid_sevs, key=lambda s: SEV_ORDER[s]))} "
+                f"(or CRITICAL/MEDIUM)",
+                file=sys.stderr,
+            )
+            return 1
         open_issues = [i for i in open_issues if i["severity"] == target]
     if section:
         sec_upper = section.upper()
@@ -189,6 +223,26 @@ def cmd_progress(issues: list[dict]) -> int:
     return 0
 
 
+def _atomic_write(path: Path, content: str) -> None:
+    """Write content to path atomically via tmpfile + os.replace."""
+    fd, tmp_path = tempfile.mkstemp(
+        dir=str(path.parent), prefix=".review_tool_tmp_", suffix=".md"
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as tmp_f:
+            tmp_f.write(content)
+            tmp_f.flush()
+            os.fsync(tmp_f.fileno())
+        os.replace(tmp_path, str(path))
+    except BaseException:
+        # Clean up temp file on any failure
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 def cmd_add(path: Path, issue_id: str, sev: str, section_header: str, title: str) -> int:
     """Add a new issue to the Open Issues section."""
     sev_map = {"CRITICAL": "CRIT", "HIGH": "HIGH", "MEDIUM": "MED", "LOW": "LOW"}
@@ -196,30 +250,50 @@ def cmd_add(path: Path, issue_id: str, sev: str, section_header: str, title: str
 
     new_line = f"- [ ] **{issue_id}** `[{sev_tag}]` {title}"
 
-    with open(path, "r", encoding="utf-8") as f:
-        content = f.read()
+    # RVW-021: Use file locking to prevent concurrent write corruption
+    lock_path = path.with_suffix(".md.lock")
+    lock_fd = open(lock_path, "w")
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
 
-    # Find the section in Open Issues, or create it
-    section_pattern = re.compile(
-        rf'^### {re.escape(section_header)}',
-        re.MULTILINE
-    )
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
 
-    m = section_pattern.search(content)
-    if m:
-        # Find the end of this section (next ### or ---)
-        rest = content[m.end():]
-        next_section = re.search(r'\n(?=###\s|---)', rest)
-        if next_section:
-            insert_pos = m.end() + next_section.start()
-        else:
-            insert_pos = len(content)
-        content = content[:insert_pos] + "\n" + new_line + content[insert_pos:]
-    else:
-        # Insert new section before "---" that ends Open Issues
-        # Find "## Open Issues" then the next "---"
+        # RVW-016: Check for duplicate issue ID
+        if re.search(rf'\*\*{re.escape(issue_id)}\*\*', content):
+            print(
+                f"ERROR: issue ID '{issue_id}' already exists in {path}",
+                file=sys.stderr,
+            )
+            return 1
+
+        # RVW-014: Ensure "## Open Issues" section exists
         oi_match = re.search(r'^## Open Issues', content, re.MULTILINE)
-        if oi_match:
+        if not oi_match:
+            print(
+                f"ERROR: '## Open Issues' section not found in {path}",
+                file=sys.stderr,
+            )
+            return 1
+
+        # Find the section in Open Issues, or create it
+        section_pattern = re.compile(
+            rf'^### {re.escape(section_header)}',
+            re.MULTILINE
+        )
+
+        m = section_pattern.search(content)
+        if m:
+            # Find the end of this section (next ### or ---)
+            rest = content[m.end():]
+            next_section = re.search(r'\n(?=###\s|---)', rest)
+            if next_section:
+                insert_pos = m.end() + next_section.start()
+            else:
+                insert_pos = len(content)
+            content = content[:insert_pos] + "\n" + new_line + content[insert_pos:]
+        else:
+            # Insert new section before "---" that ends Open Issues
             rest = content[oi_match.end():]
             sep = re.search(r'\n---', rest)
             if sep:
@@ -227,22 +301,32 @@ def cmd_add(path: Path, issue_id: str, sev: str, section_header: str, title: str
                 new_section = f"\n\n### {section_header}\n{new_line}\n"
                 content = content[:insert_pos] + new_section + content[insert_pos:]
 
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(content)
+        # RVW-002: Atomic write
+        _atomic_write(path, content)
 
-    # Update summary line
-    _update_summary(path)
-    print(f"Added: {issue_id} [{sev_tag}] {title}")
-    return 0
+        # Update summary line
+        _update_summary(path)
+        print(f"Added: {issue_id} [{sev_tag}] {title}")
+        return 0
+    finally:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        lock_fd.close()
+        try:
+            os.unlink(lock_path)
+        except OSError:
+            pass
 
 
 def _update_summary(path: Path) -> None:
     """Re-parse and update the summary lines at the top."""
+    import datetime
+
     issues = parse_tracker(path)
     total = len(issues)
     open_issues = [i for i in issues if i["status"] == "open"]
     fixed = sum(1 for i in issues if i["status"] == "fixed")
     fp = sum(1 for i in issues if i["status"] == "false_positive")
+    wf = sum(1 for i in issues if i["status"] == "wont_fix")
 
     open_by_sev = defaultdict(int)
     for i in open_issues:
@@ -254,37 +338,45 @@ def _update_summary(path: Path) -> None:
         if c > 0:
             sev_parts.append(f"{c} {sev}")
 
+    # RVW-022: Include wont_fix in resolution parts
     res_parts = []
     if fixed:
         res_parts.append(f"{fixed} fixed")
     if fp:
         res_parts.append(f"{fp} false_positive")
+    if wf:
+        res_parts.append(f"{wf} wont_fix")
 
     blockers = [i for i in issues if i["status"] == "open" and i["severity"] == "CRIT"]
     blocker_ids = [i["id"] for i in blockers]
     phase_status = "BLOCKED" if blocker_ids else "CLEAR"
     blocker_str = ", ".join(blocker_ids) if blocker_ids else "none"
 
+    new_issues_line = f"> {total} issues | {' + '.join(res_parts)} | {len(open_issues)} open ({', '.join(sev_parts)})\n"
+    new_phase_line = f"> Phase Gate: **{phase_status}** — {blocker_str}\n"
+    new_date_line = f"> Last updated: {datetime.datetime.now().strftime('%Y-%m-%d')}\n"
+
+    # RVW-023: Use regex per-line matching instead of relying on order
+    # RVW-004: Robustify summary replacement with regex matching
     with open(path, "r", encoding="utf-8") as f:
         lines = f.readlines()
 
-    # Update summary lines (lines starting with >)
     new_lines = []
-    summary_replaced = False
     for line in lines:
-        if line.startswith("> ") and not summary_replaced:
-            if "issues |" in line:
-                line = f"> {total} issues | {' + '.join(res_parts)} | {len(open_issues)} open ({', '.join(sev_parts)})\n"
-            elif "Phase Gate:" in line:
-                line = f"> Phase Gate: **{phase_status}** — {blocker_str}\n"
-            elif "Last updated:" in line:
-                import datetime
-                line = f"> Last updated: {datetime.datetime.now().strftime('%Y-%m-%d')}\n"
-                summary_replaced = True
+        if line.startswith("> "):
+            if re.match(r'^> \d+ issues \|', line):
+                new_lines.append(new_issues_line)
+                continue
+            if re.match(r'^> Phase Gate:', line):
+                new_lines.append(new_phase_line)
+                continue
+            if re.match(r'^> Last updated:', line):
+                new_lines.append(new_date_line)
+                continue
         new_lines.append(line)
 
-    with open(path, "w", encoding="utf-8") as f:
-        f.writelines(new_lines)
+    # RVW-002: Atomic write for summary update
+    _atomic_write(path, "".join(new_lines))
 
 
 def main() -> int:

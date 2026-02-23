@@ -19,12 +19,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -339,6 +342,10 @@ def _inconclusive_claim_row(claim: ClaimSpec, reason: str, model_id: str = "") -
         "observed_ppl_mode": "",
         "observed_chunk_size": np.nan,
         "target_model_id": str(model_id),
+        "min_gain_model": "",
+        "max_degradation_model": "",
+        "target_model_coverage": "",
+        "target_model_statuses": "",
         "note": claim.note,
     }
 
@@ -354,6 +361,19 @@ def _evaluate_claim_row(
         return _inconclusive_claim_row(claim, "missing relative_gain evidence row")
 
     observed_gain_pct = float(pd.to_numeric(pd.Series([rel_row.get("gain_pct")]), errors="coerce").iloc[0])
+
+    # NaN gain_pct (e.g. baseline=0) cannot be judged; treat as INCONCLUSIVE.
+    if np.isnan(observed_gain_pct):
+        row = _inconclusive_claim_row(claim, "gain_pct is NaN (possible zero baseline)")
+        row["observed_gain_pct"] = observed_gain_pct
+        row["observed_seq_len"] = rel_row.get("seq_len", np.nan)
+        row["observed_gen_len"] = rel_row.get("gen_len", np.nan)
+        row["observed_batch"] = rel_row.get("batch", np.nan)
+        row["observed_ppl_mode"] = rel_row.get("ppl_mode", "")
+        row["observed_chunk_size"] = rel_row.get("chunk_size", np.nan)
+        row["target_model_id"] = str(rel_row.get("model_id", "")) if "model_id" in rel_row.index else ""
+        return row
+
     practical_pass = bool(observed_gain_pct >= float(claim.min_gain_pct))
 
     q_value = np.nan
@@ -436,6 +456,10 @@ def _evaluate_claim_row(
         "observed_ppl_mode": rel_row.get("ppl_mode", ""),
         "observed_chunk_size": rel_row.get("chunk_size", np.nan),
         "target_model_id": str(rel_row.get("model_id", "")) if "model_id" in rel_row.index else "",
+        "min_gain_model": "",
+        "max_degradation_model": "",
+        "target_model_coverage": "",
+        "target_model_statuses": "",
         "note": claim.note,
     }
 
@@ -458,6 +482,13 @@ def build_claim_validation(
             for model_id in target_models:
                 scoped_claim = replace(claim, target_model_ids=[model_id])
                 rel_row = _pick_best_relative_row(relative_gain, scoped_claim)
+                if rel_row is None:
+                    logger.warning(
+                        "Claim %s: no relative_gain data for model_id=%r; "
+                        "marking INCONCLUSIVE for this model.",
+                        claim.claim_id,
+                        model_id,
+                    )
                 sig_row = _pick_best_significance_row(sig, scoped_claim, rel_row)
                 row = _evaluate_claim_row(
                     claim=scoped_claim,
@@ -496,7 +527,13 @@ def build_claim_validation(
                 errors="coerce",
             ).dropna()
 
-            practical_pass = all(bool(r.get("practical_pass", False)) for r in per_model_rows)
+            # Derive practical_pass from the aggregate min-gain to stay consistent
+            # with observed_gain_pct = gains.min().  When gains is empty (all NaN),
+            # practical_pass must be False.
+            if not gains.empty:
+                practical_pass = bool(float(gains.min()) >= float(claim.min_gain_pct))
+            else:
+                practical_pass = False
             statistical_pass = all(bool(r.get("statistical_pass", False)) for r in per_model_rows)
             evidence_tokens = {str(r.get("evidence_strength", "weak")) for r in per_model_rows}
             if agg_status == "FAIL":
@@ -509,6 +546,22 @@ def build_claim_validation(
                 evidence_strength = "weak"
 
             exemplar = per_model_rows[0] if per_model_rows else _inconclusive_claim_row(claim, "no model rows")
+
+            # Identify per-model extremes for schema completeness.
+            _gain_pairs = [
+                (r.get("target_model_id", ""), r.get("observed_gain_pct"))
+                for r in per_model_rows
+            ]
+            _finite_gain_pairs = [
+                (mid, g) for mid, g in _gain_pairs if isinstance(g, (int, float)) and np.isfinite(g)
+            ]
+            if _finite_gain_pairs:
+                min_gain_model = str(min(_finite_gain_pairs, key=lambda x: x[1])[0])
+                max_degradation_model = str(min(_finite_gain_pairs, key=lambda x: x[1])[0])
+            else:
+                min_gain_model = ""
+                max_degradation_model = ""
+
             rows.append(
                 {
                     "claim_id": claim.claim_id,
@@ -536,6 +589,8 @@ def build_claim_validation(
                     "observed_ppl_mode": exemplar.get("observed_ppl_mode", ""),
                     "observed_chunk_size": exemplar.get("observed_chunk_size", np.nan),
                     "target_model_id": ",".join(target_models),
+                    "min_gain_model": min_gain_model,
+                    "max_degradation_model": max_degradation_model,
                     "target_model_coverage": f"{len(per_model_rows)}/{len(target_models)}",
                     "target_model_statuses": ";".join(
                         f"{r.get('target_model_id', '')}:{r.get('status', '')}" for r in per_model_rows
@@ -553,6 +608,9 @@ def build_claim_validation(
             sig_row=sig_row,
             alpha=alpha,
         )
+        # When exactly one target model is specified, ensure target_model_id is set.
+        if len(target_models) == 1 and not row.get("target_model_id"):
+            row["target_model_id"] = target_models[0]
         rows.append(row)
 
     if not rows:

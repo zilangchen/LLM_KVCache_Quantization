@@ -43,7 +43,8 @@ def main() -> int:
             continue
         try:
             m = json.loads(mp.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception as exc:
+            print(f"Warning: failed to parse {mp}: {exc}")
             continue
         if not str(m.get("run_tag", "")).startswith(args.run_tag_prefix):
             continue
@@ -86,8 +87,17 @@ def main() -> int:
         for src, dst in archives:
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(src), str(dst))
+        failed_cmds: list[tuple[list[str], int]] = []
         for cmd in commands:
-            subprocess.run(cmd, check=True)
+            result = subprocess.run(cmd)
+            if result.returncode != 0:
+                print(f"Warning: command failed (rc={result.returncode}): {' '.join(cmd)}")
+                failed_cmds.append((cmd, result.returncode))
+        if failed_cmds:
+            print(f"\n{len(failed_cmds)} command(s) failed:")
+            for fc, rc in failed_cmds:
+                print(f"  rc={rc}: {' '.join(fc)}")
+            return 1
     return 0
 if __name__ == "__main__":
     raise SystemExit(main())

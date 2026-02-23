@@ -8,12 +8,20 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 import re
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
+logger = logging.getLogger(__name__)
 
+# CSV glob patterns for each task.
+# NOTE: kivi_style runs produce CSV files with the same naming convention as
+# other kv_modes (e.g. profile_latency_*.csv).  No separate pattern entry is
+# needed — the existing patterns cover all kv_modes including kivi_style.
+# (CHK-003)
 TASK_TO_CSV_PATTERN = {
     "profile_latency": "profile_latency_*.csv",
     "profile_memory": "profile_memory_*.csv",
@@ -31,10 +39,18 @@ def _split_csv(values: str | None) -> List[str]:
 
 
 def _read_json(path: Path) -> Dict[str, Any] | None:
+    """Read a JSON file, returning None if missing or not a dict.
+
+    Logs a warning on JSON decode errors instead of silently returning None.
+    (CHK-009)
+    """
     if not path.exists():
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        logger.warning("Failed to parse JSON from %s: %s", path, exc)
+        return None
     except Exception:
         return None
     if not isinstance(data, dict):
@@ -43,10 +59,15 @@ def _read_json(path: Path) -> Dict[str, Any] | None:
 
 
 def _read_text(path: Path) -> str:
+    """Read a text file, using replacement characters for non-UTF-8 bytes.
+
+    Uses errors='replace' instead of 'ignore' so that corrupted bytes are
+    visible as U+FFFD rather than silently dropped.  (CHK-008)
+    """
     if not path.exists():
         return ""
     try:
-        return path.read_text(encoding="utf-8", errors="ignore")
+        return path.read_text(encoding="utf-8", errors="replace")
     except Exception:
         return ""
 
@@ -56,22 +77,44 @@ def _is_oom_from_log(content: str) -> bool:
 
 
 def _is_traceback_from_log(content: str) -> bool:
-    return "Traceback (most recent call last):" in content
+    """Detect Python tracebacks, case-insensitive.  (CHK-016)"""
+    return bool(re.search(r"Traceback \(most recent call last\):", content, flags=re.IGNORECASE))
 
 
-def _csv_has_rows(path: Path) -> bool:
+# --- CSV status helpers (CHK-011) ---
+
+# Fine-grained CSV status values returned by _csv_status().
+CSV_NOT_FOUND = "csv_not_found"
+CSV_HEADER_ONLY = "csv_header_only"
+CSV_HAS_ROWS = "csv_has_rows"
+CSV_READ_ERROR = "csv_read_error"
+
+
+def _csv_status(path: Path) -> str:
+    """Return a fine-grained status for a single CSV file.
+
+    Distinguishes between file-not-found, header-only (no data rows),
+    has-data-rows, and read errors.  (CHK-011)
+    """
     if not path.exists():
-        return False
+        return CSV_NOT_FOUND
     try:
         with open(path, "r", encoding="utf-8", newline="") as f:
             reader = csv.reader(f)
             # Header
             if next(reader, None) is None:
-                return False
+                return CSV_HEADER_ONLY
             # At least one data row
-            return next(reader, None) is not None
+            if next(reader, None) is not None:
+                return CSV_HAS_ROWS
+            return CSV_HEADER_ONLY
     except Exception:
-        return False
+        return CSV_READ_ERROR
+
+
+def _csv_has_rows(path: Path) -> bool:
+    """Convenience wrapper: True only when the CSV has at least one data row."""
+    return _csv_status(path) == CSV_HAS_ROWS
 
 
 def _find_csv_paths(run_dir: Path, pattern: str) -> List[Path]:
@@ -89,6 +132,24 @@ def _has_task_level_artifacts(run_dir: Path, task: str) -> bool:
             run_dir.glob("ruler_depth_summary_*.csv")
         )
     return True
+
+
+def _detect_failure_type(
+    *,
+    manifest_failure: str,
+    log_content: str,
+) -> str:
+    """Infer the failure_type for the returned manifest dict.  (CHK-002)
+
+    Returns one of: "oom", "traceback", "unknown_error", or "" (no failure detected).
+    """
+    if manifest_failure == "oom" or _is_oom_from_log(log_content):
+        return "oom"
+    if _is_traceback_from_log(log_content):
+        return "traceback"
+    if manifest_failure:
+        return manifest_failure
+    return ""
 
 
 def _latest_failure_type(task_info: Dict[str, Any]) -> str:
@@ -127,6 +188,17 @@ def _check_task_state(
     task_info: Dict[str, Any],
 ) -> Dict[str, Any]:
     csv_pattern = TASK_TO_CSV_PATTERN.get(task, "")
+
+    # CHK-010: warn when a task has no known CSV pattern — the check will
+    # still proceed but the caller should be aware that CSV validation is
+    # effectively skipped.
+    if not csv_pattern:
+        logger.warning(
+            "Task %r has no CSV pattern in TASK_TO_CSV_PATTERN; "
+            "CSV-based validation is skipped for run_id=%s",
+            task, run_id,
+        )
+
     csv_paths = _find_csv_paths(run_dir, csv_pattern)
     has_csv = bool(csv_paths)
     has_valid_csv = any(_csv_has_rows(path) for path in csv_paths)
@@ -144,32 +216,64 @@ def _check_task_state(
                 has_success_history = True
                 break
 
+    # --- State classification (CHK-017: comments on each branch) ---
+
     if manifest_failure == "oom" or _is_oom_from_log(log_content):
+        # OOM: manifest or log indicates out-of-memory — not retryable without config change.
         state = "oom"
     elif has_csv and not has_valid_csv:
+        # CSV files exist but none contain data rows — likely a write failure mid-task.
         state = "csv_invalid"
     elif has_csv and not has_task_artifacts:
+        # CSV data is present but expected task-level summary artifacts are missing.
         state = "task_artifacts_missing"
     elif has_csv and has_valid_csv and has_task_artifacts and (
-        manifest_status in {"success", "skipped"}
+        manifest_status in {"success"}
         or has_success_history
         or (manifest_status == "" and manifest_failure == "")
     ):
+        # Fully successful: valid CSV + artifacts + manifest confirms success
+        # (or manifest is empty/absent, implying an older run without manifest tracking).
         state = "success"
-    elif has_csv and manifest_status in {"", "failed", "running", "skipped"}:
+    elif has_csv and has_valid_csv and has_task_artifacts and manifest_status == "running":
+        # CHK-007: Valid CSV and artifacts exist but manifest still says "running".
+        # This likely means the process was interrupted after producing valid output
+        # but before updating the manifest to "success".
+        state = "csv_valid_manifest_incomplete"
+    elif has_csv and manifest_status in {"", "failed", "running"}:
+        # CHK-019 / CHK-017: CSV exists but manifest indicates non-success.
+        # Note: "skipped" is excluded here — if manifest says "skipped" with CSV
+        # present, the success branch above already handles it; reaching here with
+        # "skipped" would require has_valid_csv=False or has_task_artifacts=False,
+        # which are caught by earlier branches (csv_invalid / task_artifacts_missing).
         state = "mixed_csv_non_success"
     elif _is_traceback_from_log(log_content):
+        # No valid CSV, but log contains a Python traceback.
         state = "traceback"
     elif manifest_status in {"failed", "running"}:
+        # No CSV output at all; manifest says failed or still running.
         state = manifest_status
     else:
+        # No CSV, no manifest status, no log evidence — task output is missing entirely.
         state = "missing"
+
+    # CHK-010: when csv_pattern is empty, we cannot validate CSV presence;
+    # if the task also has no manifest evidence of success, flag it.
+    if not csv_pattern and state == "success" and manifest_status not in {"success"} and not has_success_history:
+        state = "no_csv_pattern"
+
+    # CHK-002: include failure_type in the returned dict for downstream analysis.
+    failure_type = _detect_failure_type(
+        manifest_failure=manifest_failure,
+        log_content=log_content,
+    )
 
     return {
         "task": task,
         "state": state,
         "manifest_status": manifest_status,
         "manifest_failure_type": manifest_failure,
+        "failure_type": failure_type,
         "has_csv": bool(has_csv),
         "has_valid_csv": bool(has_valid_csv),
         "has_task_artifacts": bool(has_task_artifacts),
@@ -249,7 +353,12 @@ def main() -> int:
     parser.add_argument("--runs_dir", type=str, required=True)
     parser.add_argument("--logs_dir", type=str, default="")
     parser.add_argument("--run_tag", type=str, required=True)
-    parser.add_argument("--tasks", type=str, default="profile_latency,profile_memory")
+    # CHK-014: default tasks updated to match run_experiments.py
+    parser.add_argument(
+        "--tasks",
+        type=str,
+        default="profile_latency,profile_memory,eval_ppl,eval_needle",
+    )
     parser.add_argument("--seeds", type=str, default="")
     parser.add_argument("--required_run_names", type=str, default="")
     parser.add_argument("--stress_run_names", type=str, default="")
@@ -262,12 +371,31 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    logging.basicConfig(
+        level=logging.WARNING,
+        format="%(levelname)s: %(message)s",
+        stream=sys.stderr,
+    )
+
     runs_dir = Path(args.runs_dir)
     logs_dir = Path(args.logs_dir) if args.logs_dir else None
     tasks = _split_csv(args.tasks)
     required_run_names = _split_csv(args.required_run_names)
     stress_run_names = _split_csv(args.stress_run_names)
-    seeds = [int(x) for x in _split_csv(args.seeds)] if args.seeds else []
+
+    # CHK-012: graceful handling of non-integer seed values.
+    if args.seeds:
+        raw_seeds = _split_csv(args.seeds)
+        seeds: List[int] = []
+        for s in raw_seeds:
+            try:
+                seeds.append(int(s))
+            except ValueError:
+                print(f"Error: seed value {s!r} is not a valid integer.", file=sys.stderr)
+                return 2
+    else:
+        seeds = []
+
     out_json = Path(args.out_json)
     if not out_json.is_absolute():
         out_json = Path.cwd() / out_json
@@ -279,6 +407,17 @@ def main() -> int:
     if not tasks:
         print("No tasks were provided.")
         return 2
+
+    # CHK-013: warn when run_names lists are empty — the completeness result
+    # would be vacuously True which may be misleading.
+    if not required_run_names:
+        logger.warning(
+            "required_run_names is empty; required_complete will be vacuously True."
+        )
+    if not stress_run_names:
+        logger.warning(
+            "stress_run_names is empty; stress_complete will be vacuously True."
+        )
 
     required = _check_group(
         group_name="required",
@@ -315,8 +454,11 @@ def main() -> int:
         "seeds": seeds,
         "required_run_names": required_run_names,
         "stress_run_names": stress_run_names,
-        "required_complete": len(required_missing) == 0,
-        "stress_complete": len(stress_missing) == 0,
+        # CHK-013: flag when lists are empty so downstream knows the result is vacuous.
+        "required_complete": len(required_missing) == 0 and len(required_run_names) > 0,
+        "stress_complete": len(stress_missing) == 0 and len(stress_run_names) > 0,
+        "required_vacuous": len(required_run_names) == 0,
+        "stress_vacuous": len(stress_run_names) == 0,
         "missing_required_run_names": required_missing,
         "missing_stress_run_names": stress_missing,
         "oom_registry": required["oom_registry"] + stress["oom_registry"],

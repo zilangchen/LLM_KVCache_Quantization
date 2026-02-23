@@ -899,11 +899,19 @@ def main() -> int:
             print(f"Error: matrix[{idx}] must be a mapping, got {type(entry).__name__}.")
             return 2
         run_name = entry.get("run_name")
-        if run_name_filter and run_name not in run_name_filter:
-            continue
         kv_mode = entry.get("kv_mode", "fp16")
         if kv_mode not in SUPPORTED_KV_MODES:
-            invalid_kv_modes.append(f"{run_name or f'index={idx}'}:{kv_mode}")
+            label = run_name or f"index={idx}"
+            if run_name_filter and run_name not in run_name_filter:
+                print(
+                    f"Warning: skipped entry {label} has unsupported kv_mode={kv_mode!r} "
+                    f"(not in SUPPORTED_KV_MODES). Ignored because it does not match --run_names filter."
+                )
+                continue
+            invalid_kv_modes.append(f"{label}:{kv_mode}")
+            continue
+        if run_name_filter and run_name not in run_name_filter:
+            continue
     if invalid_kv_modes:
         print("Error: found unsupported kv_mode entries:")
         for item in invalid_kv_modes:
@@ -1020,16 +1028,21 @@ def main() -> int:
                 )
                 return 2
             calib_strategy = str(calib_params.get("calib_strategy") or "").strip()
-            if calib_strategy not in {"", "kivi_asymmetric"}:
+            if not calib_strategy:
+                # Enforce kivi_asymmetric as the only valid strategy for kivi_style
+                calib_params["calib_strategy"] = "kivi_asymmetric"
+                calib_strategy = "kivi_asymmetric"
+            if calib_strategy not in {"kivi_asymmetric"}:
                 print(
                     f"Error: run_name={run_name} kv_mode=kivi_style requires calib_strategy=kivi_asymmetric, "
                     f"got {calib_strategy!r}."
                 )
                 return 2
-            if "decode_attn_impl" in run_entry and decode_attn_impl and str(decode_attn_impl) != "torch_ref":
+            if decode_attn_impl and str(decode_attn_impl) != "torch_ref":
+                source = "run_entry" if "decode_attn_impl" in run_entry else "kernel_defaults"
                 print(
                     f"Error: run_name={run_name} kv_mode=kivi_style requires decode_attn_impl=torch_ref, "
-                    f"got {decode_attn_impl!r}."
+                    f"got {decode_attn_impl!r} (from {source})."
                 )
                 return 2
             decode_attn_impl = "torch_ref"
@@ -1176,28 +1189,30 @@ def main() -> int:
                     cmd.extend(["--run_name", str(run_name)])
                 if model_revision:
                     cmd.extend(["--model_revision", str(model_revision)])
-                if run_quant_bits is not None:
-                    cmd.extend(["--quant_bits", str(run_quant_bits)])
-                if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed"] and calib_file_path:
-                    cmd.extend(["--calib_file", str(calib_file_path)])
-                if calib_params.get("calib_strategy"):
-                    cmd.extend(["--calib_strategy", str(calib_params["calib_strategy"])])
-                if calib_params.get("use_attn_temperature") is False:
-                    cmd.append("--no_use_attn_temperature")
-                if calib_params.get("use_static_scales") is False:
-                    cmd.append("--no_use_static_scales")
-                if calib_params.get("adaptive_static_scales") is True:
-                    cmd.append("--adaptive_static_scales")
-                adaptive_static_margin = calib_params.get("adaptive_static_margin")
-                if (
-                    adaptive_static_margin is not None
-                    and float(adaptive_static_margin) != 1.0
-                ):
-                    cmd.extend(["--adaptive_static_margin", str(adaptive_static_margin)])
-                if calib_params.get("adaptive_static_k") is False:
-                    cmd.append("--no_adaptive_static_k")
-                if calib_params.get("adaptive_static_v") is False:
-                    cmd.append("--no_adaptive_static_v")
+                # Only pass quant/calib params for quantized modes (not fp16)
+                if kv_mode != "fp16":
+                    if run_quant_bits is not None:
+                        cmd.extend(["--quant_bits", str(run_quant_bits)])
+                    if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed"] and calib_file_path:
+                        cmd.extend(["--calib_file", str(calib_file_path)])
+                    if calib_params.get("calib_strategy"):
+                        cmd.extend(["--calib_strategy", str(calib_params["calib_strategy"])])
+                    if calib_params.get("use_attn_temperature") is False:
+                        cmd.append("--no_use_attn_temperature")
+                    if calib_params.get("use_static_scales") is False:
+                        cmd.append("--no_use_static_scales")
+                    if calib_params.get("adaptive_static_scales") is True:
+                        cmd.append("--adaptive_static_scales")
+                    adaptive_static_margin = calib_params.get("adaptive_static_margin")
+                    if (
+                        adaptive_static_margin is not None
+                        and float(adaptive_static_margin) != 1.0
+                    ):
+                        cmd.extend(["--adaptive_static_margin", str(adaptive_static_margin)])
+                    if calib_params.get("adaptive_static_k") is False:
+                        cmd.append("--no_adaptive_static_k")
+                    if calib_params.get("adaptive_static_v") is False:
+                        cmd.append("--no_adaptive_static_v")
                 if decode_attn_impl:
                     cmd.extend(["--decode_attn_impl", str(decode_attn_impl)])
 
@@ -1295,16 +1310,8 @@ def main() -> int:
                     )
                 ):
                     print(f"Skipping {task} for {label}: already marked success with CSV artifacts.")
-                    _mark_task_status(
-                        manifest_path,
-                        manifest,
-                        task=task,
-                        status="success",
-                        cmd=cmd,
-                        log_path=log_path,
-                        returncode=0,
-                        record_history=False,
-                    )
+                    # RUN-008: Do not re-write manifest for already-completed tasks;
+                    # the task is already recorded as success in the manifest.
                     execution_rows.append(
                         {
                             "timestamp": _now_iso(),
@@ -1348,7 +1355,7 @@ def main() -> int:
                                 text=True,
                             )
                             returncode = int(result.returncode)
-                        except OSError as exc:
+                        except (OSError, subprocess.SubprocessError, ValueError) as exc:
                             f.write(f"\n[ERROR] Failed to launch subprocess: {exc}\n")
                             returncode = 127
                             failure_type = "spawn_error"
