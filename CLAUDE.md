@@ -19,11 +19,12 @@
 | 文件 | 用途 | 规则 |
 |------|------|------|
 | `objective.md` | 目标/边界/约束/成功标准/决策日志 | 任何任务开始前必须对齐；偏离边界须先确认 |
-| `iteration.md` | 进度与迭代记录 | **append-only**，不覆盖历史，只追加；顶部维护待办清单 |
+| `iteration.md` | 进度与迭代记录 | **append-only**，不覆盖历史，只追加 |
+| `review_tracker.md` | 代码审查问题追踪 | 根目录权威文件，所有审查 issue 的唯一入口 |
 | `experiment_sop.md` | 实验 SOP | 实验目录、命名、复现、数据版本、指标、产物归档 |
 | `AGENTS.md` | 开发工作流协议 | 命令入口、目录规范、提交规范 |
 
-当用户说"这个问题先存档"时，将问题记录到 `iteration.md` 顶部的待办清单。
+当用户说"这个问题先存档"时，将问题记录到 `review_tracker.md`（审查问题）或 `iteration.md`（一般待办）。
 
 ---
 
@@ -101,8 +102,8 @@ python scripts/export_tables_latex.py --tables_dir results/<tag>/tables --out_di
 
 ### 4.5 Phase 闸门：启动下一 Phase 前必须清空待办
 
-在启动任何新 Phase（如 Phase 5）之前，**必须先解决 `iteration.md` 顶部待办清单中属于当前 Phase 的所有条目**。
-若某条目因外部依赖无法完成，须在 iteration.md 中标注原因并降级为下一 Phase 的待办，不得无声跳过。
+在启动任何新 Phase 之前，**必须先通过 `python scripts/review_tool.py phase-gate` 检查门禁**。
+CRITICAL open issues 必须修复才能推进。若某条目因外部依赖无法完成，须在 review_tracker.md 中标注原因并降级，不得无声跳过。
 
 ---
 
@@ -250,27 +251,26 @@ python scripts/export_tables_latex.py --tables_dir results/<tag>/tables --out_di
 - 远程操作参考 `.agents/skills/remote-server/SKILL.md`
 
 ### 代码审查 Agent（Reviewer）
-- 只读权限为主，可写入 `iteration.md` TODO Backlog
+- 只读权限为主，可写入 `review_tracker.md`（审查问题追踪）
 - 通过 `git diff` / `git log` 监控变更，对每次提交进行增量审查
 - **空闲时主动对整个代码库进行深度全量审查**（按模块轮转：src/ → scripts/ → tests/ → configs/）
-- 发现问题按严重性（CRITICAL/HIGH/MEDIUM/LOW）记录到 TODO Backlog，通知主管
+- 发现问题按严重性（CRITICAL/HIGH/MEDIUM/LOW）记录到 `review_tracker.md`，通知主管
 - 审查重点：数值正确性、接口兼容性、边界情况、测试覆盖、配置一致性
 - **常驻运行**，仅在用户手动终止 / 主管发送 shutdown / 所有开发任务完成时退出
 
 ### 强制规则：每次启动必须读取 iteration.md
 
-**所有角色（主管/开发/审查）在每次启动、每轮迭代开始时，必须先读取 `iteration.md`**，获取：
-- TODO Backlog（当前待修复问题）
-- Approved Plans（当前待执行计划）
-- Timeline 最近条目（上次做到哪里）
+**所有角色（主管/开发/审查）在每次启动、每轮迭代开始时，必须先读取**：
+- `review_tracker.md` — 获取 open issues 和 Phase Blockers
+- `iteration.md` — 获取 Approved Plans 和 Timeline 最近条目
 
 这是保持上下文同步的唯一机制，不得跳过。
 
 ### 协作流程
 ```
-主管 → 读 iteration.md + objective.md → 拆解任务
-  ├── spawn 开发 Agent → 读 iteration.md → 领取任务 → 编码/测试/提交
-  ├── spawn 审查 Agent → 读 iteration.md → 监控变更 → 审查 → 写 TODO
+主管 → 读 review_tracker.md + iteration.md + objective.md → 拆解任务
+  ├── spawn 开发 Agent → 读 review_tracker.md + iteration.md → 领取任务 → 编码/测试/提交
+  ├── spawn 审查 Agent → 读 review_tracker.md → 监控变更 → 审查 → 写 review_tracker.md
   ├── 审查发现问题 → 主管分配修复任务 → 开发 Agent 修复
   └── 循环直到目标达成
 ```

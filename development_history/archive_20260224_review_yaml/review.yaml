@@ -1,0 +1,3951 @@
+schema_version: 1.0.0
+meta:
+  last_updated: '2026-02-23T18:44:23.516540+00:00'
+  last_updated_by: reviewer
+  total_issues: 176
+  open_issues: 112
+phase_gate:
+  blocking_criticals: 3
+  blocking_highs: 19
+  phase5_ready: false
+  blockers:
+  - T-1
+  - AF-1
+  - AG-1
+issues:
+  A-1:
+    title: MSE loss 维度语义错误 (L199-200)
+    description: MSE loss 维度语义错误 (L199-200)
+    severity: CRITICAL
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: numerical_correctness
+    module: scripts/calibrate_behavior.py
+    location:
+      file: scripts/calibrate_behavior.py
+    suggested_fix:
+      approach: Review and fix the issue in scripts/calibrate_behavior.py
+      files_to_change:
+      - scripts/calibrate_behavior.py
+      estimated_effort: medium
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 20095fb
+      verified_by: reviewer
+    audit:
+      section: A
+      section_title: MSE 校准实现缺陷
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  A-2:
+    title: MSE loss 全局 mean 无维度 (L302)
+    description: MSE loss 全局 mean 无维度 (L302)
+    severity: CRITICAL
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: numerical_correctness
+    module: scripts/calibrate_behavior.py
+    location:
+      file: scripts/calibrate_behavior.py
+    suggested_fix:
+      approach: Review and fix the issue in scripts/calibrate_behavior.py
+      files_to_change:
+      - scripts/calibrate_behavior.py
+      estimated_effort: medium
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 20095fb
+      verified_by: reviewer
+    audit:
+      section: A
+      section_title: MSE 校准实现缺陷
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  A-3:
+    title: loss_accum 未除以样本数 (L177-206)
+    description: loss_accum 未除以样本数 (L177-206)
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: numerical_correctness
+    module: scripts/calibrate_behavior.py
+    location:
+      file: scripts/calibrate_behavior.py
+    suggested_fix:
+      approach: Review and fix the issue in scripts/calibrate_behavior.py
+      files_to_change:
+      - scripts/calibrate_behavior.py
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 20095fb
+      verified_by: reviewer
+    audit:
+      section: A
+      section_title: MSE 校准实现缺陷
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  A-4:
+    title: MSE 无数值安全 clamp (L199)
+    description: MSE 无数值安全 clamp (L199)
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: numerical_correctness
+    module: scripts/calibrate_behavior.py
+    location:
+      file: scripts/calibrate_behavior.py
+    suggested_fix:
+      approach: Review and fix the issue in scripts/calibrate_behavior.py
+      files_to_change:
+      - scripts/calibrate_behavior.py
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 20095fb
+      verified_by: reviewer
+    audit:
+      section: A
+      section_title: MSE 校准实现缺陷
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  A-5:
+    title: trial 排名受 loss 尺度影响 (L780-791)
+    description: 'trial 排名受 loss 尺度影响 (L780-791): p95_mse vs p95_kl 尺度完全不同，搜索排名在不同序列长度下不可复现（注：MSE 搜索内部排名一致，跨 loss_function
+      不可比是预期行为，降级为文档问题）'
+    severity: HIGH
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: scripts/calibrate_behavior.py
+    location:
+      file: scripts/calibrate_behavior.py
+    suggested_fix:
+      approach: Review and fix the issue in scripts/calibrate_behavior.py
+      files_to_change:
+      - scripts/calibrate_behavior.py
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: A
+      section_title: MSE 校准实现缺陷
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  A-6:
+    title: 默认输出文件名硬编码为 kl.json
+    description: 默认输出文件名硬编码为 kl.json
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: scripts/calibrate_behavior.py
+    location:
+      file: scripts/calibrate_behavior.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 20095fb
+      verified_by: reviewer
+    audit:
+      section: A
+      section_title: MSE 校准实现缺陷
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  A-7:
+    title: select_best_trial() 无 key 存在性校验
+    description: select_best_trial() 无 key 存在性校验
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: scripts/calibrate_behavior.py
+    location:
+      file: scripts/calibrate_behavior.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 20095fb
+      verified_by: reviewer
+    audit:
+      section: A
+      section_title: MSE 校准实现缺陷
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  A-8:
+    title: MSE loss 语义未文档化 (L6, L234-239)
+    description: 'MSE loss 语义未文档化 (L6, L234-239): 无 docstring 说明 MSE 是位置平均还是全局平均'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: scripts/calibrate_behavior.py
+    location:
+      file: scripts/calibrate_behavior.py
+    resolution: null
+    audit:
+      section: A
+      section_title: MSE 校准实现缺陷
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  B-1:
+    title: K-scale/zp 在 clear() 后状态不一致
+    description: K-scale/zp 在 clear() 后状态不一致
+    severity: CRITICAL
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: numerical_correctness
+    module: src/cache/kivi_style_cache.py
+    location:
+      file: src/cache/kivi_style_cache.py
+    suggested_fix:
+      approach: Review and fix the issue in src/cache/kivi_style_cache.py
+      files_to_change:
+      - src/cache/kivi_style_cache.py
+      estimated_effort: medium
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 20095fb
+      verified_by: reviewer
+    audit:
+      section: B
+      section_title: KIVI Cache 实现
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  B-2:
+    title: decode K 量化与 prefill K 量化 device 一致性未强制 (L220-231)
+    description: decode K 量化与 prefill K 量化 device 一致性未强制 (L220-231)
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: numerical_correctness
+    module: src/cache/kivi_style_cache.py
+    location:
+      file: src/cache/kivi_style_cache.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#5'
+      verified_by: reviewer
+    audit:
+      section: B
+      section_title: KIVI Cache 实现
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  B-3:
+    title: V buffer shape 一致性未校验 (L126-131)
+    description: V buffer shape 一致性未校验 (L126-131)
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: src/cache/kivi_style_cache.py
+    location:
+      file: src/cache/kivi_style_cache.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#5'
+      verified_by: reviewer
+    audit:
+      section: B
+      section_title: KIVI Cache 实现
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  B-4:
+    title: append() 无输入 tensor shape 校验 (L187-245)
+    description: append() 无输入 tensor shape 校验 (L187-245)
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: numerical_correctness
+    module: src/cache/kivi_style_cache.py
+    location:
+      file: src/cache/kivi_style_cache.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#5'
+      verified_by: reviewer
+    audit:
+      section: B
+      section_title: KIVI Cache 实现
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  B-5:
+    title: _seq_len 仅在 layer_id=0 时更新 (L244-245)
+    description: '_seq_len 仅在 layer_id=0 时更新 (L244-245): 假设所有 layer 同步 append，不一致使用会导致 seq_len 错误'
+    severity: LOW
+    confidence: LOW
+    verification: unverified
+    status: open
+    category: configuration_error
+    module: src/cache/kivi_style_cache.py
+    location:
+      file: src/cache/kivi_style_cache.py
+    resolution: null
+    audit:
+      section: B
+      section_title: KIVI Cache 实现
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  B-6:
+    title: 无 batch_size=0 校验 (L204)
+    description: '无 batch_size=0 校验 (L204): 空 batch 不会显式报错'
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: boundary_case
+    module: src/cache/kivi_style_cache.py
+    location:
+      file: src/cache/kivi_style_cache.py
+    resolution: null
+    audit:
+      section: B
+      section_title: KIVI Cache 实现
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  C-1:
+    title: percentile < 50 时 quantile_lo > quantile_hi
+    description: percentile < 50 时 quantile_lo > quantile_hi
+    severity: CRITICAL
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: numerical_correctness
+    module: src/quant/asymmetric_quant.py
+    location:
+      file: src/quant/asymmetric_quant.py
+    suggested_fix:
+      approach: Review and fix the issue in src/quant/asymmetric_quant.py
+      files_to_change:
+      - src/quant/asymmetric_quant.py
+      estimated_effort: medium
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 20095fb
+      verified_by: reviewer
+    audit:
+      section: C
+      section_title: 非对称量化模块
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  C-2:
+    title: 无 percentile 范围校验
+    description: 无 percentile 范围校验
+    severity: CRITICAL
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: src/quant/asymmetric_quant.py
+    location:
+      file: src/quant/asymmetric_quant.py
+    suggested_fix:
+      approach: Review and fix the issue in src/quant/asymmetric_quant.py
+      files_to_change:
+      - src/quant/asymmetric_quant.py
+      estimated_effort: medium
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 20095fb
+      verified_by: reviewer
+    audit:
+      section: C
+      section_title: 非对称量化模块
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  C-3:
+    title: float16 输入精度损失 (L58-59)
+    description: 'float16 输入精度损失 (L58-59): quantile 在 float32 计算后转回 float16，scale/zp 精度下降'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: src/quant/asymmetric_quant.py
+    location:
+      file: src/quant/asymmetric_quant.py
+    resolution: null
+    audit:
+      section: C
+      section_title: 非对称量化模块
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  C-4:
+    title: dequantize 函数无输入类型校验 (L74-95)
+    description: 'dequantize 函数无输入类型校验 (L74-95): 传入错误 dtype 静默产生错误结果'
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: src/quant/asymmetric_quant.py
+    location:
+      file: src/quant/asymmetric_quant.py
+    resolution: null
+    audit:
+      section: C
+      section_title: 非对称量化模块
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  D-1:
+    title: generate() 函数缺少 quant_bits 参数
+    description: generate() 函数缺少 quant_bits 参数
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: interface_compatibility
+    module: src/engine/generate_loop.py
+    location:
+      file: src/engine/generate_loop.py
+    suggested_fix:
+      approach: Review and fix the issue in src/engine/generate_loop.py
+      files_to_change:
+      - src/engine/generate_loop.py
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 20095fb
+      verified_by: reviewer
+    audit:
+      section: D
+      section_title: Engine 集成
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  D-2:
+    title: decode 阶段 KIVI 走 dequant→re-quant 路径 (L635-678)
+    description: 'decode 阶段 KIVI 走 dequant→re-quant 路径 (L635-678): 每步 dequant 全量 cache 后取最后 token re-quant 回 cache，引入不必要的精度损失'
+    severity: HIGH
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: src/engine/generate_loop.py
+    location:
+      file: src/engine/generate_loop.py
+    suggested_fix:
+      approach: Review and fix the issue in src/engine/generate_loop.py
+      files_to_change:
+      - src/engine/generate_loop.py
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: D
+      section_title: Engine 集成
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  D-3:
+    title: KIVI kv_mode 未校验 quant_bits∈{4,8} (L294-310)
+    description: 'KIVI kv_mode 未校验 quant_bits∈{4,8} (L294-310): 无效 quant_bits 延迟到 KIVIStyleKVCache.__init__ 才报错'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: performance
+    module: src/engine/generate_loop.py
+    location:
+      file: src/engine/generate_loop.py
+    resolution: null
+    audit:
+      section: D
+      section_title: Engine 集成
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  D-4:
+    title: docstring 未说明 KIVI 模式行为 (L258-292)
+    description: 'docstring 未说明 KIVI 模式行为 (L258-292): 无 KIVI 模式的参数说明和约束文档'
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: interface_compatibility
+    module: src/engine/generate_loop.py
+    location:
+      file: src/engine/generate_loop.py
+    resolution: null
+    audit:
+      section: D
+      section_title: Engine 集成
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  E-1:
+    title: export_tables_latex.py KV_MODE_DISPLAY 缺 kivi_style
+    description: export_tables_latex.py KV_MODE_DISPLAY 缺 kivi_style
+    severity: CRITICAL
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: export_tables_latex.py
+    location:
+      file: export_tables_latex.py
+    suggested_fix:
+      approach: Review and fix the issue in export_tables_latex.py
+      files_to_change:
+      - export_tables_latex.py
+      estimated_effort: medium
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 8bf9414
+      verified_by: reviewer
+    audit:
+      section: E
+      section_title: 评测脚本集成
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  E-2:
+    title: export_tables_latex.py KV_MODE_ORDER 缺 kivi_style
+    description: export_tables_latex.py KV_MODE_ORDER 缺 kivi_style
+    severity: CRITICAL
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: export_tables_latex.py
+    location:
+      file: export_tables_latex.py
+    suggested_fix:
+      approach: Review and fix the issue in export_tables_latex.py
+      files_to_change:
+      - export_tables_latex.py
+      estimated_effort: medium
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 8bf9414
+      verified_by: reviewer
+    audit:
+      section: E
+      section_title: 评测脚本集成
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  E-3:
+    title: eval_longbench.py 引用未定义 logger
+    description: eval_longbench.py 引用未定义 logger
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: eval_longbench.py
+    location:
+      file: eval_longbench.py
+    suggested_fix:
+      approach: Review and fix the issue in eval_longbench.py
+      files_to_change:
+      - eval_longbench.py
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 20095fb
+      verified_by: reviewer
+    audit:
+      section: E
+      section_title: 评测脚本集成
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  E-4:
+    title: generate_thesis_report.py 缺少 KIVI claims
+    description: generate_thesis_report.py 缺少 KIVI claims
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: research_semantics
+    module: generate_thesis_report.py
+    location:
+      file: generate_thesis_report.py
+    suggested_fix:
+      approach: Review and fix the issue in generate_thesis_report.py
+      files_to_change:
+      - generate_thesis_report.py
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 8bf9414
+      verified_by: reviewer
+    audit:
+      section: E
+      section_title: 评测脚本集成
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  E-5:
+    title: 所有 eval 脚本 quant_bits fallback 将 KIVI 记录为 16 (eval_ppl L878 / eval_needle L467 / eval_longbench L833 / eval_ruler
+      L98...
+    description: '所有 eval 脚本 quant_bits fallback 将 KIVI 记录为 16 (eval_ppl L878 / eval_needle L467 / eval_longbench L833 / eval_ruler
+      L985 / profile_latency L320 / profile_memory L369): "int4" in "kivi_style" 和 "int8" in "kivi_style" 均为 False，fallback
+      到 16'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: performance
+    module: scripts/
+    location:
+      file: scripts/
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: E
+      section_title: 评测脚本集成
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  E-6:
+    title: eval_longbench.py 指标单位不一致 (L807-808)
+    description: 'eval_longbench.py 指标单位不一致 (L807-808): detail CSV 用 [0,1]，summary CSV 乘 100 变 [0,100]，下游聚合可能混淆'
+    severity: MEDIUM
+    confidence: LOW
+    verification: confirmed
+    status: fixed
+    category: configuration_error
+    module: eval_longbench.py
+    location:
+      file: eval_longbench.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: E
+      section_title: 评测脚本集成
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  E-7:
+    title: eval_longbench.py 自实现 Rouge-L 可能与官方 LongBench 不一致 (L206-219)
+    description: 'eval_longbench.py 自实现 Rouge-L 可能与官方 LongBench 不一致 (L206-219): 自实现 token-level LCS 与 THUDM 官方评测脚本可能有差异'
+    severity: MEDIUM
+    confidence: LOW
+    verification: suspected
+    status: open
+    category: configuration_error
+    module: eval_longbench.py
+    location:
+      file: eval_longbench.py
+    resolution: null
+    audit:
+      section: E
+      section_title: 评测脚本集成
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  E-8:
+    title: aggregate_results.py kv_mode 排序无 KIVI (L552, L585, L648, L1322)
+    description: 'aggregate_results.py kv_mode 排序无 KIVI (L552, L585, L648, L1322): 按字母排序而非语义排序'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: aggregate_results.py
+    location:
+      file: aggregate_results.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: E
+      section_title: 评测脚本集成
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  E-9:
+    title: eval_ruler.py 多答案评分存在死代码 (L172-174)
+    description: 'eval_ruler.py 多答案评分存在死代码 (L172-174): pass 语句无实际效果'
+    severity: LOW
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: eval_ruler.py
+    location:
+      file: eval_ruler.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: E
+      section_title: 评测脚本集成
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  F-1:
+    title: 1.5B 配置完全缺失 KIVI-style 条目
+    description: 1.5B 配置完全缺失 KIVI-style 条目
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: configuration_error
+    module: configs/
+    location:
+      file: configs/
+    suggested_fix:
+      approach: Review and fix the issue in configs/
+      files_to_change:
+      - configs/
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: f07422d
+      verified_by: reviewer
+    audit:
+      section: F
+      section_title: 实验配置矩阵一致性
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  F-2:
+    title: 7B/8B 配置完全缺失吞吐量 batch scaling 条目
+    description: 7B/8B 配置完全缺失吞吐量 batch scaling 条目
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: configuration_error
+    module: configs/
+    location:
+      file: configs/
+    suggested_fix:
+      approach: Review and fix the issue in configs/
+      files_to_change:
+      - configs/
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: f07422d
+      verified_by: reviewer
+    audit:
+      section: F
+      section_title: 实验配置矩阵一致性
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  F-3:
+    title: 7B/8B 配置缺失 INT4 长上下文运行
+    description: 7B/8B 配置缺失 INT4 长上下文运行
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: configuration_error
+    module: configs/
+    location:
+      file: configs/
+    suggested_fix:
+      approach: Review and fix the issue in configs/
+      files_to_change:
+      - configs/
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: f07422d
+      verified_by: reviewer
+    audit:
+      section: F
+      section_title: 实验配置矩阵一致性
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  F-4:
+    title: 7B/8B 长上下文仅 3 条 vs 1.5B 的 18 条
+    description: '7B/8B 长上下文仅 3 条 vs 1.5B 的 18 条: 缺失 KIVI 长上下文、INT4 长上下文、多种 INT8-ours 变体'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: configuration_error
+    module: configs/
+    location:
+      file: configs/
+    resolution: null
+    audit:
+      section: F
+      section_title: 实验配置矩阵一致性
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  F-5:
+    title: 1.5B 校准文件命名不一致 (kv_calib_kl_selected_v3_quick.json vs 7B/8B 的 kv_calib_kl_qwen25_7b_int8.json)
+    description: '1.5B 校准文件命名不一致 (kv_calib_kl_selected_v3_quick.json vs 7B/8B 的 kv_calib_kl_qwen25_7b_int8.json): 命名约定不统一'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: configuration_error
+    module: configs/
+    location:
+      file: configs/
+    resolution: null
+    audit:
+      section: F
+      section_title: 实验配置矩阵一致性
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  F-6:
+    title: 1.5B 配置头部注释缺少 kivi_style kv_mode 和 kivi_asymmetric calib_strategy
+    description: 1.5B 配置头部注释缺少 kivi_style kv_mode 和 kivi_asymmetric calib_strategy
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: configuration_error
+    module: configs/
+    location:
+      file: configs/
+    resolution: null
+    audit:
+      section: F
+      section_title: 实验配置矩阵一致性
+      round: 1
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  G-1:
+    title: 消融 A-3 decode_attn_impl 混淆因子
+    description: 消融 A-3 decode_attn_impl 混淆因子
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+    location:
+      file: configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+    suggested_fix:
+      approach: Review and fix the issue in configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+      files_to_change:
+      - configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: f07422d
+      verified_by: reviewer
+    audit:
+      section: G
+      section_title: 消融配置审查
+      round: 2
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  G-2:
+    title: 消融 A 节缺少 KIVI-style
+    description: 消融 A 节缺少 KIVI-style
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+    location:
+      file: configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+    suggested_fix:
+      approach: Review and fix the issue in configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+      files_to_change:
+      - configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: f07422d
+      verified_by: reviewer
+    audit:
+      section: G
+      section_title: 消融配置审查
+      round: 2
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  G-3:
+    title: 消融 A-2 (MSE) 使用 use_attn_temperature
+    description: '消融 A-2 (MSE) 使用 use_attn_temperature: true — MSE 校准的 inv_tau 可能不可信（见 A 节 MSE 缺陷），若 inv_tau 质量差会使 MSE 看起来更差，混淆校准方法本身的效果'
+    severity: MEDIUM
+    confidence: LOW
+    verification: suspected
+    status: open
+    category: numerical_correctness
+    module: configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+    location:
+      file: configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+    resolution: null
+    audit:
+      section: G
+      section_title: 消融配置审查
+      round: 2
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  G-4:
+    title: 消融 D 节缺少 dynamic scales 变体
+    description: '消融 D 节缺少 dynamic scales 变体 — 计划中为 "static vs adaptive vs dynamic" 三方对比，当前仅 static 和 adaptive 两方（缺 use_static_scales:
+      false 的 dynamic 变体）'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+    location:
+      file: configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+    resolution: null
+    audit:
+      section: G
+      section_title: 消融配置审查
+      round: 2
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  G-5:
+    title: 所有消融仅 seq_len=4096
+    description: 所有消融仅 seq_len=4096 — 计划中消融需 4K/8K/16K/32K 多长度点以支撑长上下文鲁棒性论证
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: code_quality
+    module: configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+    location:
+      file: configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+    resolution: null
+    audit:
+      section: G
+      section_title: 消融配置审查
+      round: 2
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  G-6:
+    title: 消融 C 节 (group_size sweep) 使用同一个 calib_file
+    description: 消融 C 节 (group_size sweep) 使用同一个 calib_file — 该 calib 文件是在 group_size=16 下校准的，在 g=32/64/128 下使用可能不够公平（但可作为"校准鲁棒性"测试）
+    severity: MEDIUM
+    confidence: LOW
+    verification: suspected
+    status: open
+    category: test_coverage
+    module: configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+    location:
+      file: configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+    resolution: null
+    audit:
+      section: G
+      section_title: 消融配置审查
+      round: 2
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  G-7:
+    title: 消融 A-1/B-1/C-1 是完全相同的 run
+    description: 消融 A-1/B-1/C-1 是完全相同的 run — 若 --skip_completed_success 正确工作则不重复跑，但配置冗余可简化
+    severity: LOW
+    confidence: LOW
+    verification: unverified
+    status: open
+    category: configuration_error
+    module: configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+    location:
+      file: configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml
+    resolution: null
+    audit:
+      section: G
+      section_title: 消融配置审查
+      round: 2
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  H-1:
+    title: generate_thesis_report.py C11 "cross-model robustness" claim 无 model_id 过滤
+    description: generate_thesis_report.py C11 "cross-model robustness" claim 无 model_id 过滤 — 聚合运行时会将所有模型结果混合评估，需确认聚合逻辑是否按模型分组验证
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: open
+    category: research_semantics
+    module: generate_thesis_report.py
+    location:
+      file: generate_thesis_report.py
+    resolution: null
+    audit:
+      section: H
+      section_title: export/generate/configs 审查
+      round: 2
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  H-2:
+    title: 所有 3 配置文件的 KIVI 吞吐量仅包含 INT8（无 INT4 KIVI 吞吐量）— 可能遗漏 KIVI INT4 batch scaling 数据
+    description: 所有 3 配置文件的 KIVI 吞吐量仅包含 INT8（无 INT4 KIVI 吞吐量）— 可能遗漏 KIVI INT4 batch scaling 数据
+    severity: LOW
+    confidence: LOW
+    verification: suspected
+    status: open
+    category: configuration_error
+    module: scripts/
+    location:
+      file: scripts/
+    resolution: null
+    audit:
+      section: H
+      section_title: export/generate/configs 审查
+      round: 2
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  J-1:
+    title: calibrate_behavior.py --calib_out None fallback
+    description: calibrate_behavior.py --calib_out None fallback
+    severity: CRITICAL
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: calibrate_behavior.py
+    location:
+      file: calibrate_behavior.py
+    suggested_fix:
+      approach: Review and fix the issue in calibrate_behavior.py
+      files_to_change:
+      - calibrate_behavior.py
+      estimated_effort: medium
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      verified_by: reviewer
+    audit:
+      section: J
+      section_title: 修复审查与新发现
+      round: 4
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  J-2:
+    title: calibrate_behavior.py MSE clamping 语义偏差：MSE 路径对 p_ref/p_quant 执行 clamp(min=eps) 后再计算差的平方。对 MSE 而言 clamp 不防 NaN（MSE
+      不含...
+    description: calibrate_behavior.py MSE clamping 语义偏差：MSE 路径对 p_ref/p_quant 执行 clamp(min=eps) 后再计算差的平方。对 MSE 而言 clamp 不防
+      NaN（MSE 不含 log），反而将原始值为 0 的概率人为提升为 eps，改变了真实误差度量。不会导致崩溃但使 MSE 与 KL 的 clamping 语义不对称
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: calibrate_behavior.py
+    location:
+      file: calibrate_behavior.py
+    resolution: null
+    audit:
+      section: J
+      section_title: 修复审查与新发现
+      round: 4
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  J-3:
+    title: eval_longbench.py logger 定义位置：logger = logging.getLogger(__name__) 在 import 块中间（介于 traceback 和 from collections
+      impor...
+    description: eval_longbench.py logger 定义位置：logger = logging.getLogger(__name__) 在 import 块中间（介于 traceback 和 from collections
+      import defaultdict 之间），不符合 PEP 8 import 分组规范（标准库 → 第三方 → 本地，中间不穿插代码）；功能无影响
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: documentation
+    module: eval_longbench.py
+    location:
+      file: eval_longbench.py
+    resolution: null
+    audit:
+      section: J
+      section_title: 修复审查与新发现
+      round: 4
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  I-1:
+    title: ablation_dimensions.scale_strategy 仅列 [static, adaptive]（L77）— 计划中为 "static vs adaptive vs dynamic" 三方，与消融配置 D
+      节同一缺失
+    description: ablation_dimensions.scale_strategy 仅列 [static, adaptive]（L77）— 计划中为 "static vs adaptive vs dynamic" 三方，与消融配置
+      D 节同一缺失
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: numerical_correctness
+    module: configs/snapshots/final_emnlp2026_v1.yaml
+    location:
+      file: configs/snapshots/final_emnlp2026_v1.yaml
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#4'
+      verified_by: reviewer
+    audit:
+      section: I
+      section_title: final_emnlp2026_v1.yaml 审查
+      round: 3
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  I-2:
+    title: benchmarks 仅列 4 个质量评测（L67-71）— 未包含 latency/memory/throughput 系统性能 benchmark，虽然这些是独立维度但在 meta-config 中应有提及
+    description: benchmarks 仅列 4 个质量评测（L67-71）— 未包含 latency/memory/throughput 系统性能 benchmark，虽然这些是独立维度但在 meta-config 中应有提及
+    severity: LOW
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: configuration_error
+    module: configs/snapshots/final_emnlp2026_v1.yaml
+    location:
+      file: configs/snapshots/final_emnlp2026_v1.yaml
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#4'
+      verified_by: reviewer
+    audit:
+      section: I
+      section_title: final_emnlp2026_v1.yaml 审查
+      round: 3
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  I-3:
+    title: models[0].calibration_artifacts 列出了尚不存在的 MSE 产物（int8_mse/int4_mse，L38-39）— MSE 校准实现有已知 bug，这些产物暂不可用
+    description: models[0].calibration_artifacts 列出了尚不存在的 MSE 产物（int8_mse/int4_mse，L38-39）— MSE 校准实现有已知 bug，这些产物暂不可用
+    severity: LOW
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: numerical_correctness
+    module: configs/snapshots/final_emnlp2026_v1.yaml
+    location:
+      file: configs/snapshots/final_emnlp2026_v1.yaml
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#4'
+      verified_by: reviewer
+    audit:
+      section: I
+      section_title: final_emnlp2026_v1.yaml 审查
+      round: 3
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  K-1:
+    title: KIVI 模式静默忽略参数 (L412-486, L563)
+    description: 'KIVI 模式静默忽略参数 (L412-486, L563): 若调用 generate(..., kv_mode="kivi_style", use_attn_temperature=True, calib_file="...")
+      不会警告，参数被静默丢弃。应对不兼容参数组合发出 warning'
+    severity: HIGH
+    confidence: LOW
+    verification: unverified
+    status: open
+    category: interface_compatibility
+    module: src/engine/generate_loop.py
+    location:
+      file: src/engine/generate_loop.py
+    suggested_fix:
+      approach: Review and fix the issue in src/engine/generate_loop.py
+      files_to_change:
+      - src/engine/generate_loop.py
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: K
+      section_title: generate_loop.py KIVI 路径
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  K-2:
+    title: KIVI decode 路径 dequant→requant 精度累积（已知 D2 但补充细节）
+    description: 'KIVI decode 路径 dequant→requant 精度累积（已知 D2 但补充细节）: V cache 每步 per-token scale 重算 + K cache 用 prefill-time
+      scale re-quant，双重量化≠量化一次。特别是 V 的 scale 分布在 decode 阶段与 prefill 阶段不同'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: src/engine/generate_loop.py
+    location:
+      file: src/engine/generate_loop.py
+    resolution: null
+    audit:
+      section: K
+      section_title: generate_loop.py KIVI 路径
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  K-3:
+    title: Batch 约束重复校验 (L344-361)
+    description: 'Batch 约束重复校验 (L344-361): 两段代码检查同一条件（batch>1 且 attention_mask 非全 1），KIVI 走 Block 1 但 Block 2 的错误信息暗示仅 fused
+      模式有此约束，可能误导开发者'
+    severity: MEDIUM
+    confidence: LOW
+    verification: suspected
+    status: open
+    category: code_quality
+    module: src/engine/generate_loop.py
+    location:
+      file: src/engine/generate_loop.py
+    resolution: null
+    audit:
+      section: K
+      section_title: generate_loop.py KIVI 路径
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  K-4:
+    title: KIVI docstring 缺失 (L288-291)
+    description: 'KIVI docstring 缺失 (L288-291): 函数 docstring 未说明 kivi_style 的约束、行为、参数限制'
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: interface_compatibility
+    module: src/engine/generate_loop.py
+    location:
+      file: src/engine/generate_loop.py
+    resolution: null
+    audit:
+      section: K
+      section_title: generate_loop.py KIVI 路径
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  L-1:
+    title: eval_ppl.py build_kv_cache() 缺失 kivi_style 分支
+    description: eval_ppl.py build_kv_cache() 缺失 kivi_style 分支
+    severity: CRITICAL
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: configuration_error
+    module: eval_ppl.py
+    location:
+      file: eval_ppl.py
+    suggested_fix:
+      approach: Review and fix the issue in eval_ppl.py
+      files_to_change:
+      - eval_ppl.py
+      estimated_effort: medium
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 03ed4a0
+      verified_by: reviewer
+    audit:
+      section: L
+      section_title: run_experiments.py 审查
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  L-2:
+    title: skip_completed_success 状态不一致 (L1134 vs L1147)
+    description: 'skip_completed_success 状态不一致 (L1134 vs L1147): manifest 记录 "success" 但 execution_rows 记录 "skipped"，追踪混淆'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: configuration_error
+    module: scripts/run_experiments.py
+    location:
+      file: scripts/run_experiments.py
+    resolution: null
+    audit:
+      section: L
+      section_title: run_experiments.py 审查
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  L-3:
+    title: subprocess.run 无异常捕获 (L1174-1179)
+    description: 'subprocess.run 无异常捕获 (L1174-1179): FileNotFoundError/OSError 会导致整个 run_experiments 崩溃而不清理 manifest'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: code_quality
+    module: scripts/run_experiments.py
+    location:
+      file: scripts/run_experiments.py
+    resolution: null
+    audit:
+      section: L
+      section_title: run_experiments.py 审查
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  L-4:
+    title: kv_mode 无效值静默跳过 (L850-862)
+    description: 'kv_mode 无效值静默跳过 (L850-862): 无全局汇总报告哪些 run 因 kv_mode 无效被跳过'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: code_quality
+    module: scripts/run_experiments.py
+    location:
+      file: scripts/run_experiments.py
+    resolution: null
+    audit:
+      section: L
+      section_title: run_experiments.py 审查
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  L-5:
+    title: YAML 配置无 matrix 非空校验 (L725-794)
+    description: 'YAML 配置无 matrix 非空校验 (L725-794): 空 matrix 静默运行零任务但报告"成功"'
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: boundary_case
+    module: scripts/run_experiments.py
+    location:
+      file: scripts/run_experiments.py
+    resolution: null
+    audit:
+      section: L
+      section_title: run_experiments.py 审查
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  L-6:
+    title: append 模式 manifest 元数据被覆盖 (L252-265)
+    description: 'append 模式 manifest 元数据被覆盖 (L252-265): 第二次 append 的 run_tag/seed 覆盖第一次，无法追溯历史参数差异'
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: interface_compatibility
+    module: scripts/run_experiments.py
+    location:
+      file: scripts/run_experiments.py
+    resolution: null
+    audit:
+      section: L
+      section_title: run_experiments.py 审查
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  L-7:
+    title: append_history 未记录 kv_mode/quant_bits 变化 (L272-278)
+    description: 'append_history 未记录 kv_mode/quant_bits 变化 (L272-278): 仅记录 tasks 和 config path，参数变化不可追溯'
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: interface_compatibility
+    module: scripts/run_experiments.py
+    location:
+      file: scripts/run_experiments.py
+    resolution: null
+    audit:
+      section: L
+      section_title: run_experiments.py 审查
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  M-1:
+    title: kivi_style 完全缺失显著性配对
+    description: kivi_style 完全缺失显著性配对
+    severity: CRITICAL
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: configuration_error
+    module: scripts/aggregate_results.py
+    location:
+      file: scripts/aggregate_results.py
+    suggested_fix:
+      approach: Review and fix the issue in scripts/aggregate_results.py
+      files_to_change:
+      - scripts/aggregate_results.py
+      estimated_effort: medium
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 03ed4a0
+      verified_by: reviewer
+    audit:
+      section: M
+      section_title: aggregate_results.py 审查
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  M-2:
+    title: longbench_official_macro 未被聚合
+    description: longbench_official_macro 未被聚合
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: scripts/aggregate_results.py
+    location:
+      file: scripts/aggregate_results.py
+    suggested_fix:
+      approach: Review and fix the issue in scripts/aggregate_results.py
+      files_to_change:
+      - scripts/aggregate_results.py
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 03ed4a0
+      verified_by: reviewer
+    audit:
+      section: M
+      section_title: aggregate_results.py 审查
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  M-3:
+    title: 显著性分析缺失 model_id/hardware 分组
+    description: 显著性分析缺失 model_id/hardware 分组
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: configuration_error
+    module: scripts/aggregate_results.py
+    location:
+      file: scripts/aggregate_results.py
+    suggested_fix:
+      approach: Review and fix the issue in scripts/aggregate_results.py
+      files_to_change:
+      - scripts/aggregate_results.py
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 03ed4a0
+      verified_by: reviewer
+    audit:
+      section: M
+      section_title: aggregate_results.py 审查
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  M-4:
+    title: RULER 深度分析缺失 model_id
+    description: RULER 深度分析缺失 model_id
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: configuration_error
+    module: scripts/aggregate_results.py
+    location:
+      file: scripts/aggregate_results.py
+    suggested_fix:
+      approach: Review and fix the issue in scripts/aggregate_results.py
+      files_to_change:
+      - scripts/aggregate_results.py
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      commit: 03ed4a0
+      verified_by: reviewer
+    audit:
+      section: M
+      section_title: aggregate_results.py 审查
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  M-5:
+    title: kv_mode 使用字母序排序而非语义顺序 (L552, L585, L648, L1322)
+    description: 'kv_mode 使用字母序排序而非语义顺序 (L552, L585, L648, L1322): 表格中 int4_baseline 出现在 int8_baseline 之前，不符合论文叙述（先 INT8 后
+      INT4）'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: research_semantics
+    module: scripts/aggregate_results.py
+    location:
+      file: scripts/aggregate_results.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: M
+      section_title: aggregate_results.py 审查
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - paper
+  M-6:
+    title: 显著性配对数据可能被 aggfunc="mean" 静默平均 (L998)
+    description: '显著性配对数据可能被 aggfunc="mean" 静默平均 (L998): pivot_table 对多 replica 自动平均，如果同 seed 有重复数据，n_pairs 会被虚高估计'
+    severity: MEDIUM
+    confidence: LOW
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: scripts/aggregate_results.py
+    location:
+      file: scripts/aggregate_results.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: M
+      section_title: aggregate_results.py 审查
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  M-7:
+    title: LongBench 图 y 轴标签与新口径不一致
+    description: 'LongBench 图 y 轴标签与新口径不一致 (scripts/aggregate_results.py): macro F1 命名与 official-metric macro 不一致'
+    severity: LOW
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: configuration_error
+    module: (`scripts/aggregate_results.py
+    location:
+      file: (`scripts/aggregate_results.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: M
+      section_title: aggregate_results.py 审查
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  M-8:
+    title: Bootstrap CI 单样本情况返回 (value, value) 无警告 (L1059-1060)
+    description: 'Bootstrap CI 单样本情况返回 (value, value) 无警告 (L1059-1060): 无法区分单样本 CI 与真正精确的无变异情况'
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: code_quality
+    module: scripts/aggregate_results.py
+    location:
+      file: scripts/aggregate_results.py
+    resolution: null
+    audit:
+      section: M
+      section_title: aggregate_results.py 审查
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  M-9:
+    title: 精确枚举阈值 n=16 硬编码 (L1092-1107)
+    description: '精确枚举阈值 n=16 硬编码 (L1092-1107): 从精确枚举到 MC 采样的切换点不可调'
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: code_quality
+    module: scripts/aggregate_results.py
+    location:
+      file: scripts/aggregate_results.py
+    resolution: null
+    audit:
+      section: M
+      section_title: aggregate_results.py 审查
+      round: 5
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  O-1:
+    title: MK-NIAH hits_exact 计数器死代码 (L172-174)
+    description: 'MK-NIAH hits_exact 计数器死代码 (L172-174): pass 语句不执行 hits_exact += 1，hits_exact 变量初始化后从未递增。当前 exact_match 改由
+      all_present 逻辑补位（L177-180），但设计意图不清——若要逐个键检查 exact match 则逻辑缺失'
+    severity: CRITICAL
+    confidence: LOW
+    verification: confirmed
+    status: fixed
+    category: configuration_error
+    module: scripts/eval_ruler.py
+    location:
+      file: scripts/eval_ruler.py
+    suggested_fix:
+      approach: Review and fix the issue in scripts/eval_ruler.py
+      files_to_change:
+      - scripts/eval_ruler.py
+      estimated_effort: medium
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: O
+      section_title: eval_ruler.py 评分逻辑
+      round: 7
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  O-2:
+    title: VT 多链评分仅评价第一条链 (L216, L442)
+    description: 'VT 多链评分仅评价第一条链 (L216, L442): 多链 VT 时 expected_answers 含 N 个值，但 _score_case() 调用 _score_single_answer(prediction,
+      case.expected_answers[0]) 只取第一个值。若 ruler_vt_num_chains > 1（默认=1 暂安全），其余链的答案被完全忽略'
+    severity: CRITICAL
+    confidence: LOW
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: scripts/eval_ruler.py
+    location:
+      file: scripts/eval_ruler.py
+    suggested_fix:
+      approach: Review and fix the issue in scripts/eval_ruler.py
+      files_to_change:
+      - scripts/eval_ruler.py
+      estimated_effort: medium
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: O
+      section_title: eval_ruler.py 评分逻辑
+      round: 7
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  O-3:
+    title: 上下文截断从右侧保留破坏 RULER 语义 (L546-554)
+    description: '上下文截断从右侧保留破坏 RULER 语义 (L546-554): _truncate_prompt_ids() 在 prompt 超 context_len 时执行 ids = ids[-max_tokens:]（保留末尾
+      question，丢弃前面的 context/haystack）。RULER 的核心是在长上下文中检索，截断 context 使 benchmark 退化为短上下文问题。应从左侧截断或直接报错拒绝'
+    severity: CRITICAL
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: interface_compatibility
+    module: scripts/eval_ruler.py
+    location:
+      file: scripts/eval_ruler.py
+    suggested_fix:
+      approach: 应从左侧截断或直接报错拒绝 — ✅ 已修复（PR-2，改为 prefix+query 尾段保留）
+      files_to_change:
+      - scripts/eval_ruler.py
+      estimated_effort: medium
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: O
+      section_title: eval_ruler.py 评分逻辑
+      round: 7
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  O-4:
+    title: kivi_style quant_bits 推断为 16 (L985)
+    description: 'kivi_style quant_bits 推断为 16 (L985): "int4" in "kivi_style" 和 "int8" in "kivi_style" 均 False → fallback
+      到 16。CSV 中 quant_bits 字段错误（与 E5 同类问题，此处为 eval_ruler 实例）'
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: scripts/eval_ruler.py
+    location:
+      file: scripts/eval_ruler.py
+    suggested_fix:
+      approach: Review and fix the issue in scripts/eval_ruler.py
+      files_to_change:
+      - scripts/eval_ruler.py
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: O
+      section_title: eval_ruler.py 评分逻辑
+      round: 7
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - legacy_id:E5
+    - kivi
+  O-5:
+    title: CWE pred_words 未过滤空字符串 (L193)
+    description: 'CWE pred_words 未过滤空字符串 (L193): truth_words 通过 if _normalize_text(a) 过滤空串，但 pred_words 未做同样过滤。若模型输出仅含标点/空格，pred_words
+      可能含空字符串导致意外 set 匹配'
+    severity: MEDIUM
+    confidence: LOW
+    verification: confirmed
+    status: fixed
+    category: boundary_case
+    module: scripts/eval_ruler.py
+    location:
+      file: scripts/eval_ruler.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: O
+      section_title: eval_ruler.py 评分逻辑
+      round: 7
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  O-6:
+    title: _token_f1() 分母过度保护 (L140-141)
+    description: '_token_f1() 分母过度保护 (L140-141): max(1, len(pred_tokens)) 在 common=0 时冗余（0/1=0 已安全），代码意图不清'
+    severity: LOW
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: scripts/eval_ruler.py
+    location:
+      file: scripts/eval_ruler.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: O
+      section_title: eval_ruler.py 评分逻辑
+      round: 7
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  P-1:
+    title: B1 修复验证不完整
+    description: 'B1 修复验证不完整 (test_kivi_cache.py L233-242): test_clear() 仅检查 get_seq_len()==0，未验证 _k_scale_initialized 状态或
+      clear→re-append 时 K-scale 是否重新计算（B1 核心场景）'
+    severity: HIGH
+    confidence: HIGH
+    verification: confirmed
+    status: open
+    category: numerical_correctness
+    module: test_kivi_cache.py
+    location:
+      file: test_kivi_cache.py
+      lines:
+      - 233
+      - 242
+    suggested_fix:
+      approach: Review and fix the issue in test_kivi_cache.py
+      files_to_change:
+      - test_kivi_cache.py
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: P
+      section_title: 测试覆盖质量
+      round: 7
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  P-2:
+    title: K decode 量化误差无测试
+    description: 'K decode 量化误差无测试: prefill 阶段计算 K per-channel scale 后，decode 新 token 用相同 scale 量化的误差从未被测试。这是 KIVI 区别于对称量化的核心特性'
+    severity: HIGH
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: tests/
+    location:
+      file: tests/
+    suggested_fix:
+      approach: Review and fix the issue in tests/
+      files_to_change:
+      - tests/
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: P
+      section_title: 测试覆盖质量
+      round: 7
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  P-3:
+    title: 缺少 float16 输入测试
+    description: '缺少 float16 输入测试: 所有测试用 float32，但生产环境用 float16。_make_cache() 默认 dtype=torch.float32，而 KIVIStyleKVCache 默认
+      dtype=torch.float16'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: tests/
+    location:
+      file: tests/
+    resolution: null
+    audit:
+      section: P
+      section_title: 测试覆盖质量
+      round: 7
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  P-4:
+    title: 缺少 per-channel/per-token 轴语义验证
+    description: '缺少 per-channel/per-token 轴语义验证 (test_asymmetric_quant.py): 测试验证 shape 正确但不验证"同一 channel 的不同 token 共享同一 scale"的核心语义'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: open
+    category: numerical_correctness
+    module: (test_asymmetric_quant.py
+    location:
+      file: (test_asymmetric_quant.py
+    resolution: null
+    audit:
+      section: P
+      section_title: 测试覆盖质量
+      round: 7
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  P-5:
+    title: C1/C2 修复缺少边界值测试
+    description: 'C1/C2 修复缺少边界值测试: 无 percentile=50.0（应拒绝）、percentile=50.01（应通过）、percentile=100.1（应拒绝）的显式测试'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: boundary_case
+    module: tests/
+    location:
+      file: tests/
+    resolution: null
+    audit:
+      section: P
+      section_title: 测试覆盖质量
+      round: 7
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  P-6:
+    title: 统计测试缺少混合符号 sign-flip 场景
+    description: '统计测试缺少混合符号 sign-flip 场景 (test_aggregate_results_stats.py): 仅测试全正差异（p=2/16=0.125），缺少正负混合的 p-value 计算验证'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: open
+    category: test_coverage
+    module: (test_aggregate_results_stats.py
+    location:
+      file: (test_aggregate_results_stats.py
+    resolution: null
+    audit:
+      section: P
+      section_title: 测试覆盖质量
+      round: 7
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  P-7:
+    title: 缺少单 token、batch=0、head_dim=1 等极端边界测试
+    description: 缺少单 token、batch=0、head_dim=1 等极端边界测试
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: boundary_case
+    module: tests/
+    location:
+      file: tests/
+    resolution: null
+    audit:
+      section: P
+      section_title: 测试覆盖质量
+      round: 7
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  P-8:
+    title: 缺少多轮 clear→append 循环测试（生产中常见的 batch 间重用 cache 场景）
+    description: 缺少多轮 clear→append 循环测试（生产中常见的 batch 间重用 cache 场景）
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: test_coverage
+    module: tests/
+    location:
+      file: tests/
+    resolution: null
+    audit:
+      section: P
+      section_title: 测试覆盖质量
+      round: 7
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  Q-1:
+    title: 分类准确率子串匹配过于宽松 (L252)
+    description: '分类准确率子串匹配过于宽松 (L252): _classification_accuracy() 使用 ans_norm in pred_norm 子串匹配。若预测 "category_a_extended"
+      包含答案 "category_a" → 错误返回 1.0。影响 trec、lsht、passage_count、passage_retrieval 等分类任务评分偏高。应仅用精确匹配 pred_norm == ans_norm'
+    severity: HIGH
+    confidence: LOW
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: scripts/eval_longbench.py
+    location:
+      file: scripts/eval_longbench.py
+    suggested_fix:
+      approach: 应仅用精确匹配 `pred_norm == ans_norm` — ✅ 已修复（PR-2）
+      files_to_change:
+      - scripts/eval_longbench.py
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: Q
+      section_title: eval_longbench.py 评分指标
+      round: 8
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  Q-2:
+    title: 指标尺度 [0,100] vs objective.md 声称 [0,1] 不一致 (L812, L867-868)
+    description: '指标尺度 [0,100] vs objective.md 声称 [0,1] 不一致 (L812, L867-868): per-task 聚合乘以 100（* 100.0），macro-average 在 [0,100]
+      尺度。但 objective.md L159 声明 longbench_score 归一化到 [0,1]。论文表格会显示 85.23 而非 0.8523，与声明矛盾'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: configuration_error
+    module: scripts/eval_longbench.py
+    location:
+      file: scripts/eval_longbench.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: Q
+      section_title: eval_longbench.py 评分指标
+      round: 8
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - paper
+  Q-3:
+    title: HF 字段提取 fallback 顺序含 "input" 作为 context 候选 (L387)
+    description: 'HF 字段提取 fallback 顺序含 "input" 作为 context 候选 (L387): context_keys 列表含 "input"，若数据集有 {"input": "question",
+      "other_field": "document"}，会将 question 误作 context。主路径（L377-380）处理标准 LongBench 格式正确，但 fallback 路径有风险'
+    severity: MEDIUM
+    confidence: LOW
+    verification: confirmed
+    status: fixed
+    category: documentation
+    module: scripts/eval_longbench.py
+    location:
+      file: scripts/eval_longbench.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: Q
+      section_title: eval_longbench.py 评分指标
+      round: 8
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  Q-4:
+    title: task_off_name 取 vals[0] 假设同一任务所有样本指标名一致 (L811)
+    description: 'task_off_name 取 vals[0] 假设同一任务所有样本指标名一致 (L811): 无 assert 验证一致性'
+    severity: LOW
+    confidence: LOW
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: scripts/eval_longbench.py
+    location:
+      file: scripts/eval_longbench.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: Q
+      section_title: eval_longbench.py 评分指标
+      round: 8
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  R-1:
+    title: kivi_style quant_bits CSV 记录 vs 运行时不一致 (L304/341 vs L369)
+    description: 'kivi_style quant_bits CSV 记录 vs 运行时不一致 (L304/341 vs L369): generate_from_ids() 传 quant_bits=None，运行时 generate_loop.py
+      默认用 8。但 CSV L369 的推断逻辑 "int4" in "kivi_style" 为 False → fallback 到 16。论文 profiling 结果的 quant_bits 字段为 16，而实际量化用 8（与
+      E5 同系列问题）'
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: numerical_correctness
+    module: generate_loop.py
+    location:
+      file: generate_loop.py
+    suggested_fix:
+      approach: Review and fix the issue in generate_loop.py
+      files_to_change:
+      - generate_loop.py
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: R
+      section_title: profile_memory.py 内存测量
+      round: 8
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - legacy_id:E5
+    - kivi
+    - paper
+  R-2:
+    title: pynvml 初始化异常未捕获 (L104-105)
+    description: 'pynvml 初始化异常未捕获 (L104-105): nvmlInit() 和 nvmlDeviceGetHandleByIndex() 可能因驱动/权限问题抛异常，导致 MemoryMonitor.__init__()
+      崩溃进而 main() 崩溃。缺少 try-except'
+    severity: MEDIUM
+    confidence: LOW
+    verification: confirmed
+    status: fixed
+    category: performance
+    module: scripts/profile_memory.py
+    location:
+      file: scripts/profile_memory.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: R
+      section_title: profile_memory.py 内存测量
+      round: 8
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  R-3:
+    title: MemoryMonitor.stop() 线程健壮性 (L119-121)
+    description: 'MemoryMonitor.stop() 线程健壮性 (L119-121): 若 pynvml 不可用导致 run() 提前返回，.join() 可能异常。应在 join() 前检查 self.is_alive()'
+    severity: MEDIUM
+    confidence: LOW
+    verification: confirmed
+    status: fixed
+    category: performance
+    module: scripts/profile_memory.py
+    location:
+      file: scripts/profile_memory.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: R
+      section_title: profile_memory.py 内存测量
+      round: 8
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  R-4:
+    title: NVML 回退逻辑隐性掩盖不可用 (L381)
+    description: 'NVML 回退逻辑隐性掩盖不可用 (L381): nvml_peak if nvml_peak > 0 else torch_peak — 当 pynvml 不可用时 nvml_peak=0，无声回退到 torch_peak。跨运行对比时内存数据来源可能不一致'
+    severity: MEDIUM
+    confidence: LOW
+    verification: confirmed
+    status: fixed
+    category: configuration_error
+    module: scripts/profile_memory.py
+    location:
+      file: scripts/profile_memory.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#2'
+      verified_by: reviewer
+    audit:
+      section: R
+      section_title: profile_memory.py 内存测量
+      round: 8
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  R-5:
+    title: output 属性可靠性 (L348-352)
+    description: 'output 属性可靠性 (L348-352): getattr(out, "kv_cache_mem_mb", 0.0) 若 generate 异常提前返回，CSV 无声记录 0，无法区分"无 KV cache"
+      vs "测量失败"'
+    severity: LOW
+    confidence: LOW
+    verification: unverified
+    status: open
+    category: code_quality
+    module: scripts/profile_memory.py
+    location:
+      file: scripts/profile_memory.py
+    resolution: null
+    audit:
+      section: R
+      section_title: profile_memory.py 内存测量
+      round: 8
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  S-1:
+    title: kivi_style 的 calib_strategy 默认值继承陷阱 (L880-881, L1015-1016)
+    description: 'kivi_style 的 calib_strategy 默认值继承陷阱 (L880-881, L1015-1016): 若 YAML 中 kivi_style 条目遗漏 calib_strategy，会从 quant_defaults
+      继承 kl_attn（与 kivi_asymmetric 不兼容），且 --calib_strategy kl_attn 被静默传递给子脚本。当前 ablation config 正确显式指定了 kivi_asymmetric，但缺少验证逻辑防止未来误配置'
+    severity: HIGH
+    confidence: LOW
+    verification: confirmed
+    status: open
+    category: interface_compatibility
+    module: scripts/run_experiments.py
+    location:
+      file: scripts/run_experiments.py
+    suggested_fix:
+      approach: Review and fix the issue in scripts/run_experiments.py
+      files_to_change:
+      - scripts/run_experiments.py
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: S
+      section_title: run_experiments.py 实验运行器
+      round: 9
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  S-2:
+    title: kivi_style decode_attn_impl 无强制验证 (L882-884, L1033-1034)
+    description: 'kivi_style decode_attn_impl 无强制验证 (L882-884, L1033-1034): kivi_style 必须用 torch_ref（KIVIStyleKVCache 硬编码），但运行器允许传入
+      triton_fused 而不报错。若 YAML 配置错误，参数被静默忽略，导致调试困惑'
+    severity: MEDIUM
+    confidence: LOW
+    verification: confirmed
+    status: open
+    category: interface_compatibility
+    module: scripts/run_experiments.py
+    location:
+      file: scripts/run_experiments.py
+    resolution: null
+    audit:
+      section: S
+      section_title: run_experiments.py 实验运行器
+      round: 9
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  S-3:
+    title: 无条件传递 quant 参数给所有 kv_mode (L987-998)
+    description: '无条件传递 quant 参数给所有 kv_mode (L987-998): group_size、clip_percentile 等参数对 fp16 和 kivi_style 无效，但始终加入命令行。污染日志、增加调试难度'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: interface_compatibility
+    module: scripts/run_experiments.py
+    location:
+      file: scripts/run_experiments.py
+    resolution: null
+    audit:
+      section: S
+      section_title: run_experiments.py 实验运行器
+      round: 9
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  S-4:
+    title: skip 时重复标记成功 (L1130-1138)
+    description: 'skip 时重复标记成功 (L1130-1138): 已成功的 task 被 skip 时再次写入 "success" 状态和新 history 记录，导致 manifest 膨胀'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: code_quality
+    module: scripts/run_experiments.py
+    location:
+      file: scripts/run_experiments.py
+    resolution: null
+    audit:
+      section: S
+      section_title: run_experiments.py 实验运行器
+      round: 9
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  S-5:
+    title: manifest history 仅保留最近 20 条 (L334)
+    description: 'manifest history 仅保留最近 20 条 (L334): 超过 21 次重试时丢失早期记录。罕见场景但可能影响审计'
+    severity: LOW
+    confidence: LOW
+    verification: suspected
+    status: open
+    category: code_quality
+    module: scripts/run_experiments.py
+    location:
+      file: scripts/run_experiments.py
+    resolution: null
+    audit:
+      section: S
+      section_title: run_experiments.py 实验运行器
+      round: 9
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  T-1:
+    title: OOM 分类被 elif 链短路 (L94-109)
+    description: 'OOM 分类被 elif 链短路 (L94-109): 当 has_csv=True + manifest_failure="oom" 时，L100 的 manifest_status in {"", "failed",
+      ...} 先匹配 → 错误返回 "mixed_csv_non_success" 而非 "oom"。更严重：若 has_success_history=True（history 中有旧的 success 记录），L94 匹配 → 返回
+      "success"。OOM 运行被误报为完成。L102 OOM 检测从不被触达'
+    severity: CRITICAL
+    confidence: HIGH
+    verification: unverified
+    status: open
+    category: code_quality
+    module: scripts/check_run_completeness.py
+    location:
+      file: scripts/check_run_completeness.py
+    suggested_fix:
+      approach: Review and fix the issue in scripts/check_run_completeness.py
+      files_to_change:
+      - scripts/check_run_completeness.py
+      estimated_effort: medium
+    resolution: null
+    audit:
+      section: T
+      section_title: check_run_completeness.py
+      round: 9
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  T-2:
+    title: manifest 无 failure_type 字段 (L85)
+    description: 'manifest 无 failure_type 字段 (L85): task_info.get("failure_type", "") 对当前 manifest schema 始终返回空串。OOM 检测完全依赖日志文件解析
+      _is_oom_from_log()，若日志被截断或不含 "CUDA out of memory" 字符串则检测失败'
+    severity: HIGH
+    confidence: LOW
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: scripts/check_run_completeness.py
+    location:
+      file: scripts/check_run_completeness.py
+    suggested_fix:
+      approach: Review and fix the issue in scripts/check_run_completeness.py
+      files_to_change:
+      - scripts/check_run_completeness.py
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: T
+      section_title: check_run_completeness.py
+      round: 9
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  T-3:
+    title: 不验证 kivi_style 运行完整性
+    description: '不验证 kivi_style 运行完整性: 当 kivi_style 被添加到配置矩阵后，completeness checker 的 --required_run_names 和 --stress_run_names
+      参数需手动更新。若遗漏，kivi_style 运行的缺失/OOM 不会被报告'
+    severity: HIGH
+    confidence: LOW
+    verification: confirmed
+    status: open
+    category: interface_compatibility
+    module: scripts/check_run_completeness.py
+    location:
+      file: scripts/check_run_completeness.py
+    suggested_fix:
+      approach: Review and fix the issue in scripts/check_run_completeness.py
+      files_to_change:
+      - scripts/check_run_completeness.py
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: T
+      section_title: check_run_completeness.py
+      round: 9
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  T-4:
+    title: 不验证 CSV 内容完整性 (L80)
+    description: '不验证 CSV 内容完整性 (L80): 仅检查 CSV 文件存在（glob 模式匹配），不验证行数、schema、数据正确性。残留的空/损坏 CSV 被视为有效'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: open
+    category: boundary_case
+    module: scripts/check_run_completeness.py
+    location:
+      file: scripts/check_run_completeness.py
+    resolution: null
+    audit:
+      section: T
+      section_title: check_run_completeness.py
+      round: 9
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  T-5:
+    title: LongBench/RULER 任务级完整性无验证 (L16-23, L146-148)
+    description: 'LongBench/RULER 任务级完整性无验证 (L16-23, L146-148): 仅检查 CSV 文件是否存在，不验证 7 任务/4 子任务是否全部完成。部分任务缺失不会被捕获'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: open
+    category: configuration_error
+    module: scripts/check_run_completeness.py
+    location:
+      file: scripts/check_run_completeness.py
+    resolution: null
+    audit:
+      section: T
+      section_title: check_run_completeness.py
+      round: 9
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  U-1:
+    title: kivi_style_cache.py V scale/zp 缓冲区 dtype 隐性转换 (L140-149, L240-241)
+    description: 'kivi_style_cache.py V scale/zp 缓冲区 dtype 隐性转换 (L140-149, L240-241): 缓冲区以 self.dtype（默认 float16）预分配，但 quantize_asymmetric_per_token()
+      返回与输入同 dtype 的 scale。若输入为 float32，scale 被静默截断为 float16。当前模型均用 float16 故无影响，但 float32 推理是隐患'
+    severity: MEDIUM
+    confidence: LOW
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: kivi_style_cache.py
+    location:
+      file: kivi_style_cache.py
+    resolution: null
+    audit:
+      section: U
+      section_title: generate_loop + patch_model KIVI
+      round: 10
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  U-2:
+    title: patch_model.py kv_heads 推断失败静默降级 (L473-477)
+    description: 'patch_model.py kv_heads 推断失败静默降级 (L473-477): 若 num_key_value_heads 属性缺失且 _infer_heads_from_proj() 也失败，L477
+      将 kv_heads 设为 q_heads（静默将 GQA 降级为 MHA）。目标模型（Qwen2/LLaMA3.1）均有此属性，但无防御性断言'
+    severity: MEDIUM
+    confidence: LOW
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: patch_model.py
+    location:
+      file: patch_model.py
+    resolution: null
+    audit:
+      section: U
+      section_title: generate_loop + patch_model KIVI
+      round: 10
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  U-3:
+    title: patch_model.py KIVI 缓存若被错误路由到 fused forward (L556-567)
+    description: 'patch_model.py KIVI 缓存若被错误路由到 fused forward (L556-567): KIVIStyleKVCache 无 get_int8_tensors() 方法，会触发 L567
+      RuntimeError。当前架构设计防止了此路径，但若代码重构改变了路由逻辑，缺少早期守卫'
+    severity: MEDIUM
+    confidence: LOW
+    verification: unverified
+    status: open
+    category: code_quality
+    module: patch_model.py
+    location:
+      file: patch_model.py
+    resolution: null
+    audit:
+      section: U
+      section_title: generate_loop + patch_model KIVI
+      round: 10
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  U-4:
+    title: 'generate_loop.py kivi_style 接受但静默忽略 calib_file/use_attn_temperature/adaptive_static_scales 参数 (L412-485, L563-566):
+      已...'
+    description: 'generate_loop.py kivi_style 接受但静默忽略 calib_file/use_attn_temperature/adaptive_static_scales 参数 (L412-485,
+      L563-566): 已在 K1 中记录，此处补充完整参数列表。无功能性影响但违反 fail-fast 原则'
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: generate_loop.py
+    location:
+      file: generate_loop.py
+    resolution: null
+    audit:
+      section: U
+      section_title: generate_loop + patch_model KIVI
+      round: 10
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  V-1:
+    title: KIVI INT4 未实现 bit-packing，内存与 INT8 相同 (L84, L90, L138-143)
+    description: 'KIVI INT4 未实现 bit-packing，内存与 INT8 相同 (L84, L90, L138-143): 所有 INT4 值存储为 torch.int8（1 byte/value），从未调用 pack_int4()/unpack_int4()。对比
+      INT4KVCache 使用 bit-packing 实现 0.5 byte/value。KIVI INT4 的实际内存节省为 0%（相对于 INT8），仅有量化精度区别。**论文中如果对比 KIVI INT4 与 INT4-ours
+      的内存开销，必须注明此差异**'
+    severity: HIGH
+    confidence: LOW
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: src/cache/kivi_style_cache.py
+    location:
+      file: src/cache/kivi_style_cache.py
+    suggested_fix:
+      approach: Review and fix the issue in src/cache/kivi_style_cache.py
+      files_to_change:
+      - src/cache/kivi_style_cache.py
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: V
+      section_title: KIVI INT4 路径
+      round: 11
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+    - paper
+  V-2:
+    title: get_memory_mb() 注释误导 (L307)
+    description: 'get_memory_mb() 注释误导 (L307): 注释 "INT8 tensors" 适用于 INT4 和 INT8，但未区分。hardcoded * 1 对当前实现正确（int8 存储），但暗示了对
+      bit-packing 的认知而未实现'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: src/cache/kivi_style_cache.py
+    location:
+      file: src/cache/kivi_style_cache.py
+    resolution: null
+    audit:
+      section: V
+      section_title: KIVI INT4 路径
+      round: 11
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  V-3:
+    title: INT4 量化精度 edge case 未覆盖
+    description: 'INT4 量化精度 edge case 未覆盖: asymmetric_quant.py INT4 路径 qmax - qmin = 15 仅为 INT8 的 1/16 精度。zero_point 不受 INT4
+      范围约束（数学正确但 FP16 精度下可能损失）。测试未覆盖全零输入 + INT4、极小幅度值 + INT4 等场景'
+    severity: MEDIUM
+    confidence: LOW
+    verification: suspected
+    status: open
+    category: numerical_correctness
+    module: asymmetric_quant.py
+    location:
+      file: asymmetric_quant.py
+    resolution: null
+    audit:
+      section: V
+      section_title: KIVI INT4 路径
+      round: 11
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  V-4:
+    title: INT4 vs INT8 行为切换逻辑正确
+    description: 'INT4 vs INT8 行为切换逻辑正确: prefill (L213-215)、decode (L224-231)、构造器验证 (L64-65) 均正确分支'
+    severity: LOW
+    confidence: MEDIUM
+    verification: confirmed
+    status: open
+    category: code_quality
+    module: src/cache/kivi_style_cache.py
+    location:
+      file: src/cache/kivi_style_cache.py
+    resolution: null
+    audit:
+      section: V
+      section_title: KIVI INT4 路径
+      round: 11
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  W-1:
+    title: 7B/8B 校准产物尚未生成（Phase 2 依赖，非 bug）
+    description: '7B/8B 校准产物尚未生成（Phase 2 依赖，非 bug）: final config 引用 4 个不存在的 JSON（kv_calib_kl_qwen25_7b_int8/int4、kv_calib_kl_llama31_8b_int8/int4）。Phase
+      2 计划中但尚未执行。在 Phase 5 全矩阵实验前必须完成'
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: false_positive
+    category: configuration_error
+    module: configs/snapshots/final_emnlp2026_v1.yaml
+    location:
+      file: configs/snapshots/final_emnlp2026_v1.yaml
+    suggested_fix:
+      approach: Review and fix the issue in configs/snapshots/final_emnlp2026_v1.yaml
+      files_to_change:
+      - configs/snapshots/final_emnlp2026_v1.yaml
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#4'
+      verified_by: reviewer
+    audit:
+      section: W
+      section_title: final_emnlp2026_v1.yaml 最终配置
+      round: 11
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  W-2:
+    title: LLaMA-3.1-8B 使用本地路径而非 HF ID
+    description: 'LLaMA-3.1-8B 使用本地路径而非 HF ID: /root/autodl-tmp/modelscope_cache/... 无法在其他机器复现。应补充 HF model_id + revision
+      作为备选，或在 experiment_sop.md 中记录 ModelScope 下载步骤'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: code_quality
+    module: configs/snapshots/final_emnlp2026_v1.yaml
+    location:
+      file: configs/snapshots/final_emnlp2026_v1.yaml
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#4'
+      verified_by: reviewer
+    audit:
+      section: W
+      section_title: final_emnlp2026_v1.yaml 最终配置
+      round: 11
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  W-3:
+    title: Claims C9-C11 定义不够精确
+    description: 'Claims C9-C11 定义不够精确: C9/C10 仅对比 INT8-ours vs KIVI 的 LongBench/Needle，缺少 INT4-ours vs KIVI 的显式 claim。C11
+      "cross-model" 表述模糊，应明确"在 Qwen-7B 和 LLaMA-8B 上 INT8-ours 相比 INT8-baseline 在 LongBench 上非劣"'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: research_semantics
+    module: configs/snapshots/final_emnlp2026_v1.yaml
+    location:
+      file: configs/snapshots/final_emnlp2026_v1.yaml
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#4'
+      verified_by: reviewer
+    audit:
+      section: W
+      section_title: final_emnlp2026_v1.yaml 最终配置
+      round: 11
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  W-4:
+    title: meta-config 无执行工作流说明
+    description: 'meta-config 无执行工作流说明: 仅声明目标矩阵，未提供具体 run_experiments.py 调用命令或执行顺序'
+    severity: LOW
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: configuration_error
+    module: run_experiments.py
+    location:
+      file: run_experiments.py
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#4'
+      verified_by: reviewer
+    audit:
+      section: W
+      section_title: final_emnlp2026_v1.yaml 最终配置
+      round: 11
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  X-1:
+    title: 论文内存对比表必须注明 KIVI INT4 无 bit-packing
+    description: '论文内存对比表必须注明 KIVI INT4 无 bit-packing: KIVIStyleKVCache 的 INT4 存储为 int8（1 byte/value），与 INT4KVCache 的 0.5
+      byte/value 不同。若论文表格对比 "KIVI INT4 vs INT4-ours" 内存，KIVI 数值将显著偏高。建议在 Memory profiling 结果旁加注 "KIVI INT4 uses int8 storage
+      without bit-packing"'
+    severity: HIGH
+    confidence: LOW
+    verification: confirmed
+    status: fixed
+    category: numerical_correctness
+    module: src/cache/
+    location:
+      file: src/cache/
+    suggested_fix:
+      approach: 建议在 Memory profiling 结果旁加注 "KIVI INT4 uses int8 storage without bit-packing" — ✅ 已修复（PR-4 文档披露）
+      files_to_change:
+      - src/cache/
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#4'
+      verified_by: reviewer
+    audit:
+      section: X
+      section_title: INT8KVCache vs KIVIStyleKVCache 对比
+      round: 12
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+    - paper
+  X-2:
+    title: 论文 Methods 节须披露 K 量化策略差异
+    description: '论文 Methods 节须披露 K 量化策略差异: INT8-ours 使用 per-token group-wise 对称量化（每 token 独立 scale），KIVI 使用 per-channel 非对称量化（prefill
+      时一次性计算 K-scale，decode 复用并可能 clip）。这导致 decode 阶段 KIVI K 可能有 clipping error，影响长上下文检索质量（Needle/RULER）'
+    severity: HIGH
+    confidence: LOW
+    verification: confirmed
+    status: fixed
+    category: numerical_correctness
+    module: src/cache/
+    location:
+      file: src/cache/
+    suggested_fix:
+      approach: Review and fix the issue in src/cache/
+      files_to_change:
+      - src/cache/
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#4'
+      verified_by: reviewer
+    audit:
+      section: X
+      section_title: INT8KVCache vs KIVIStyleKVCache 对比
+      round: 12
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+    - paper
+  X-3:
+    title: 论文须披露 KIVI 无温度校正
+    description: '论文须披露 KIVI 无温度校正: KIVI 不支持 inv_tau（kivi_style_cache.py L78-79 硬编码 None/False）。对比 RQ2（温度校正消融）时，KIVI 作为无温度校正的自然基线，但须在实验设计中明确声明'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: documentation
+    module: inv_tau（kivi_style_cache.py
+    location:
+      file: inv_tau（kivi_style_cache.py
+      lines:
+      - 78
+      - 79
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#4'
+      verified_by: reviewer
+    audit:
+      section: X
+      section_title: INT8KVCache vs KIVIStyleKVCache 对比
+      round: 12
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+    - paper
+  X-4:
+    title: 论文须披露 decode kernel 差异
+    description: '论文须披露 decode kernel 差异: KIVI 始终用 torch_ref（非 fused），INT8-ours 可用 triton_fused。延迟对比不完全公平——KIVI 的 TPOT 劣势部分源于
+      kernel 选择而非量化策略'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: numerical_correctness
+    module: src/cache/
+    location:
+      file: src/cache/
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#4'
+      verified_by: reviewer
+    audit:
+      section: X
+      section_title: INT8KVCache vs KIVIStyleKVCache 对比
+      round: 12
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+    - paper
+  X-5:
+    title: KIVI K-scale 内存恒定 vs INT8 随 seq_len 增长
+    description: 'KIVI K-scale 内存恒定 vs INT8 随 seq_len 增长: KIVI k_scale [B,H,D] ~8KB/layer（常量），INT8 k_scale [B,H,S,G] ~512KB/layer@4K（随
+      S 线性增长）。长上下文场景下 KIVI 的 scale 开销显著更小，但 zero-point 存储（~528KB/layer total）部分抵消优势'
+    severity: LOW
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: numerical_correctness
+    module: src/cache/
+    location:
+      file: src/cache/
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#4'
+      verified_by: reviewer
+    audit:
+      section: X
+      section_title: INT8KVCache vs KIVIStyleKVCache 对比
+      round: 12
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  Y-1:
+    title: _normalize_static_scale 3D case 实现错误
+    description: '_normalize_static_scale 3D case 实现错误 (int8_basic.py L38-43, int4_basic.py 同位置): 3D scale 输入的索引操作会产生超维张量。当前
+      cache 仅传 2D/4D scale 故未触发，但代码路径存在 latent crash。建议删除或修复'
+    severity: MEDIUM
+    confidence: HIGH
+    verification: suspected
+    status: open
+    category: numerical_correctness
+    module: (int8_basic.py
+    location:
+      file: (int8_basic.py
+      lines:
+      - 38
+      - 43
+    resolution: null
+    audit:
+      section: Y
+      section_title: 对称量化核心模块
+      round: 13
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  Y-2:
+    title: dequantize_symmetric_int8 多路径判断脆弱
+    description: 'dequantize_symmetric_int8 多路径判断脆弱 (int8_basic.py L182-226): 基于 ndim 和 shape[-1] 区分 Path 1/2/3。若 num_groups=1
+      时 scale shape [B,H,S,1] 会被误判为 per-token scale（Path 3）而非 group scale（Path 2）。当前 cache 用 num_groups≥2 故安全'
+    severity: MEDIUM
+    confidence: HIGH
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: int8_basic.py
+    location:
+      file: int8_basic.py
+      lines:
+      - 182
+      - 226
+    resolution: null
+    audit:
+      section: Y
+      section_title: 对称量化核心模块
+      round: 13
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  Y-3:
+    title: 缺少 INT8 离群值测试
+    description: '缺少 INT8 离群值测试: test_int8_quant.py 未测试极端离群值 + percentile clipping 的交互。对比 test_asymmetric_quant.py 已有此测试。建议补充'
+    severity: MEDIUM
+    confidence: LOW
+    verification: suspected
+    status: open
+    category: boundary_case
+    module: test_int8_quant.py
+    location:
+      file: test_int8_quant.py
+    resolution: null
+    audit:
+      section: Y
+      section_title: 对称量化核心模块
+      round: 13
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  Y-4:
+    title: __init__.py.__all__ 不完整
+    description: '__init__.py.__all__ 不完整: quantize_symmetric_int4_with_scale, pack_int4, unpack_int4 未导出。实际使用通过直接 import
+      子模块不受影响，但违反公共接口最佳实践'
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: __init__.py
+    location:
+      file: __init__.py
+    resolution: null
+    audit:
+      section: Y
+      section_title: 对称量化核心模块
+      round: 13
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  Y-5:
+    title: 核心公式验证通过
+    description: '核心公式验证通过: INT8 scale=absmax/127 范围[-127,127]、INT4 scale=absmax/7 范围[-7,7]、clamp(min=1e-5) 防零、percentile
+      clipping、组级量化 reshape/broadcast、pack/unpack INT4 bit-packing — 全部正确'
+    severity: LOW
+    confidence: MEDIUM
+    verification: confirmed
+    status: open
+    category: numerical_correctness
+    module: src/quant/
+    location:
+      file: src/quant/
+    resolution: null
+    audit:
+      section: Y
+      section_title: 对称量化核心模块
+      round: 13
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  Z-1:
+    title: 消融实验仅跑 PPL+Needle，缺少 LongBench
+    description: '消融实验仅跑 PPL+Needle，缺少 LongBench: Phase 4 计划（iteration.md Approved Plans 节）最初写 "needle/PPL/LongBench, 5 seeds"，但实际
+      --tasks eval_ppl,eval_needle。LongBench 消融未执行。若论文消融表需要 LongBench 数据点（如 RQ1 校准方法对比在 LongBench 上的表现），需补跑'
+    severity: MEDIUM
+    confidence: LOW
+    verification: unverified
+    status: open
+    category: research_semantics
+    module: scripts/
+    location:
+      file: scripts/
+    resolution: null
+    audit:
+      section: Z
+      section_title: Phase 4 完成验证
+      round: 14
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - paper
+  Z-2:
+    title: dev agent 仍未确认 O 节 3 CRITICAL + T 节 1 CRITICAL
+    description: 'dev agent 仍未确认 O 节 3 CRITICAL + T 节 1 CRITICAL: Phase 4 timeline 声称 "All CRITICAL=0"，但 iteration.md 的 O
+      节（eval_ruler.py 评分 bug）和 T 节（check_run_completeness.py OOM 分类）共 4 个 CRITICAL 仍为 unchecked。这些 bug 不阻塞消融实验（消融未跑 RULER），但阻塞
+      Phase 5 全矩阵（含 RULER）'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: open
+    category: configuration_error
+    module: 节（eval_ruler.py
+    location:
+      file: 节（eval_ruler.py
+    resolution: null
+    audit:
+      section: Z
+      section_title: Phase 4 完成验证
+      round: 14
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  Z-3:
+    title: 消融 output dir 命名含双重 seed
+    description: '消融 output dir 命名含双重 seed: ablation_*_s{seed}_ablation_1p5b_s{seed}/ — 可能造成目录名冗余。不影响功能但增加维护难度'
+    severity: LOW
+    confidence: LOW
+    verification: suspected
+    status: open
+    category: code_quality
+    module: scripts/
+    location:
+      file: scripts/
+    resolution: null
+    audit:
+      section: Z
+      section_title: Phase 4 完成验证
+      round: 14
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AA-1:
+    title: 默认校准路径与 generate_loop 不匹配 (calibrate_behavior.py
+    description: '默认校准路径与 generate_loop 不匹配 (calibrate_behavior.py:644, generate_loop.py:416-418): MSE 模式默认输出 artifacts/kv_calib_mse.json，但
+      generate_loop 默认加载 artifacts/kv_calib_kl.json。通过 run_experiments.py 运行时显式传 --calib_file 所以不受影响，但手动运行易误用。建议在文档中明确说明或在
+      generate_loop 加载时 warn'
+    severity: HIGH
+    confidence: MEDIUM
+    verification: suspected
+    status: open
+    category: numerical_correctness
+    module: (calibrate_behavior.py
+    location:
+      file: (calibrate_behavior.py
+      lines:
+      - 644
+    suggested_fix:
+      approach: 建议在文档中明确说明或在 generate_loop 加载时 warn
+      files_to_change:
+      - (calibrate_behavior.py
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: AA
+      section_title: calibrate_behavior MSE 审查
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AA-2:
+    title: 加载校准文件时无 loss_function 字段校验 (generate_loop.py
+    description: '加载校准文件时无 loss_function 字段校验 (generate_loop.py:445-461): 校准 JSON 包含 loss_function 字段（calibrate_behavior.py:901），但加载时未验证是否与预期一致。可能导致
+      MSE 校准 被误用为 KL 场景，或反之。建议加载时 log warning'
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: open
+    category: numerical_correctness
+    module: generate_loop.py
+    location:
+      file: generate_loop.py
+      lines:
+      - 445
+      - 461
+    suggested_fix:
+      approach: 建议加载时 log warning
+      files_to_change:
+      - generate_loop.py
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: AA
+      section_title: calibrate_behavior MSE 审查
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AA-3:
+    title: inv_tau shape 未在加载时验证 (generate_loop.py
+    description: 'inv_tau shape 未在加载时验证 (generate_loop.py:450): 加载 inv_tau 时未检查 shape 是否匹配当前模型 (num_layers × num_heads)。跨模型误加载校准文件时会导致
+      shape mismatch，错误仅在推理时暴露'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: open
+    category: code_quality
+    module: generate_loop.py
+    location:
+      file: generate_loop.py
+      lines:
+      - 450
+    resolution: null
+    audit:
+      section: AA
+      section_title: calibrate_behavior MSE 审查
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AA-4:
+    title: MSE 与 KL loss 量级差异影响搜索行为 (calibrate_behavior.py
+    description: 'MSE 与 KL loss 量级差异影响搜索行为 (calibrate_behavior.py:197-344): MSE loss 在 [0,2] 范围，KL loss 在 [0,∞)。搜索时 p95_loss
+      排序对 MSE 更敏感（值域窄，tie-breaking 频繁），可能导致 MSE 和 KL 选择不同超参。论文需声明此设计差异'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: suspected
+    status: open
+    category: numerical_correctness
+    module: calibrate_behavior.py
+    location:
+      file: calibrate_behavior.py
+      lines:
+      - 197
+      - 344
+    resolution: null
+    audit:
+      section: AA
+      section_title: calibrate_behavior MSE 审查
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - paper
+  AA-5:
+    title: evaluate_quant_candidate 不使用 inv_tau (calibrate_behavior.py
+    description: 'evaluate_quant_candidate 不使用 inv_tau (calibrate_behavior.py:306): 网格搜索评估时不应用温度校正，但实际推理时会应用。搜索优化目标与部署现实不完全一致——按设计如此（scales
+      先搜后温度后校正），但论文应注明'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: calibrate_behavior.py
+    location:
+      file: calibrate_behavior.py
+      lines:
+      - 306
+    resolution: null
+    audit:
+      section: AA
+      section_title: calibrate_behavior MSE 审查
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - paper
+  AA-6:
+    title: loss_accum NaN 无检测 (calibrate_behavior.py
+    description: 'loss_accum NaN 无检测 (calibrate_behavior.py:197-219): 若某样本产生 NaN/Inf，argmin(NaN) 返回 0（静默选择第一个候选）。概率低但缺少 safeguard'
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: calibrate_behavior.py
+    location:
+      file: calibrate_behavior.py
+      lines:
+      - 197
+      - 219
+    resolution: null
+    audit:
+      section: AA
+      section_title: calibrate_behavior MSE 审查
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AA-7:
+    title: search_trials.csv 已按 loss_function 区分文件名 (calibrate_behavior.py
+    description: 'search_trials.csv 已按 loss_function 区分文件名 (calibrate_behavior.py:642-644): 默认输出路径已含 loss_function 后缀，不存在覆盖风险（审查
+      agent 误报为 CRITICAL，实际代码已处理）'
+    severity: LOW
+    confidence: HIGH
+    verification: unverified
+    status: false_positive
+    category: numerical_correctness
+    module: calibrate_behavior.py
+    location:
+      file: calibrate_behavior.py
+      lines:
+      - 642
+      - 644
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      verified_by: reviewer
+    audit:
+      section: AA
+      section_title: calibrate_behavior MSE 审查
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AB-1:
+    title: RULER 聚合缺少子任务分拆 (aggregate_results.py
+    description: 'RULER 聚合缺少子任务分拆 (aggregate_results.py:1936-2078): 仅聚合 ruler_pass_rate/ruler_score 等整体指标，缺少 S-NIAH / MK-NIAH
+      / VT / CWE 四个子任务的独立宏平均。论文若需声称"4 个子任务上的鲁棒性"，需补充 ruler_subtask_summary.csv'
+    severity: HIGH
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: research_semantics
+    module: aggregate_results.py
+    location:
+      file: aggregate_results.py
+      lines:
+      - 1936
+      - 2078
+    suggested_fix:
+      approach: Review and fix the issue in aggregate_results.py
+      files_to_change:
+      - aggregate_results.py
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: AB
+      section_title: aggregate_results KIVI/多模型
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - paper
+  AB-2:
+    title: 多模型对比缺少分层表
+    description: '多模型对比缺少分层表 (aggregate_results.py 全局): model_id 作为 groupby key 参与聚合，但产出表不分层——无法快速查看"INT8-ours 在 1.5B vs 7B
+      vs 8B 上的对比"。论文 Table 需要 per-model 独立行'
+    severity: HIGH
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: research_semantics
+    module: (aggregate_results.py
+    location:
+      file: (aggregate_results.py
+    suggested_fix:
+      approach: Review and fix the issue in (aggregate_results.py
+      files_to_change:
+      - (aggregate_results.py
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: AB
+      section_title: aggregate_results KIVI/多模型
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - paper
+  AB-3:
+    title: LongBench 聚合同时包含 3 个近义指标 (aggregate_results.py
+    description: 'LongBench 聚合同时包含 3 个近义指标 (aggregate_results.py:1867-1874): longbench_score、longbench_official_macro、longbench_f1_macro
+      同时聚合。需确认哪个是 objective.md 定义的 primary endpoint（应为 longbench_score）。多指标并存增加混淆风险'
+    severity: MEDIUM
+    confidence: HIGH
+    verification: confirmed
+    status: open
+    category: code_quality
+    module: aggregate_results.py
+    location:
+      file: aggregate_results.py
+      lines:
+      - 1867
+      - 1874
+    resolution: null
+    audit:
+      section: AB
+      section_title: aggregate_results KIVI/多模型
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AB-4:
+    title: KIVI quant_bits 在 pairings 中未区分 INT8/INT4 (aggregate_results.py
+    description: 'KIVI quant_bits 在 pairings 中未区分 INT8/INT4 (aggregate_results.py:2105-2110): pairings 列表 ("kivi_style", "int8_ours")
+      未指定 kivi 的 quant_bits。若结果 CSV 中混合了 kivi_int8 和 kivi_int4 行，统计检验可能混用两种精度的数据'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: suspected
+    status: open
+    category: numerical_correctness
+    module: aggregate_results.py
+    location:
+      file: aggregate_results.py
+      lines:
+      - 2105
+      - 2110
+    resolution: null
+    audit:
+      section: AB
+      section_title: aggregate_results KIVI/多模型
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  AB-5:
+    title: kv_mode 显示顺序依赖默认排序 (aggregate_results.py
+    description: 'kv_mode 显示顺序依赖默认排序 (aggregate_results.py:705-732): 绘图/表格中 kv_mode 未定义固定显示顺序，使用 Python 默认字符串排序。建议定义 KV_MODE_DISPLAY_ORDER
+      常量确保论文一致性'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: suspected
+    status: open
+    category: research_semantics
+    module: aggregate_results.py
+    location:
+      file: aggregate_results.py
+      lines:
+      - 705
+      - 732
+    resolution: null
+    audit:
+      section: AB
+      section_title: aggregate_results KIVI/多模型
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - paper
+  AB-6:
+    title: Bootstrap seed 基于 SHA256 hash 的独立性
+    description: 'Bootstrap seed 基于 SHA256 hash 的独立性: 使用 _stable_random_seed 生成确定性 seed（可复现），但不同 metric 对之间的 seed 独立性依赖 hash
+      无碰撞假设。实际安全但缺少文档说明'
+    severity: LOW
+    confidence: LOW
+    verification: unverified
+    status: open
+    category: documentation
+    module: scripts/aggregate_results.py
+    location:
+      file: scripts/aggregate_results.py
+    resolution: null
+    audit:
+      section: AB
+      section_title: aggregate_results KIVI/多模型
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AC-1:
+    title: C11 跨模型验证逻辑缺陷 (generate_thesis_report.py
+    description: 'C11 跨模型验证逻辑缺陷 (generate_thesis_report.py:267-275,182-193): C11 声称 "across extended models" 但 _pick_best_relative_row()
+      只返回所有模型中最佳单行 gain_pct，无法分别验证每个模型是否都通过。若 1.5B 通过但 7B 失败，当前逻辑仍报 PASS'
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: open
+    category: code_quality
+    module: generate_thesis_report.py
+    location:
+      file: generate_thesis_report.py
+      lines:
+      - 267
+      - 275
+      - 182
+      - 193
+    suggested_fix:
+      approach: Review and fix the issue in generate_thesis_report.py
+      files_to_change:
+      - generate_thesis_report.py
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: AC
+      section_title: export_tables + generate_thesis_report
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AC-2:
+    title: LongBench 表缺少任务指标组成说明 (export_tables_latex.py
+    description: 'LongBench 表缺少任务指标组成说明 (export_tables_latex.py:285-313): 仅导出 longbench_score_mean，论文读者无法从表格了解 score 由 F1/Rouge-L/Accuracy/EditSim
+      组成。建议加脚注或附录表'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: suspected
+    status: open
+    category: documentation
+    module: export_tables_latex.py
+    location:
+      file: export_tables_latex.py
+      lines:
+      - 285
+      - 313
+    resolution: null
+    audit:
+      section: AC
+      section_title: export_tables + generate_thesis_report
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - paper
+  AC-3:
+    title: RULER 表仅显示整体 pass rate (export_tables_latex.py
+    description: 'RULER 表仅显示整体 pass rate (export_tables_latex.py:316-344): 缺少 4 个子任务（S-NIAH/MK-NIAH/VT/CWE）的分列显示。论文卖点之一是 novel
+      synthetic benchmark，但表格缺乏子任务细节'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: research_semantics
+    module: export_tables_latex.py
+    location:
+      file: export_tables_latex.py
+      lines:
+      - 316
+      - 344
+    resolution: null
+    audit:
+      section: AC
+      section_title: export_tables + generate_thesis_report
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - paper
+  AC-4:
+    title: 多模型表格缺少 per-model 分页
+    description: '多模型表格缺少 per-model 分页 (export_tables_latex.py 全局): 所有导出函数仅生成单表，无 --per_model_tables 参数支持。论文 RQ4 跨模型验证需要分模型展示'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: open
+    category: interface_compatibility
+    module: (export_tables_latex.py
+    location:
+      file: (export_tables_latex.py
+    resolution: null
+    audit:
+      section: AC
+      section_title: export_tables + generate_thesis_report
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - paper
+  AC-5:
+    title: C9 对指标名正确 (generate_thesis_report.py
+    description: 'C9 对指标名正确 (generate_thesis_report.py:167): C9 使用 metric="longbench_score" 与 objective.md primary endpoint
+      对齐 ✓'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: code_quality
+    module: generate_thesis_report.py
+    location:
+      file: generate_thesis_report.py
+      lines:
+      - 167
+    resolution: null
+    audit:
+      section: AC
+      section_title: export_tables + generate_thesis_report
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AC-6:
+    title: KIVI 在 KV_MODE_ORDER 和 KV_MODE_DISPLAY 中已完整映射 (export_tables_latex.py
+    description: 'KIVI 在 KV_MODE_ORDER 和 KV_MODE_DISPLAY 中已完整映射 (export_tables_latex.py:41-63): kivi_style 排序和显示正常 ✓'
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: code_quality
+    module: export_tables_latex.py
+    location:
+      file: export_tables_latex.py
+      lines:
+      - 41
+      - 63
+    resolution: null
+    audit:
+      section: AC
+      section_title: export_tables + generate_thesis_report
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  AD-1:
+    title: quant_bits CSV 推断 fallback 为 16 (eval_ppl.py
+    description: 'quant_bits CSV 推断 fallback 为 16 (eval_ppl.py:888, profile_latency.py:320): 当 --quant_bits 未显式传入时，"kivi_style"
+      不匹配 "int4"/"int8" 子串，fallback 到 16。通过 run_experiments.py 运行时正确传入 --quant_bits，但手动运行时容易漏传导致 CSV 中 kivi_style 被标为 quant_bits=16（看起来像
+      FP16）'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: performance
+    module: (eval_ppl.py
+    location:
+      file: (eval_ppl.py
+      lines:
+      - 888
+    resolution: null
+    audit:
+      section: AD
+      section_title: eval_ppl + profile_latency KIVI
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  AD-2:
+    title: profile_latency.py run 间无显式 CUDA sync (profile_latency.py
+    description: 'profile_latency.py run 间无显式 CUDA sync (profile_latency.py:290-294): 虽然 CUDATimer.start() 内部会 sync，但在 gc.collect
+      + torch.cuda.empty_cache 后、创建 input_ids 前没有显式 sync。empty_cache 本身是同步操作，但 gc.collect 可能触发的 finalizer 中的 GPU op 不一定被 sync。风险低但可加一行显式
+      sync 改善'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: suspected
+    status: open
+    category: boundary_case
+    module: profile_latency.py
+    location:
+      file: profile_latency.py
+      lines:
+      - 290
+      - 294
+    resolution: null
+    audit:
+      section: AD
+      section_title: eval_ppl + profile_latency KIVI
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AD-3:
+    title: kivi_style decode_attn_impl 参数被静默忽略 (profile_latency.py
+    description: 'kivi_style decode_attn_impl 参数被静默忽略 (profile_latency.py:314): 用户传 --decode_attn_impl triton_fused 与 --kv_mode
+      kivi_style 时，generate_loop 会忽略 fused（kivi 走 baseline path），CSV 中不记录实际使用的 decode path。建议 warn 或在 CSV 增加 decode_impl_actual
+      列'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: suspected
+    status: open
+    category: interface_compatibility
+    module: profile_latency.py
+    location:
+      file: profile_latency.py
+      lines:
+      - 314
+    resolution: null
+    audit:
+      section: AD
+      section_title: eval_ppl + profile_latency KIVI
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  AD-4:
+    title: calib_file 对 kivi_style 静默无操作 (eval_ppl.py
+    description: 'calib_file 对 kivi_style 静默无操作 (eval_ppl.py:228-299): KIVI 不需要校准文件，传入 --calib_file 会被安静忽略。行为正确但缺少 warning
+      提示用户'
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: code_quality
+    module: eval_ppl.py
+    location:
+      file: eval_ppl.py
+      lines:
+      - 228
+      - 299
+    resolution: null
+    audit:
+      section: AD
+      section_title: eval_ppl + profile_latency KIVI
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  AE-1:
+    title: KIVI cache zero-point decode 传播测试缺失
+    description: KIVI cache zero-point decode 传播测试缺失 (test_kivi_cache.py)
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: numerical_correctness
+    module: (test_kivi_cache.py
+    location:
+      file: (test_kivi_cache.py
+    suggested_fix:
+      approach: Review and fix the issue in (test_kivi_cache.py
+      files_to_change:
+      - (test_kivi_cache.py
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#5'
+      verified_by: reviewer
+    audit:
+      section: AE
+      section_title: 测试套件覆盖缺口
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  AE-2:
+    title: asymmetric_quant zero-point 公式直接验证缺失
+    description: asymmetric_quant zero-point 公式直接验证缺失 (test_asymmetric_quant.py)
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: fixed
+    category: configuration_error
+    module: (test_asymmetric_quant.py
+    location:
+      file: (test_asymmetric_quant.py
+    suggested_fix:
+      approach: Review and fix the issue in (test_asymmetric_quant.py
+      files_to_change:
+      - (test_asymmetric_quant.py
+      estimated_effort: small
+    resolution:
+      fixed_at: '2026-02-23T00:00:00+00:00'
+      pr: '#5'
+      verified_by: reviewer
+    audit:
+      section: AE
+      section_title: 测试套件覆盖缺口
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AE-3:
+    title: calibrate_behavior.py 完全无单元测试
+    description: 'calibrate_behavior.py 完全无单元测试: 校准脚本是论文核心算法，包含 KL 散度计算、inv_tau 搜索、MSE loss、网格搜索——全无细粒度单元测试'
+    severity: HIGH
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: calibrate_behavior.py
+    location:
+      file: calibrate_behavior.py
+    suggested_fix:
+      approach: Review and fix the issue in calibrate_behavior.py
+      files_to_change:
+      - calibrate_behavior.py
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: AE
+      section_title: 测试套件覆盖缺口
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - paper
+  AE-4:
+    title: KIVI + asymmetric_quant 端到端集成测试缺失
+    description: 'KIVI + asymmetric_quant 端到端集成测试缺失: test_kivi_cache.py 和 test_asymmetric_quant.py 分别测试各自功能，但缺少 quantize_asymmetric_per_channel/per_token
+      → KIVI cache append/get_kv 的联合 round-trip 验证'
+    severity: HIGH
+    confidence: MEDIUM
+    verification: confirmed
+    status: open
+    category: configuration_error
+    module: test_kivi_cache.py
+    location:
+      file: test_kivi_cache.py
+    suggested_fix:
+      approach: Review and fix the issue in test_kivi_cache.py
+      files_to_change:
+      - test_kivi_cache.py
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: AE
+      section_title: 测试套件覆盖缺口
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  AE-5:
+    title: per-channel K 和 per-token V axis 独立性验证缺失
+    description: 'per-channel K 和 per-token V axis 独立性验证缺失 (test_kivi_cache.py): 未构造不同 channel/token 具有极端不同振幅的测试数据，来验证各 channel/token
+      确实获得独立 scale'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: open
+    category: numerical_correctness
+    module: (test_kivi_cache.py
+    location:
+      file: (test_kivi_cache.py
+    resolution: null
+    audit:
+      section: AE
+      section_title: 测试套件覆盖缺口
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  AE-6:
+    title: Bootstrap CI n=1 和 n=2 边界测试缺失
+    description: 'Bootstrap CI n=1 和 n=2 边界测试缺失 (test_aggregate_results_stats.py): n=1 应返回 (value, value)，n=2 的 CI 宽度应较大。现有测试均用
+      n≥3'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: boundary_case
+    module: (test_aggregate_results_stats.py
+    location:
+      file: (test_aggregate_results_stats.py
+    resolution: null
+    audit:
+      section: AE
+      section_title: 测试套件覆盖缺口
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AE-7:
+    title: Permutation test NaN 处理测试缺失
+    description: 'Permutation test NaN 处理测试缺失 (test_aggregate_results_stats.py): 输入含 NaN 时 _paired_signflip_pvalue 应过滤并可能返回
+      "insufficient_pairs"。缺少显式测试'
+    severity: MEDIUM
+    confidence: LOW
+    verification: suspected
+    status: open
+    category: numerical_correctness
+    module: (test_aggregate_results_stats.py
+    location:
+      file: (test_aggregate_results_stats.py
+    resolution: null
+    audit:
+      section: AE
+      section_title: 测试套件覆盖缺口
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AE-8:
+    title: BH-FDR 单调性验证缺失
+    description: 'BH-FDR 单调性验证缺失 (test_aggregate_results_stats.py): BH-FDR q-values 按排序后应单调非递减，但无测试验证此数学性质'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: confirmed
+    status: open
+    category: configuration_error
+    module: (test_aggregate_results_stats.py
+    location:
+      file: (test_aggregate_results_stats.py
+    resolution: null
+    audit:
+      section: AE
+      section_title: 测试套件覆盖缺口
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AE-9:
+    title: eval_longbench.py / eval_ruler.py 完全无单元测试
+    description: 'eval_longbench.py / eval_ruler.py 完全无单元测试: 两个 benchmark 脚本为新增代码，无对应测试文件。eval_ruler.py 的评分函数 (O1-O3 CRITICAL
+      bugs) 本应有单元测试覆盖'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: test_coverage
+    module: eval_longbench.py
+    location:
+      file: eval_longbench.py
+    resolution: null
+    audit:
+      section: AE
+      section_title: 测试套件覆盖缺口
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - legacy_id:O1
+  AE-10:
+    title: INT4 vs INT8 误差比例测试缺失
+    description: 'INT4 vs INT8 误差比例测试缺失 (test_kivi_cache.py): 同一数据 INT4 应比 INT8 误差大约 5x，但未测试此预期关系'
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: configuration_error
+    module: (test_kivi_cache.py
+    location:
+      file: (test_kivi_cache.py
+    resolution: null
+    audit:
+      section: AE
+      section_title: 测试套件覆盖缺口
+      round: 15
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  AF-1:
+    title: eval_longbench.py _classification_accuracy() 语义变化未文档化 (L265)
+    description: 'eval_longbench.py _classification_accuracy() 语义变化未文档化 (L265): 从 pred==ans or ans in pred 改为仅 pred==ans（精确匹配）。移除了
+      contains 判断，改变了分类任务评分策略。若非有意修改，评测结果可能失效；需确认官方 LongBench 评测脚本使用哪种策略'
+    severity: CRITICAL
+    confidence: HIGH
+    verification: confirmed
+    status: open
+    category: documentation
+    module: eval_longbench.py
+    location:
+      file: eval_longbench.py
+    suggested_fix:
+      approach: Review and fix the issue in eval_longbench.py
+      files_to_change:
+      - eval_longbench.py
+      estimated_effort: medium
+    resolution: null
+    audit:
+      section: AF
+      section_title: 'Codex PR #5 增量审查'
+      round: 16
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AF-2:
+    title: patch_model.py 移除 kv_heads 默认推理 (L100-108)
+    description: 'patch_model.py 移除 kv_heads 默认推理 (L100-108): 不再对缺少 num_key_value_heads 的模型自动推断 kv_heads = q_heads。可能破坏非标自定义模型适配，错误消息应补充提示如何手动设置'
+    severity: HIGH
+    confidence: LOW
+    verification: suspected
+    status: open
+    category: interface_compatibility
+    module: patch_model.py
+    location:
+      file: patch_model.py
+    suggested_fix:
+      approach: Review and fix the issue in patch_model.py
+      files_to_change:
+      - patch_model.py
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: AF
+      section_title: 'Codex PR #5 增量审查'
+      round: 16
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AF-3:
+    title: calibrate_behavior.py MSE clamping 移除导致旧校准产物不可复现
+    description: 'calibrate_behavior.py MSE clamping 移除导致旧校准产物不可复现: 移除 p_ref_clamped 后 MSE 数值变化，已有的 artifacts/kv_calib_mse_*.json
+      基于旧代码生成，需重新生成（注：KL 路径不受影响）'
+    severity: HIGH
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: calibrate_behavior.py
+    location:
+      file: calibrate_behavior.py
+    suggested_fix:
+      approach: Review and fix the issue in calibrate_behavior.py
+      files_to_change:
+      - calibrate_behavior.py
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: AF
+      section_title: 'Codex PR #5 增量审查'
+      round: 16
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AF-4:
+    title: 全 eval 脚本 _resolve_quant_bits() 重复定义（6 处相同代码，违反 DRY）
+    description: '全 eval 脚本 _resolve_quant_bits() 重复定义（6 处相同代码，违反 DRY）: eval_ruler/eval_longbench/eval_needle/eval_ppl/profile_latency/profile_memory
+      各有完整副本。建议提取到 src/utils/quant_utils.py'
+    severity: MEDIUM
+    confidence: LOW
+    verification: suspected
+    status: open
+    category: performance
+    module: src/utils/quant_utils.py
+    location:
+      file: src/utils/quant_utils.py
+    resolution: null
+    audit:
+      section: AF
+      section_title: 'Codex PR #5 增量审查'
+      round: 16
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AF-5:
+    title: profile_memory.py GPU 峰值来源判断逻辑 (L383-385)
+    description: 'profile_memory.py GPU 峰值来源判断逻辑 (L383-385): 用 nvml_peak > 0 判断数据源而非监控器状态。当 NVML 初始化失败且 torch_peak 也≈0 时判断不准确'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: performance
+    module: profile_memory.py
+    location:
+      file: profile_memory.py
+    resolution: null
+    audit:
+      section: AF
+      section_title: 'Codex PR #5 增量审查'
+      round: 16
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AF-6:
+    title: eval_ruler.py 截断策略 magic numbers (L562-570)
+    description: 'eval_ruler.py 截断策略 magic numbers (L562-570): tail_keep = min(128, max_tokens // 8) 的 128 和 8 无注释说明来源，建议补充策略依据'
+    severity: MEDIUM
+    confidence: LOW
+    verification: suspected
+    status: open
+    category: documentation
+    module: eval_ruler.py
+    location:
+      file: eval_ruler.py
+    resolution: null
+    audit:
+      section: AF
+      section_title: 'Codex PR #5 增量审查'
+      round: 16
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AF-7:
+    title: generate_loop.py batch>1 填充检查移除
+    description: 'generate_loop.py batch>1 填充检查移除: 原仅针对 int8_fused 等，现完全移除。对 KIVI-style 的 batch>1 支持策略不明确'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: code_quality
+    module: generate_loop.py
+    location:
+      file: generate_loop.py
+    resolution: null
+    audit:
+      section: AF
+      section_title: 'Codex PR #5 增量审查'
+      round: 16
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  AF-8:
+    title: kivi_style_cache.py clear() 仅重置 K scale/zp 未显式清零 V scale/zp
+    description: 'kivi_style_cache.py clear() 仅重置 K scale/zp 未显式清零 V scale/zp: 通过 seq_len=0 隐式屏蔽安全，但应显式清零以防御性编程'
+    severity: MEDIUM
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: numerical_correctness
+    module: kivi_style_cache.py
+    location:
+      file: kivi_style_cache.py
+    resolution: null
+    audit:
+      section: AF
+      section_title: 'Codex PR #5 增量审查'
+      round: 16
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  AF-9:
+    title: final_emnlp2026_v1.yaml LLaMA 本地路径硬编码
+    description: 'final_emnlp2026_v1.yaml LLaMA 本地路径硬编码: local_model_path: "/root/autodl-tmp/..." 跨机器不可复现，建议参数化'
+    severity: MEDIUM
+    confidence: LOW
+    verification: suspected
+    status: open
+    category: interface_compatibility
+    module: scripts/
+    location:
+      file: scripts/
+    resolution: null
+    audit:
+      section: AF
+      section_title: 'Codex PR #5 增量审查'
+      round: 16
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AF-10:
+    title: kivi_style_cache.py INT4 head_dim 偶数约束仅在 append 时检查
+    description: 'kivi_style_cache.py INT4 head_dim 偶数约束仅在 append 时检查: 仅运行时报错，不在构造时前置检查（设计决策，可接受）'
+    severity: LOW
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: code_quality
+    module: kivi_style_cache.py
+    location:
+      file: kivi_style_cache.py
+    resolution: null
+    audit:
+      section: AF
+      section_title: 'Codex PR #5 增量审查'
+      round: 16
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+    tags:
+    - kivi
+  AG-1:
+    title: '**RULER CWE 子任务在 1.5B *_long 配置下触发 max_position_embeddings 溢出**'
+    description: '**RULER CWE 子任务在 1.5B *_long 配置下触发 max_position_embeddings 溢出**'
+    severity: CRITICAL
+    confidence: MEDIUM
+    verification: unverified
+    status: open
+    category: configuration_error
+    module: scripts/eval_ruler.py
+    location:
+      file: scripts/eval_ruler.py
+    suggested_fix:
+      approach: Review and fix the issue in scripts/eval_ruler.py
+      files_to_change:
+      - scripts/eval_ruler.py
+      estimated_effort: medium
+    resolution: null
+    audit:
+      section: AG
+      section_title: RULER 长上下文溢出
+      round: 17
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AG-2:
+    title: '**run_experiments.py 预检查遗漏 RULER CWE 的额外 max_new_tokens 开销** (L806-928)'
+    description: '**run_experiments.py 预检查遗漏 RULER CWE 的额外 max_new_tokens 开销** (L806-928): 当前 pre-launch validation 检查 seq_len
+      + gen_len > max_position_embeddings（32704+64=32768 ≤ 32768 → 通过），但未考虑 RULER CWE 使用 128 个 gen tokens 而非 gen_len。建议在 RULER
+      任务的 pre-check 中使用 max(gen_len, cwe_max_tokens) 代替 gen_len'
+    severity: HIGH
+    confidence: LOW
+    verification: suspected
+    status: open
+    category: code_quality
+    module: '**run_experiments.py'
+    location:
+      file: '**run_experiments.py'
+    suggested_fix:
+      approach: 建议在 RULER 任务的 pre-check 中使用 `max(gen_len, cwe_max_tokens)` 代替 gen_len
+      files_to_change:
+      - '**run_experiments.py'
+      estimated_effort: small
+    resolution: null
+    audit:
+      section: AG
+      section_title: RULER 长上下文溢出
+      round: 17
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer
+  AG-3:
+    title: '**eval_ruler.py case 循环无 per-case error handling** (L872-908)'
+    description: '**eval_ruler.py case 循环无 per-case error handling** (L872-908): 任意一个 case 的 generation 异常（如 position embedding
+      溢出、OOM）会导致整个脚本崩溃。已完成的子任务结果也丢失。建议为 case 循环添加 try/except + partial result 保存'
+    severity: MEDIUM
+    confidence: LOW
+    verification: suspected
+    status: open
+    category: code_quality
+    module: '**eval_ruler.py'
+    location:
+      file: '**eval_ruler.py'
+    resolution: null
+    audit:
+      section: AG
+      section_title: RULER 长上下文溢出
+      round: 17
+      discovered_at: '2026-02-23T00:00:00+00:00'
+      discovered_by: reviewer

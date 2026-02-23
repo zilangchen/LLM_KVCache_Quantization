@@ -8,6 +8,7 @@
 - Tech stack: Python 3.12, PyTorch, Transformers, Triton, numpy/pandas/matplotlib.
 - Key modules: `src/cache/`, `src/quant/`, `src/kernels/`, `src/engine/`, `scripts/`.
 - Architecture docs: `objective.md`, `README.md`, `experiment_sop.md`.
+- Review tracker: `review_tracker.md` (root, authoritative file for all code review issues).
 - Coding conventions: follow existing style in repo; prefer minimal diffs and explicit reproducibility metadata.
 
 ## Mandatory planning gate
