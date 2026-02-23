@@ -125,7 +125,12 @@ Canonical agent workflow directory is `.agents/`.
 - **Method**: 9 parallel background agents + main thread direct fixes
 - **Validation**: `python -m py_compile` — all 16 modified .py files COMPILE OK
 - **review_tracker.md**: ~90 issues fixed this wave; Phase Gate: CLEAR (0 CRIT open)
-- **Commit**: pending
+- **Commits**:
+  - `a60cbe6` fix: core quant/cache/engine fixes — KVC-002 INT4 pack offset, QNT-003~009, ENG-015~031
+  - `2442ce7` fix: scripts bulk review fixes — CHK(13), RVW(11), EXP(9), CAL(10), RUN(9), EVL(5), AGG(7)
+  - `c67038c` test: AGG-033 update sign-flip test assertions for Phipson-Smyth +1 correction
+  - `6c12740` docs: update review_tracker (166 fixed, 0 CRIT), config, and meta files
+  - `93d79b9` chore: review-coord agent model opus→sonnet
 - **Risks / follow-ups**:
   - 本地 pytest 因 numpy/scipy 依赖问题无法运行，远端验证待实验完成后进行
   - TST-* issues (22个测试覆盖问题) 属于新增测试，非代码修复，后续 Wave 2 处理
