@@ -492,6 +492,9 @@ Canonical agent workflow directory is `.agents/`.
   - compileall：通过
   - `aggregate_results.py` 语法检查通过
   - `tests/test_aggregate_results_stats.py` 受本地缺 `pandas` 阻塞（需远端补跑）
+- **Commits**:
+  - `7d5d65a` feat: export layered per-model aggregate tables
+  - `8b8f0e4` docs: mark AB2 done and log per-model layering milestone
 - **Risks / follow-ups**:
   - 需在远端标准环境补跑 `tests/test_aggregate_results_stats.py`
 
