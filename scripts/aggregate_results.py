@@ -171,6 +171,72 @@ def _save_table(df: pd.DataFrame, out_path: Path) -> None:
     df.to_csv(out_path, index=False)
 
 
+def _slugify_model_id(model_id: object) -> str:
+    raw = str(model_id).strip()
+    if not raw:
+        return "unknown_model"
+    slug = raw.replace("/", "__")
+    slug = re.sub(r"[^A-Za-z0-9_.-]+", "_", slug).strip("._")
+    return slug or "unknown_model"
+
+
+def _export_per_model_layered_tables(tables_dir: Path) -> pd.DataFrame:
+    """
+    Export per-model layered tables for all top-level CSVs that carry `model_id`.
+
+    Output layout:
+      tables/per_model/<model_slug>/<table_name>.csv
+
+    Returns:
+      Manifest rows with model/table/row_count metadata.
+    """
+    rows: List[Dict[str, object]] = []
+    per_model_root = tables_dir / "per_model"
+
+    for csv_path in sorted(tables_dir.glob("*.csv")):
+        # Avoid recursively layering the layered-table manifest itself.
+        if csv_path.name == "per_model_table_manifest.csv":
+            continue
+        try:
+            df = pd.read_csv(csv_path)
+        except Exception:
+            continue
+        if df.empty or "model_id" not in df.columns:
+            continue
+
+        model_series = df["model_id"].astype(str).str.strip()
+        model_values = sorted(
+            {
+                v
+                for v in model_series.tolist()
+                if v and v.lower() != "nan"
+            }
+        )
+        if not model_values:
+            continue
+
+        for model_id in model_values:
+            sub = df[model_series == model_id].copy()
+            if sub.empty:
+                continue
+            model_slug = _slugify_model_id(model_id)
+            out_path = per_model_root / model_slug / csv_path.name
+            _save_table(sub, out_path)
+            rows.append(
+                {
+                    "table_name": csv_path.name,
+                    "model_id": model_id,
+                    "model_slug": model_slug,
+                    "row_count": int(len(sub)),
+                    "output_file": str(out_path.relative_to(tables_dir)),
+                }
+            )
+
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows)
+
+
 def _parse_seq_tag_to_len(seq_tag: str) -> int | None:
     seq_tag = str(seq_tag).strip().lower()
     m = re.fullmatch(r"(\d+)(k?)", seq_tag)
@@ -2415,6 +2481,13 @@ def main() -> int:
     )
     if not main_claims.empty:
         _save_table(main_claims, tables_dir / "thesis_main_claims_32k.csv")
+
+    per_model_manifest = _export_per_model_layered_tables(tables_dir)
+    if not per_model_manifest.empty:
+        _save_table(
+            per_model_manifest.sort_values(["model_id", "table_name"]).reset_index(drop=True),
+            tables_dir / "per_model_table_manifest.csv",
+        )
 
     print(f"Wrote tables to {tables_dir} and plots to {plots_dir}")
     return 0
