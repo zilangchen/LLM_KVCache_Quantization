@@ -153,6 +153,53 @@ class TestRunExperimentsResilience(unittest.TestCase):
                     env_info={"env_hash": "abc"},
                 )
 
+    def test_ruler_peak_gen_tokens_defaults_include_cwe_floor(self):
+        peak = rex._ruler_peak_gen_tokens_for_gate(  # pylint: disable=protected-access
+            ruler_tasks_arg=None,
+            ruler_max_new_tokens=32,
+        )
+        self.assertEqual(peak, 128)
+
+    def test_ruler_peak_gen_tokens_respects_explicit_tasks(self):
+        peak = rex._ruler_peak_gen_tokens_for_gate(  # pylint: disable=protected-access
+            ruler_tasks_arg="s_niah,mk_niah,vt",
+            ruler_max_new_tokens=32,
+        )
+        self.assertEqual(peak, 32)
+
+    def test_ruler_peak_gen_tokens_uses_runtime_max_new_tokens(self):
+        peak = rex._ruler_peak_gen_tokens_for_gate(  # pylint: disable=protected-access
+            ruler_tasks_arg="cwe",
+            ruler_max_new_tokens=256,
+        )
+        self.assertEqual(peak, 256)
+
+    def test_compute_ruler_truncation_warning_for_long_case(self):
+        warning = rex._compute_ruler_truncation_warning(  # pylint: disable=protected-access
+            run_name="int4_baseline_long",
+            seq_len=32704,
+            gen_len=64,
+            max_position_embeddings=32768,
+            ruler_context_len=32704,
+            ruler_max_new_tokens=32,
+            ruler_tasks_arg=None,
+        )
+        self.assertIsInstance(warning, str)
+        self.assertIn("safe_prompt_budget=32640", warning)
+        self.assertIn("int4_baseline_long", warning)
+
+    def test_compute_ruler_truncation_warning_none_when_safe(self):
+        warning = rex._compute_ruler_truncation_warning(  # pylint: disable=protected-access
+            run_name="int8_ours_curve_8k",
+            seq_len=8192,
+            gen_len=64,
+            max_position_embeddings=32768,
+            ruler_context_len=8192,
+            ruler_max_new_tokens=32,
+            ruler_tasks_arg="s_niah,mk_niah,vt",
+        )
+        self.assertIsNone(warning)
+
 
 if __name__ == "__main__":
     unittest.main()
