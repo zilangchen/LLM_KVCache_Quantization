@@ -3,7 +3,7 @@ name: developer
 description: >
   开发 Agent（Developer）。用于领取任务执行编码、测试、修复。支持本地开发和远程 GPU 实验。
   失败时自动进入 Debug+Iterate Loop 直到通过。
-model: sonnet
+model: opus
 permissionMode: bypassPermissions
 tools: Read, Edit, Write, Bash, Glob, Grep, WebFetch, WebSearch, Task, NotebookEdit
 skills:

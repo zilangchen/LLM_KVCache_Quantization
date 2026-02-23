@@ -1,6 +1,6 @@
 # Code Review Tracker
 
-> 176 issues | 62 fixed + 2 false_positive | 112 open (3 CRIT, 19 HIGH, 61 MED, 29 LOW)
+> 182 issues | 64 fixed + 2 false_positive | 116 open (3 CRIT, 21 HIGH, 63 MED, 29 LOW)
 > Phase Gate: **BLOCKED** — CHK-001, EVL-001, EVL-002
 > Last updated: 2026-02-24
 
@@ -150,12 +150,20 @@
 - [ ] **TST-017** `[LOW]` 缺少单 token、batch=0、head_dim=1 等极端边界测试
 - [ ] **TST-018** `[LOW]` 缺少多轮 clear→append 循环测试（生产中常见的 batch 间重用 cache 场景）
 
+### RVW. 审查工具与配置 — `scripts/review_tool.py`, `.claude/agents/reviewer.md`
+- [ ] **RVW-001** `[HIGH]` review_tool.py phase-gate 仅检查 CRIT，遗漏 HIGH (L120): `cmd_phase_gate()` 仅过滤 `severity == "CRIT"`，按 CLAUDE.md §4.5 闸门规则，HIGH 也应阻塞（至少提示）。可能导致存在 HIGH 阻塞项时误判为 CLEAR
+- [ ] **RVW-002** `[HIGH]` review_tool.py cmd_add() 文件写入非原子性 (L230-231): `open(path, "w")` 直接覆写，若进程中途崩溃会导致 review_tracker.md 被截断或损坏。应使用 tmpfile + rename 原子写入
+- [ ] **RVW-003** `[MED]` review_tool.py 解析不匹配行静默跳过 (L42-87): 任何不符合 ISSUE_RE 格式的 issue 行会被完全忽略，无警告日志。正则已从 `\w+` 改为 `[A-Z]+` 部分改善，但核心静默跳过问题仍存在
+- [ ] **RVW-004** `[MED]` review_tool.py _update_summary() 格式假设过强 (L274-283): `summary_replaced` 标志仅在 "Last updated:" 行后触发，若 header 行顺序变化或新增行则部分 summary 不更新
+- [x] **RVW-005** `[MED]` reviewer.md L5 描述引用 "iteration.md TODO Backlog" 应为 "review_tracker.md" (.claude/agents/reviewer.md L5) — fixed
+- [x] **RVW-006** `[MED]` reviewer.md YAML 权限与 body 指令矛盾 (.claude/agents/reviewer.md L8 vs L11,L16) — fixed: body 改为"严禁修改源代码（src/、scripts/、tests/、configs/）"，写入权限标注"仅限 review_tracker.md + iteration.md"
+
 ---
 
 ## Resolved
 
 <details>
-<summary>62 fixed + 2 false_positive (click to expand)</summary>
+<summary>64 fixed + 2 false_positive (click to expand)</summary>
 
 ### AGG. 聚合
 - [x] **AGG-001** `[CRIT]` kivi_style 完全缺失显著性配对 — fixed commit 03ed4a0
