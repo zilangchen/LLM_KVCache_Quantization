@@ -243,6 +243,58 @@ class TestGenerateThesisReport(unittest.TestCase):
         self.assertEqual(row["status"], "PASS")
         self.assertAlmostEqual(float(row["observed_gain_pct"]), 1.5, places=6)
 
+    def test_claim_validation_cross_model_requires_all_target_models_pass(self):
+        rel = pd.DataFrame(
+            [
+                {
+                    "metric": "longbench_score",
+                    "baseline_mode": "int8_baseline",
+                    "challenger_mode": "int8_ours",
+                    "model_id": "Qwen/Qwen2.5-7B-Instruct",
+                    "seq_len": 32704,
+                    "batch": 1,
+                    "gain_pct": 1.0,
+                },
+                {
+                    "metric": "longbench_score",
+                    "baseline_mode": "int8_baseline",
+                    "challenger_mode": "int8_ours",
+                    "model_id": "meta-llama/Llama-3.1-8B-Instruct",
+                    "seq_len": 32704,
+                    "batch": 1,
+                    "gain_pct": -1.5,
+                },
+            ]
+        )
+        claims = [
+            gtr.ClaimSpec(
+                claim_id="C11",
+                title="Cross-model",
+                metric="longbench_score",
+                baseline_mode="int8_baseline",
+                challenger_mode="int8_ours",
+                min_gain_pct=-1.0,
+                require_q_significance=False,
+                target_seq_len=32704,
+                target_batch=1,
+                target_model_ids=[
+                    "Qwen/Qwen2.5-7B-Instruct",
+                    "meta-llama/Llama-3.1-8B-Instruct",
+                ],
+            )
+        ]
+        out = gtr.build_claim_validation(
+            relative_gain=rel,
+            significance=pd.DataFrame(),
+            claims=claims,
+            alpha=0.05,
+        )
+        self.assertEqual(len(out), 1)
+        row = out.iloc[0]
+        self.assertEqual(row["status"], "FAIL")
+        self.assertIn("target_model_statuses", row.index)
+        self.assertIn("Llama-3.1-8B-Instruct:FAIL", str(row["target_model_statuses"]))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -201,6 +201,9 @@ TASK_OFFICIAL_METRIC: Dict[str, str] = {
     "lcc": "edit_sim",
     "repobench-p": "edit_sim",
 }
+# LongBench official classification metric is strict normalized exact match.
+# We intentionally do NOT use substring/contains matching here.
+CLASSIFICATION_MATCH_POLICY = "exact_match_only"
 
 
 def _lcs_length(x: List[str], y: List[str]) -> int:
@@ -258,7 +261,7 @@ def _edit_similarity(pred: str, truth: str) -> float:
 
 
 def _classification_accuracy(pred: str, answers: Sequence[str]) -> float:
-    """Classification accuracy: 1.0 if normalised prediction matches any answer."""
+    """Classification accuracy: strict normalized exact match (official LongBench behavior)."""
     pred_norm = _normalize_text(pred)
     for ans in answers:
         ans_norm = _normalize_text(ans)
@@ -797,6 +800,7 @@ def main() -> None:
                 "f1": float(score["f1"]),
                 "official_metric_name": str(official_metric_name),
                 "official_metric_value": float(official_metric_value),
+                "classification_match_policy": CLASSIFICATION_MATCH_POLICY,
                 "seed": int(args.seed),
                 "replica_id": int(args.replica_id),
                 "timestamp": timestamp,
@@ -887,6 +891,7 @@ def main() -> None:
         "longbench_f1_macro": round(float(np.mean(f1_macro)) if f1_macro else 0.0, 4),
         "longbench_official_macro": round(float(np.mean(official_macro)) if official_macro else 0.0, 4),
         "longbench_score": round(float(np.mean(official_macro)) if official_macro else 0.0, 4),
+        "longbench_classification_match_policy": CLASSIFICATION_MATCH_POLICY,
     }
 
     if args.save_csv:

@@ -382,6 +382,7 @@ def _mark_task_status(
     error: str | None = None,
     failure_type: str | None = None,
     attempt_idx: int | None = None,
+    record_history: bool = True,
 ) -> None:
     now = _now_iso()
     tasks = manifest.setdefault("tasks", {})
@@ -410,7 +411,7 @@ def _mark_task_status(
         entry["failure_type"] = str(failure_type)
     if error and status not in {"success", "skipped"}:
         entry["error"] = str(error)
-    if status in {"success", "failed", "skipped"}:
+    if status in {"success", "failed", "skipped"} and record_history:
         hist_row: Dict[str, Any] = {
             "timestamp": now,
             "status": status,
@@ -1298,10 +1299,11 @@ def main() -> int:
                         manifest_path,
                         manifest,
                         task=task,
-                        status="skipped",
+                        status="success",
                         cmd=cmd,
                         log_path=log_path,
                         returncode=0,
+                        record_history=False,
                     )
                     execution_rows.append(
                         {
