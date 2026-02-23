@@ -29,7 +29,7 @@ tmux send-keys -t "$SESSION:0.2" "claude --dangerously-skip-permissions --agent 
 sleep 5
 
 tmux send-keys -t "$SESSION:0.0" "我是主管 Agent。按启动流程开始：获取真实时间 → 读 iteration.md + objective.md → 评估状态 → 制定迭代计划 → 开始执行。" Enter
-tmux send-keys -t "$SESSION:0.1" "我是开发 Agent。按启动流程开始：获取真实时间 → 读 iteration.md → 从 TODO Backlog 领取最高优先级 CRITICAL 任务 → 开始修复。" Enter
+tmux send-keys -t "$SESSION:0.1" "我是开发 Agent。按启动流程开始：获取真实时间 → 读 review_tracker.md + iteration.md → 按优先级矩阵领取任务 → 开始修复。" Enter
 tmux send-keys -t "$SESSION:0.2" "持续审查模式启动。按启动流程开始：获取时间 → 读 review_tracker.md → 进入持续监控循环。" Enter
 
 tmux select-pane -t "$SESSION:0.0"

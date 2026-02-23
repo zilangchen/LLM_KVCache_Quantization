@@ -1,7 +1,7 @@
 # Code Review Tracker
 
-> 240 issues | 65 fixed + 2 false_positive | 173 open (3 CRIT, 32 HIGH, 97 MED, 41 LOW)
-> Phase Gate: **BLOCKED** — CHK-001, EVL-001, EVL-002
+> 273 issues | 74 fixed + 2 false_positive | 197 open (0 CRIT, 44 HIGH, 112 MED, 41 LOW)
+> Phase Gate: **CLEAR** — all CRITICAL resolved
 > Last updated: 2026-02-24
 
 ---
@@ -10,18 +10,32 @@
 
 ### CHK. 完整性检查 — `scripts/check_run_completeness.py`
 
-- [ ] **CHK-001** `[CRIT]` OOM 分类被 elif 链短路 (L94-109)
+- [x] **CHK-001** `[CRIT]` OOM 分类被 elif 链短路 (L94-109) — fixed commit 1aa5c95 (OOM 检查已移至 if 链首位 L147-148)
 - [ ] **CHK-002** `[HIGH]` manifest 无 failure_type 字段 (L85)
 - [ ] **CHK-003** `[HIGH]` 不验证 kivi_style 运行完整性
 - [ ] **CHK-004** `[MED]` 不验证 CSV 内容完整性 (L80)
 - [ ] **CHK-005** `[MED]` LongBench/RULER 任务级完整性无验证 (L16-23, L146-148)
 - [ ] **CHK-006** `[MED]` dev agent 仍未确认 O 节 3 CRITICAL + T 节 1 CRITICAL
+- [ ] **CHK-007** `[HIGH]` manifest_status="running" + 完整有效 CSV 被错判为 mixed_csv_non_success (L153-159): success 分支要求 manifest_status∈{success,skipped}，"running" 落入 L159 的 mixed 分支。进程在写完 CSV 后崩溃但未更新 manifest 时触发，导致不必要的重跑。 — D2, confidence: 90%
+- [ ] **CHK-008** `[HIGH]` 日志 errors="ignore" 掩盖 OOM/traceback 检测 (L49): `_read_text()` 用 `errors="ignore"` 静默丢弃非 UTF-8 字节，若 OOM 关键字跨越被丢弃的字节则 re.search 漏检。应用 `errors="replace"`。 — D2+D5, confidence: 88%
+- [ ] **CHK-009** `[HIGH]` JSON manifest 损坏被 except 静默返回 None (L37-42): `_read_json()` 对任何异常（含 JSONDecodeError）返回 None，调用方无法区分"文件不存在"与"文件损坏"。损坏的 manifest 被当作空处理，运行被误判为 missing。 — D2, confidence: 88%
+- [ ] **CHK-010** `[HIGH]` 新增任务类型无 CSV 模式和产物验证 → 默认通过 (L17-24, L85-91): TASK_TO_CSV_PATTERN 仅 6 任务，新任务 csv_pattern="" → glob 无匹配 → has_csv=False → "missing"。但 `_has_task_level_artifacts` 对非 LB/RULER 任务返回 True，无实际验证。 — D2+D1+D7, confidence: 95%
+- [ ] **CHK-011** `[MED]` CSV 三种失败模式不区分 (L62-74): `_csv_has_rows()` 对文件不存在/仅 header/读取异常均返回 False，调用方合并为 `has_valid_csv=False`，无法针对性修复。 — D2, confidence: 85%
+- [ ] **CHK-012** `[MED]` 非整数 seed 参数导致未处理 ValueError (L270): `int(x)` 对 "abc" 等输入直接崩溃，无友好错误提示。 — D2+D5, confidence: 85%
+- [ ] **CHK-013** `[MED]` 空 required/stress_run_names 产生虚假 complete=True (L268-269, L318): 空列表 → 空 expected → missing_run_names=[] → required_complete=True。无至少一个 run 的前置检查。 — D2+D5, confidence: 85%
+- [ ] **CHK-014** `[MED]` --tasks 默认值与 run_experiments.py 不一致 (L252): check 脚本默认 "profile_latency,profile_memory"(2 任务)，run 脚本默认 4 任务。长实验检查时漏验 eval_ppl/eval_needle。 — D4, confidence: 86%
+- [ ] **CHK-015** `[MED]` failure_type 域值枚举与 run_experiments.py _classify_failure() 不同步 (L94-108): 两处独立维护 failure_type 枚举，新增类型时易遗漏。 — D4, confidence: 84%
+- [ ] **CHK-016** `[MED]` Traceback 检测大小写敏感 (L58): 使用精确字符串 "Traceback (most recent call last):" 匹配，小写变体漏检。OOM 检测用了 re.IGNORECASE 但 Traceback 没有。 — D7, confidence: 88%
+- [ ] **CHK-017** `[MED]` 状态转移链 7 层嵌套无注释 (L147-166): 20 行 elif 链含复杂布尔表达式和多个不可达分支，无状态机文档。维护易引入逻辑错误。 — D7, confidence: 100%
+- [ ] **CHK-018** `[MED]` _split_csv/_read_json/_read_text 与 run_experiments.py 重复定义 (L27-51): 3 个工具函数在两个脚本中独立实现，修 bug 需改两处。 — D7, confidence: 100%
+- [ ] **CHK-019** `[MED]` L159 中 "skipped" 是不可达分支: has_csv=True + manifest_status="skipped" 总被 L153 先捕获（"skipped" 在 L154 的集合中）。死代码增加阅读困惑。 — D7, confidence: 95%
+- [ ] **CHK-020** `[LOW]` 返回类型 Dict[str, Any] 无 TypedDict/dataclass 约束 (L168-181, L238-243): 字段名错误无法被静态检查捕获。 — D7, confidence: 80%
 
 ### EVL. 评测脚本 — `scripts/eval_*.py`
 
-- [ ] **EVL-001** `[CRIT]` eval_longbench.py _classification_accuracy() 语义变化未文档化 (L265)
-- [ ] **EVL-002** `[CRIT]` **RULER CWE 子任务在 1.5B *_long 配置下触发 max_position_embeddings 溢出**
-- [ ] **EVL-008** `[HIGH]` **run_experiments.py 预检查遗漏 RULER CWE 的额外 max_new_tokens 开销** (L806-928)
+- [x] **EVL-001** `[CRIT]` eval_longbench.py _classification_accuracy() 语义变化未文档化 (L265) — fixed commit 52f4abf (CLASSIFICATION_MATCH_POLICY 常量 + docstring + CSV audit 字段)
+- [x] **EVL-002** `[CRIT]` **RULER CWE 子任务在 1.5B *_long 配置下触发 max_position_embeddings 溢出** — fixed commit b7f4c36 (_effective_prompt_budget() 确保 prompt + gen ≤ max_model_len)
+- [x] **EVL-008** `[HIGH]` **run_experiments.py 预检查遗漏 RULER CWE 的额外 max_new_tokens 开销** (L806-928) — fixed commit b7f4c36 (prelaunch 截断警告 + _effective_prompt_budget)
 - [ ] **EVL-013** `[MED]` eval_ruler.py 截断策略 magic numbers (L562-570)
 - [ ] **EVL-014** `[MED]` **eval_ruler.py case 循环无 per-case error handling** (L872-908)
 - [ ] **EVL-017** `[MED]` eval_longbench.py 自实现 Rouge-L 可能与官方 LongBench 不一致 (L206-219)
@@ -45,6 +59,21 @@
 - [ ] **AGG-015** `[LOW]` 精确枚举阈值 n=16 硬编码 (L1092-1107)
 - [ ] **AGG-016** `[MED]` 显著性 pairings 遗漏 `("int4_baseline", "int4_ours")` (L2207-2212): INT8 有 baseline-vs-ours 配对，INT4 仅有 `("int4_fused", "int4_ours")`。若 Phase5v2 不含 int4_fused 运行，则 INT4 无任何显著性比较
 - [ ] **AGG-017** `[MED]` `_export_per_model_layered_tables()` bare `except` 吞掉 CSV 读取错误 (aggregate_results.py): 空 `except:` 捕获所有异常（包括 CSV 格式损坏、权限错误），静默跳过该模型的表导出。应至少 `except Exception as e:` 并 log warning。 — D2 incremental, confidence: 90%
+- [ ] **AGG-018** `[HIGH]` _add_ci95_columns 使用 z=1.96 而非 t 分位数，n=5 时 CI 偏窄 29% (aggregate_results.py:148-150): 固定乘数 1.96（正态分布）用于 count<=5 的小样本。df=4 时 t 分位数为 2.776，当前 CI 半宽仅为真实值的 70%。影响所有 summary 表（latency/memory/ppl/needle/longbench/ruler）的 CI 列和图表 error bar。 — D1 EXP rotation, confidence: 95%
+- [ ] **AGG-019** `[HIGH]` sign-flip p 值定义在 exact 与 MC 分支间不一致 (aggregate_results.py:1249-1258): exact 分支 (n<=16) 不含 +1 修正可产出 p=0.0；MC 分支 (n>16) 含 Phipson-Smyth +1 修正保证 p>0。当 n 从 16 增到 17 时可能出现 p 值跳变。p=0 在 BH-FDR 调整时产生 q=0，统计学上不规范。 — D1 EXP rotation, confidence: 92%
+- [ ] **AGG-020** `[HIGH]` _read_csvs() bare except 静默跳过损坏 CSV 文件 (aggregate_results.py:93-96): `except Exception: continue` 无日志无计数。若 CSV 因编码/截断/权限损坏，数据被完全丢弃。小样本统计下丢失 1 个 seed 显著改变结论。严格模式也不检查加载文件数 vs 预期。 — D2/D5/D7 EXP rotation, confidence: 95%
+- [ ] **AGG-021** `[HIGH]` _main_claims_32k_table 混合 outer/left merge 产生幽灵行或丢失数据 (aggregate_results.py:1467-1477): latency+memory 用 outer merge（可能产生 NaN 幽灵行），ppl/longbench/ruler 用 left merge（可能丢弃不在 latency 中的 kv_mode 数据）。无 merge 后行数 sanity check。 — D2 EXP rotation, confidence: 85%
+- [ ] **AGG-022** `[HIGH]` _build_paired_metric_rows pivot_table aggfunc="mean" 静默折叠重复 seed 观测 (aggregate_results.py:1144-1153): 重复 (key, seed, kv_mode) 行被均值折叠，仅 print() 警告（非 logging）。折叠后 paired test 的独立性假设被违反，p-value 可能不可靠。 — D2 EXP rotation, confidence: 85%
+- [ ] **AGG-023** `[HIGH]` relative_gain pairings 缺少 kivi_style → C9/C10 永远 INCONCLUSIVE (aggregate_results.py:2390-2396): significance pairings 含 ("kivi_style","int8_ours")，但 relative_gain pairings 不含。generate_thesis_report C9/C10 需要 relative_gain 行证据，永远找不到 → 返回 INCONCLUSIVE。 — D4/D5 EXP rotation, confidence: 98%
+- [ ] **AGG-024** `[HIGH]` relative_gain key_cols 不含 model_id → C11 跨模型过滤失效 (aggregate_results.py:2398-2466): 所有 _relative_gain_table 调用的 key_cols 不含 "model_id"。generate_thesis_report C11 的 target_model_ids 过滤因 "model_id" 列不存在而跳过，claim 实际评估所有模型混合后的聚合值。 — D4 EXP rotation, confidence: 95%
+- [ ] **AGG-025** `[HIGH]` _main_claims_32k_table 多模型场景 merge on kv_mode 产生笛卡尔积 (aggregate_results.py:1438-1483): lat_cols 不含 model_id，多模型 summary 中同一 kv_mode 有多行。merge on="kv_mode" 产生 N*M 行笛卡尔积，导致 LaTeX 表重复行、论文 main claims 膨胀。 — D4 EXP rotation, confidence: 92%
+- [ ] **AGG-026** `[HIGH]` gain_pct 与 diff 基于不同样本量计算 (aggregate_results.py:1156-1190): baseline=0 时 gain_pct=NaN，dropna(subset=...) 不含 gain_pct 列所以 NaN 行保留。但 _significance_summary 对 gain_pct 做额外 dropna，导致 gain_pct_mean 基于 n-k 样本而 diff_mean 基于 n 样本，n_pairs 不匹配。 — D1/D5 EXP rotation, confidence: 85%
+- [ ] **AGG-027** `[MED]` _add_ci95_columns count=1 时 CI 半宽强制为 0，产生误导性零宽度 CI (aggregate_results.py:150): `ci_half.where(cnt > 1, 0.0)` 使单 seed 行显示 [mean, mean] 区间，读者误以为完美精确。应标记为 NaN 或注明 count=1。 — D2/D5 EXP rotation, confidence: 95%
+- [ ] **AGG-028** `[MED]` _to_numeric errors="coerce" 将非数值静默转 NaN，无 warning (aggregate_results.py:107-111): 对所有指标列使用 `pd.to_numeric(errors="coerce")`，异常字符串（"N/A"、"err"、空串）变 NaN 后被 groupby 忽略。5-seed 小样本下丢失 1 个点显著影响结论。 — D2 EXP rotation, confidence: 90%
+- [ ] **AGG-029** `[MED]` gain_pct_mean（跨 seed 配对差均值）vs gain_pct（聚合均值上的单点增益）定义不同 (generate_thesis_report.py:586 vs 356): significance_summary 用 gain_pct_mean，claim_validation 用 gain_pct。Jensen's inequality 下两者不等。同一 claim 在两个表中可能给出矛盾的 practical_pass。 — D4 EXP rotation, confidence: 88%
+- [ ] **AGG-030** `[MED]` _main_claims_32k_table latency 或 memory 为空即返回完全空表 (aggregate_results.py:1464-1467): 若 latency 数据缺失，即使 needle/ppl/longbench/ruler 完整，main claims 表也为空。无 warning。 — D2 EXP rotation, confidence: 90%
+- [ ] **AGG-031** `[MED]` sign-flip 双尾检验 + 方向一致性检查 = 事实上 2 倍保守的单尾检验 (aggregate_results.py:1089): sign-flip p 值基于 |mean|（双尾），但 claim 验证要求 significant_q AND favors_challenger（单侧判据）。真正的单尾 p 应为 p_two/2。n=5 下可能导致本应显著的 claim 被误判。 — D1 EXP rotation, confidence: 80%
+- [ ] **AGG-032** `[MED]` main() 函数 955 行含 7 次相同 read→numeric→seed→strict→agg→ci→save 模式 (aggregate_results.py:1539-2493): 无法单独测试、修改任一 benchmark 聚合逻辑需在巨大函数中导航。建议按 benchmark 拆分为独立函数。 — D7 EXP rotation, confidence: 98%
 
 ### CAL. 校准模块 — `scripts/calibrate_behavior.py`
 - [ ] **CAL-006** `[HIGH]` trial 排名受 loss 尺度影响 (L780-791)
@@ -118,6 +147,10 @@
 - [ ] **EXP-010** `[HIGH]` generate_thesis_report.py 单模型路径缺少 `target_model_id` 字段: 当 `--model_ids` 只传一个模型时，`_evaluate_claim_row()` 返回的 dict 不含 `target_model_id` key，但下游 DataFrame 构建假设该列存在，导致 KeyError。跨模型路径正常。 — D1 incremental, confidence: 92%
 - [ ] **EXP-011** `[LOW]` generate_thesis_report.py NaN `gain_pct` 被判定为 FAIL 而非 INCONCLUSIVE: 当 baseline 为 0 时 `gain_pct = NaN`，当前逻辑将 NaN 视为未通过阈值 → FAIL。应归类为 INCONCLUSIVE 并在报告中标注。 — D2 incremental, confidence: 85%
 - [ ] **EXP-012** `[LOW]` generate_thesis_report.py 单模型 vs 跨模型 claim schema 不一致 (27 vs 29 keys): 单模型 claim dict 缺少 `min_gain_model` 和 `max_degradation_model` 字段，跨模型有。下游若以跨模型 schema 为模板构建 DataFrame，单模型行会出 NaN 列。 — D4 incremental, confidence: 82%
+- [ ] **EXP-013** `[HIGH]` export_tables_latex.py `_read_csv()` bare except 返回空 DataFrame，全部下游 export 静默跳过: L66-70 `except: return pd.DataFrame()` 吞掉所有异常（包括 schema 错误、编码错误），8 个 export 函数均依赖此函数，文件损坏或格式变更时无任何警告，产出空 LaTeX 表格。 — D2 EXP rotation, confidence: 95%
+- [ ] **EXP-014** `[MED]` export_tables_latex.py `_pivot_metric()` groupby().mean() 静默平均多模型行: L91-126 当输入包含多个 model_id 的数据时，pivot 前的 groupby 会将不同模型的指标平均，产出的 LaTeX 表格数值为多模型混合平均值而非单模型值。当前无 model_id 过滤逻辑。 — D4 EXP rotation, confidence: 90%
+- [ ] **EXP-015** `[MED]` export_tables_latex.py LaTeX `--label_prefix` 注入风险: `label_prefix` 参数直接拼入 `\label{}` 命令（L140 等），含特殊字符（如 `}`, `\`）时会破坏 LaTeX 编译。无输入校验或转义。 — D3 EXP rotation, confidence: 85%
+- [ ] **EXP-016** `[MED]` export_tables_latex.py export_latency / export_memory 近乎重复的 DRY 违反: L159-225 两函数结构几乎相同（仅 metric_col 和标题不同），约 60 行重复代码。应提取公共 `_export_profile_table()` 函数。 — D7 EXP rotation, confidence: 88%
 
 ### KVC. KV Cache — `src/cache/`
 - [ ] **KVC-002** `[HIGH]` ~~KIVI INT4 未实现 bit-packing~~ **事实已变更**：当前代码已实现 bit-packing (L75 `bit_packed=True` for INT4, L300/306 `pack_int4`, L344-345/354-355 `unpack_int4`)。但远端测试显示 decode 路径有维度不匹配 bug（2 tests failed, iteration.md 2026-02-23 17:29）。建议降级为 MED 并改描述为"KIVI INT4 bit-pack decode 维度不匹配"
@@ -193,6 +226,13 @@
 - [ ] **TST-027** `[MED]` _get_rope_cos_sin 多 fallback 路径无测试 (patch_model.py:398-447): 5 种 fallback 全靠 try-except 消音，无测试验证正确路径被选中。 — D6, confidence: 85%
 - [ ] **TST-028** `[MED]` _resolve_attn_shape_meta 头数推断无测试 (patch_model.py:467-502): 6 种 fallback 推断 q_heads/kv_heads/head_dim，错误推断导致 fused attention 输出形状错误。 — D6, confidence: 90%
 - [ ] **TST-029** `[MED]` _materialize_int4_cache_as_int8 无测试 (patch_model.py:42-62): bit_packed vs unpacked 两条路径、形状 mismatch 校验无独立测试。 — D6, confidence: 85%
+- [ ] **TST-030** `[HIGH]` check_run_completeness.py 关键状态路径未测试: _check_task_state() 返回 8 种状态中 task_artifacts_missing、running、mixed_csv_non_success、missing 4 种无直接测试用例。当前仅覆盖 success、oom、csv_invalid、traceback 路径。 — D6 CHK rotation, confidence: 95%
+- [ ] **TST-031** `[HIGH]` eval_longbench/eval_ruler 工件检测完全无测试 (check_run_completeness.py:85-90): `_has_task_level_artifacts()` 中 longbench 检查 task_summary CSV、ruler 需同时检查 task_summary + depth_summary，两条分支零测试。 — D6 CHK rotation, confidence: 100%
+- [ ] **TST-032** `[MED]` check_run_completeness.py 8 个工具函数无独立单元测试: _split_csv, _read_json, _read_text, _is_oom_from_log, _is_traceback_from_log, _csv_has_rows, _has_task_level_artifacts, _expected_run_ids 均无单元测试，仅通过集成测试间接覆盖。 — D6 CHK rotation, confidence: 90%
+- [ ] **TST-033** `[MED]` check_run_completeness.py 参数组合和错误路径测试不足: allow_oom_completion=False 影响、runs_dir 不存在 exit(2)、logs_dir=None 完整路径、allow_stress_unexpected_failures 标志均无测试。 — D6 CHK rotation, confidence: 88%
+- [ ] **TST-034** `[HIGH]` export_tables_latex.py 零测试覆盖: 510 行代码、8 个 export 函数、2 个 helper 函数，tests/ 下无任何对应测试文件。_read_csv bare except、_pivot_metric 多模型平均、LaTeX 特殊字符转义等问题均无回归防护。 — D6 EXP rotation, confidence: 98%
+- [ ] **TST-035** `[HIGH]` aggregate_results.py 统计函数测试覆盖不足: `_stable_random_seed`、`_cohens_dz`、`_relative_gain_table`、`_build_paired_metric_rows`、`_paired_signflip_pvalue` 等核心统计函数缺少针对性单元测试。现有 test_aggregate_results_stats.py 仅覆盖部分路径。 — D6 EXP rotation, confidence: 92%
+- [ ] **TST-036** `[HIGH]` aggregate_results.py main() 管线无端到端测试: main() 函数 955 行，串联 7+ 子流程（read→CI→paired→claims→latex），无任何 e2e 测试验证从 CSV 输入到最终 tables/plots 产出的完整路径。配置变更可能静默破坏输出。 — D6 EXP rotation, confidence: 95%
 
 ### RVW. 审查工具与配置 — `scripts/review_tool.py`, `.claude/agents/review-*.md`
 - [ ] **RVW-001** `[HIGH]` review_tool.py phase-gate 仅检查 CRIT，遗漏 HIGH (L120): `cmd_phase_gate()` 仅过滤 `severity == "CRIT"`，按 CLAUDE.md §4.5 闸门规则，HIGH 也应阻塞（至少提示）。可能导致存在 HIGH 阻塞项时误判为 CLEAR
@@ -201,15 +241,15 @@
 - [ ] **RVW-004** `[MED]` review_tool.py _update_summary() 格式假设过强 + 双写竞争 (L268-287): `summary_replaced` 标志仅在 "Last updated:" 行后触发，若 header 行顺序变化或新增行则部分 summary 不更新。另外 `cmd_add` 先 write content 再调 `_update_summary`（二次 open+write），后者可能只更新部分摘要行却无返回值通知调用方
 - [x] **RVW-005** `[MED]` reviewer.md L5 描述引用 "iteration.md TODO Backlog" 应为 "review_tracker.md" (.claude/agents/reviewer.md L5) — fixed
 - [x] **RVW-006** `[MED]` reviewer.md YAML 权限与 body 指令矛盾 (.claude/agents/reviewer.md L8 vs L11,L16) — fixed: body 改为"严禁修改源代码（src/、scripts/、tests/、configs/）"，写入权限标注"仅限 review_tracker.md + iteration.md"
-- [ ] **RVW-007** `[MED]` start_agents.sh L32 developer 启动 prompt 引用 "TODO Backlog" 而非 review_tracker.md (scripts/start_agents.sh L32): 与 developer.md L22 "读取 review_tracker.md" 冲突，可能导致 developer agent 优先遵循启动 prompt 到 iteration.md 而非 review_tracker.md 查找任务
-- [ ] **RVW-008** `[MED]` start_agents.sh L33 reviewer 启动 prompt 未提及 review_tracker.md (scripts/start_agents.sh L33): reviewer.md L21 要求先读 review_tracker.md，但启动 prompt 仅说"读 iteration.md"
+- [x] **RVW-007** `[MED]` start_agents.sh L32 developer 启动 prompt 引用 "TODO Backlog" 而非 review_tracker.md (scripts/start_agents.sh L32): 与 developer.md L22 "读取 review_tracker.md" 冲突，可能导致 developer agent 优先遵循启动 prompt 到 iteration.md 而非 review_tracker.md 查找任务 — fixed (prompt 改为 "读 review_tracker.md + iteration.md → 按优先级矩阵领取任务")
+- [x] **RVW-008** `[MED]` start_agents.sh L33 reviewer 启动 prompt 未提及 review_tracker.md (scripts/start_agents.sh L33): reviewer.md L21 要求先读 review_tracker.md，但启动 prompt 仅说"读 iteration.md" — fixed commit 3ba38e3 (prompt 已更新为 "读 review_tracker.md → 进入持续监控循环")
 - [ ] **RVW-009** `[LOW]` settings.json Stop hook "BLOCKED" 字符串匹配过宽 (.claude/settings.json L21): iteration.md 历史条目中若包含 "BLOCKED" 一词（如引用 Phase Gate 状态），会误触发退出许可，应匹配更精确的标记如 "auto-iterate-blocked"
-- [ ] **RVW-010** `[LOW]` start_agents.sh 硬编码绝对路径 (scripts/start_agents.sh L5): `PROJECT_DIR="/Users/chenzilang/..."` 不可移植，建议使用 `$(cd "$(dirname "$0")/.." && pwd)`
-- [ ] **RVW-011** `[HIGH]` Phase Blocker CHK-001 已修复但未标记 — 独立审查确认 `_check_task_state()` OOM 检查已移至 if 链首位 (check_run_completeness.py L147)，匹配 Codex PR 修复 (merge 1aa5c95)。Phase Gate 状态过期，建议 developer 验证并标记 fixed 以解除 blocker
+- [x] **RVW-010** `[LOW]` start_agents.sh 硬编码绝对路径 (scripts/start_agents.sh L5): `PROJECT_DIR="/Users/chenzilang/..."` 不可移植，建议使用 `$(cd "$(dirname "$0")/.." && pwd)` — fixed commit 3ba38e3
+- [x] **RVW-011** `[HIGH]` Phase Blocker CHK-001 已修复但未标记 — 独立审查确认 `_check_task_state()` OOM 检查已移至 if 链首位 (check_run_completeness.py L147)，匹配 Codex PR 修复 (merge 1aa5c95)。Phase Gate 状态过期，建议 developer 验证并标记 fixed 以解除 blocker — fixed (supervisor 已验证并标记 CHK-001)
 - [ ] **RVW-012** `[MED]` 多处 kv_mode 列表遗漏 int4_fused: developer.md L91 和 CLAUDE.md §9 固定决策均缺少 `int4_fused`（仅列 6 项），而 review-numerical.md L122 和代码 generate_loop.py 均包含 `int4_fused`（7 项）。权威文件与实际代码不一致
 - [ ] **RVW-013** `[LOW]` Resolved KVC-003 前提失效: KVC-003 "论文须注明 KIVI INT4 无 bit-packing" 已标记 fixed，但当前代码已实现 bit-packing (L75, L300)。论文描述应更新为"KIVI INT4 使用 bit-packing"。此项记录前提变更，非新 bug
 - [ ] **RVW-014** `[HIGH]` cmd_add() 在 `## Open Issues` 节缺失时静默无操作 (scripts/review_tool.py L219-235): 当 `re.search(r'^## Open Issues', content)` 返回 None 时，整个写入分支被跳过，函数仍输出 "Added: ..." 并返回 0，issue 实际未写入 — confidence: 97%
-- [ ] **RVW-015** `[HIGH]` start_agents.sh L28 `--agent reviewer` 引用已删除的 agent (scripts/start_agents.sh L16,L28): reviewer.md 已被 review-coord.md + 7 专项 Agent 替代，执行该脚本会以不存在的 reviewer agent 启动第三个 pane，审查子系统完全无法工作 — confidence: 98%
+- [x] **RVW-015** `[HIGH]` start_agents.sh L28 `--agent reviewer` 引用已删除的 agent (scripts/start_agents.sh L16,L28): reviewer.md 已被 review-coord.md + 7 专项 Agent 替代，执行该脚本会以不存在的 reviewer agent 启动第三个 pane，审查子系统完全无法工作 — fixed commit 3ba38e3
 - [ ] **RVW-016** `[MED]` cmd_add() 无重复 ID 检查 (scripts/review_tool.py L192-236): 重复执行相同 `--id` 会产生重复条目，cmd_stats 计数虚高 — confidence: 100%
 - [ ] **RVW-017** `[MED]` parse_tracker rest.replace(" — fixed", "") 全局替换可损坏 title (scripts/review_tool.py L63): 若 issue title 本身包含 " — fixed" 子串（如 "partially — fixed workaround"），该子串也会被静默删除 — confidence: 80%
 - [ ] **RVW-018** `[MED]` 无效 --sev 参数静默返回空结果 (scripts/review_tool.py L137-139): 传入未知 severity（如 `--sev foo`）时 fallback 为 `"FOO"`，过滤结果为空列表，exit code 仍为 0，用户无法区分"真无结果"与"参数拼写错误" — confidence: 88%

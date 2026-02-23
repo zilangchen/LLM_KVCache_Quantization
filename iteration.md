@@ -42,7 +42,8 @@ Canonical agent workflow directory is `.agents/`.
   - [x] 创建 6 个 runner 脚本（3 质量 + 3 吞吐） — ✅ 2026-02-23 17:22
   - [x] 启动质量并行评测（3 tmux sessions: q_1p5b/q_7b/q_8b） — ✅ 2026-02-23 17:23
   - [x] Cherry-pick Codex RULER 修复到 main（5 commits: b7f4c36→4dbc227） — ✅ 2026-02-24 04:34
-  - [ ] rsync 修复到远端 + repair RULER-long 失败
+  - [x] rsync 修复到远端 — ✅ 2026-02-24 04:38
+  - [ ] repair RULER-long 失败（int4_baseline_long 修复中，int4_fused_long 待修复）
   - [ ] 质量评测完成（535 runs: 1.5B×215 + 7B×160 + 8B×160）
   - [ ] 吞吐串行评测（565 runs: 1.5B×240 + 7B×200 + 8B×200）（质量完成后启动）
   - [ ] 3 模型延迟/显存 profiling
@@ -93,6 +94,24 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
 
 ## Timeline (Latest First)
+
+### 2026-02-24 05:10 | Supervisor 审查追踪清理 — Phase Gate 解除阻塞
+
+- **Goal**: 验证并标记已修复的 Phase Blockers 和 RVW issues，解除 Phase Gate 阻塞
+- **Changed files**:
+  - `review_tracker.md`: 标记 9 个已修复 issues (CHK-001, EVL-001, EVL-002, EVL-008, RVW-007, RVW-008, RVW-010, RVW-011, RVW-015)
+  - `scripts/start_agents.sh`: L32 developer prompt 从 "TODO Backlog" 改为 "review_tracker.md + iteration.md → 按优先级矩阵领取任务" (RVW-007)
+- **Validation**:
+  - `review_tool.py stats`: 273 total, 74 fixed, 197 open ✅
+  - `review_tool.py phase-gate`: **CLEAR** (was BLOCKED by 3 CRIT) ✅
+  - CHK-001: 代码验证 OOM 检查在 if 链首位 (L147-148) ✅
+  - EVL-001: CLASSIFICATION_MATCH_POLICY + docstring + CSV audit 字段 ✅
+  - EVL-002: _effective_prompt_budget() 确保 prompt + gen ≤ max_model_len ✅
+- **Phase Gate 状态**: BLOCKED → **CLEAR**（0 CRIT open）
+- **Commit**: 53fd752
+- **Risks / follow-ups**:
+  - 远程实验仍在运行，本次修改不影响远端代码
+  - 44 HIGH issues 仍 open，优先处理 ENG/TST 模块
 
 ### 2026-02-24 04:34 | Cherry-pick Codex RULER 修复 + 附带改进
 
