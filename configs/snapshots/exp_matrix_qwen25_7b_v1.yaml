@@ -379,7 +379,8 @@ matrix:
 
   # =========================================================================
   # Long-context stress runs (seq_len + gen_len <= max_position_embeddings)
-  # NOTE: Qwen2.5-7B max_position_embeddings is 131072; using 32704 for
+  # NOTE: For this pinned revision, run_experiments.py resolves
+  #       max_position_embeddings=32768 at runtime; using 32704 keeps
   #       comparability with the 1.5B config.
   # =========================================================================
   - run_name: fp16_kv_long

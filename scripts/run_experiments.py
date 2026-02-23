@@ -211,6 +211,56 @@ def _task_has_csv(run_dir: Path, task: str) -> bool:
     return any(run_dir.glob(pattern))
 
 
+def _resolve_ruler_tasks_for_gate(ruler_tasks_arg: str | None) -> List[str]:
+    if not ruler_tasks_arg:
+        return ["s_niah", "mk_niah", "vt", "cwe"]
+    out = [t.strip().lower() for t in str(ruler_tasks_arg).split(",") if t.strip()]
+    return out or ["s_niah", "mk_niah", "vt", "cwe"]
+
+
+def _ruler_peak_gen_tokens_for_gate(
+    *,
+    ruler_tasks_arg: str | None,
+    ruler_max_new_tokens: int,
+) -> int:
+    peak = int(ruler_max_new_tokens)
+    tasks = _resolve_ruler_tasks_for_gate(ruler_tasks_arg)
+    if "cwe" in tasks:
+        peak = max(peak, 128)
+    return int(peak)
+
+
+def _compute_ruler_truncation_warning(
+    *,
+    run_name: str,
+    seq_len: int,
+    gen_len: int,
+    max_position_embeddings: int,
+    ruler_context_len: int,
+    ruler_max_new_tokens: int,
+    ruler_tasks_arg: str | None,
+) -> str | None:
+    peak_gen = _ruler_peak_gen_tokens_for_gate(
+        ruler_tasks_arg=ruler_tasks_arg,
+        ruler_max_new_tokens=ruler_max_new_tokens,
+    )
+    base_total_budget = min(
+        int(seq_len) + int(gen_len),
+        int(max_position_embeddings),
+    )
+    safe_prompt_budget = min(int(ruler_context_len), int(base_total_budget) - int(peak_gen))
+    if safe_prompt_budget >= int(ruler_context_len):
+        return None
+    tasks = ",".join(_resolve_ruler_tasks_for_gate(ruler_tasks_arg))
+    return (
+        "Warning: RULER prompt budget will be truncated at runtime. "
+        f"run_name={run_name} requested_context_len={ruler_context_len} "
+        f"peak_gen_tokens={peak_gen} base_total_budget={base_total_budget} "
+        f"safe_prompt_budget={safe_prompt_budget} tasks={tasks}. "
+        "eval_ruler.py will enforce safe truncation to avoid length overflow."
+    )
+
+
 def _read_text_best_effort(path: Path) -> str:
     if not path.exists():
         return ""
@@ -932,6 +982,23 @@ def main() -> int:
                 f"seq_len <= {suggested_seq_len} (or reduce gen_len)."
             )
             return 2
+        if max_position_embeddings is not None and "eval_ruler" in task_list:
+            requested_ruler_context = (
+                int(args.ruler_context_len)
+                if args.ruler_context_len is not None
+                else int(seq_len)
+            )
+            warning = _compute_ruler_truncation_warning(
+                run_name=str(run_name),
+                seq_len=int(seq_len),
+                gen_len=int(gen_len),
+                max_position_embeddings=int(max_position_embeddings),
+                ruler_context_len=int(requested_ruler_context),
+                ruler_max_new_tokens=int(args.ruler_max_new_tokens),
+                ruler_tasks_arg=args.ruler_tasks,
+            )
+            if warning:
+                print(warning)
 
         quant_params = resolve_quant_params(run_entry, quant_defaults)
         run_quant_bits = run_entry.get("quant_bits", quant_defaults.get("quant_bits"))
