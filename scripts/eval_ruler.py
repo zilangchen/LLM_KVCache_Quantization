@@ -570,6 +570,23 @@ def _truncate_prompt_ids(
     return torch.tensor([ids], dtype=torch.long), truncated
 
 
+def _effective_prompt_budget(
+    *,
+    requested_context_len: int,
+    seq_len: int,
+    gen_len: int,
+    gen_tokens_case: int,
+    max_model_len: int,
+) -> Tuple[int, int]:
+    """Return (effective_prompt_budget, base_total_budget)."""
+    base_total_budget = min(int(seq_len) + int(gen_len), int(max_model_len))
+    effective_prompt_budget = min(
+        int(requested_context_len),
+        int(base_total_budget) - int(gen_tokens_case),
+    )
+    return int(effective_prompt_budget), int(base_total_budget)
+
+
 # ---------------------------------------------------------------------------
 # Utility: git / paths / failure handling
 # ---------------------------------------------------------------------------
@@ -800,6 +817,8 @@ def main() -> None:
         trust_remote_code=True,
     )
     model.eval()
+    max_model_len = int(getattr(model.config, "max_position_embeddings", 32768) or 32768)
+    print(f"Resolved max_position_embeddings={max_model_len}")
 
     # ---- Generate cases for each task ----
     all_cases: List[RulerCase] = []
@@ -868,78 +887,150 @@ def main() -> None:
     max_new_tokens = int(args.ruler_max_new_tokens)
     # CWE needs more tokens to list words
     cwe_max_tokens = max(max_new_tokens, 128)
+    case_total = int(len(all_cases))
+    case_success_count = 0
+    case_error_count = 0
+    base_total_budget = min(int(args.seq_len) + int(args.gen_len), max_model_len)
 
     for idx, case in enumerate(all_cases):
         prompt = _build_prompt(case)
         gen_tokens = cwe_max_tokens if case.task_name == "cwe" else max_new_tokens
-        input_ids, input_truncated = _truncate_prompt_ids(
-            tokenizer, prompt, context_len
+        effective_prompt_budget, base_total_budget = _effective_prompt_budget(
+            requested_context_len=int(context_len),
+            seq_len=int(args.seq_len),
+            gen_len=int(args.gen_len),
+            gen_tokens_case=int(gen_tokens),
+            max_model_len=int(max_model_len),
         )
-        input_ids = input_ids.to(model.device)
-        attention_mask = torch.ones_like(
-            input_ids, dtype=torch.long, device=model.device
+        try:
+            if effective_prompt_budget <= 0:
+                raise ValueError(
+                    "effective prompt budget is non-positive: "
+                    f"requested_context_len={context_len}, seq_len={args.seq_len}, "
+                    f"gen_len={args.gen_len}, gen_tokens_case={gen_tokens}, "
+                    f"max_model_len={max_model_len}"
+                )
+
+            input_ids, input_truncated = _truncate_prompt_ids(
+                tokenizer, prompt, effective_prompt_budget
+            )
+            input_ids = input_ids.to(model.device)
+            attention_mask = torch.ones_like(
+                input_ids, dtype=torch.long, device=model.device
+            )
+
+            out = generate_from_ids(
+                model=model,
+                tokenizer=tokenizer,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_new_tokens=gen_tokens,
+                kv_mode=args.kv_mode,
+                group_size=args.group_size,
+                clip_percentile=args.clip_percentile,
+                seed=args.seed,
+                calib_file=args.calib_file,
+                use_attn_temperature=args.use_attn_temperature,
+                use_static_scales=args.use_static_scales,
+                adaptive_static_scales=args.adaptive_static_scales,
+                adaptive_static_margin=args.adaptive_static_margin,
+                adaptive_static_k=args.adaptive_static_k,
+                adaptive_static_v=args.adaptive_static_v,
+                decode_attn_impl=args.decode_attn_impl or "triton_fused",
+                stop_on_eos=True,
+                quant_bits=runtime_quant_bits,
+            )
+
+            pred_text = tokenizer.decode(
+                out.generated_ids[0].tolist(), skip_special_tokens=True
+            ).strip()
+            score = _score_case(case, pred_text)
+            task_scores[case.task_name].append(score)
+            depth_scores[case.depth_ratio].append(score)
+            case_success_count += 1
+
+            details_rows.append(
+                {
+                    "run_id": f"ruler_{timestamp}",
+                    "case_index": idx,
+                    "case_id": case.case_id,
+                    "ruler_task": case.task_name,
+                    "kv_mode": args.kv_mode,
+                    "seq_len": int(input_ids.shape[1]),
+                    "gen_len": gen_tokens,
+                    "depth_ratio": float(case.depth_ratio),
+                    "expected": ";".join(case.expected_answers),
+                    "prediction": pred_text,
+                    "exact_match": float(score["exact_match"]),
+                    "contains_match": float(score["contains_match"]),
+                    "f1": float(score["f1"]),
+                    "input_truncated": bool(input_truncated),
+                    "requested_context_len": int(context_len),
+                    "effective_prompt_budget": int(effective_prompt_budget),
+                    "base_total_budget": int(base_total_budget),
+                    "max_model_len": int(max_model_len),
+                    "case_status": "success",
+                    "case_error_type": "",
+                    "case_error_msg": "",
+                    "seed": int(args.seed),
+                    "replica_id": int(args.replica_id),
+                    "timestamp": timestamp,
+                    "git_commit": git_commit,
+                }
+            )
+
+            ttft_vals.append(float(out.ttft_ms))
+            tpot_vals.append(float(out.tpot_ms))
+            tokps_vals.append(float(out.tok_per_s))
+            peak_mem_vals.append(float(out.gpu_mem_peak_mb))
+
+            if (idx + 1) % 10 == 0 or idx == len(all_cases) - 1:
+                print(
+                    f"  [{idx + 1}/{len(all_cases)}] {case.task_name} "
+                    f"em={score['exact_match']:.0f} f1={score['f1']:.2f} "
+                    f"errors={case_error_count}"
+                )
+        except Exception as exc:  # noqa: BLE001
+            case_error_count += 1
+            print(
+                f"  [WARN] case failed idx={idx + 1}/{len(all_cases)} "
+                f"task={case.task_name} type={type(exc).__name__}: {exc}"
+            )
+            details_rows.append(
+                {
+                    "run_id": f"ruler_{timestamp}",
+                    "case_index": idx,
+                    "case_id": case.case_id,
+                    "ruler_task": case.task_name,
+                    "kv_mode": args.kv_mode,
+                    "seq_len": np.nan,
+                    "gen_len": gen_tokens,
+                    "depth_ratio": float(case.depth_ratio),
+                    "expected": ";".join(case.expected_answers),
+                    "prediction": "",
+                    "exact_match": np.nan,
+                    "contains_match": np.nan,
+                    "f1": np.nan,
+                    "input_truncated": np.nan,
+                    "requested_context_len": int(context_len),
+                    "effective_prompt_budget": int(effective_prompt_budget),
+                    "base_total_budget": int(base_total_budget),
+                    "max_model_len": int(max_model_len),
+                    "case_status": "error",
+                    "case_error_type": type(exc).__name__,
+                    "case_error_msg": str(exc),
+                    "seed": int(args.seed),
+                    "replica_id": int(args.replica_id),
+                    "timestamp": timestamp,
+                    "git_commit": git_commit,
+                }
+            )
+
+    if case_success_count <= 0:
+        raise RuntimeError(
+            "All RULER cases failed; no valid samples to aggregate. "
+            f"case_total={case_total} case_error_count={case_error_count}"
         )
-
-        out = generate_from_ids(
-            model=model,
-            tokenizer=tokenizer,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            max_new_tokens=gen_tokens,
-            kv_mode=args.kv_mode,
-            group_size=args.group_size,
-            clip_percentile=args.clip_percentile,
-            seed=args.seed,
-            calib_file=args.calib_file,
-            use_attn_temperature=args.use_attn_temperature,
-            use_static_scales=args.use_static_scales,
-            adaptive_static_scales=args.adaptive_static_scales,
-            adaptive_static_margin=args.adaptive_static_margin,
-            adaptive_static_k=args.adaptive_static_k,
-            adaptive_static_v=args.adaptive_static_v,
-            decode_attn_impl=args.decode_attn_impl or "triton_fused",
-            stop_on_eos=True,
-            quant_bits=runtime_quant_bits,
-        )
-
-        pred_text = tokenizer.decode(
-            out.generated_ids[0].tolist(), skip_special_tokens=True
-        ).strip()
-        score = _score_case(case, pred_text)
-        task_scores[case.task_name].append(score)
-        depth_scores[case.depth_ratio].append(score)
-
-        details_rows.append(
-            {
-                "run_id": f"ruler_{timestamp}",
-                "case_index": idx,
-                "case_id": case.case_id,
-                "ruler_task": case.task_name,
-                "kv_mode": args.kv_mode,
-                "seq_len": int(input_ids.shape[1]),
-                "gen_len": gen_tokens,
-                "depth_ratio": float(case.depth_ratio),
-                "expected": ";".join(case.expected_answers),
-                "prediction": pred_text,
-                "exact_match": float(score["exact_match"]),
-                "contains_match": float(score["contains_match"]),
-                "f1": float(score["f1"]),
-                "input_truncated": bool(input_truncated),
-                "seed": int(args.seed),
-                "replica_id": int(args.replica_id),
-                "timestamp": timestamp,
-                "git_commit": git_commit,
-            }
-        )
-
-        ttft_vals.append(float(out.ttft_ms))
-        tpot_vals.append(float(out.tpot_ms))
-        tokps_vals.append(float(out.tok_per_s))
-        peak_mem_vals.append(float(out.gpu_mem_peak_mb))
-
-        if (idx + 1) % 10 == 0 or idx == len(all_cases) - 1:
-            print(f"  [{idx + 1}/{len(all_cases)}] {case.task_name} "
-                  f"em={score['exact_match']:.0f} f1={score['f1']:.2f}")
 
     # ---- Aggregate per-task ----
     task_rows: List[Dict[str, object]] = []
@@ -1040,6 +1131,13 @@ def main() -> None:
         "ruler_num_cases": int(args.ruler_num_cases),
         "ruler_num_kv_pairs": int(getattr(args, "ruler_num_kv_pairs", 0) or 0),
         "ruler_depth_count": int(len(depth_rows)),
+        "requested_context_len": int(context_len),
+        "base_total_budget": int(base_total_budget),
+        "max_model_len": int(max_model_len),
+        "case_total": int(case_total),
+        "case_success_count": int(case_success_count),
+        "case_error_count": int(case_error_count),
+        "case_error_rate": round(float(case_error_count / max(case_total, 1)), 6),
         "ruler_tasks": ",".join(tasks),
         "ruler_pass_rate": overall_pass_rate,
         "ruler_contains_rate": overall_contains,
