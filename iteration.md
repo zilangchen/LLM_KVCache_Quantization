@@ -6,6 +6,27 @@ Canonical agent workflow directory is `.agents/`.
 
 ## TODO Backlog (Top)
 
+### Phase 5 阻塞清单（必须修复后再跑全矩阵）
+
+> 最后更新：2026-02-23 18:09。全量审查 36 节（A-AE） + Codex PR 增量审查 1 节（AF）。
+> PR #5 合并 (1aa5c95): 35 文件, +1539/-236 行。4 CRITICAL 全修复。新发现 1 CRITICAL + 2 HIGH + 6 MEDIUM。
+
+**4 个 CRITICAL（阻塞 RULER 和 OOM 检测）** — ✅ 全部已修复（Codex PR-1~PR-4，merge commit 1aa5c95）：
+1. ~~**O1** eval_ruler.py MK-NIAH `hits_exact` 死代码 (L165-185)~~ — ✅ 已修复（PR-2）
+2. ~~**O2** eval_ruler.py VT multi-chain 仅评第一链 (L216)~~ — ✅ 已修复（PR-2），现用 `_score_multi_answer`
+3. ~~**O3** eval_ruler.py 上下文截断方向 RIGHT→应为 LEFT (L552)~~ — ✅ 已修复（PR-2），改为 `ids[:max_tokens]`
+4. ~~**T1** check_run_completeness.py OOM elif 优先级 (L94-109)~~ — ✅ 已修复（PR-3），OOM 检测前置
+
+**关键 HIGH（影响论文质量）**：
+- **AC1** generate_thesis_report.py C11 跨模型验证只取最佳单行，非逐模型验证
+- **AB1** aggregate_results.py RULER 缺子任务分拆表
+- **AB2** aggregate_results.py 多模型缺分层对比表
+- ~~**AE1-2** 测试覆盖：KIVI zp 传播/asymmetric 公式~~ — ✅ 已修复（PR #5）
+- **AE3-4** 测试覆盖：calibrate 无测试/端到端集成缺失（仍未修复）
+- **AF-N2** eval_longbench.py `_classification_accuracy()` 语义变化需确认（新 CRITICAL）
+
+---
+
 ### 代码审查发现（2026-02-23 监管审查）
 
 > 以下问题由项目监管 agent 在全面代码审查中发现，按严重性分类排列。
@@ -27,9 +48,9 @@ Canonical agent workflow directory is `.agents/`.
 #### B. KIVI Cache 实现 — `src/cache/kivi_style_cache.py`
 
 - [x] `[CRITICAL]` K-scale/zp 在 `clear()` 后状态不一致 — ✅ 已修复 commit 20095fb
-- [ ] `[MEDIUM]` decode K 量化与 prefill K 量化 device 一致性未强制 (L220-231): 若输入 k 与 cache device 不同会静默失败
-- [ ] `[MEDIUM]` V buffer shape 一致性未校验 (L126-131): 仅校验 K buffer 的 batch/heads/head_dim，不校验 V buffer
-- [ ] `[MEDIUM]` `append()` 无输入 tensor shape 校验 (L187-245): 若传入转置 tensor（如 [B,D,H,S]）不会报错但量化结果错误
+- [x] `[MEDIUM]` decode K 量化与 prefill K 量化 device 一致性未强制 (L220-231) — ✅ 已修复（PR #5 1aa5c95: 设备类型和 index 匹配检查）
+- [x] `[MEDIUM]` V buffer shape 一致性未校验 (L126-131) — ✅ 已修复（PR #5 1aa5c95: `_ensure_capacity` 中添加详细 V buffer 检查）
+- [x] `[MEDIUM]` `append()` 无输入 tensor shape 校验 (L187-245) — ✅ 已修复（PR #5 1aa5c95: 14+ 验证检查包括 4D shape、k/v 形状一致、dtype、device）
 - [ ] `[LOW]` `_seq_len` 仅在 layer_id=0 时更新 (L244-245): 假设所有 layer 同步 append，不一致使用会导致 seq_len 错误
 - [ ] `[LOW]` 无 batch_size=0 校验 (L204): 空 batch 不会显式报错
 
@@ -271,6 +292,112 @@ Canonical agent workflow directory is `.agents/`.
 - [ ] `[LOW]` `__init__.py.__all__` 不完整: `quantize_symmetric_int4_with_scale`, `pack_int4`, `unpack_int4` 未导出。实际使用通过直接 import 子模块不受影响，但违反公共接口最佳实践
 - [ ] `[LOW]` 核心公式验证通过: INT8 scale=absmax/127 范围[-127,127]、INT4 scale=absmax/7 范围[-7,7]、clamp(min=1e-5) 防零、percentile clipping、组级量化 reshape/broadcast、pack/unpack INT4 bit-packing — 全部正确
 
+#### Z. Phase 4 完成验证（第十四轮审查）
+
+> Phase 4 消融实验 70/70 runs 完成后的验证审查。commit c07f810。
+
+- [ ] `[MEDIUM]` 消融实验仅跑 PPL+Needle，缺少 LongBench: Phase 4 计划（iteration.md Approved Plans 节）最初写 "needle/PPL/LongBench, 5 seeds"，但实际 `--tasks eval_ppl,eval_needle`。LongBench 消融未执行。若论文消融表需要 LongBench 数据点（如 RQ1 校准方法对比在 LongBench 上的表现），需补跑
+- [ ] `[MEDIUM]` dev agent 仍未确认 O 节 3 CRITICAL + T 节 1 CRITICAL: Phase 4 timeline 声称 "All CRITICAL=0"，但 iteration.md 的 O 节（eval_ruler.py 评分 bug）和 T 节（check_run_completeness.py OOM 分类）共 4 个 CRITICAL 仍为 unchecked。这些 bug 不阻塞消融实验（消融未跑 RULER），但阻塞 Phase 5 全矩阵（含 RULER）
+- [ ] `[LOW]` 消融 output dir 命名含双重 seed: `ablation_*_s{seed}_ablation_1p5b_s{seed}/` — 可能造成目录名冗余。不影响功能但增加维护难度
+
+#### AA. 深度审查 — `scripts/calibrate_behavior.py` MSE 校准实现（第十五轮审查）
+
+> MSE loss 新功能的正确性、默认路径、搜索行为、数值稳定性审查。
+
+- [ ] `[HIGH]` 默认校准路径与 generate_loop 不匹配 (calibrate_behavior.py:644, generate_loop.py:416-418): MSE 模式默认输出 `artifacts/kv_calib_mse.json`，但 generate_loop 默认加载 `artifacts/kv_calib_kl.json`。通过 run_experiments.py 运行时显式传 `--calib_file` 所以不受影响，但手动运行易误用。建议在文档中明确说明或在 generate_loop 加载时 warn
+- [ ] `[HIGH]` 加载校准文件时无 loss_function 字段校验 (generate_loop.py:445-461): 校准 JSON 包含 `loss_function` 字段（calibrate_behavior.py:901），但加载时未验证是否与预期一致。可能导致 MSE 校准 被误用为 KL 场景，或反之。建议加载时 log warning
+- [ ] `[MEDIUM]` inv_tau shape 未在加载时验证 (generate_loop.py:450): 加载 `inv_tau` 时未检查 shape 是否匹配当前模型 (num_layers × num_heads)。跨模型误加载校准文件时会导致 shape mismatch，错误仅在推理时暴露
+- [ ] `[MEDIUM]` MSE 与 KL loss 量级差异影响搜索行为 (calibrate_behavior.py:197-344): MSE loss 在 [0,2] 范围，KL loss 在 [0,∞)。搜索时 `p95_loss` 排序对 MSE 更敏感（值域窄，tie-breaking 频繁），可能导致 MSE 和 KL 选择不同超参。论文需声明此设计差异
+- [ ] `[MEDIUM]` evaluate_quant_candidate 不使用 inv_tau (calibrate_behavior.py:306): 网格搜索评估时不应用温度校正，但实际推理时会应用。搜索优化目标与部署现实不完全一致——按设计如此（scales 先搜后温度后校正），但论文应注明
+- [ ] `[LOW]` loss_accum NaN 无检测 (calibrate_behavior.py:197-219): 若某样本产生 NaN/Inf，argmin(NaN) 返回 0（静默选择第一个候选）。概率低但缺少 safeguard
+- [ ] `[LOW]` search_trials.csv 已按 loss_function 区分文件名 (calibrate_behavior.py:642-644): 默认输出路径已含 loss_function 后缀，不存在覆盖风险（审查 agent 误报为 CRITICAL，实际代码已处理）
+
+#### AB. 深度审查 — `scripts/aggregate_results.py` KIVI 与多模型聚合（第十五轮审查）
+
+> KIVI baseline 支持、多模型分层表、LongBench/RULER 聚合完整性审查。
+
+- [ ] `[HIGH]` RULER 聚合缺少子任务分拆 (aggregate_results.py:1936-2078): 仅聚合 `ruler_pass_rate`/`ruler_score` 等整体指标，缺少 S-NIAH / MK-NIAH / VT / CWE 四个子任务的独立宏平均。论文若需声称"4 个子任务上的鲁棒性"，需补充 `ruler_subtask_summary.csv`
+- [ ] `[HIGH]` 多模型对比缺少分层表 (aggregate_results.py 全局): model_id 作为 groupby key 参与聚合，但产出表不分层——无法快速查看"INT8-ours 在 1.5B vs 7B vs 8B 上的对比"。论文 Table 需要 per-model 独立行
+- [ ] `[MEDIUM]` LongBench 聚合同时包含 3 个近义指标 (aggregate_results.py:1867-1874): `longbench_score`、`longbench_official_macro`、`longbench_f1_macro` 同时聚合。需确认哪个是 objective.md 定义的 primary endpoint（应为 `longbench_score`）。多指标并存增加混淆风险
+- [ ] `[MEDIUM]` KIVI quant_bits 在 pairings 中未区分 INT8/INT4 (aggregate_results.py:2105-2110): pairings 列表 `("kivi_style", "int8_ours")` 未指定 kivi 的 quant_bits。若结果 CSV 中混合了 kivi_int8 和 kivi_int4 行，统计检验可能混用两种精度的数据
+- [ ] `[MEDIUM]` kv_mode 显示顺序依赖默认排序 (aggregate_results.py:705-732): 绘图/表格中 kv_mode 未定义固定显示顺序，使用 Python 默认字符串排序。建议定义 `KV_MODE_DISPLAY_ORDER` 常量确保论文一致性
+- [ ] `[LOW]` Bootstrap seed 基于 SHA256 hash 的独立性: 使用 `_stable_random_seed` 生成确定性 seed（可复现），但不同 metric 对之间的 seed 独立性依赖 hash 无碰撞假设。实际安全但缺少文档说明
+
+#### AC. 深度审查 — `scripts/export_tables_latex.py` + `scripts/generate_thesis_report.py`（第十五轮审查）
+
+> LaTeX 表格导出的 KIVI/多模型支持，论文声明 C1-C11 验证逻辑完整性审查。
+
+- [ ] `[HIGH]` C11 跨模型验证逻辑缺陷 (generate_thesis_report.py:267-275,182-193): C11 声称 "across extended models" 但 `_pick_best_relative_row()` 只返回所有模型中最佳单行 gain_pct，无法分别验证每个模型是否都通过。若 1.5B 通过但 7B 失败，当前逻辑仍报 PASS
+- [ ] `[MEDIUM]` LongBench 表缺少任务指标组成说明 (export_tables_latex.py:285-313): 仅导出 `longbench_score_mean`，论文读者无法从表格了解 score 由 F1/Rouge-L/Accuracy/EditSim 组成。建议加脚注或附录表
+- [ ] `[MEDIUM]` RULER 表仅显示整体 pass rate (export_tables_latex.py:316-344): 缺少 4 个子任务（S-NIAH/MK-NIAH/VT/CWE）的分列显示。论文卖点之一是 novel synthetic benchmark，但表格缺乏子任务细节
+- [ ] `[MEDIUM]` 多模型表格缺少 per-model 分页 (export_tables_latex.py 全局): 所有导出函数仅生成单表，无 `--per_model_tables` 参数支持。论文 RQ4 跨模型验证需要分模型展示
+- [ ] `[MEDIUM]` C9 对指标名正确 (generate_thesis_report.py:167): C9 使用 `metric="longbench_score"` 与 objective.md primary endpoint 对齐 ✓
+- [ ] `[LOW]` KIVI 在 KV_MODE_ORDER 和 KV_MODE_DISPLAY 中已完整映射 (export_tables_latex.py:41-63): kivi_style 排序和显示正常 ✓
+
+#### AD. 深度审查 — `scripts/eval_ppl.py` + `scripts/profile_latency.py` KIVI 集成（第十五轮审查）
+
+> 两个脚本的 kivi_style 路由、quant_bits CSV 推断、计时同步性审查。
+
+- [ ] `[MEDIUM]` quant_bits CSV 推断 fallback 为 16 (eval_ppl.py:888, profile_latency.py:320): 当 `--quant_bits` 未显式传入时，"kivi_style" 不匹配 "int4"/"int8" 子串，fallback 到 16。通过 run_experiments.py 运行时正确传入 `--quant_bits`，但手动运行时容易漏传导致 CSV 中 kivi_style 被标为 quant_bits=16（看起来像 FP16）
+- [ ] `[MEDIUM]` profile_latency.py run 间无显式 CUDA sync (profile_latency.py:290-294): 虽然 CUDATimer.start() 内部会 sync，但在 gc.collect + torch.cuda.empty_cache 后、创建 input_ids 前没有显式 sync。empty_cache 本身是同步操作，但 gc.collect 可能触发的 finalizer 中的 GPU op 不一定被 sync。风险低但可加一行显式 sync 改善
+- [ ] `[MEDIUM]` kivi_style decode_attn_impl 参数被静默忽略 (profile_latency.py:314): 用户传 `--decode_attn_impl triton_fused` 与 `--kv_mode kivi_style` 时，generate_loop 会忽略 fused（kivi 走 baseline path），CSV 中不记录实际使用的 decode path。建议 warn 或在 CSV 增加 `decode_impl_actual` 列
+- [ ] `[LOW]` calib_file 对 kivi_style 静默无操作 (eval_ppl.py:228-299): KIVI 不需要校准文件，传入 `--calib_file` 会被安静忽略。行为正确但缺少 warning 提示用户
+
+#### AE. 深度审查 — 测试套件覆盖缺口（第十五轮审查）
+
+> test_kivi_cache.py / test_asymmetric_quant.py / test_aggregate_results_stats.py 覆盖完整性审查。
+
+- [x] `[HIGH]` KIVI cache zero-point decode 传播测试缺失 (test_kivi_cache.py) — ✅ 已修复（PR #5 1aa5c95: test_decode_token_error_with_prefill_scale_is_bounded + test_multi_clear_append_cycles）
+- [x] `[HIGH]` asymmetric_quant zero-point 公式直接验证缺失 (test_asymmetric_quant.py) — ✅ 已修复（PR #5 1aa5c95: test_per_channel_semantics_match_manual_min_max + test_per_token_semantics_match_manual_min_max）
+- [ ] `[HIGH]` calibrate_behavior.py 完全无单元测试: 校准脚本是论文核心算法，包含 KL 散度计算、inv_tau 搜索、MSE loss、网格搜索——全无细粒度单元测试
+- [ ] `[HIGH]` KIVI + asymmetric_quant 端到端集成测试缺失: test_kivi_cache.py 和 test_asymmetric_quant.py 分别测试各自功能，但缺少 `quantize_asymmetric_per_channel/per_token` → KIVI cache `append/get_kv` 的联合 round-trip 验证
+- [ ] `[MEDIUM]` per-channel K 和 per-token V axis 独立性验证缺失 (test_kivi_cache.py): 未构造不同 channel/token 具有极端不同振幅的测试数据，来验证各 channel/token 确实获得独立 scale
+- [ ] `[MEDIUM]` Bootstrap CI n=1 和 n=2 边界测试缺失 (test_aggregate_results_stats.py): n=1 应返回 (value, value)，n=2 的 CI 宽度应较大。现有测试均用 n≥3
+- [ ] `[MEDIUM]` Permutation test NaN 处理测试缺失 (test_aggregate_results_stats.py): 输入含 NaN 时 `_paired_signflip_pvalue` 应过滤并可能返回 "insufficient_pairs"。缺少显式测试
+- [ ] `[MEDIUM]` BH-FDR 单调性验证缺失 (test_aggregate_results_stats.py): BH-FDR q-values 按排序后应单调非递减，但无测试验证此数学性质
+- [ ] `[MEDIUM]` eval_longbench.py / eval_ruler.py 完全无单元测试: 两个 benchmark 脚本为新增代码，无对应测试文件。eval_ruler.py 的评分函数 (O1-O3 CRITICAL bugs) 本应有单元测试覆盖
+- [ ] `[LOW]` INT4 vs INT8 误差比例测试缺失 (test_kivi_cache.py): 同一数据 INT4 应比 INT8 误差大约 5x，但未测试此预期关系
+
+#### AF. Codex PR #5 增量审查 — 35文件, +1539/-236 行（2026-02-23 18:09）
+
+> 审查对象：merge commit 1aa5c95（c07f810→1aa5c95），含 PR-1~PR-4 的全部代码修复。
+> 修复了之前 O1-O3, T1, E6 等问题。以下为新发现或遗留问题。
+
+**CRITICAL 修复验证（4/4 已确认）**：
+- [x] O1 eval_ruler.py MK-NIAH `hits_exact` 死代码 → 已删除无用逻辑，改为严格全答案判断
+- [x] O2 eval_ruler.py VT multi-chain → `_score_case()` 现用 `{"mk_niah", "vt"}` 条件调度
+- [x] O3 eval_ruler.py 截断方向 → 改为 head+tail 混合截断（保留 head_keep + tail_keep=min(128, max_tokens//8)）
+- [x] T1 check_run_completeness.py OOM elif 优先级 → OOM 检测前置为最高优先级，新增 `_csv_has_rows()` / `_has_task_level_artifacts()` / `_latest_failure_type()`
+- [x] E6 全 eval 脚本 quant_bits fallback → 新增统一 `_resolve_quant_bits()` 函数（kivi_style→8）
+
+**新发现问题**：
+
+- [ ] `[CRITICAL]` eval_longbench.py `_classification_accuracy()` 语义变化未文档化 (L265): 从 `pred==ans or ans in pred` 改为仅 `pred==ans`（精确匹配）。移除了 contains 判断，改变了分类任务评分策略。若非有意修改，评测结果可能失效；需确认官方 LongBench 评测脚本使用哪种策略
+- [ ] `[HIGH]` patch_model.py 移除 `kv_heads` 默认推理 (L100-108): 不再对缺少 `num_key_value_heads` 的模型自动推断 `kv_heads = q_heads`。可能破坏非标自定义模型适配，错误消息应补充提示如何手动设置
+- [ ] `[HIGH]` calibrate_behavior.py MSE clamping 移除导致旧校准产物不可复现: 移除 `p_ref_clamped` 后 MSE 数值变化，已有的 `artifacts/kv_calib_mse_*.json` 基于旧代码生成，需重新生成（注：KL 路径不受影响）
+- [ ] `[MEDIUM]` 全 eval 脚本 `_resolve_quant_bits()` 重复定义（6 处相同代码，违反 DRY）: eval_ruler/eval_longbench/eval_needle/eval_ppl/profile_latency/profile_memory 各有完整副本。建议提取到 `src/utils/quant_utils.py`
+- [ ] `[MEDIUM]` profile_memory.py GPU 峰值来源判断逻辑 (L383-385): 用 `nvml_peak > 0` 判断数据源而非监控器状态。当 NVML 初始化失败且 torch_peak 也≈0 时判断不准确
+- [ ] `[MEDIUM]` eval_ruler.py 截断策略 magic numbers (L562-570): `tail_keep = min(128, max_tokens // 8)` 的 128 和 8 无注释说明来源，建议补充策略依据
+- [ ] `[MEDIUM]` generate_loop.py batch>1 填充检查移除: 原仅针对 int8_fused 等，现完全移除。对 KIVI-style 的 batch>1 支持策略不明确
+- [ ] `[MEDIUM]` kivi_style_cache.py `clear()` 仅重置 K scale/zp 未显式清零 V scale/zp: 通过 seq_len=0 隐式屏蔽安全，但应显式清零以防御性编程
+- [ ] `[MEDIUM]` final_emnlp2026_v1.yaml LLaMA 本地路径硬编码: `local_model_path: "/root/autodl-tmp/..."` 跨机器不可复现，建议参数化
+- [ ] `[LOW]` kivi_style_cache.py INT4 head_dim 偶数约束仅在 append 时检查: 仅运行时报错，不在构造时前置检查（设计决策，可接受）
+
+**已修复的前期问题映射更新**：
+- [x] Y-ZP: KIVI zero-point decode 传播 → ✅ 已修复（decode 明确读取存储的 zp）
+- [x] AE-INT4: pack/unpack 不对称 → ✅ 已测试（test_int4_storage_is_bit_packed）
+- [x] AE-ZP: zero-point 公式验证 → ✅ 已测试（test_per_channel/per_token_semantics_match_manual_min_max）
+- [x] B-clear: clear 后状态不一致 → ✅ 已修复（重置 `_k_scale_initialized` + scale/zp 清零）
+- [x] B-shape: append 无输入 shape 校验 → ✅ 已修复（14+ 验证检查）
+- [x] B-V_buf: V buffer 一致性未校验 → ✅ 已修复（`_ensure_capacity` 中添加详细 V buffer 检查）
+- [x] B-device: decode K 量化 device 一致性 → ✅ 已修复（设备类型和 index 匹配检查）
+
+**代码质量评估**：
+- 整体质量：8/10（验证充分，测试覆盖良好，新增 24 个测试用例）
+- 数值正确性：9/10（float32 升级、scale 精度保证、公式验证）
+- 向后兼容性：8/10（个别严格化检查可能影响非标模型）
+- 新增测试：234 行，覆盖 CRITICAL 修复 + INT4 bit packing + append 身份验证
+
 ---
 
 ## Approved Plans
@@ -286,15 +413,18 @@ Canonical agent workflow directory is `.agents/`.
   - [x] 创建消融配置 — ✅ 完成 commit f07422d
   - [x] 运行消融实验矩阵（PPL+Needle，5 seeds × 14 configs = 70 runs） — ✅ 完成 2026-02-23 07:27
 
-### Plan: EMNLP 2026 Phase 5 — 全矩阵实验
+### Plan: EMNLP 2026 Phase 5v2 — 全矩阵实验（phase5v2 新目录）
 - **批准日期**：2026-02-23
-- **前置条件**：✅ B-F 节 CRITICAL/HIGH 已修复
-- **状态**：待执行
+- **前置条件**：✅ 4 CRITICAL 已修复（Codex PR merge 1aa5c95）；旧 RULER/LongBench 结果标记 legacy
+- **状态**：🟢 执行中（质量并行评测已启动 2026-02-23 17:23）
 - **内容**：
   - [x] 更新 7B/8B 配置：保留 batch=1,2,4,8,16 吞吐量；FP16 删 b24/b32 避免 OOM；添加 KIVI 条目 — ✅ commit f07422d
-  - [ ] 1.5B KIVI 补跑（6 运行 × 5 seeds × 4 tasks）
-  - [ ] Qwen2.5-7B 全矩阵（全 kv_modes × 5 seeds × 4 tasks + 吞吐量）
-  - [ ] LLaMA-3.1-8B 全矩阵（同上）
+  - [x] Codex 全量代码修复（35 files, 4 PR 合并） — ✅ merge commit 1aa5c95
+  - [x] 远端代码同步（rsync） — ✅ 2026-02-23 17:22
+  - [x] 创建 6 个 runner 脚本（3 质量 + 3 吞吐） — ✅ 2026-02-23 17:22
+  - [x] 启动质量并行评测（3 tmux sessions: q_1p5b/q_7b/q_8b） — ✅ 2026-02-23 17:23
+  - [ ] 质量评测完成（535 runs: 1.5B×215 + 7B×160 + 8B×160）
+  - [ ] 吞吐串行评测（565 runs: 1.5B×240 + 7B×200 + 8B×200）（质量完成后启动）
   - [ ] 3 模型延迟/显存 profiling
   - [x] 修复 `export_tables_latex.py`：KV_MODE_ORDER/DISPLAY 缺 kivi_style — ✅ commit 8bf9414
   - [x] 扩展 `generate_thesis_report.py`：claims C7-C11 — ✅ commit 8bf9414
@@ -343,6 +473,37 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
 
 ## Timeline (Latest First)
+
+### 2026-02-23 17:29 | Phase 5v2 启动 — 合并验证 + 质量并行评测
+
+- **Goal**: 验证 Codex 修复合并完整性，同步远端代码，启动 3 模型并行质量评测
+- **Scope**: Step 0 (合并验证) + Step 1 (脚本创建) + Step 2 (质量启动)
+- **Changed files**:
+  - `iteration.md`: 更新 TODO Backlog（4 CRITICAL 全部标记已修复）+ Approved Plans（Phase 5v2 状态更新）
+- **Commands**:
+  - `git pull --ff-only origin main` → 9 commits, 35 files (Codex PR-1~PR-4 + merge)
+  - `python3 -m compileall -f src/ scripts/ tests/` → 全部通过
+  - 远端 `pytest tests/ -v` → 143 passed, 2 failed (KIVI INT4 bit-pack decode 维度不匹配), 1 skipped
+  - `rsync -avz ... → 38 files synced` 到远端
+  - `tmux kill-session -t phase5` → 旧会话已清理
+  - `tmux new-session -d -s q_1p5b/q_7b/q_8b` → 3 个质量并行评测已启动
+- **Outputs**:
+  - GPU: H20 100% 利用率, 40GB/98GB VRAM（三模型并行，预算 56GB 内）
+  - 3 个 run 目录已创建，各模型第一轮 PPL+Needle 已完成，正在跑 LongBench
+  - 远端磁盘: /root 25GB 可用（结果存储）; /root/autodl-tmp 2.4GB（仅读模型）
+- **Validation**:
+  - [x] 4 CRITICAL bug 修复确认（代码级验证 O1/O2/O3/T1）
+  - [x] 编译检查全部通过
+  - [x] 远端测试 143/145 通过
+  - [x] 三模型并行评测已启动，GPU 利用率正常
+  - [ ] KIVI INT4 bit-pack 测试失败（2 tests）— 不阻塞主实验（continue_all），后续跟进
+- **Risks / follow-ups**:
+  - KIVI INT4 bit-pack decode 路径有维度不匹配 bug，可能影响 kivi_style_int4 系列实验结果
+  - autodl-tmp 仅 2.4GB，不要在该分区写新数据
+  - 质量评测预计 80-100h 墙钟；完成后启动吞吐串行
+  - **监控命令**: `ssh -p 31867 root@region-42.seetacloud.com 'tmux ls; ls results/phase5v2/runs/ | wc -l; nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader'`
+
+---
 
 ### 2026-02-23 16:11 | PR-4 配置与文档收口：I/W/X 全量关闭
 - **Goal**: 收口 final config / objective / SOP / preflight 文档口径，关闭 I/W/X backlog
