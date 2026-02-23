@@ -25,8 +25,10 @@ class TestAggregateResultsStats(unittest.TestCase):
         )
         self.assertEqual(method, "exact_signflip")
         self.assertEqual(n_perm, 16)
-        # Exact two-sided sign-flip p-value for n=4 all-positive diffs is 2/16.
-        self.assertAlmostEqual(p_value, 0.125, places=12)
+        # With Phipson-Smyth +1 correction: p = (exceed + 1) / (n_enum + 1).
+        # For n=4 all-positive diffs: only sign=(+1,+1,+1,+1) yields |mean|>=|observed|,
+        # so exceed=1 (the observed itself), p = (1+1)/(16+1) = 2/17.
+        self.assertAlmostEqual(p_value, 2.0 / 17.0, places=12)
 
     def test_exact_signflip_pvalue_mixed_signs(self):
         diffs = np.array([3.0, 2.0, -1.0, 0.5], dtype=np.float64)
@@ -42,7 +44,10 @@ class TestAggregateResultsStats(unittest.TestCase):
         bits = ((idx >> np.arange(n, dtype=np.uint32)) & 1).astype(np.int8)
         signs = bits * 2 - 1
         perm_means = np.abs((signs * diffs[None, :]).mean(axis=1))
-        expected_p = float(np.mean(perm_means >= (observed - 1e-12)))
+        # Phipson-Smyth +1 correction: p = (exceed + 1) / (n_enum + 1)
+        exceed = int(np.sum(perm_means >= (observed - 1e-12)))
+        n_enum = len(perm_means)
+        expected_p = float((exceed + 1) / (n_enum + 1))
         self.assertAlmostEqual(p_value, expected_p, places=12)
 
     def test_bootstrap_ci_contains_mean(self):
