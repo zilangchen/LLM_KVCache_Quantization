@@ -1,41 +1,42 @@
-# 最终复现实验协议（KV Cache Quantization）
+# 复现实验协议（KV Cache Quantization — EMNLP 2026）
 
-> 目标：在远端 H20 环境一键复现 `fp16 / int8_baseline / int8_ours` 主线，并可扩展 `int4_fused / int4_ours` 作为论文冲优补充，产出可直接引用的表格与图。
+> 目标：在远端 H20 环境一键复现 3 模型 × 7 kv_mode 全矩阵实验，产出可直接引用的表格与图。
 
-当前论文验收最终产物目录（远端）：`/root/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/`（见 `docs/final_results_summary.md`）。
-如需同步到本地，请使用文末 rsync 命令。
+## 主流程（Phase5v2）
 
-新增：可直接使用一键脚本跑 `final_thesis_plus_*`：
-```bash
-cd /root/LLM_KVCache_Quantization
-bash scripts/run_final_thesis_plus.sh
-```
-脚本会自动完成：`gates -> 主线实验 -> batch 扩展 -> aggregate -> latex`。
-脚本会自动产出 `reports/`（claim gate + 统计决策摘要 + 论文可粘贴 Markdown 摘要）。
+当前主线实验使用 Phase5v2 流程，结果目录：`results/phase5v2/`。
 
-第4周主线重跑（期刊版，推荐）：
-```bash
-cd /root/LLM_KVCache_Quantization
-bash scripts/run_final_journal_v1.sh
-```
+运行方式：使用 `results/phase5v2/` 下的 runner 脚本（质量 + 吞吐分别执行）。
+
 固定快照配置：
-- `configs/snapshots/exp_matrix_week4_final_journal_v1.yaml`
-默认输出目录：
-- `results/final_journal_v1/`
+- 1.5B: `configs/exp_matrix.yaml`
+- 7B: `configs/snapshots/exp_matrix_qwen25_7b_v1.yaml`
+- 8B: `configs/snapshots/exp_matrix_llama31_8b_v1.yaml`
+- 消融: `configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml`
+- 最终元配置: `configs/snapshots/final_emnlp2026_v1.yaml`
+
+> **Legacy 声明**：`results/final_thesis_plus_*` 和 `results/final_journal_v1/` 为历史产物目录，不参与新聚合。旧 Phase5 中包含 `eval_longbench` / `eval_ruler` 的结果已归档为 legacy。
 
 > 自 2026-02 起，`scripts/run_experiments.py` 会在每个 `runs/<run_id>/` 下写入 `run_manifest.json`，
 > 并在 `--append` 时强制校验 `git_commit/env_hash` 一致性；非 `--append` 模式下拒绝写入非空目录，
 > 以避免历史结果与新结果混写。
 > 同时支持 `--failure_policy/--max_retries/--skip_completed_success`，可在不破坏复现实验口径的前提下进行自动补跑。
-> `scripts/run_final_thesis_plus.sh` 已接入 `scripts/check_run_completeness.py`，支持 required/stress 分层与迭代修复。
+> `scripts/run_experiments.py` 已接入 `scripts/check_run_completeness.py`，支持 required/stress 分层与迭代修复。
 
 ## 1) 环境（固定）
 - 远端解释器：`/root/miniconda3/bin/python`（Python 3.12 / Torch 2.8.0 + cu128 / CUDA 12.8）
 - 仓库目录：`/root/LLM_KVCache_Quantization`
-- 模型：`Qwen/Qwen2.5-1.5B-Instruct`
-- 模型 revision（已 pin）：`989aa7980e4cf806f80c7fef2b1adb7bc71aa306`
+- 模型（1.5B 主模型）：`Qwen/Qwen2.5-1.5B-Instruct`（revision: `989aa7980e4cf806f80c7fef2b1adb7bc71aa306`）
+- 模型（7B）：`Qwen/Qwen2.5-7B-Instruct`（revision 见 `final_emnlp2026_v1.yaml`）
+- 模型（8B）：`meta-llama/Llama-3.1-8B-Instruct`（HF 首选；远端 ModelScope 缓存需记录双入口）
 
-多模型扩展（Phase5v2）固定模型入口：
+多模型校准产物：
+- 1.5B KL: `artifacts/kv_calib_kl_selected_v3_quick.json`
+- 1.5B MSE INT8: `artifacts/kv_calib_mse_1p5b_int8.json`
+- 1.5B MSE INT4: `artifacts/kv_calib_mse_1p5b_int4.json`
+- 7B/8B 校准产物：运行 `calibrate_behavior.py` 生成，路径 `artifacts/kv_calib_*_{7b,8b}_*.json`
+
+模型入口说明：
 - `Qwen/Qwen2.5-7B-Instruct`（HF revision 见 `configs/snapshots/final_emnlp2026_v1.yaml`）
 - `meta-llama/Llama-3.1-8B-Instruct`（首选 HF ID；远端若使用 ModelScope 缓存路径，需在日志里同时记录 `hf_model_id + local_model_path`）
 
@@ -87,11 +88,10 @@ cd /root/LLM_KVCache_Quantization
 ## 4) 四个硬闸门（跑出 0 退出码才能信结果）
 建议把闸门输出也落盘到最终目录，答辩/验收时可直接展示。
 
-创建最终目录（建议固定 `final_thesis_plus_*` 前缀）：
+创建最终目录（Phase5v2 使用固定路径 `results/phase5v2/`，最终论文使用 `results/emnlp_final/`）：
 ```bash
 cd /root/LLM_KVCache_Quantization
-RUN_TAG="final_thesis_plus_$(date +%Y%m%d_%H%M%S)"
-BASE_DIR="results/${RUN_TAG}"
+BASE_DIR="results/phase5v2"     # 或 results/emnlp_final
 mkdir -p "${BASE_DIR}"/{runs,logs,tables,plots,latex_tables,gates,env}
 echo "${BASE_DIR}"
 ```
@@ -342,6 +342,6 @@ KV_FUSED_DUMP_DIR=results/fused_dumps KV_FUSED_DUMP_LAYER=0 KV_FUSED_DUMP_STEP=3
 ## 10) 同步最终目录到本地
 ```bash
 rsync -avz -e "ssh -p 31867" \
-  root@region-42.seetacloud.com:/root/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/ \
-  /Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/
+  root@region-42.seetacloud.com:/root/LLM_KVCache_Quantization/results/phase5v2/ \
+  /Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/phase5v2/
 ```
