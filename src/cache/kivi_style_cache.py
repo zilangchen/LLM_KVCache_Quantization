@@ -72,6 +72,9 @@ class KIVIStyleKVCache:
         self.quant_bits = quant_bits
         self.k_percentile = k_percentile
         self.v_percentile = v_percentile
+        # INT4 mode uses bit-packing (2 values per byte), which requires even
+        # head_dim.  head_dim is unknown at __init__ time (it comes from the
+        # first append() call), so the actual check is enforced in append().
         self.bit_packed = bool(quant_bits == 4)
         # Keep scale/zp in float32 to avoid silent precision truncation.
         self._scale_dtype = torch.float32
@@ -118,6 +121,8 @@ class KIVIStyleKVCache:
         target_len: int,
     ) -> None:
         """Ensure K/V buffers have enough capacity for target_len tokens."""
+        if batch <= 0:
+            raise ValueError(f"batch must be > 0, got {batch}")
         if self.max_seq_len is not None and target_len > self.max_seq_len:
             raise ValueError(
                 f"target_len {target_len} exceeds max_seq_len {self.max_seq_len} "
@@ -318,6 +323,11 @@ class KIVIStyleKVCache:
         )
 
         self._layer_seq_lens[layer_id] = target_len
+        # Update global seq_len as max across all layers.  Unlike INT8KVCache
+        # (which updates only on layer_id==0 for speed), KIVI takes the max to
+        # stay correct even when layers are appended out of order or
+        # incrementally.  In normal sequential execution all layers have the
+        # same length, so max() == any single layer's length.
         self._seq_len = max(self._layer_seq_lens)
 
     def get_kv(self, layer_id: int) -> Tuple[Tensor, Tensor]:
@@ -372,6 +382,9 @@ class KIVIStyleKVCache:
         # Reset K scale/zp so stale values from a previous batch don't persist.
         self._k_scale = [None] * self.num_layers
         self._k_zp = [None] * self.num_layers
+        # Reset V scale/zp as well to avoid stale per-token metadata.
+        self._v_scale = [None] * self.num_layers
+        self._v_zp = [None] * self.num_layers
         self._seq_len = 0
 
     def release(self) -> None:
@@ -388,18 +401,23 @@ class KIVIStyleKVCache:
         self._seq_len = 0
 
     def get_memory_mb(self) -> float:
-        """Get current memory usage in MB."""
+        """Get total *allocated* memory in MB (includes unused capacity headroom).
+
+        This counts the full pre-allocated buffer sizes, not just the valid
+        (seq_len) portion, because the OS/CUDA allocator reserves the full
+        capacity.  Includes K/V quantized payloads and their scale/zp metadata.
+        """
         total_bytes = 0
         for i in range(self.num_layers):
             if self._k_cache[i] is not None:
                 # Quantized payload (int8 storage; INT4 uses bit-packed int8 payload).
                 total_bytes += self._k_cache[i].numel() * self._k_cache[i].element_size()
                 total_bytes += self._v_cache[i].numel() * self._v_cache[i].element_size()
-                # K scale/zp (per-channel, shape [B, H, D]).
+                # K scale/zp (per-channel, shape [B, H, D], stored as float32).
                 if self._k_scale[i] is not None:
                     total_bytes += self._k_scale[i].numel() * self._k_scale[i].element_size()
                     total_bytes += self._k_zp[i].numel() * self._k_zp[i].element_size()
-                # V scale/zp (per-token, shape [B, H, S]).
+                # V scale/zp (per-token, shape [B, H, capacity], stored as float32).
                 if self._v_scale[i] is not None:
                     total_bytes += self._v_scale[i].numel() * self._v_scale[i].element_size()
                     total_bytes += self._v_zp[i].numel() * self._v_zp[i].element_size()

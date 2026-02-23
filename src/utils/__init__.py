@@ -13,6 +13,7 @@ from src.utils.repro import (
     build_config_snapshot,
     ensure_dir,
     write_config_snapshot,
+    resolve_quant_bits,
 )
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "build_config_snapshot",
     "ensure_dir",
     "write_config_snapshot",
+    "resolve_quant_bits",
 ]

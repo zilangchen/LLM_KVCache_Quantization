@@ -74,6 +74,34 @@ def build_config_snapshot(
     return snapshot
 
 
+def resolve_quant_bits(kv_mode: str, quant_bits_arg: int | None = None) -> int:
+    """
+    Determine effective quantization bit-width from kv_mode string.
+
+    This is the **canonical** implementation. Scripts that previously defined
+    a local ``_resolve_quant_bits`` should import this function instead:
+
+        from src.utils.repro import resolve_quant_bits
+
+    Args:
+        kv_mode: KV cache mode string (e.g. "int8_baseline", "int4_ours", "kivi_style").
+        quant_bits_arg: Explicit override from CLI ``--quant_bits``; takes precedence.
+
+    Returns:
+        Effective bit-width (4, 8, or 16).
+    """
+    if quant_bits_arg is not None:
+        return int(quant_bits_arg)
+    mode = str(kv_mode)
+    if mode == "kivi_style":
+        return 8
+    if "int4" in mode:
+        return 4
+    if "int8" in mode:
+        return 8
+    return 16
+
+
 def ensure_dir(path: str) -> None:
     """Ensure a directory exists."""
     os.makedirs(path, exist_ok=True)

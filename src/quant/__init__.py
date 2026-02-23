@@ -1,11 +1,17 @@
 """
 Quantization utilities for KV Cache.
 
-Available functions:
-- quantize_symmetric_int8: Symmetric INT8 quantization with percentile clipping
-- dequantize_symmetric_int8: Dequantize INT8 back to FP16/FP32
-- quantize_symmetric_int4: Symmetric INT4 quantization (more aggressive)
-- dequantize_symmetric_int4: Dequantize INT4 back to FP16/FP32
+Symmetric (INT8 / INT4):
+- quantize_symmetric_int8 / dequantize_symmetric_int8
+- quantize_symmetric_int8_with_scale  (static-scale path)
+- quantize_symmetric_int4 / dequantize_symmetric_int4
+- quantize_symmetric_int4_with_scale  (static-scale path)
+- pack_int4 / unpack_int4             (bit-packing helpers)
+
+Asymmetric (KIVI-style):
+- quantize_asymmetric / dequantize_asymmetric          (generic, axis-based)
+- quantize_asymmetric_per_channel / dequantize_asymmetric_per_channel  (K cache)
+- quantize_asymmetric_per_token / dequantize_asymmetric_per_token      (V cache)
 """
 
 from src.quant.int8_basic import (

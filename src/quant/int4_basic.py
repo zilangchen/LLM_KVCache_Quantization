@@ -3,11 +3,13 @@
 INT4 Symmetric Quantization for KV Cache.
 
 This module provides INT4 quantization functions for more aggressive compression.
-INT4 uses 4-bit signed integers with range [-7, 7] (we leave -8 for special cases).
+INT4 uses 4-bit signed integers. Symmetric quantization uses range [-7, 7];
+asymmetric quantization (KIVI-style) uses the full [-8, 7] range.
 
 Note:
-- Quantized values are represented as torch.int8 in [-7, 7].
+- Quantized values are represented as torch.int8 in [-8, 7].
 - Bit packing (2x INT4 per byte) is supported by pack_int4/unpack_int4.
+  pack/unpack use an offset of +8 to map [-8, 7] to [0, 15] for nibble storage.
 """
 
 from typing import Tuple
@@ -26,34 +28,43 @@ def _normalize_static_scale(
     Normalize static scale to shape [B, H, S, num_groups, 1].
 
     Accepts scale in one of the following shapes:
-    - [H, num_groups]
-    - [B, H, S, num_groups]
-    - [B, H, S, num_groups, 1]
+    - [H, num_groups]                   (2D, broadcast over batch & seq)
+    - [B, H, G] / [1, H, G]            (3D, broadcast over seq)
+    - [H, 1, G] / [H, G, 1]            (3D legacy, broadcast over batch & seq)
+    - [B, H, S, num_groups]             (4D, no broadcast needed)
+    - [B, H, S, num_groups, 1]          (5D, already target shape)
     """
     if scale.ndim == 2:
+        # [H, G] -> [1, H, 1, G, 1]
         scale_view = scale[None, :, None, :, None]
     elif scale.ndim == 4:
+        # [B, H, S, G] -> [B, H, S, G, 1]
         scale_view = scale[..., None]
     elif scale.ndim == 5:
         scale_view = scale
-    elif scale.ndim == 3 and scale.shape[-1] == num_groups:
-        # Supported:
-        # - [B, H, G]
-        # - [1, H, G]
-        # - [H, 1, G] (legacy)
-        # - [H, G, 1] (legacy)
-        if scale.shape[0] == batch and scale.shape[1] == heads:
+    elif scale.ndim == 3:
+        # Several 3D layouts are supported.
+        # Dispatch is by matching shape dims against (batch, heads, num_groups).
+        d0, d1, d2 = scale.shape
+        if d2 == num_groups and d0 == batch and d1 == heads:
+            # [B, H, G] -> [B, H, 1, G, 1]
             scale_view = scale[:, :, None, :, None]
-        elif scale.shape[0] == 1 and scale.shape[1] == heads:
-            scale_view = scale.expand(batch, heads, num_groups)[:, :, None, :, None]
-        elif scale.shape[0] == heads and scale.shape[1] == 1:
+        elif d2 == num_groups and d0 == 1 and d1 == heads:
+            # [1, H, G] -> [1, H, 1, G, 1]; final expand handles batch.
+            scale_view = scale[:, :, None, :, None]
+        elif d2 == num_groups and d0 == heads and d1 == 1:
+            # [H, 1, G] (legacy) -> [1, H, 1, G, 1]
             scale_view = scale[:, 0, :][None, :, None, :, None]
-        elif scale.shape[0] == heads and scale.shape[1] == num_groups and scale.shape[2] == 1:
+        elif d1 == num_groups and d0 == heads and d2 == 1:
+            # [H, G, 1] (legacy) -> [1, H, 1, G, 1]
             scale_view = scale[..., 0][None, :, None, :, None]
         else:
-            raise ValueError(f"Unsupported scale shape: {scale.shape}")
+            raise ValueError(
+                f"Unsupported 3D scale shape: {scale.shape} for "
+                f"batch={batch}, heads={heads}, num_groups={num_groups}"
+            )
     else:
-        raise ValueError(f"Unsupported scale shape: {scale.shape}")
+        raise ValueError(f"Unsupported scale ndim={scale.ndim}, shape={tuple(scale.shape)}")
 
     scale_view = scale_view.expand(batch, heads, seq_len, num_groups, 1)
     return scale_view
@@ -101,7 +112,11 @@ def quantize_symmetric_int4(
     
     # Calculate absolute maximum per group
     abs_reshaped = reshaped.abs()
-    
+
+    # Precision note: for float16 inputs the non-quantile (amax) path stays
+    # in float16.  The INT4 quantization step size (~1/7 ~= 0.14) is far
+    # larger than float16 rounding error (~5e-4), so promoting to float32
+    # is unnecessary and would increase peak memory.
     if percentile < 100.0:
         quantile = max(min(percentile / 100.0, 1.0), 0.0)
         abs_max = torch.quantile(
@@ -116,8 +131,8 @@ def quantize_symmetric_int4(
     # Avoid division by zero
     abs_max = abs_max.to(tensor.dtype)
     abs_max = abs_max.clamp(min=1e-5)
-    
-    # INT4 range is [-7, 7] (we reserve -8 for potential special values)
+
+    # INT4 symmetric range is [-7, 7]; asymmetric uses [-8, 7] (see asymmetric_quant.py).
     scale = abs_max / 7.0
     
     # Quantize
@@ -128,7 +143,8 @@ def quantize_symmetric_int4(
     
     # Store scales without trailing singleton dim for cache/storage compatibility:
     # [B, H, S, num_groups, 1] -> [B, H, S, num_groups]
-    scale = scale.to(torch.float16).squeeze(-1)
+    # ENG-028: Preserve input dtype instead of forcing fp16, consistent with INT8 path.
+    scale = scale.to(tensor.dtype).squeeze(-1)
     
     return quantized, scale
 
@@ -231,18 +247,21 @@ def dequantize_symmetric_int4(
 def pack_int4(tensor: Tensor) -> Tensor:
     """
     Pack two INT4 values into one INT8.
-    
+
     Args:
-        tensor: INT8 tensor with values in [-7, 7], shape [..., N] where N is even
-        
+        tensor: INT8 tensor with values in [-8, 7], shape [..., N] where N is even.
+                Both symmetric ([-7, 7]) and asymmetric ([-8, 7]) ranges are supported.
+
     Returns:
         Packed INT8 tensor with shape [..., N//2]
     """
     assert tensor.shape[-1] % 2 == 0, "Last dimension must be even for packing"
-    
-    # Shift values to unsigned range [0, 15] for packing
-    # Original: -7 to 7 -> Shifted: 0 to 14 (we add 7)
-    shifted = (tensor + 7).to(torch.uint8)
+
+    # Shift values to unsigned range [0, 15] for packing.
+    # Offset +8 maps the full INT4 signed range [-8, 7] -> [0, 15].
+    # This correctly handles both symmetric ([-7, 7]) and asymmetric ([-8, 7]) quantization.
+    # (Previous offset of +7 failed for -8: -8+7=-1 overflowed to 255 in uint8.)
+    shifted = (tensor + 8).to(torch.uint8)
     
     # Reshape to [..., N//2, 2]
     shape = tensor.shape[:-1] + (tensor.shape[-1] // 2, 2)
@@ -257,25 +276,25 @@ def pack_int4(tensor: Tensor) -> Tensor:
 def unpack_int4(packed: Tensor) -> Tensor:
     """
     Unpack INT8 tensor back to two INT4 values.
-    
+
     Args:
         packed: Packed INT8 tensor, shape [..., N]
-        
+
     Returns:
-        Unpacked INT8 tensor with values in [-7, 7], shape [..., N*2]
+        Unpacked INT8 tensor with values in [-8, 7], shape [..., N*2]
     """
     # Convert to unsigned for bit operations
     unsigned = packed.to(torch.uint8)
-    
+
     # Extract high and low nibbles
     high = (unsigned >> 4) & 0x0F
     low = unsigned & 0x0F
-    
+
     # Stack and reshape
     unpacked = torch.stack([high, low], dim=-1)
     unpacked = unpacked.view(*packed.shape[:-1], packed.shape[-1] * 2)
-    
-    # Shift back to signed range [-7, 7]
-    unpacked = (unpacked.to(torch.int8) - 7)
-    
+
+    # Shift back to signed range [-8, 7] (inverse of +8 offset in pack_int4).
+    unpacked = (unpacked.to(torch.int8) - 8)
+
     return unpacked

@@ -305,8 +305,8 @@ def _maybe_dump_fused_decode(
     step: int,
     decode_impl: str,
     q_kernel: torch.Tensor,
-    k_int8: torch.Tensor,
-    v_int8: torch.Tensor,
+    k_int8: Optional[torch.Tensor],
+    v_int8: Optional[torch.Tensor],
     k_scale: torch.Tensor,
     v_scale: torch.Tensor,
     context_lens: torch.Tensor,
@@ -556,6 +556,11 @@ def _fused_forward_impl(
     # Optional per-head temperature correction (inv_tau) for int8_ours.
     inv_tau = getattr(cache_wrapper.engine, "inv_tau", None)
     if inv_tau is not None and getattr(cache_wrapper.engine, "use_attn_temperature", True):
+        # ENG-019: Bounds check for layer_idx, consistent with prefill path.
+        if layer_idx >= inv_tau.shape[0]:
+            raise ValueError(
+                f"inv_tau has {inv_tau.shape[0]} layers but fused decode got layer_idx={layer_idx}."
+            )
         inv_tau_layer = inv_tau[layer_idx].to(device=query_states.device, dtype=query_states.dtype)
         query_states = query_states * inv_tau_layer.view(1, -1, 1, 1)
 
@@ -721,6 +726,14 @@ def apply_int8_fused_patch(model):
         layers = model.model.layers
     except Exception:
         layers = None
+
+    # ENG-017: If layers cannot be detected, abort early with a clear error
+    # instead of silently proceeding and crashing on model.model.layers[0] below.
+    if layers is None:
+        raise ValueError(
+            "Cannot detect model layers (model.model.layers). "
+            "apply_int8_fused_patch requires a standard HF decoder model."
+        )
 
     if layers is not None:
         cfg = getattr(model, "config", None)

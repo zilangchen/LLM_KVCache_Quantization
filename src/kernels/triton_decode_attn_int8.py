@@ -372,6 +372,17 @@ def decode_attn_int8(
             f"context_lens max ({max_ctx_in_batch}) exceeds cache seq dim ({max_seq})"
         )
 
+    # ENG-016: If all context lengths are 0, return zeros immediately to avoid
+    # NaN from softmax divide-by-zero inside the kernel.
+    if max_ctx_in_batch == 0:
+        return torch.zeros_like(q)
+
+    # ENG-015: Kernel always outputs fp16. If q is not fp16, convert q to fp16
+    # for kernel computation, then convert output back to original dtype.
+    original_dtype = q.dtype
+    if original_dtype != torch.float16:
+        q = q.to(torch.float16)
+
     output = torch.empty_like(q)
 
     if block_size is None:
@@ -429,5 +440,15 @@ def decode_attn_int8(
         NUM_GROUPS=num_groups,
         N_REP=n_rep,
     )
-    
+
+    # ENG-016: Zero out output rows for batch entries with context_lens=0
+    # to prevent NaN from kernel's softmax divide-by-zero.
+    if min_ctx_in_batch == 0:
+        zero_mask = (context_lens == 0)  # [B]
+        output[zero_mask] = 0.0
+
+    # ENG-015: Convert output back to original dtype if needed.
+    if original_dtype != torch.float16:
+        output = output.to(original_dtype)
+
     return output

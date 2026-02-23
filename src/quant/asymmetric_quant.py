@@ -54,6 +54,16 @@ def quantize_asymmetric(
     if quant_bits == 8:
         qmin, qmax = -128, 127
     else:
+        # INT4 asymmetric uses the full signed 4-bit range [-8, 7].
+        # Edge cases to be aware of:
+        #   - Constant tensors: t_max == t_min -> scale clamped to 1e-5/(qmax-qmin),
+        #     all values quantize to the same code. Dequant error is negligible.
+        #   - Single-element axis (e.g., seq_len=1 for per-channel K): scale is
+        #     well-defined but has no variance across the reduction dim — acceptable.
+        #   - Very small magnitude tensors (|max| < 1e-5): scale is clamped, so
+        #     the quantized range is tiny. Precision is limited but NaN-free.
+        #   - Negative qmin=-8 means pack_int4/unpack_int4 must use offset +8
+        #     (not +7) to avoid uint8 overflow; see int4_basic.py.
         qmin, qmax = -8, 7
 
     axis = int(axis)
@@ -61,6 +71,11 @@ def quantize_asymmetric(
         axis += tensor.ndim
     if axis < 0 or axis >= tensor.ndim:
         raise ValueError(f"axis out of range for tensor.ndim={tensor.ndim}: {axis}")
+
+    if tensor.shape[axis] == 0:
+        raise ValueError(
+            f"Quantization axis {axis} has size 0 in tensor shape {tuple(tensor.shape)}"
+        )
 
     # Compute min/max in float32 for stable scale/zero-point estimation.
     tensor_f = tensor.float()
@@ -73,7 +88,8 @@ def quantize_asymmetric(
         t_min = tensor_f.amin(dim=axis, keepdim=True)
         t_max = tensor_f.amax(dim=axis, keepdim=True)
 
-    # Compute scale and zero_point
+    # Compute scale and zero_point.
+    # clamp(min=1e-5) prevents division by zero for constant-value tensors.
     scale = (t_max - t_min).clamp(min=1e-5) / (qmax - qmin)
     zero_point = t_min - qmin * scale
 

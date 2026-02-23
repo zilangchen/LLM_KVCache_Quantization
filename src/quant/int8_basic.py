@@ -24,35 +24,44 @@ def _normalize_static_scale(
     Normalize static scale to shape [B, H, S, num_groups, 1].
 
     Accepts scale in one of the following shapes:
-    - [H, num_groups]
-    - [1, H, 1, num_groups]
-    - [B, H, S, num_groups]
-    - [B, H, S, num_groups, 1]
+    - [H, num_groups]                   (2D, broadcast over batch & seq)
+    - [B, H, G] / [1, H, G]            (3D, broadcast over seq)
+    - [H, 1, G] / [H, G, 1]            (3D legacy, broadcast over batch & seq)
+    - [1, H, 1, num_groups]             (4D, broadcast over batch & seq)
+    - [B, H, S, num_groups]             (4D, no broadcast needed)
+    - [B, H, S, num_groups, 1]          (5D, already target shape)
     """
     if scale.ndim == 2:
+        # [H, G] -> [1, H, 1, G, 1]
         scale_view = scale[None, :, None, :, None]
     elif scale.ndim == 4:
+        # [B, H, S, G] -> [B, H, S, G, 1]
         scale_view = scale[..., None]
     elif scale.ndim == 5:
         scale_view = scale
-    elif scale.ndim == 3 and scale.shape[-1] == num_groups:
-        # Supported:
-        # - [B, H, G]
-        # - [1, H, G]
-        # - [H, 1, G] (legacy)
-        # - [H, G, 1] (legacy)
-        if scale.shape[0] == batch and scale.shape[1] == heads:
+    elif scale.ndim == 3:
+        # Several 3D layouts are supported.
+        # Dispatch is by matching shape dims against (batch, heads, num_groups).
+        d0, d1, d2 = scale.shape
+        if d2 == num_groups and d0 == batch and d1 == heads:
+            # [B, H, G] -> [B, H, 1, G, 1]
             scale_view = scale[:, :, None, :, None]
-        elif scale.shape[0] == 1 and scale.shape[1] == heads:
-            scale_view = scale.expand(batch, heads, num_groups)[:, :, None, :, None]
-        elif scale.shape[0] == heads and scale.shape[1] == 1:
+        elif d2 == num_groups and d0 == 1 and d1 == heads:
+            # [1, H, G] -> [1, H, 1, G, 1]; final expand handles batch.
+            scale_view = scale[:, :, None, :, None]
+        elif d2 == num_groups and d0 == heads and d1 == 1:
+            # [H, 1, G] (legacy) -> [1, H, 1, G, 1]
             scale_view = scale[:, 0, :][None, :, None, :, None]
-        elif scale.shape[0] == heads and scale.shape[1] == num_groups and scale.shape[2] == 1:
+        elif d1 == num_groups and d0 == heads and d2 == 1:
+            # [H, G, 1] (legacy) -> [1, H, 1, G, 1]
             scale_view = scale[..., 0][None, :, None, :, None]
         else:
-            raise ValueError(f"Unsupported scale shape: {scale.shape}")
+            raise ValueError(
+                f"Unsupported 3D scale shape: {scale.shape} for "
+                f"batch={batch}, heads={heads}, num_groups={num_groups}"
+            )
     else:
-        raise ValueError(f"Unsupported scale shape: {scale.shape}")
+        raise ValueError(f"Unsupported scale ndim={scale.ndim}, shape={tuple(scale.shape)}")
 
     scale_view = scale_view.expand(batch, heads, seq_len, num_groups, 1)
     return scale_view
@@ -108,6 +117,13 @@ def quantize_symmetric_int8(
     # Calculate absolute maximum over the last dimension (group_size)
     abs_reshaped = reshaped.abs()
     
+    # Precision note: when tensor.dtype is float16, the quantile path already
+    # promotes to float32 for stability.  The non-quantile (amax) path keeps
+    # the input dtype.  Scale computation and the round/clamp below therefore
+    # run in the input dtype.  For float16 inputs this is intentional: the
+    # quantization error from float16 arithmetic (~5e-4 relative) is well
+    # below the INT8 quantization step size (~1/127 ~= 7.8e-3), so promoting
+    # to float32 here would increase memory without meaningful accuracy gain.
     if percentile < 100.0:
         quantile = max(min(percentile / 100.0, 1.0), 0.0)
         abs_max = torch.quantile(
@@ -121,7 +137,7 @@ def quantize_symmetric_int8(
     # Avoid division by zero
     abs_max = abs_max.clamp(min=1e-5)
     scale = abs_max / 127.0  # [B, H, S, num_groups, 1]
-    
+
     # Quantize: [..., num_groups, group_size]
     # Scale broadcasts over group_size dim
     quantized_reshaped = torch.round(reshaped / scale).clamp(-127, 127).to(torch.int8)
@@ -199,32 +215,39 @@ def dequantize_symmetric_int8(
     Formula:
         tensor = quantized * scale
 
+    The function handles three scale layouts (produced by different quantize paths):
+
+    Path A -- scale.ndim == quantized.ndim + 1:
+        scale shape [B, H, S, num_groups, 1] (5-D with trailing singleton).
+        Reshape quantized to [B, H, S, G, group_size], multiply, reshape back.
+
+    Path B -- scale.ndim == quantized.ndim, num_groups > 1:
+        scale shape [B, H, S, num_groups] (4-D, squeezed from Path A).
+        Same reshape logic, but unsqueeze(-1) on scale to broadcast.
+
+    Path B' -- scale.ndim == quantized.ndim, num_groups == 1:
+        scale shape [B, H, S, 1] (per-token scalar scale).
+        Direct broadcast multiply, no reshape needed.
+
     Args:
-        quantized: INT8 tensor
-        scale: Scale tensor
+        quantized: INT8 tensor [B, H, S, D]
+        scale: Scale tensor (see layout descriptions above)
 
     Returns:
-        Dequantized tensor in float16 (or scale.dtype)
+        Dequantized tensor in scale.dtype
     """
-    # Check dimensions to detect group-wise scaling
-    # quantized: [B, H, S, D]
-    # scale: [B, H, S, num_groups] or [B, H, S, num_groups, 1] or [B, H, S, 1]
-    
+    # --- Path A: 5-D scale with trailing singleton ---
     if scale.ndim == quantized.ndim + 1:
-        # Likely group-wise scale [..., num_groups, 1]
-        # We need to reshape quantized to match
         B, H, S, D = quantized.shape
         num_groups = scale.shape[-2]
         group_size = D // num_groups
-        
-        q_reshaped = quantized.view(B, H, S, num_groups, group_size)  # [B, H, S, G, GS]
-        # Scale broadcasts: [..., num_groups, 1] * [..., num_groups, group_size]
+
+        q_reshaped = quantized.view(B, H, S, num_groups, group_size)
         decoded_reshaped = q_reshaped.to(scale.dtype) * scale
-        
         return decoded_reshaped.view(B, H, S, D)
 
+    # --- Path B / B': 4-D scale ---
     if scale.ndim == quantized.ndim:
-        # Group-wise scale stored as [B, H, S, num_groups] (including num_groups==1).
         B, H, S, D = quantized.shape
         num_groups = scale.shape[-1]
         if num_groups <= 0 or D % num_groups != 0:
@@ -232,8 +255,10 @@ def dequantize_symmetric_int8(
                 f"Invalid scale shape for group-wise dequantization: "
                 f"quantized={tuple(quantized.shape)}, scale={tuple(scale.shape)}"
             )
+        # Path B': per-token scalar scale (num_groups == 1).
         if num_groups == 1:
             return quantized.to(scale.dtype) * scale
+        # Path B: group-wise scale.
         group_size = D // num_groups
         q_reshaped = quantized.view(B, H, S, num_groups, group_size)
         decoded_reshaped = q_reshaped.to(scale.dtype) * scale.unsqueeze(-1)

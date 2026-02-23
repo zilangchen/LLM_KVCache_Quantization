@@ -40,6 +40,9 @@ from src.utils.timing import (
 )
 from src.utils.repro import set_seed
 
+# ENG-031: Module-level constant for fused KV modes to avoid repeated hardcoding.
+_FUSED_KV_MODES = frozenset({"int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"})
+
 
 def _cache_stats_from_past_key_values(past_key_values) -> tuple[float, int]:
     """
@@ -172,6 +175,14 @@ def _register_prefill_temperature_hooks(model, inv_tau: torch.Tensor):
 
     layers = getattr(getattr(model, "model", None), "layers", None)
     if layers is None:
+        # ENG-022: Warn when model structure does not match expected layout
+        # instead of silently returning empty hooks.
+        import warnings
+        warnings.warn(
+            "Cannot register prefill temperature hooks: model.model.layers not found. "
+            "Per-head temperature scaling will NOT be applied during prefill.",
+            UserWarning,
+        )
         return handles
 
     if not isinstance(inv_tau, torch.Tensor) or inv_tau.ndim != 2:
@@ -373,6 +384,12 @@ def generate_from_ids(
     input_ids = input_ids.to(device=model.device, dtype=torch.long)
     batch_size, prompt_len = int(input_ids.shape[0]), int(input_ids.shape[1])
 
+    # ENG-020: Validate non-degenerate input shapes.
+    if batch_size == 0:
+        raise ValueError(f"input_ids batch_size must be > 0, got shape {tuple(input_ids.shape)}")
+    if prompt_len == 0:
+        raise ValueError(f"input_ids prompt_len must be > 0, got shape {tuple(input_ids.shape)}")
+
     if attention_mask is None:
         attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=model.device)
     else:
@@ -395,7 +412,7 @@ def generate_from_ids(
             )
 
     # Apply patch if needed
-    if kv_mode in ["int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"]:
+    if kv_mode in _FUSED_KV_MODES:
         if kv_mode == "int8_ours":
             import warnings
 
@@ -473,8 +490,10 @@ def generate_from_ids(
                         UserWarning,
                     )
 
-                group_size = calib_group_k or group_size
-                clip_percentile = calib_clip_k or clip_percentile
+                # ENG-026: Use `is not None` instead of `or` to avoid
+                # replacing legitimate falsy values (e.g. 0).
+                group_size = calib_group_k if calib_group_k is not None else group_size
+                clip_percentile = calib_clip_k if calib_clip_k is not None else clip_percentile
 
                 if use_static_scales and "k_scale" in calib:
                     static_k_scale = torch.tensor(calib["k_scale"], dtype=torch.float16)
@@ -636,23 +655,25 @@ def generate_from_ids(
     prefill_timer.stop()
     ttft_ms = prefill_timer.elapsed_ms
 
-    generated_steps.append(next_token)
-    current_token = next_token.view(batch_size, 1)  # [B, 1]
+    # ENG-018: If max_new_tokens=0, skip generation entirely.
+    if max_new_tokens > 0:
+        generated_steps.append(next_token)
+        current_token = next_token.view(batch_size, 1)  # [B, 1]
 
-    # Update attention mask for decode phase
-    if attention_mask is not None:
-        attention_mask = torch.cat(
-            [
-                attention_mask,
-                torch.ones((batch_size, 1), device=model.device, dtype=attention_mask.dtype),
-            ],
-            dim=1,
-        )
+        # Update attention mask for decode phase
+        if attention_mask is not None:
+            attention_mask = torch.cat(
+                [
+                    attention_mask,
+                    torch.ones((batch_size, 1), device=model.device, dtype=attention_mask.dtype),
+                ],
+                dim=1,
+            )
 
     # ========== DECODE PHASE ==========
     eos_token_id = tokenizer.eos_token_id
 
-    for _ in range(max_new_tokens - 1):
+    for _ in range(max(max_new_tokens - 1, 0)):
         if stop_on_eos and eos_token_id is not None:
             # Stop only when all sequences have emitted EOS to keep shapes uniform.
             if torch.all(generated_steps[-1] == int(eos_token_id)).item():
@@ -665,7 +686,7 @@ def generate_from_ids(
             # Prepare past_key_values
             if kv_mode == "fp16" and fp16_use_model_cache and model_cache_for_decode is not None:
                 current_past_key_values = model_cache_for_decode
-            elif kv_mode in ["int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"]:
+            elif kv_mode in _FUSED_KV_MODES:
                 from src.engine.patch_model import INT8CacheWrapperContainer
 
                 current_past_key_values = INT8CacheWrapperContainer(kv_cache, num_layers)
@@ -681,7 +702,7 @@ def generate_from_ids(
 
             # Dynamic Cache Check (Skipped for fused wrapper as it mocks Cache)
             if (
-                kv_mode not in ["int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"]
+                kv_mode not in _FUSED_KV_MODES
                 and HAS_DYNAMIC_CACHE
                 and isinstance(current_past_key_values, tuple)
             ):
@@ -698,7 +719,7 @@ def generate_from_ids(
 
             # Update cache with NEW token's KV for non-fused modes.
             if (
-                kv_mode not in ["int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"]
+                kv_mode not in _FUSED_KV_MODES
                 and not (kv_mode == "fp16" and fp16_use_model_cache)
             ):
                 if outputs.past_key_values is not None:
@@ -762,7 +783,11 @@ def generate_from_ids(
         tok_per_s_total = 0.0
         tok_per_s_per_seq = 0.0
 
-    generated_ids = torch.stack(generated_steps, dim=1).to(dtype=torch.long)  # [B, gen_len]
+    # ENG-018: Handle empty generated_steps when max_new_tokens=0.
+    if generated_steps:
+        generated_ids = torch.stack(generated_steps, dim=1).to(dtype=torch.long)  # [B, gen_len]
+    else:
+        generated_ids = torch.empty((batch_size, 0), dtype=torch.long, device=model.device)
 
     output = GenerationBatchOutput(
         generated_ids=generated_ids,
