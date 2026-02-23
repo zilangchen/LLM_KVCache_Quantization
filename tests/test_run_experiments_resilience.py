@@ -89,6 +89,39 @@ class TestRunExperimentsResilience(unittest.TestCase):
             self.assertNotIn("failure_type", task)
             self.assertNotIn("error", task)
 
+    def test_mark_task_success_without_history_for_skip_resume(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            manifest_path = root / "run_manifest.json"
+            log_path = root / "logs" / "profile_latency.log"
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            log_path.write_text("", encoding="utf-8")
+            manifest = {
+                "tasks": {
+                    "profile_latency": {
+                        "status": "success",
+                        "history": [{"status": "success", "attempt": 1}],
+                    }
+                }
+            }
+
+            rex._mark_task_status(  # pylint: disable=protected-access
+                manifest_path,
+                manifest,
+                task="profile_latency",
+                status="success",
+                cmd=["python", "scripts/profile_latency.py"],
+                log_path=log_path,
+                returncode=0,
+                record_history=False,
+            )
+
+            updated = rex._read_json(manifest_path)  # pylint: disable=protected-access
+            self.assertIsInstance(updated, dict)
+            task = updated["tasks"]["profile_latency"]
+            self.assertEqual(task.get("status"), "success")
+            self.assertEqual(len(task.get("history", [])), 1)
+
     def test_init_manifest_append_history_records_kv_and_quant(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

@@ -347,6 +347,7 @@ def main():
     monitor = MemoryMonitor()
     monitor.start()
 
+    out = None
     try:
         input_ids = torch.tensor(tokens, dtype=torch.long, device=model.device).unsqueeze(0)
         input_ids = input_ids.repeat(int(args.batch), 1)
@@ -377,8 +378,18 @@ def main():
 
     torch_peak = torch.cuda.max_memory_allocated() / 1024 / 1024
     nvml_peak = monitor.peak_mem
-    kv_cache_mem_mb = float(getattr(out, "kv_cache_mem_mb", 0.0))
-    kv_cache_seq_len = int(getattr(out, "kv_cache_seq_len", 0))
+    kv_cache_mem_source = "reported"
+    if out is None:
+        raise RuntimeError("generate_from_ids returned no output")
+    if hasattr(out, "kv_cache_mem_mb"):
+        kv_cache_mem_mb = float(out.kv_cache_mem_mb)
+    else:
+        kv_cache_mem_mb = float("nan")
+        kv_cache_mem_source = "missing_attr"
+    if hasattr(out, "kv_cache_seq_len"):
+        kv_cache_seq_len = int(out.kv_cache_seq_len)
+    else:
+        kv_cache_seq_len = -1
     print(f"Torch Peak: {torch_peak:.2f} MB")
     print(f"NVML Peak: {nvml_peak:.2f} MB")
     if monitor.init_error:
@@ -395,8 +406,13 @@ def main():
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / f"profile_memory_{args.kv_mode}_{timestamp.replace(':','-')}.csv"
         
-        gpu_peak = float(nvml_peak) if nvml_peak > 0 else float(torch_peak)
-        gpu_peak_source = "nvml" if nvml_peak > 0 else "torch_peak"
+        use_nvml = monitor.source == "nvml" and not monitor.init_error
+        if use_nvml:
+            gpu_peak = float(nvml_peak)
+            gpu_peak_source = "nvml"
+        else:
+            gpu_peak = float(torch_peak)
+            gpu_peak_source = "torch_peak"
         row = {
             "run_id": f"mem_{timestamp}",
             "model_id": args.model_id,
@@ -419,6 +435,7 @@ def main():
             "torch_peak_mb": round(torch_peak, 2),
             "nvml_peak_mb": round(nvml_peak, 2),
             "kv_cache_mem_mb": round(kv_cache_mem_mb, 2),
+            "kv_cache_mem_source": kv_cache_mem_source,
             "kv_cache_seq_len": int(kv_cache_seq_len),
             "timestamp": timestamp,
             "git_commit": git_commit,
@@ -437,7 +454,7 @@ def main():
             "run_id", "model_id", "run_name", "kv_mode", "quant_bits", "clip_percentile", "group_size",
             "dtype", "hardware", "seq_len", "gen_len", "batch", "ttft_ms", "tpot_ms",
             "tok_per_s", "tok_per_s_per_seq", "gpu_mem_peak_mb", "gpu_mem_peak_source", "torch_peak_mb", "nvml_peak_mb", "kv_cache_mem_mb",
-            "kv_cache_seq_len", "timestamp", "git_commit", "seed", "replica_id"
+            "kv_cache_mem_source", "kv_cache_seq_len", "timestamp", "git_commit", "seed", "replica_id"
         ]
         
         with open(path, "w", newline="") as f:

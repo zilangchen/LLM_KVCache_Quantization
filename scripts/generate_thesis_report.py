@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
@@ -312,6 +312,134 @@ def _pick_best_significance_row(
     return sub.iloc[0]
 
 
+def _inconclusive_claim_row(claim: ClaimSpec, reason: str, model_id: str = "") -> Dict[str, object]:
+    return {
+        "claim_id": claim.claim_id,
+        "title": claim.title,
+        "metric": claim.metric,
+        "baseline_mode": claim.baseline_mode,
+        "challenger_mode": claim.challenger_mode,
+        "status": "INCONCLUSIVE",
+        "reason": reason,
+        "min_gain_pct": float(claim.min_gain_pct),
+        "observed_gain_pct": np.nan,
+        "practical_pass": False,
+        "require_q_significance": bool(claim.require_q_significance),
+        "statistical_pass": False,
+        "q_value": np.nan,
+        "p_value": np.nan,
+        "n_pairs": np.nan,
+        "meets_min_pairs": False,
+        "significant_q_alpha": False,
+        "favors_challenger": False,
+        "evidence_strength": "weak",
+        "observed_seq_len": np.nan,
+        "observed_gen_len": np.nan,
+        "observed_batch": np.nan,
+        "observed_ppl_mode": "",
+        "observed_chunk_size": np.nan,
+        "target_model_id": str(model_id),
+        "note": claim.note,
+    }
+
+
+def _evaluate_claim_row(
+    *,
+    claim: ClaimSpec,
+    rel_row: Optional[pd.Series],
+    sig_row: Optional[pd.Series],
+    alpha: float,
+) -> Dict[str, object]:
+    if rel_row is None:
+        return _inconclusive_claim_row(claim, "missing relative_gain evidence row")
+
+    observed_gain_pct = float(pd.to_numeric(pd.Series([rel_row.get("gain_pct")]), errors="coerce").iloc[0])
+    practical_pass = bool(observed_gain_pct >= float(claim.min_gain_pct))
+
+    q_value = np.nan
+    p_value = np.nan
+    n_pairs = np.nan
+    meets_min_pairs = False
+    significant_q = False
+    favors_challenger = False
+    statistical_pass = not claim.require_q_significance
+    stat_reason = "q-significance not required"
+
+    if sig_row is not None:
+        q_value = float(pd.to_numeric(pd.Series([sig_row.get("q_value")]), errors="coerce").iloc[0])
+        p_value = float(pd.to_numeric(pd.Series([sig_row.get("p_value")]), errors="coerce").iloc[0])
+        n_pairs = float(pd.to_numeric(pd.Series([sig_row.get("n_pairs")]), errors="coerce").iloc[0])
+        meets_min_pairs = _to_bool(sig_row.get("meets_min_pairs", False))
+        significant_q = _to_bool(sig_row.get("significant_q_alpha", False))
+        if not significant_q and np.isfinite(q_value):
+            significant_q = bool(q_value <= float(alpha))
+        favors_challenger = _to_bool(sig_row.get("favors_challenger", False))
+
+        if claim.require_q_significance:
+            statistical_pass = bool(significant_q and favors_challenger and meets_min_pairs)
+            stat_reason = (
+                "q-significant and direction-consistent"
+                if statistical_pass
+                else "required q-significance not met"
+            )
+        else:
+            # For non-inferiority type claims, fail only if challenger is significantly worse.
+            if significant_q and not favors_challenger:
+                statistical_pass = False
+                stat_reason = "statistically significant contradiction"
+            else:
+                statistical_pass = True
+                stat_reason = "no significant contradiction"
+    elif claim.require_q_significance:
+        statistical_pass = False
+        stat_reason = "missing significance row for required q-test"
+
+    if practical_pass and statistical_pass:
+        status = "PASS"
+        evidence_strength = "strong" if significant_q else "moderate"
+        reason = "practical and statistical criteria satisfied"
+    elif not practical_pass:
+        status = "FAIL"
+        evidence_strength = "none"
+        reason = (
+            f"practical threshold not met: gain={observed_gain_pct:.4f}% < "
+            f"required {claim.min_gain_pct:.4f}%"
+        )
+    else:
+        status = "INCONCLUSIVE"
+        evidence_strength = "weak"
+        reason = stat_reason
+
+    return {
+        "claim_id": claim.claim_id,
+        "title": claim.title,
+        "metric": claim.metric,
+        "baseline_mode": claim.baseline_mode,
+        "challenger_mode": claim.challenger_mode,
+        "status": status,
+        "reason": reason,
+        "min_gain_pct": float(claim.min_gain_pct),
+        "observed_gain_pct": observed_gain_pct,
+        "practical_pass": practical_pass,
+        "require_q_significance": bool(claim.require_q_significance),
+        "statistical_pass": statistical_pass,
+        "q_value": q_value,
+        "p_value": p_value,
+        "n_pairs": n_pairs,
+        "meets_min_pairs": bool(meets_min_pairs),
+        "significant_q_alpha": bool(significant_q),
+        "favors_challenger": bool(favors_challenger),
+        "evidence_strength": evidence_strength,
+        "observed_seq_len": rel_row.get("seq_len", np.nan),
+        "observed_gen_len": rel_row.get("gen_len", np.nan),
+        "observed_batch": rel_row.get("batch", np.nan),
+        "observed_ppl_mode": rel_row.get("ppl_mode", ""),
+        "observed_chunk_size": rel_row.get("chunk_size", np.nan),
+        "target_model_id": str(rel_row.get("model_id", "")) if "model_id" in rel_row.index else "",
+        "note": claim.note,
+    }
+
+
 def build_claim_validation(
     *,
     relative_gain: pd.DataFrame,
@@ -324,10 +452,63 @@ def build_claim_validation(
     sig = _to_numeric(sig, ["p_value", "q_value", "n_pairs", "gain_pct_mean"])
 
     for claim in claims:
-        rel_row = _pick_best_relative_row(relative_gain, claim)
-        sig_row = _pick_best_significance_row(sig, claim, rel_row)
+        target_models = [str(m).strip() for m in (claim.target_model_ids or []) if str(m).strip()]
+        if len(target_models) > 1:
+            per_model_rows: List[Dict[str, object]] = []
+            for model_id in target_models:
+                scoped_claim = replace(claim, target_model_ids=[model_id])
+                rel_row = _pick_best_relative_row(relative_gain, scoped_claim)
+                sig_row = _pick_best_significance_row(sig, scoped_claim, rel_row)
+                row = _evaluate_claim_row(
+                    claim=scoped_claim,
+                    rel_row=rel_row,
+                    sig_row=sig_row,
+                    alpha=alpha,
+                )
+                row["target_model_id"] = model_id
+                per_model_rows.append(row)
 
-        if rel_row is None:
+            status_tokens = {str(r.get("status", "")) for r in per_model_rows}
+            if "FAIL" in status_tokens:
+                agg_status = "FAIL"
+                agg_reason = "at least one target model failed non-inferiority threshold"
+            elif "INCONCLUSIVE" in status_tokens:
+                agg_status = "INCONCLUSIVE"
+                agg_reason = "at least one target model lacks sufficient evidence"
+            else:
+                agg_status = "PASS"
+                agg_reason = "all target models satisfy practical and statistical criteria"
+
+            gains = pd.to_numeric(
+                pd.Series([r.get("observed_gain_pct") for r in per_model_rows]),
+                errors="coerce",
+            ).dropna()
+            q_vals = pd.to_numeric(
+                pd.Series([r.get("q_value") for r in per_model_rows]),
+                errors="coerce",
+            ).dropna()
+            p_vals = pd.to_numeric(
+                pd.Series([r.get("p_value") for r in per_model_rows]),
+                errors="coerce",
+            ).dropna()
+            n_pairs = pd.to_numeric(
+                pd.Series([r.get("n_pairs") for r in per_model_rows]),
+                errors="coerce",
+            ).dropna()
+
+            practical_pass = all(bool(r.get("practical_pass", False)) for r in per_model_rows)
+            statistical_pass = all(bool(r.get("statistical_pass", False)) for r in per_model_rows)
+            evidence_tokens = {str(r.get("evidence_strength", "weak")) for r in per_model_rows}
+            if agg_status == "FAIL":
+                evidence_strength = "none"
+            elif evidence_tokens == {"strong"}:
+                evidence_strength = "strong"
+            elif evidence_tokens.issubset({"strong", "moderate"}):
+                evidence_strength = "moderate"
+            else:
+                evidence_strength = "weak"
+
+            exemplar = per_model_rows[0] if per_model_rows else _inconclusive_claim_row(claim, "no model rows")
             rows.append(
                 {
                     "claim_id": claim.claim_id,
@@ -335,108 +516,43 @@ def build_claim_validation(
                     "metric": claim.metric,
                     "baseline_mode": claim.baseline_mode,
                     "challenger_mode": claim.challenger_mode,
-                    "status": "INCONCLUSIVE",
-                    "reason": "missing relative_gain evidence row",
-                    "min_gain_pct": claim.min_gain_pct,
-                    "observed_gain_pct": np.nan,
-                    "practical_pass": False,
+                    "status": agg_status,
+                    "reason": agg_reason,
+                    "min_gain_pct": float(claim.min_gain_pct),
+                    "observed_gain_pct": float(gains.min()) if not gains.empty else np.nan,
+                    "practical_pass": bool(practical_pass),
                     "require_q_significance": bool(claim.require_q_significance),
-                    "statistical_pass": False,
-                    "q_value": np.nan,
-                    "p_value": np.nan,
-                    "n_pairs": np.nan,
-                    "meets_min_pairs": False,
-                    "significant_q_alpha": False,
-                    "favors_challenger": False,
-                    "evidence_strength": "weak",
+                    "statistical_pass": bool(statistical_pass),
+                    "q_value": float(q_vals.max()) if not q_vals.empty else np.nan,
+                    "p_value": float(p_vals.max()) if not p_vals.empty else np.nan,
+                    "n_pairs": float(n_pairs.min()) if not n_pairs.empty else np.nan,
+                    "meets_min_pairs": all(bool(r.get("meets_min_pairs", False)) for r in per_model_rows),
+                    "significant_q_alpha": all(bool(r.get("significant_q_alpha", False)) for r in per_model_rows),
+                    "favors_challenger": all(bool(r.get("favors_challenger", False)) for r in per_model_rows),
+                    "evidence_strength": evidence_strength,
+                    "observed_seq_len": exemplar.get("observed_seq_len", np.nan),
+                    "observed_gen_len": exemplar.get("observed_gen_len", np.nan),
+                    "observed_batch": exemplar.get("observed_batch", np.nan),
+                    "observed_ppl_mode": exemplar.get("observed_ppl_mode", ""),
+                    "observed_chunk_size": exemplar.get("observed_chunk_size", np.nan),
+                    "target_model_id": ",".join(target_models),
+                    "target_model_coverage": f"{len(per_model_rows)}/{len(target_models)}",
+                    "target_model_statuses": ";".join(
+                        f"{r.get('target_model_id', '')}:{r.get('status', '')}" for r in per_model_rows
+                    ),
+                    "note": claim.note,
                 }
             )
             continue
 
-        observed_gain_pct = float(pd.to_numeric(pd.Series([rel_row.get("gain_pct")]), errors="coerce").iloc[0])
-        practical_pass = bool(observed_gain_pct >= float(claim.min_gain_pct))
-
-        q_value = np.nan
-        p_value = np.nan
-        n_pairs = np.nan
-        meets_min_pairs = False
-        significant_q = False
-        favors_challenger = False
-        statistical_pass = not claim.require_q_significance
-        stat_reason = "q-significance not required"
-
-        if sig_row is not None:
-            q_value = float(pd.to_numeric(pd.Series([sig_row.get("q_value")]), errors="coerce").iloc[0])
-            p_value = float(pd.to_numeric(pd.Series([sig_row.get("p_value")]), errors="coerce").iloc[0])
-            n_pairs = float(pd.to_numeric(pd.Series([sig_row.get("n_pairs")]), errors="coerce").iloc[0])
-            meets_min_pairs = _to_bool(sig_row.get("meets_min_pairs", False))
-            significant_q = _to_bool(sig_row.get("significant_q_alpha", False))
-            if not significant_q and np.isfinite(q_value):
-                significant_q = bool(q_value <= float(alpha))
-            favors_challenger = _to_bool(sig_row.get("favors_challenger", False))
-
-            if claim.require_q_significance:
-                statistical_pass = bool(significant_q and favors_challenger and meets_min_pairs)
-                stat_reason = (
-                    "q-significant and direction-consistent"
-                    if statistical_pass
-                    else "required q-significance not met"
-                )
-            else:
-                # For non-inferiority type claims, fail only if challenger is significantly worse.
-                if significant_q and not favors_challenger:
-                    statistical_pass = False
-                    stat_reason = "statistically significant contradiction"
-                else:
-                    statistical_pass = True
-                    stat_reason = "no significant contradiction"
-        elif claim.require_q_significance:
-            statistical_pass = False
-            stat_reason = "missing significance row for required q-test"
-
-        if practical_pass and statistical_pass:
-            status = "PASS"
-            evidence_strength = "strong" if significant_q else "moderate"
-            reason = "practical and statistical criteria satisfied"
-        elif not practical_pass:
-            status = "FAIL"
-            evidence_strength = "none"
-            reason = (
-                f"practical threshold not met: gain={observed_gain_pct:.4f}% < "
-                f"required {claim.min_gain_pct:.4f}%"
-            )
-        else:
-            status = "INCONCLUSIVE"
-            evidence_strength = "weak"
-            reason = stat_reason
-
-        row = {
-            "claim_id": claim.claim_id,
-            "title": claim.title,
-            "metric": claim.metric,
-            "baseline_mode": claim.baseline_mode,
-            "challenger_mode": claim.challenger_mode,
-            "status": status,
-            "reason": reason,
-            "min_gain_pct": float(claim.min_gain_pct),
-            "observed_gain_pct": observed_gain_pct,
-            "practical_pass": practical_pass,
-            "require_q_significance": bool(claim.require_q_significance),
-            "statistical_pass": statistical_pass,
-            "q_value": q_value,
-            "p_value": p_value,
-            "n_pairs": n_pairs,
-            "meets_min_pairs": bool(meets_min_pairs),
-            "significant_q_alpha": bool(significant_q),
-            "favors_challenger": bool(favors_challenger),
-            "evidence_strength": evidence_strength,
-            "observed_seq_len": rel_row.get("seq_len", np.nan),
-            "observed_gen_len": rel_row.get("gen_len", np.nan),
-            "observed_batch": rel_row.get("batch", np.nan),
-            "observed_ppl_mode": rel_row.get("ppl_mode", ""),
-            "observed_chunk_size": rel_row.get("chunk_size", np.nan),
-            "note": claim.note,
-        }
+        rel_row = _pick_best_relative_row(relative_gain, claim)
+        sig_row = _pick_best_significance_row(sig, claim, rel_row)
+        row = _evaluate_claim_row(
+            claim=claim,
+            rel_row=rel_row,
+            sig_row=sig_row,
+            alpha=alpha,
+        )
         rows.append(row)
 
     if not rows:
