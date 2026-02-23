@@ -6,6 +6,8 @@
 - 模型：`Qwen/Qwen2.5-1.5B-Instruct@989aa7980e4cf806f80c7fef2b1adb7bc71aa306`
 - 硬件：NVIDIA H20（96GB）
 - 解码：greedy（`temperature=0, top_p=1, top_k=0`）
+- 口径修订：PR-2 之后，旧 Phase5 中含 `eval_longbench` / `eval_ruler` 的结果一律视为 **legacy**
+  （不进入新聚合，不用于论文主表）
 
 ## 最终验收目录（统一引用）
 - 远端：`/root/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/`
@@ -40,6 +42,14 @@
 来源：`thesis_main_claims_32k.csv`
 - `int4_fused` 与 `int4_ours` 在 32K Needle 为 `0%`，PPL 分别约 `161.83` / `23.41`
 - 结论：INT4 路径当前不满足论文主线质量门槛，应作为“扩展尝试 + 失败分析”而非主结论。
+- KIVI 披露：KIVI-style INT4 当前为 int8 容器存储（未 bit-packing），内存对比需附注说明。
+
+## Phase5v2 重启计划（并行执行）
+- 新目录：`results/phase5v2/`
+- 新 tag：`phase5v2_<model>_s<seed>`
+- 调度：quality 三模型并行（1.5B/7B/8B），throughput 串行独占 GPU
+- 聚合：
+  `python3 scripts/aggregate_results.py --runs_dir ${BASE_DIR}/runs --logs_dir ${BASE_DIR}/logs --tables_dir ${BASE_DIR}/tables --plots_dir ${BASE_DIR}/plots --strict`
 
 ## 论文引用建议
 - 主图目录：`/root/LLM_KVCache_Quantization/results/final_thesis_plus_20260219_045623/plots/`

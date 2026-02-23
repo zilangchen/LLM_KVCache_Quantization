@@ -104,9 +104,9 @@ Canonical agent workflow directory is `.agents/`.
 
 #### I. final_emnlp2026_v1.yaml 审查（第三轮审查）
 
-- [ ] `[MEDIUM]` `ablation_dimensions.scale_strategy` 仅列 `[static, adaptive]`（L77）— 计划中为 "static vs adaptive vs dynamic" 三方，与消融配置 D 节同一缺失
-- [ ] `[LOW]` `benchmarks` 仅列 4 个质量评测（L67-71）— 未包含 latency/memory/throughput 系统性能 benchmark，虽然这些是独立维度但在 meta-config 中应有提及
-- [ ] `[LOW]` `models[0].calibration_artifacts` 列出了尚不存在的 MSE 产物（`int8_mse`/`int4_mse`，L38-39）— MSE 校准实现有已知 bug，这些产物暂不可用
+- [x] `[MEDIUM]` `ablation_dimensions.scale_strategy` 仅列 `[static, adaptive]`（L77）— 计划中为 "static vs adaptive vs dynamic" 三方，与消融配置 D 节同一缺失 — ✅ 已修复（PR-4）
+- [x] `[LOW]` `benchmarks` 仅列 4 个质量评测（L67-71）— 未包含 latency/memory/throughput 系统性能 benchmark，虽然这些是独立维度但在 meta-config 中应有提及 — ✅ 已修复（PR-4）
+- [x] `[LOW]` `models[0].calibration_artifacts` 列出了尚不存在的 MSE 产物（`int8_mse`/`int4_mse`，L38-39）— MSE 校准实现有已知 bug，这些产物暂不可用 — ✅ 已修复（PR-4）
 
 ---
 
@@ -245,20 +245,20 @@ Canonical agent workflow directory is `.agents/`.
 
 > 最终实验配置的完整性、一致性、可复现性审查。
 
-- [ ] `[HIGH]` 7B/8B 校准产物尚未生成（Phase 2 依赖，非 bug）: final config 引用 4 个不存在的 JSON（kv_calib_kl_qwen25_7b_int8/int4、kv_calib_kl_llama31_8b_int8/int4）。Phase 2 计划中但尚未执行。在 Phase 5 全矩阵实验前必须完成
-- [ ] `[MEDIUM]` LLaMA-3.1-8B 使用本地路径而非 HF ID: `/root/autodl-tmp/modelscope_cache/...` 无法在其他机器复现。应补充 HF model_id + revision 作为备选，或在 experiment_sop.md 中记录 ModelScope 下载步骤
-- [ ] `[MEDIUM]` Claims C9-C11 定义不够精确: C9/C10 仅对比 INT8-ours vs KIVI 的 LongBench/Needle，缺少 INT4-ours vs KIVI 的显式 claim。C11 "cross-model" 表述模糊，应明确"在 Qwen-7B 和 LLaMA-8B 上 INT8-ours 相比 INT8-baseline 在 LongBench 上非劣"
-- [ ] `[LOW]` meta-config 无执行工作流说明: 仅声明目标矩阵，未提供具体 run_experiments.py 调用命令或执行顺序
+- [x] `[HIGH]` 7B/8B 校准产物尚未生成（Phase 2 依赖，非 bug）: final config 引用 4 个不存在的 JSON（kv_calib_kl_qwen25_7b_int8/int4、kv_calib_kl_llama31_8b_int8/int4）。Phase 2 计划中但尚未执行。在 Phase 5 全矩阵实验前必须完成 — ✅ 误报核销（PR-4，校准产物已存在）
+- [x] `[MEDIUM]` LLaMA-3.1-8B 使用本地路径而非 HF ID: `/root/autodl-tmp/modelscope_cache/...` 无法在其他机器复现。应补充 HF model_id + revision 作为备选，或在 experiment_sop.md 中记录 ModelScope 下载步骤 — ✅ 已修复（PR-4）
+- [x] `[MEDIUM]` Claims C9-C11 定义不够精确: C9/C10 仅对比 INT8-ours vs KIVI 的 LongBench/Needle，缺少 INT4-ours vs KIVI 的显式 claim。C11 "cross-model" 表述模糊，应明确"在 Qwen-7B 和 LLaMA-8B 上 INT8-ours 相比 INT8-baseline 在 LongBench 上非劣" — ✅ 已修复（PR-4）
+- [x] `[LOW]` meta-config 无执行工作流说明: 仅声明目标矩阵，未提供具体 run_experiments.py 调用命令或执行顺序 — ✅ 已修复（PR-4）
 
 #### X. 对比审查 — INT8KVCache vs KIVIStyleKVCache 设计差异（第十二轮审查，论文表述相关）
 
 > 两套 KV Cache 实现的架构差异对比。以下发现主要影响论文声明和实验公平性，非代码 bug。
 
-- [ ] `[HIGH]` 论文内存对比表必须注明 KIVI INT4 无 bit-packing: KIVIStyleKVCache 的 INT4 存储为 int8（1 byte/value），与 INT4KVCache 的 0.5 byte/value 不同。若论文表格对比 "KIVI INT4 vs INT4-ours" 内存，KIVI 数值将显著偏高。建议在 Memory profiling 结果旁加注 "KIVI INT4 uses int8 storage without bit-packing"
-- [ ] `[HIGH]` 论文 Methods 节须披露 K 量化策略差异: INT8-ours 使用 per-token group-wise 对称量化（每 token 独立 scale），KIVI 使用 per-channel 非对称量化（prefill 时一次性计算 K-scale，decode 复用并可能 clip）。这导致 decode 阶段 KIVI K 可能有 clipping error，影响长上下文检索质量（Needle/RULER）
-- [ ] `[MEDIUM]` 论文须披露 KIVI 无温度校正: KIVI 不支持 inv_tau（kivi_style_cache.py L78-79 硬编码 None/False）。对比 RQ2（温度校正消融）时，KIVI 作为无温度校正的自然基线，但须在实验设计中明确声明
-- [ ] `[MEDIUM]` 论文须披露 decode kernel 差异: KIVI 始终用 torch_ref（非 fused），INT8-ours 可用 triton_fused。延迟对比不完全公平——KIVI 的 TPOT 劣势部分源于 kernel 选择而非量化策略
-- [ ] `[LOW]` KIVI K-scale 内存恒定 vs INT8 随 seq_len 增长: KIVI k_scale [B,H,D] ~8KB/layer（常量），INT8 k_scale [B,H,S,G] ~512KB/layer@4K（随 S 线性增长）。长上下文场景下 KIVI 的 scale 开销显著更小，但 zero-point 存储（~528KB/layer total）部分抵消优势
+- [x] `[HIGH]` 论文内存对比表必须注明 KIVI INT4 无 bit-packing: KIVIStyleKVCache 的 INT4 存储为 int8（1 byte/value），与 INT4KVCache 的 0.5 byte/value 不同。若论文表格对比 "KIVI INT4 vs INT4-ours" 内存，KIVI 数值将显著偏高。建议在 Memory profiling 结果旁加注 "KIVI INT4 uses int8 storage without bit-packing" — ✅ 已修复（PR-4 文档披露）
+- [x] `[HIGH]` 论文 Methods 节须披露 K 量化策略差异: INT8-ours 使用 per-token group-wise 对称量化（每 token 独立 scale），KIVI 使用 per-channel 非对称量化（prefill 时一次性计算 K-scale，decode 复用并可能 clip）。这导致 decode 阶段 KIVI K 可能有 clipping error，影响长上下文检索质量（Needle/RULER） — ✅ 已修复（PR-4 文档披露）
+- [x] `[MEDIUM]` 论文须披露 KIVI 无温度校正: KIVI 不支持 inv_tau（kivi_style_cache.py L78-79 硬编码 None/False）。对比 RQ2（温度校正消融）时，KIVI 作为无温度校正的自然基线，但须在实验设计中明确声明 — ✅ 已修复（PR-4 文档披露）
+- [x] `[MEDIUM]` 论文须披露 decode kernel 差异: KIVI 始终用 torch_ref（非 fused），INT8-ours 可用 triton_fused。延迟对比不完全公平——KIVI 的 TPOT 劣势部分源于 kernel 选择而非量化策略 — ✅ 已修复（PR-4 文档披露）
+- [x] `[LOW]` KIVI K-scale 内存恒定 vs INT8 随 seq_len 增长: KIVI k_scale [B,H,D] ~8KB/layer（常量），INT8 k_scale [B,H,S,G] ~512KB/layer@4K（随 S 线性增长）。长上下文场景下 KIVI 的 scale 开销显著更小，但 zero-point 存储（~528KB/layer total）部分抵消优势 — ✅ 已修复（PR-4 文档披露）
 
 #### Y. 深度审查 — `src/quant/` 对称量化核心模块（第十三轮审查）
 
@@ -342,6 +342,22 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
 
 ## Timeline (Latest First)
+
+### 2026-02-23 16:11 | PR-4 配置与文档收口：I/W/X 全量关闭
+- **Goal**: 收口 final config / objective / SOP / preflight 文档口径，关闭 I/W/X backlog
+- **Changed files**:
+  - `configs/snapshots/final_emnlp2026_v1.yaml`: 补 `dynamic` 消融维度、系统 benchmark、LLaMA HF+local 双入口、C9/C10/C11 精确 claim、Phase5v2 workflow
+  - `objective.md`: 新增 KIVI 差异披露（INT4 非 bit-pack、无温度校正、kernel 差异）；新增 Phase5v2 legacy 与 run_tag 规则
+  - `experiment_sop.md`: 补多模型复现入口（HF + ModelScope）与 Phase5v2 强制流程
+  - `docs/final_results_summary.md`: 增加 legacy 数据声明、KIVI 内存披露与 Phase5v2 重启策略
+  - `docs/thesis_preflight_checklist.md`: 增加 Phase5v2 口径一致性检查与 KIVI 论文披露检查
+  - `iteration.md`: I/W/X 对应项更新为已关闭（含 W-1 误报核销）
+- **Commands**:
+  - `date '+%Y-%m-%d %H:%M'`
+- **Validation**:
+  - 配置与文档检查通过；本里程碑为文档/配置收口，无新增 Python 代码路径
+- **Risks / follow-ups**:
+  - 合并 PR-2 后需同步更新 `iteration.md` 的 E/M/O/Q/R 关闭状态，避免并行分支冲突
 
 ### 2026-02-23 07:27 | Phase 4 COMPLETE: Ablation Experiments Finished (70/70 runs)
 - **Goal**: Run full ablation experiment matrix on remote GPU
