@@ -435,6 +435,11 @@ def _get_rope_cos_sin(
     if rotary is None or position_ids is None:
         return None, None
 
+    # ENG-039: Narrow exception handling to (AttributeError, KeyError, TypeError)
+    # to avoid swallowing CUDA RuntimeErrors and shape mismatches. Unexpected
+    # exceptions are logged as warnings so the real root cause is visible.
+    _EXPECTED_ROPE_ERRORS = (AttributeError, KeyError, TypeError)
+
     # Common HF API: rotary_emb(x, position_ids) -> (cos, sin)
     for call in (
         lambda: rotary(value_states, position_ids),
@@ -444,9 +449,17 @@ def _get_rope_cos_sin(
     ):
         try:
             out = call()
-        except TypeError:
+        except _EXPECTED_ROPE_ERRORS:
             continue
-        except Exception:
+        except Exception as exc:
+            import warnings
+            warnings.warn(
+                f"Unexpected exception in _get_rope_cos_sin rotary call: "
+                f"{type(exc).__name__}: {exc}. This may indicate a real error "
+                f"(e.g. CUDA RuntimeError, shape mismatch) rather than an API "
+                f"incompatibility. Skipping this call variant.",
+                RuntimeWarning,
+            )
             continue
         if isinstance(out, (tuple, list)) and len(out) == 2:
             return out[0], out[1]
@@ -464,8 +477,15 @@ def _get_rope_cos_sin(
                 cos = cos[position_ids]
                 sin = sin[position_ids]
                 return cos, sin
-    except Exception:
+    except _EXPECTED_ROPE_ERRORS:
         pass
+    except Exception as exc:
+        import warnings
+        warnings.warn(
+            f"Unexpected exception in _get_rope_cos_sin seq_len fallback: "
+            f"{type(exc).__name__}: {exc}. This may indicate a real error.",
+            RuntimeWarning,
+        )
 
     return None, None
 

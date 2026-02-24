@@ -128,9 +128,13 @@ def quantize_symmetric_int4(
     else:
         abs_max = torch.amax(abs_reshaped, dim=-1, keepdim=True)
 
-    # Avoid division by zero
-    abs_max = abs_max.to(tensor.dtype)
+    # ENG-037: Clamp abs_max BEFORE casting to tensor.dtype to prevent
+    # fp16 precision loss from producing exact 0.0 (fp16 has limited
+    # subnormal range). If abs_max is very small and cast to fp16 first,
+    # it can become 0.0, then clamp(min=1e-5) is too late — the value is
+    # already zero and scale=0 causes NaN from round(x/0).
     abs_max = abs_max.clamp(min=1e-5)
+    abs_max = abs_max.to(tensor.dtype)
 
     # INT4 symmetric range is [-7, 7]; asymmetric uses [-8, 7] (see asymmetric_quant.py).
     scale = abs_max / 7.0

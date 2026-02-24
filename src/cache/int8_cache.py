@@ -7,12 +7,17 @@ by storing K/V tensors in int8 format with associated scales.
 """
 
 import logging
+import warnings
 from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor
 
 logger = logging.getLogger(__name__)
+
+# ENG-040: Threshold for warning on excessive clipping in static-scale quantization.
+# If more than this fraction of values are clipped to [-127, 127], emit a warning.
+_CLIP_WARN_THRESHOLD = 0.05  # 5%
 
 from src.quant.int8_basic import (
     dequantize_symmetric_int8,
@@ -327,6 +332,23 @@ class INT8KVCache:
             q_k, scale_k = quantize_symmetric_int8_with_scale(
                 k, scale_k, self.group_size
             )
+            # ENG-040: Detect excessive clipping in static-scale K quantization.
+            # quantize_symmetric_int8_with_scale silently clips to [-127, 127].
+            # If many values are clipped, the static scale is too small for the
+            # incoming data, causing silent accuracy degradation.
+            _total_k = q_k.numel()
+            if _total_k > 0:
+                _clipped_k = int(((q_k == 127) | (q_k == -127)).sum().item())
+                _clip_ratio_k = _clipped_k / _total_k
+                if _clip_ratio_k > _CLIP_WARN_THRESHOLD:
+                    warnings.warn(
+                        f"ENG-040: Static K scale overflow at layer {layer_id}: "
+                        f"{_clip_ratio_k:.1%} of values clipped to [-127, 127] "
+                        f"(threshold={_CLIP_WARN_THRESHOLD:.0%}). "
+                        f"The static scale may be too small for this input. "
+                        f"Consider re-calibrating or enabling adaptive_static_scales.",
+                        RuntimeWarning,
+                    )
         else:
             q_k, scale_k = quantize_symmetric_int8(
                 k, self.clip_percentile, self.group_size
@@ -343,6 +365,20 @@ class INT8KVCache:
             q_v, scale_v = quantize_symmetric_int8_with_scale(
                 v, scale_v, self.group_size
             )
+            # ENG-040: Detect excessive clipping in static-scale V quantization.
+            _total_v = q_v.numel()
+            if _total_v > 0:
+                _clipped_v = int(((q_v == 127) | (q_v == -127)).sum().item())
+                _clip_ratio_v = _clipped_v / _total_v
+                if _clip_ratio_v > _CLIP_WARN_THRESHOLD:
+                    warnings.warn(
+                        f"ENG-040: Static V scale overflow at layer {layer_id}: "
+                        f"{_clip_ratio_v:.1%} of values clipped to [-127, 127] "
+                        f"(threshold={_CLIP_WARN_THRESHOLD:.0%}). "
+                        f"The static scale may be too small for this input. "
+                        f"Consider re-calibrating or enabling adaptive_static_scales.",
+                        RuntimeWarning,
+                    )
         else:
             q_v, scale_v = quantize_symmetric_int8(
                 v, self.clip_percentile, self.group_size

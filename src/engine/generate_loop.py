@@ -546,9 +546,18 @@ def generate_from_ids(
                     inv_tau = inv_tau.to(model.device)
             except Exception as exc:
                 if allow_missing_calib:
+                    # ENG-038: Warn clearly that the fallback means no static_scale
+                    # and no inv_tau will be used, even though kv_mode remains
+                    # unchanged. Without this warning, experiment results labelled
+                    # as "int8_ours" (or int4_ours) actually run as baseline,
+                    # silently invalidating comparisons.
                     warnings.warn(
                         f"Failed to load calibration file {calib_path}: {exc}. "
-                        "Falling back to baseline int8 behavior.",
+                        f"Falling back to dynamic-only quantization (no static scales, "
+                        f"no inv_tau temperature). kv_mode is still '{kv_mode}' but "
+                        f"effective behavior is equivalent to baseline. Results "
+                        f"labelled '{kv_mode}' from this run should NOT be compared "
+                        f"against properly-calibrated runs.",
                         UserWarning,
                     )
                 else:

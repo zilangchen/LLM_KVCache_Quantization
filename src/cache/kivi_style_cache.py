@@ -16,6 +16,7 @@ Interface is compatible with INT8KVCache: append(), get_kv(), get_seq_len(),
 clear(), release(), get_memory_mb().
 """
 
+import warnings
 from typing import Dict, List, Optional, Tuple
 
 import torch
@@ -329,7 +330,22 @@ class KIVIStyleKVCache:
                 qmin, qmax_val = -8, 7
             s = k_scale.unsqueeze(2)  # [B, H, 1, D]
             zp = k_zp.unsqueeze(2)  # [B, H, 1, D]
-            q_k_full = torch.round((k.float() - zp) / s).clamp(qmin, qmax_val).to(torch.int8)
+            # ENG-041: Detect when decode token K values exceed the prefill-computed
+            # scale range. In KIVI, the per-channel K scale is fixed at prefill time.
+            # Decode tokens whose values fall outside this range are silently clipped,
+            # which can degrade attention accuracy without any visible signal.
+            _unscaled = (k.float() - zp) / s
+            _out_of_range = ((_unscaled < qmin) | (_unscaled > qmax_val))
+            _oor_ratio = float(_out_of_range.sum().item()) / max(_out_of_range.numel(), 1)
+            if _oor_ratio > 0.05:
+                warnings.warn(
+                    f"ENG-041: KIVI decode K clipping at layer {layer_id}: "
+                    f"{_oor_ratio:.1%} of values exceed prefill-computed scale range "
+                    f"[{qmin}, {qmax_val}]. Decode token magnitudes may have drifted "
+                    f"beyond prefill calibration. Attention accuracy may degrade.",
+                    RuntimeWarning,
+                )
+            q_k_full = torch.round(_unscaled).clamp(qmin, qmax_val).to(torch.int8)
 
         q_k_store = pack_int4(q_k_full) if self.bit_packed else q_k_full
 
