@@ -388,7 +388,12 @@ matrix:
     quant_bits: 8
     calib_strategy: kl_attn
     calib_file: artifacts/kv_calib_kl_selected_v3_quick.json
-    use_attn_temperature: true
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
     group_size_k: 16
     group_size_v: 16
     decode_attn_impl: triton_fused
@@ -401,7 +406,12 @@ matrix:
     quant_bits: 8
     calib_strategy: kl_attn
     calib_file: artifacts/kv_calib_kl_selected_v3_quick.json
-    use_attn_temperature: true
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
     group_size_k: 16
     group_size_v: 16
     decode_attn_impl: triton_fused
@@ -414,7 +424,12 @@ matrix:
     quant_bits: 8
     calib_strategy: kl_attn
     calib_file: artifacts/kv_calib_kl_selected_v3_quick.json
-    use_attn_temperature: true
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
     group_size_k: 16
     group_size_v: 16
     decode_attn_impl: triton_fused
@@ -427,7 +442,12 @@ matrix:
     quant_bits: 8
     calib_strategy: kl_attn
     calib_file: artifacts/kv_calib_kl_selected_v3_quick.json
-    use_attn_temperature: true
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
     group_size_k: 16
     group_size_v: 16
     decode_attn_impl: triton_fused
@@ -440,7 +460,12 @@ matrix:
     quant_bits: 8
     calib_strategy: kl_attn
     calib_file: artifacts/kv_calib_kl_selected_v3_quick.json
-    use_attn_temperature: true
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
     group_size_k: 16
     group_size_v: 16
     decode_attn_impl: triton_fused

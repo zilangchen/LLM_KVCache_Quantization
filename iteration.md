@@ -1042,3 +1042,12 @@ Canonical agent workflow directory is `.agents/`.
   - PASS: `compileall` for `src/scripts/tests`
 - Risks / follow-ups:
   - 远端主目录 `/root/LLM_KVCache_Quantization` 当前为脏工作区，后续生产运行建议继续使用隔离目录或先清理后再 pull。
+
+### 2026-02-25 01:09 | CFG-022/026/029 决策与修复
+- Goal: 关闭剩余配置审查项（温度口径一致性、7B/8B 校准产物核销、LLaMA revision pin）。
+- Actions:
+  - CFG-022: 统一 `configs/exp_matrix.yaml` 中 1.5B `int8_ours_throughput_8k_b1/b2/b4/b8/b16` 为 `use_attn_temperature: false`，并补齐 `use_static_scales/adaptive_static_*` 字段，和 `b24/b32` 以及 7B/8B 口径一致。
+  - CFG-026: 远端核验 `artifacts/` 已存在 4 个校准文件（`kv_calib_kl_qwen25_7b_int8/int4.json`, `kv_calib_kl_llama31_8b_int8/int4.json`），按误报核销。
+  - CFG-029: 在 `configs/snapshots/final_emnlp2026_v1.yaml` 将 LLaMA-3.1-8B `model_revision` pin 为 `043efdca396f2b6f4b5714d76d70df7840856ed7`（来源：远端 modelscope 缓存 `.msc` 元数据）。
+- Notes:
+  - LongBench 图表 y 轴命名核验：`scripts/aggregate_results.py` 当前为 `LongBench score (official-metric macro, 0-1)`，`macro F1` 报告为陈旧误报。

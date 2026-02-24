@@ -53,7 +53,7 @@ models:
       int4_kl: "artifacts/kv_calib_kl_llama31_8b_int4.json"
     hf_model_id: "meta-llama/Llama-3.1-8B-Instruct"
     local_model_path: "/root/autodl-tmp/modelscope_cache/LLM-Research/Meta-Llama-3___1-8B-Instruct"
-    model_revision: null  # local path on remote; use hf_model_id when cross-machine reproducing
+    model_revision: "043efdca396f2b6f4b5714d76d70df7840856ed7"  # pinned from remote modelscope cache metadata
 
 kv_modes:
   - fp16
