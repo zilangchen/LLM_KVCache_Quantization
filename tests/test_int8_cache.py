@@ -705,5 +705,158 @@ class TestINT8CacheClearAppendCycle(unittest.TestCase):
         self.assertLess(v_err, 0.1, f"Token-by-token V error after clear: {v_err}")
 
 
+class TestINT8OutlierHandling(unittest.TestCase):
+    """QNT-007: INT8 quantization must handle outlier values gracefully.
+
+    When input contains very large or very small values (outliers), the
+    quantization should clip to the INT8 range [-127, 127] rather than
+    overflowing. Dequantized values must remain finite, and the quantized
+    tensor must stay within the valid INT8 symmetric range.
+    """
+
+    def setUp(self):
+        torch.manual_seed(42)
+        self.B, self.H, self.S, self.D = 1, 2, 4, 128
+        self.group_size = 64
+
+    def test_large_positive_outlier_clipped(self):
+        """A single very large positive value should be clipped to 127 in INT8."""
+        x = torch.randn(self.B, self.H, self.S, self.D, dtype=torch.float32)
+        # Inject an extreme outlier
+        x[0, 0, 0, 0] = 1e6
+        q, scale = quantize_symmetric_int8(x, percentile=100.0, group_size=self.group_size)
+        # Quantized values must be within [-127, 127]
+        self.assertTrue((q >= -127).all(), "Quantized values must be >= -127")
+        self.assertTrue((q <= 127).all(), "Quantized values must be <= 127")
+        # The outlier element should be clipped to exactly 127
+        self.assertEqual(q[0, 0, 0, 0].item(), 127,
+                         "Large positive outlier should be clipped to 127")
+        # Dequantized output must be finite
+        y = dequantize_symmetric_int8(q, scale)
+        self.assertTrue(torch.isfinite(y).all(), "Dequantized output must be finite")
+
+    def test_large_negative_outlier_clipped(self):
+        """A single very large negative value should be clipped to -127 in INT8."""
+        x = torch.randn(self.B, self.H, self.S, self.D, dtype=torch.float32)
+        x[0, 0, 1, 10] = -1e6
+        q, scale = quantize_symmetric_int8(x, percentile=100.0, group_size=self.group_size)
+        self.assertTrue((q >= -127).all())
+        self.assertTrue((q <= 127).all())
+        self.assertEqual(q[0, 0, 1, 10].item(), -127,
+                         "Large negative outlier should be clipped to -127")
+        y = dequantize_symmetric_int8(q, scale)
+        self.assertTrue(torch.isfinite(y).all())
+
+    def test_mixed_extreme_outliers(self):
+        """Multiple extreme outliers (both positive and negative) should all be clipped."""
+        x = torch.randn(self.B, self.H, self.S, self.D, dtype=torch.float32)
+        # Inject multiple outliers across different positions
+        x[0, 0, 0, 0] = 1e8
+        x[0, 0, 0, 1] = -1e8
+        x[0, 1, 2, 63] = 5e7
+        x[0, 1, 3, 127] = -5e7
+        q, scale = quantize_symmetric_int8(x, percentile=100.0, group_size=self.group_size)
+        self.assertTrue((q >= -127).all(), "All quantized values must be >= -127")
+        self.assertTrue((q <= 127).all(), "All quantized values must be <= 127")
+        y = dequantize_symmetric_int8(q, scale)
+        self.assertTrue(torch.isfinite(y).all(), "All dequantized values must be finite")
+
+    def test_outlier_does_not_corrupt_non_outlier_quantization(self):
+        """Outlier in one group should not corrupt quantization of another group.
+
+        Because quantization is per-group, an outlier in group 0 should only
+        affect group 0's scale, not group 1's.
+        """
+        x = torch.randn(1, 1, 1, self.D, dtype=torch.float32) * 0.1
+        # Inject outlier only in group 0 (first 64 dims)
+        x[0, 0, 0, 0] = 1e6
+        q, scale = quantize_symmetric_int8(x, percentile=100.0, group_size=self.group_size)
+
+        # Group 0 scale should be very large (dominated by outlier)
+        # Group 1 scale should be small (normal randn * 0.1)
+        scale_g0 = scale[0, 0, 0, 0].item()
+        scale_g1 = scale[0, 0, 0, 1].item()
+        self.assertGreater(scale_g0, scale_g1 * 100,
+                           "Outlier group scale should be much larger than non-outlier group scale")
+
+        # Dequantize and check that group 1 values are still close to original
+        y = dequantize_symmetric_int8(q, scale)
+        group1_err = (x[0, 0, 0, 64:] - y[0, 0, 0, 64:]).abs().max().item()
+        self.assertLess(group1_err, 0.01,
+                        f"Non-outlier group roundtrip error too large: {group1_err}")
+
+    def test_outlier_with_percentile_clipping(self):
+        """Percentile clipping (< 100%) should suppress outlier influence on scale.
+
+        With percentile=99.9, the scale is determined by the 99.9th percentile
+        of abs values rather than the absolute max. This means the outlier value
+        will be clipped more aggressively (quantized to +/-127), and the
+        non-outlier values should have better quantization accuracy.
+        """
+        x = torch.randn(self.B, self.H, self.S, self.D, dtype=torch.float32)
+        x[0, 0, 0, 0] = 1e6  # extreme outlier
+
+        # Quantize with percentile clipping
+        q_clip, scale_clip = quantize_symmetric_int8(
+            x, percentile=99.9, group_size=self.group_size
+        )
+        # Quantize without clipping
+        q_full, scale_full = quantize_symmetric_int8(
+            x, percentile=100.0, group_size=self.group_size
+        )
+
+        # Both must be within INT8 range
+        self.assertTrue((q_clip >= -127).all())
+        self.assertTrue((q_clip <= 127).all())
+        self.assertTrue((q_full >= -127).all())
+        self.assertTrue((q_full <= 127).all())
+
+        # With percentile clipping, the scale for the outlier's group should
+        # be smaller (tighter around non-outlier values)
+        # This means non-outlier values get more quantization resolution
+        scale_clip_g0 = scale_clip[0, 0, 0, 0].item()
+        scale_full_g0 = scale_full[0, 0, 0, 0].item()
+        self.assertLess(scale_clip_g0, scale_full_g0,
+                        "Percentile-clipped scale should be smaller than full-range scale")
+
+    def test_fp16_outlier_near_max_range(self):
+        """fp16 max is ~65504. Values near this should still quantize correctly."""
+        x = torch.full(
+            (self.B, self.H, self.S, self.D), 60000.0, dtype=torch.float16
+        )
+        # Add a few outlier positions at the extreme
+        x[0, 0, 0, 0] = torch.tensor(65000.0, dtype=torch.float16)
+
+        q, scale = quantize_symmetric_int8(x, percentile=100.0, group_size=self.group_size)
+        self.assertTrue((q >= -127).all())
+        self.assertTrue((q <= 127).all())
+        y = dequantize_symmetric_int8(q, scale)
+        self.assertTrue(torch.isfinite(y).all(),
+                        "Dequantized near-fp16-max values must be finite")
+
+    def test_cache_with_outlier_input(self):
+        """INT8KVCache should handle outlier inputs without crashing or producing NaN."""
+        cache = INT8KVCache(
+            num_layers=1, device="cpu", group_size=self.group_size,
+            clip_percentile=100.0,
+        )
+        k = torch.randn(self.B, self.H, self.S, self.D, dtype=torch.float16)
+        v = torch.randn(self.B, self.H, self.S, self.D, dtype=torch.float16)
+        # Inject outliers (staying within fp16 range to avoid inf)
+        k[0, 0, 0, 0] = 60000.0
+        k[0, 0, 1, 10] = -60000.0
+        v[0, 1, 2, 50] = 50000.0
+
+        cache.append(0, k, v)
+        k_out, v_out = cache.get_kv(0)
+
+        self.assertEqual(k_out.shape, k.shape)
+        self.assertEqual(v_out.shape, v.shape)
+        self.assertTrue(torch.isfinite(k_out).all(),
+                        "K output must be finite even with outlier input")
+        self.assertTrue(torch.isfinite(v_out).all(),
+                        "V output must be finite even with outlier input")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -872,5 +872,377 @@ class TestSafeTCrit(unittest.TestCase):
         self.assertLessEqual(result, 2.00)
 
 
+class TestStableRandomSeed(unittest.TestCase):
+    """TST-035: Tests for _stable_random_seed() deterministic seed derivation."""
+
+    def test_deterministic_same_inputs(self):
+        """Same base_seed and parts must always produce the same derived seed."""
+        seed1 = agg._stable_random_seed(42, "metric_a", "kv_mode_b")  # pylint: disable=protected-access
+        seed2 = agg._stable_random_seed(42, "metric_a", "kv_mode_b")  # pylint: disable=protected-access
+        self.assertEqual(seed1, seed2, "Same inputs must produce identical seeds")
+
+    def test_different_parts_differ(self):
+        """Different string parts should (with overwhelming probability) produce different seeds."""
+        seed_a = agg._stable_random_seed(42, "metric_a", "kv_mode_b")  # pylint: disable=protected-access
+        seed_b = agg._stable_random_seed(42, "metric_x", "kv_mode_y")  # pylint: disable=protected-access
+        self.assertNotEqual(seed_a, seed_b, "Different parts should produce different seeds")
+
+    def test_different_base_seed_differ(self):
+        """Different base seeds with same parts should produce different derived seeds."""
+        seed_a = agg._stable_random_seed(1, "metric", "mode")  # pylint: disable=protected-access
+        seed_b = agg._stable_random_seed(2, "metric", "mode")  # pylint: disable=protected-access
+        self.assertNotEqual(seed_a, seed_b, "Different base seeds should differ")
+
+    def test_result_is_nonneg_int_within_uint32(self):
+        """Returned seed must be a non-negative int within [0, 2^32 - 2]."""
+        seed = agg._stable_random_seed(1234, "a", "b", "c")  # pylint: disable=protected-access
+        self.assertIsInstance(seed, int)
+        self.assertGreaterEqual(seed, 0)
+        self.assertLess(seed, 2**32 - 1)
+
+    def test_no_parts(self):
+        """Calling with no parts (only base_seed) should still return a valid seed."""
+        seed = agg._stable_random_seed(0)  # pylint: disable=protected-access
+        self.assertIsInstance(seed, int)
+        self.assertGreaterEqual(seed, 0)
+
+    def test_order_of_parts_matters(self):
+        """Swapping parts order should produce different seeds."""
+        seed_ab = agg._stable_random_seed(42, "a", "b")  # pylint: disable=protected-access
+        seed_ba = agg._stable_random_seed(42, "b", "a")  # pylint: disable=protected-access
+        self.assertNotEqual(seed_ab, seed_ba, "Part order should matter")
+
+
+class TestCohensDz(unittest.TestCase):
+    """TST-035: Tests for _cohens_dz() effect size computation."""
+
+    def test_known_effect_size(self):
+        """For values [2, 4, 6], mean=4, std(ddof=1)=2, dz=4/2=2.0."""
+        values = np.array([2.0, 4.0, 6.0], dtype=np.float64)
+        dz = agg._cohens_dz(values)  # pylint: disable=protected-access
+        self.assertAlmostEqual(dz, 2.0, places=10)
+
+    def test_zero_mean_returns_zero(self):
+        """Symmetric values around 0 should give dz=0."""
+        values = np.array([-1.0, 1.0, -2.0, 2.0], dtype=np.float64)
+        dz = agg._cohens_dz(values)  # pylint: disable=protected-access
+        self.assertAlmostEqual(dz, 0.0, places=10)
+
+    def test_single_value_returns_nan(self):
+        """n<2 should return NaN (cannot compute std with ddof=1)."""
+        values = np.array([5.0], dtype=np.float64)
+        dz = agg._cohens_dz(values)  # pylint: disable=protected-access
+        self.assertTrue(np.isnan(dz), f"Expected NaN for single value, got {dz}")
+
+    def test_empty_returns_nan(self):
+        """Empty array should return NaN."""
+        values = np.array([], dtype=np.float64)
+        dz = agg._cohens_dz(values)  # pylint: disable=protected-access
+        self.assertTrue(np.isnan(dz), f"Expected NaN for empty input, got {dz}")
+
+    def test_all_identical_returns_nan(self):
+        """All identical values -> std=0 -> returns NaN (division by zero guarded)."""
+        values = np.array([3.0, 3.0, 3.0, 3.0], dtype=np.float64)
+        dz = agg._cohens_dz(values)  # pylint: disable=protected-access
+        self.assertTrue(np.isnan(dz), f"Expected NaN for zero std, got {dz}")
+
+    def test_nan_values_filtered(self):
+        """NaN values should be filtered out via np.isfinite."""
+        values = np.array([2.0, np.nan, 4.0, 6.0], dtype=np.float64)
+        dz = agg._cohens_dz(values)  # pylint: disable=protected-access
+        # After filtering: [2, 4, 6], mean=4, std=2, dz=2.0
+        self.assertAlmostEqual(dz, 2.0, places=10)
+
+    def test_large_effect(self):
+        """Large positive diffs -> large positive dz."""
+        values = np.array([100.0, 101.0, 102.0, 103.0], dtype=np.float64)
+        dz = agg._cohens_dz(values)  # pylint: disable=protected-access
+        self.assertGreater(dz, 0.0, "All positive values should give positive dz")
+        # mean=101.5, std(ddof=1)~=1.29, dz~=78.6
+        self.assertGreater(dz, 50.0)
+
+    def test_negative_effect(self):
+        """All negative diffs -> negative dz."""
+        values = np.array([-5.0, -6.0, -7.0], dtype=np.float64)
+        dz = agg._cohens_dz(values)  # pylint: disable=protected-access
+        self.assertLess(dz, 0.0, "All negative values should give negative dz")
+
+
+class TestRelativeGainTable(unittest.TestCase):
+    """TST-035: Tests for _relative_gain_table()."""
+
+    def test_basic_higher_is_better(self):
+        """Challenger is higher -> gain_pct > 0 when higher_is_better=True."""
+        df = pd.DataFrame([
+            {"kv_mode": "baseline", "seq_len": 4096, "score": 80.0},
+            {"kv_mode": "ours", "seq_len": 4096, "score": 90.0},
+        ])
+        out = agg._relative_gain_table(  # pylint: disable=protected-access
+            df,
+            metric_col="score",
+            metric_name="score",
+            key_cols=["seq_len"],
+            pairings=[("baseline", "ours")],
+            higher_is_better=True,
+        )
+        self.assertEqual(len(out), 1)
+        row = out.iloc[0]
+        self.assertEqual(row["baseline_mode"], "baseline")
+        self.assertEqual(row["challenger_mode"], "ours")
+        self.assertAlmostEqual(float(row["baseline_value"]), 80.0, places=5)
+        self.assertAlmostEqual(float(row["challenger_value"]), 90.0, places=5)
+        # gain_pct = (90 - 80) / 80 * 100 = 12.5
+        self.assertAlmostEqual(float(row["gain_pct"]), 12.5, places=5)
+
+    def test_basic_lower_is_better(self):
+        """Challenger is lower -> gain_pct > 0 when higher_is_better=False (e.g., latency)."""
+        df = pd.DataFrame([
+            {"kv_mode": "baseline", "seq_len": 4096, "tpot_ms": 10.0},
+            {"kv_mode": "ours", "seq_len": 4096, "tpot_ms": 8.0},
+        ])
+        out = agg._relative_gain_table(  # pylint: disable=protected-access
+            df,
+            metric_col="tpot_ms",
+            metric_name="tpot_ms",
+            key_cols=["seq_len"],
+            pairings=[("baseline", "ours")],
+            higher_is_better=False,
+        )
+        self.assertEqual(len(out), 1)
+        row = out.iloc[0]
+        # gain_pct = (10 - 8) / 10 * 100 = 20.0
+        self.assertAlmostEqual(float(row["gain_pct"]), 20.0, places=5)
+
+    def test_empty_input(self):
+        """Empty DataFrame should return empty result."""
+        df = pd.DataFrame()
+        out = agg._relative_gain_table(  # pylint: disable=protected-access
+            df,
+            metric_col="score",
+            metric_name="score",
+            key_cols=["seq_len"],
+            pairings=[("baseline", "ours")],
+            higher_is_better=True,
+        )
+        self.assertTrue(out.empty)
+
+    def test_missing_kv_mode_column(self):
+        """Missing kv_mode column should return empty result."""
+        df = pd.DataFrame([{"seq_len": 4096, "score": 90.0}])
+        out = agg._relative_gain_table(  # pylint: disable=protected-access
+            df,
+            metric_col="score",
+            metric_name="score",
+            key_cols=["seq_len"],
+            pairings=[("baseline", "ours")],
+            higher_is_better=True,
+        )
+        self.assertTrue(out.empty)
+
+    def test_missing_pairing_mode(self):
+        """Pairing where one mode is missing should be skipped, not crash."""
+        df = pd.DataFrame([
+            {"kv_mode": "baseline", "seq_len": 4096, "score": 80.0},
+            {"kv_mode": "other", "seq_len": 4096, "score": 90.0},
+        ])
+        out = agg._relative_gain_table(  # pylint: disable=protected-access
+            df,
+            metric_col="score",
+            metric_name="score",
+            key_cols=["seq_len"],
+            pairings=[("baseline", "ours")],
+            higher_is_better=True,
+        )
+        self.assertTrue(out.empty)
+
+    def test_multiple_key_groups(self):
+        """Multiple key groups (different seq_len values) should produce multiple rows."""
+        df = pd.DataFrame([
+            {"kv_mode": "baseline", "seq_len": 4096, "score": 80.0},
+            {"kv_mode": "ours", "seq_len": 4096, "score": 88.0},
+            {"kv_mode": "baseline", "seq_len": 8192, "score": 70.0},
+            {"kv_mode": "ours", "seq_len": 8192, "score": 77.0},
+        ])
+        out = agg._relative_gain_table(  # pylint: disable=protected-access
+            df,
+            metric_col="score",
+            metric_name="score",
+            key_cols=["seq_len"],
+            pairings=[("baseline", "ours")],
+            higher_is_better=True,
+        )
+        self.assertEqual(len(out), 2)
+
+
+class TestBuildPairedMetricRows(unittest.TestCase):
+    """TST-035: Tests for _build_paired_metric_rows()."""
+
+    def test_basic_pairing_higher_is_better(self):
+        """Basic pairing with higher_is_better=True."""
+        df = pd.DataFrame([
+            {"kv_mode": "baseline", "seed": 1234, "seq_len": 4096, "score": 80.0},
+            {"kv_mode": "ours", "seed": 1234, "seq_len": 4096, "score": 90.0},
+            {"kv_mode": "baseline", "seed": 1235, "seq_len": 4096, "score": 82.0},
+            {"kv_mode": "ours", "seed": 1235, "seq_len": 4096, "score": 88.0},
+        ])
+        out = agg._build_paired_metric_rows(  # pylint: disable=protected-access
+            df=df,
+            metric_col="score",
+            key_cols=["seq_len"],
+            pairings=[("baseline", "ours")],
+            metric_name="score",
+            higher_is_better=True,
+        )
+        self.assertEqual(len(out), 2)
+        # favorable_diff = diff = challenger - baseline (since higher_is_better)
+        self.assertTrue((out["favorable_diff"] > 0).all(), "All favorable diffs should be positive")
+
+    def test_basic_pairing_lower_is_better(self):
+        """Basic pairing with higher_is_better=False (e.g., latency)."""
+        df = pd.DataFrame([
+            {"kv_mode": "baseline", "seed": 1234, "seq_len": 4096, "tpot_ms": 10.0},
+            {"kv_mode": "ours", "seed": 1234, "seq_len": 4096, "tpot_ms": 8.0},
+            {"kv_mode": "baseline", "seed": 1235, "seq_len": 4096, "tpot_ms": 11.0},
+            {"kv_mode": "ours", "seed": 1235, "seq_len": 4096, "tpot_ms": 9.0},
+        ])
+        out = agg._build_paired_metric_rows(  # pylint: disable=protected-access
+            df=df,
+            metric_col="tpot_ms",
+            key_cols=["seq_len"],
+            pairings=[("baseline", "ours")],
+            metric_name="tpot_ms",
+            higher_is_better=False,
+        )
+        self.assertEqual(len(out), 2)
+        # favorable_diff = -diff (since lower_is_better and challenger < baseline)
+        self.assertTrue((out["favorable_diff"] > 0).all(),
+                        "Favorable diffs should be positive when challenger is lower for lower-is-better")
+
+    def test_empty_input(self):
+        """Empty DataFrame should return empty result."""
+        df = pd.DataFrame()
+        out = agg._build_paired_metric_rows(  # pylint: disable=protected-access
+            df=df,
+            metric_col="score",
+            key_cols=["seq_len"],
+            pairings=[("baseline", "ours")],
+            metric_name="score",
+            higher_is_better=True,
+        )
+        self.assertTrue(out.empty)
+
+    def test_missing_metric_col(self):
+        """Missing metric column should return empty result."""
+        df = pd.DataFrame([
+            {"kv_mode": "baseline", "seed": 1234, "seq_len": 4096},
+        ])
+        out = agg._build_paired_metric_rows(  # pylint: disable=protected-access
+            df=df,
+            metric_col="nonexistent",
+            key_cols=["seq_len"],
+            pairings=[("baseline", "ours")],
+            metric_name="test",
+            higher_is_better=True,
+        )
+        self.assertTrue(out.empty)
+
+    def test_unpaired_seeds_dropped(self):
+        """Seeds present in only one mode should be dropped from the pairing."""
+        df = pd.DataFrame([
+            {"kv_mode": "baseline", "seed": 1234, "seq_len": 4096, "score": 80.0},
+            {"kv_mode": "ours", "seed": 1234, "seq_len": 4096, "score": 90.0},
+            {"kv_mode": "baseline", "seed": 1235, "seq_len": 4096, "score": 82.0},
+            # seed 1235 missing from "ours" -> should be dropped
+        ])
+        out = agg._build_paired_metric_rows(  # pylint: disable=protected-access
+            df=df,
+            metric_col="score",
+            key_cols=["seq_len"],
+            pairings=[("baseline", "ours")],
+            metric_name="score",
+            higher_is_better=True,
+        )
+        self.assertEqual(len(out), 1, "Only the fully-paired seed should remain")
+        self.assertEqual(float(out.iloc[0]["seed"]), 1234.0)
+
+    def test_output_columns(self):
+        """Verify expected output columns are present."""
+        df = pd.DataFrame([
+            {"kv_mode": "baseline", "seed": 1234, "seq_len": 4096, "score": 80.0},
+            {"kv_mode": "ours", "seed": 1234, "seq_len": 4096, "score": 90.0},
+        ])
+        out = agg._build_paired_metric_rows(  # pylint: disable=protected-access
+            df=df,
+            metric_col="score",
+            key_cols=["seq_len"],
+            pairings=[("baseline", "ours")],
+            metric_name="score",
+            higher_is_better=True,
+        )
+        expected_cols = {
+            "seed", "metric", "baseline_mode", "challenger_mode",
+            "baseline_value", "challenger_value", "diff", "favorable_diff", "gain_pct",
+        }
+        self.assertTrue(expected_cols.issubset(set(out.columns)),
+                        f"Missing columns: {expected_cols - set(out.columns)}")
+
+
+class TestPairedSignflipPvalueExtended(unittest.TestCase):
+    """TST-035: Extended tests for _paired_signflip_pvalue()."""
+
+    def test_two_values_exact_enumeration(self):
+        """n=2 should use exact enumeration (2^2=4 patterns)."""
+        diffs = np.array([1.0, 2.0], dtype=np.float64)
+        p_value, method, n_perm = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            diffs, n_permutations=5000, seed=42
+        )
+        self.assertEqual(method, "exact_signflip")
+        self.assertEqual(n_perm, 4)
+        self.assertTrue(0.0 < p_value <= 1.0)
+
+    def test_large_n_uses_mc(self):
+        """n=20 (> _EXACT_ENUM_THRESHOLD=16) should use Monte Carlo path."""
+        diffs = np.random.default_rng(42).normal(1.0, 0.5, size=20)
+        p_value, method, n_perm = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            diffs, n_permutations=5000, seed=42
+        )
+        self.assertEqual(method, "mc_signflip")
+        self.assertEqual(n_perm, 5000)
+        self.assertTrue(0.0 < p_value <= 1.0)
+
+    def test_mc_reproducible_with_same_seed(self):
+        """MC path should produce identical results with the same seed."""
+        diffs = np.random.default_rng(0).normal(0.5, 1.0, size=20)
+        p1, m1, n1 = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            diffs, n_permutations=3000, seed=99
+        )
+        p2, m2, n2 = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            diffs, n_permutations=3000, seed=99
+        )
+        self.assertEqual(m1, m2)
+        self.assertEqual(n1, n2)
+        self.assertAlmostEqual(p1, p2, places=15,
+                               msg="MC path must be reproducible with same seed")
+
+    def test_single_value_insufficient(self):
+        """n=1 (< 2) should return NaN p-value with 'insufficient_pairs'."""
+        diffs = np.array([5.0], dtype=np.float64)
+        p_value, method, n_perm = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            diffs, n_permutations=5000, seed=42
+        )
+        self.assertTrue(np.isnan(p_value))
+        self.assertEqual(method, "insufficient_pairs")
+        self.assertEqual(n_perm, 0)
+
+    def test_n_permutations_at_least_2000(self):
+        """When n_permutations < 2000, the function should enforce minimum of 2000."""
+        diffs = np.random.default_rng(42).normal(0.5, 1.0, size=20)
+        p_value, method, n_perm = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            diffs, n_permutations=100, seed=42
+        )
+        self.assertEqual(method, "mc_signflip")
+        self.assertEqual(n_perm, 2000, "Minimum n_permutations should be 2000")
+
+
 if __name__ == "__main__":
     unittest.main()

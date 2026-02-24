@@ -229,10 +229,12 @@ class TestTritonDecodeAttn(unittest.TestCase):
 
         k_reshaped = curr_k_int8.view(kv_heads, seq_len, num_groups, group_size)
         v_reshaped = curr_v_int8.view(kv_heads, seq_len, num_groups, group_size)
-        k_dequant_kv = (k_reshaped.to(torch.float16) * curr_k_scale.unsqueeze(-1)).view(
+        # TST-046: Use fp32 for dequant reference to match _torch_ref_decode (L61-62)
+        # and avoid fp16 precision loss on long contexts.
+        k_dequant_kv = (k_reshaped.to(torch.float32) * curr_k_scale.to(torch.float32).unsqueeze(-1)).view(
             kv_heads, seq_len, head_dim
         )
-        v_dequant_kv = (v_reshaped.to(torch.float16) * curr_v_scale.unsqueeze(-1)).view(
+        v_dequant_kv = (v_reshaped.to(torch.float32) * curr_v_scale.to(torch.float32).unsqueeze(-1)).view(
             kv_heads, seq_len, head_dim
         )
 

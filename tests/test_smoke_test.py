@@ -1,0 +1,200 @@
+"""TST-037: Unit tests for scripts/smoke_test.py utility functions.
+
+Tests cover:
+- get_git_commit(): returns commit hash or "unknown"
+- get_hardware_info(): returns dict with expected keys
+- Main flow mocking: CUDA unavailable exit(0) path with --cpu-ok
+"""
+
+import subprocess
+import sys
+import unittest
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_DIR = PROJECT_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.utils.repro import get_git_commit, get_hardware_info
+
+
+class TestGetGitCommit(unittest.TestCase):
+    """Tests for get_git_commit() from src/utils/repro.py."""
+
+    def test_returns_string(self):
+        """get_git_commit() must always return a string."""
+        result = get_git_commit()
+        self.assertIsInstance(result, str)
+
+    def test_returns_hash_or_unknown(self):
+        """Return value must be either a short hex hash or 'unknown'."""
+        result = get_git_commit()
+        if result != "unknown":
+            # Should be a hex string of length <= 8
+            self.assertLessEqual(len(result), 8)
+            self.assertTrue(
+                all(c in "0123456789abcdef" for c in result),
+                f"Expected hex chars, got '{result}'",
+            )
+
+    @patch("src.utils.repro.subprocess.run")
+    def test_git_available_returns_hash(self, mock_run):
+        """When git succeeds, return first 8 chars of the hash."""
+        mock_run.return_value = MagicMock(
+            stdout="abcdef1234567890\n",
+            returncode=0,
+        )
+        result = get_git_commit()
+        self.assertEqual(result, "abcdef12")
+
+    @patch("src.utils.repro.subprocess.run", side_effect=FileNotFoundError)
+    def test_git_not_found_returns_unknown(self, mock_run):
+        """When git is not installed (FileNotFoundError), return 'unknown'."""
+        result = get_git_commit()
+        self.assertEqual(result, "unknown")
+
+    @patch(
+        "src.utils.repro.subprocess.run",
+        side_effect=subprocess.CalledProcessError(128, "git"),
+    )
+    def test_not_a_repo_returns_unknown(self, mock_run):
+        """When not in a git repo (CalledProcessError), return 'unknown'."""
+        result = get_git_commit()
+        self.assertEqual(result, "unknown")
+
+
+class TestGetHardwareInfo(unittest.TestCase):
+    """Tests for get_hardware_info() from src/utils/repro.py."""
+
+    def test_returns_dict(self):
+        """get_hardware_info() must return a dict."""
+        result = get_hardware_info()
+        self.assertIsInstance(result, dict)
+
+    def test_has_expected_keys(self):
+        """Result dict must contain 'gpu' and 'gpu_memory' keys."""
+        result = get_hardware_info()
+        self.assertIn("gpu", result)
+        self.assertIn("gpu_memory", result)
+
+    def test_values_are_strings(self):
+        """All values in the returned dict must be strings."""
+        result = get_hardware_info()
+        for key, value in result.items():
+            self.assertIsInstance(value, str, f"Value for key '{key}' is not a string")
+
+    @patch("src.utils.repro.torch")
+    def test_no_cuda_returns_na(self, mock_torch):
+        """When CUDA is not available, gpu and gpu_memory should be 'N/A'."""
+        mock_torch.cuda.is_available.return_value = False
+        result = get_hardware_info()
+        self.assertEqual(result["gpu"], "N/A")
+        self.assertEqual(result["gpu_memory"], "N/A")
+
+    @patch("src.utils.repro.torch")
+    def test_cuda_available_returns_gpu_info(self, mock_torch):
+        """When CUDA is available, gpu and gpu_memory should be populated."""
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.get_device_name.return_value = "NVIDIA A100"
+        mock_props = MagicMock()
+        mock_props.total_memory = 80.0e9  # 80 GB
+        mock_torch.cuda.get_device_properties.return_value = mock_props
+        result = get_hardware_info()
+        self.assertEqual(result["gpu"], "NVIDIA A100")
+        self.assertIn("80.0", result["gpu_memory"])
+
+
+class TestSmokeTestMainCudaUnavailable(unittest.TestCase):
+    """Tests for the main() flow when CUDA is not available.
+
+    The smoke_test.py main() imports torch and checks torch.cuda.is_available().
+    When CUDA is unavailable and --cpu-ok is set, it should exit(0).
+    When CUDA is unavailable and --cpu-ok is NOT set, it should exit(1).
+    """
+
+    def _run_smoke_test_main(self, extra_args=None):
+        """Import and invoke the main function from smoke_test.py with mocking."""
+        # We need to mock torch inside the main() function scope.
+        # The simplest approach is to mock sys.argv and the torch import.
+        args = ["smoke_test.py"]
+        if extra_args:
+            args.extend(extra_args)
+
+        mock_torch = MagicMock()
+        mock_torch.__version__ = "2.0.0"
+        mock_torch.cuda.is_available.return_value = False
+
+        # We need to intercept the import of torch and transformers inside main()
+        # Since main() does `import torch` at runtime, we mock it at module level
+        with patch.dict("sys.modules", {"torch": mock_torch, "transformers": MagicMock()}):
+            with patch("sys.argv", args):
+                # Import the module fresh to get its main function
+                scripts_dir = PROJECT_ROOT / "scripts"
+                if str(scripts_dir) not in sys.path:
+                    sys.path.insert(0, str(scripts_dir))
+
+                # Re-import by loading the module
+                import importlib
+                import importlib.util
+
+                spec = importlib.util.spec_from_file_location(
+                    "smoke_test_mod",
+                    str(scripts_dir / "smoke_test.py"),
+                )
+                # We need to mock the imports that happen at module top-level
+                with patch.dict("sys.modules", {
+                    "torch": mock_torch,
+                    "transformers": MagicMock(),
+                }):
+                    mod = importlib.util.module_from_spec(spec)
+                    # Mock the src.utils imports that happen at import time
+                    mock_repro = MagicMock()
+                    mock_repro.get_git_commit.return_value = "abc12345"
+                    mock_repro.get_hardware_info.return_value = {"gpu": "N/A", "gpu_memory": "N/A"}
+                    mock_repro.set_seed = MagicMock()
+                    mock_hf = MagicMock()
+                    mock_hf.resolve_pretrained_path.return_value = "mock_path"
+                    with patch.dict("sys.modules", {
+                        "torch": mock_torch,
+                        "transformers": MagicMock(),
+                        "src": MagicMock(),
+                        "src.utils": MagicMock(),
+                        "src.utils.repro": mock_repro,
+                        "src.utils.hf": mock_hf,
+                    }):
+                        spec.loader.exec_module(mod)
+                        return mod.main
+
+    def test_cuda_unavailable_cpu_ok_exits_zero(self):
+        """With --cpu-ok and no CUDA, main should call sys.exit(0)."""
+        mock_torch = MagicMock()
+        mock_torch.__version__ = "2.0.0"
+        mock_torch.cuda.is_available.return_value = False
+
+        with patch("sys.argv", ["smoke_test.py", "--cpu-ok"]):
+            main_fn = self._run_smoke_test_main(["--cpu-ok"])
+            if main_fn is not None:
+                with self.assertRaises(SystemExit) as ctx:
+                    main_fn()
+                self.assertEqual(ctx.exception.code, 0)
+
+    def test_cuda_unavailable_no_cpu_ok_exits_one(self):
+        """Without --cpu-ok and no CUDA, main should call sys.exit(1)."""
+        mock_torch = MagicMock()
+        mock_torch.__version__ = "2.0.0"
+        mock_torch.cuda.is_available.return_value = False
+
+        with patch("sys.argv", ["smoke_test.py"]):
+            main_fn = self._run_smoke_test_main()
+            if main_fn is not None:
+                with self.assertRaises(SystemExit) as ctx:
+                    main_fn()
+                self.assertEqual(ctx.exception.code, 1)
+
+
+if __name__ == "__main__":
+    unittest.main()
