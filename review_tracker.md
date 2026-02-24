@@ -1,6 +1,6 @@
 # Code Review Tracker
 
-> 367 issues | 234 fixed + 10 false_positive + 4 wont_fix | 115 open (0 CRIT, 29 HIGH, 58 MED, 28 LOW)
+> 367 issues | 243 fixed + 10 false_positive + 4 wont_fix | 106 open (0 CRIT, 27 HIGH, 53 MED, 26 LOW)
 > Phase Gate: **CLEAR** — 0 CRITICAL open
 > Last updated: 2026-02-24
 
@@ -38,21 +38,21 @@
 - [ ] **AGG-012** `[LOW]` Bootstrap seed 基于 SHA256 hash 的独立性
 - [ ] **AGG-014** `[LOW]` Bootstrap CI 单样本情况返回 (value, value) 无警告 (L1059-1060)
 - [ ] **AGG-015** `[LOW]` 精确枚举阈值 n=16 硬编码 (L1092-1107)
-- [ ] **AGG-029** `[MED]` gain_pct_mean（跨 seed 配对差均值）vs gain_pct（聚合均值上的单点增益）定义不同 (generate_thesis_report.py:586 vs 356): significance_summary 用 gain_pct_mean，claim_validation 用 gain_pct。Jensen's inequality 下两者不等。同一 claim 在两个表中可能给出矛盾的 practical_pass。 — D4 EXP rotation, confidence: 88%
+- [x] **AGG-029** `[MED]` gain_pct_mean（跨 seed 配对差均值）vs gain_pct（聚合均值上的单点增益）定义不同 (generate_thesis_report.py:586 vs 356): significance_summary 用 gain_pct_mean，claim_validation 用 gain_pct。Jensen's inequality 下两者不等。同一 claim 在两个表中可能给出矛盾的 practical_pass。 — D4 EXP rotation, confidence: 88% -- fixed
 - [ ] **AGG-031** `[MED]` sign-flip 双尾检验 + 方向一致性检查 = 事实上 2 倍保守的单尾检验 (aggregate_results.py:1089): sign-flip p 值基于 |mean|（双尾），但 claim 验证要求 significant_q AND favors_challenger（单侧判据）。真正的单尾 p 应为 p_two/2。n=5 下可能导致本应显著的 claim 被误判。 — D1 EXP rotation, confidence: 80%
 - [ ] **AGG-032** `[MED]` main() 函数 955 行含 7 次相同 read→numeric→seed→strict→agg→ci→save 模式 (aggregate_results.py:1539-2493): 无法单独测试、修改任一 benchmark 聚合逻辑需在巨大函数中导航。建议按 benchmark 拆分为独立函数。 — D7 EXP rotation, confidence: 98%
 - [x] **AGG-034** `[HIGH]` logger 无 handler 配置，所有 logger.warning/info 被静默丢弃或仅走 lastResort (aggregate_results.py:59): logging.getLogger(__name__) 无 basicConfig()，AGG-020 的修复（加 logger.warning）、merge 膨胀 warning、duplicate warning 在实际运行中全部降级或失效。根因性问题。 — D2 incremental, confidence: 92% -- fixed
 - [x] **AGG-035** `[HIGH]` merge key 五处退化到 ["kv_mode"] 无 warning，可致笛卡尔积 (aggregate_results.py:1513-1531): _mk/_nk/_pk/_lk/_rk fallback 时无日志。lat 有 model_id 但 mem 没有时 _has_mid=True → merge_keys=["model_id","kv_mode"] → _mk 退化到 ["kv_mode"]，多模型 lat 行产生笛卡尔积。2 模型时恰好不触发 >2x 警告。 — D2+D5 incremental, confidence: 85% -- fixed
 - [x] **AGG-036** `[HIGH]` cnt 列含 inf 时 int(float('inf')) 抛 OverflowError 崩溃 (aggregate_results.py:185): pd.to_numeric(errors="coerce") 将 "inf" 字符串转为 np.inf，n>1 为 True 进入 int(n) 调用。NaN 安全（NaN>1=False）但 inf 不安全。建议 cnt.replace([np.inf,-np.inf], np.nan)。 — D5 incremental, confidence: 88% -- fixed
-- [ ] **AGG-037** `[MED]` _build_paired_metric_rows 静默丢弃 model_id 维度致跨模型混合 (aggregate_results.py:1188): key_cols 新增 "model_id" 但列不存在时被列表推导过滤，paired pivot 不按模型分组。跨模型数据混为同一 cell 被 aggfunc="mean" 平均。依赖未配置的 logger 报 warning。 — D2 incremental, confidence: 82%
+- [x] **AGG-037** `[MED]` _build_paired_metric_rows 静默丢弃 model_id 维度致跨模型混合 (aggregate_results.py:1188): key_cols 新增 "model_id" 但列不存在时被列表推导过滤，paired pivot 不按模型分组。跨模型数据混为同一 cell 被 aggfunc="mean" 平均。依赖未配置的 logger 报 warning。 — D2 incremental, confidence: 82% -- fixed
 - [x] **AGG-038** `[MED]` _t_critical fallback 对 alpha!=0.05 静默返回 z=1.96 而非 t 值 (aggregate_results.py:42-43): scipy 不可用时 alpha=0.01,df=4 返回 1.96 而实际 t=4.604。当前唯一调用点用默认 alpha 不触发，但函数签名暴露 alpha 参数。建议加 warning 或 raise。 — D1+D2 incremental, confidence: 78% -- fixed
 - [x] **AGG-039** `[MED]` scipy 路径 df=0 返回 NaN 而 fallback 返回 12.706，行为不一致 (aggregate_results.py:30-32 vs 48-49): 两个分支对 df=0 的语义不同。当前调用方有 max(1,...) 保护，但函数级契约不明确。 — D5 incremental, confidence: 70% -- fixed
 - [x] **AGG-040** `[MED]` plt.errorbar NaN yerr 静默跳过 error bar 无视觉提示 (aggregate_results.py:855-859): n<=1 时 ci95_half=NaN 传给 matplotlib errorbar，数据点仍绘制但无 error bar，可能误导读者以为该点精确度极高。 — D4 incremental, confidence: 75% -- fixed
 - [x] **AGG-041** `[MED]` 变量命名 _mk/_nk/_pk/_lk/_rk 可读性严重不足 + merge key 逻辑 5 处重复且 fallback 模式不一致 (aggregate_results.py:1513-1531): if-not 与 or 混用，增加出错风险。建议提取 _get_merge_keys helper。 — D7 incremental, confidence: 90% -- fixed
 - [x] **AGG-042** `[MED]` 双重定义 _t_critical via try/except 隐式降级无 flag (aggregate_results.py:28-57): 两个同名函数在 try/except 中定义，运行时不会记录"降级到 fallback"。建议用 HAS_SCIPY 标志显式化。 — D7 incremental, confidence: 80% -- fixed
-- [ ] **AGG-043** `[LOW]` _t_critical df>120 返回 1.96 产生不连续跳变 (aggregate_results.py:50-51): df=120 查表值 1.980，df=121 直接返回 1.96，~1% CI 宽度跳变。建议用 _T_TABLE[120] 作为上界 fallback。 — D2 incremental, confidence: 70%
+- [x] **AGG-043** `[LOW]` _t_critical df>120 返回 1.96 产生不连续跳变 (aggregate_results.py:50-51): df=120 查表值 1.980，df=121 直接返回 1.96，~1% CI 宽度跳变。建议用 _T_TABLE[120] 作为上界 fallback。 — D2 incremental, confidence: 70% -- fixed
 - [x] **AGG-044** `[LOW]` _read_csvs relative_to bare except 无日志 (aggregate_results.py:131-134): AGG-020 修复了 CSV 读取 except 但 relative_to 仍 bare except 静默回退。与 AGG-020 修复精神不一致。 — D2 incremental, confidence: 68% -- fixed
-- [ ] **AGG-045** `[LOW]` fallback t-table 缺少来源和精度注释 (aggregate_results.py:34-40): 硬编码查表值无来源标注（scipy/R/Stata?），无精度说明，影响可审计性和复现性。 — D7 incremental, confidence: 75%
+- [x] **AGG-045** `[LOW]` fallback t-table 缺少来源和精度注释 (aggregate_results.py:34-40): 硬编码查表值无来源标注（scipy/R/Stata?），无精度说明，影响可审计性和复现性。 — D7 incremental, confidence: 75% -- fixed
 - [x] **AGG-046** `[MED]` _read_json bare except 静默吞掉 JSON 损坏与 IO 错误 (aggregate_results.py:460-461): `except Exception: return {}` 对 JSONDecodeError、PermissionError、OSError 均静默返回空 dict，manifest 读取失败与 manifest 不存在无法区分。run_experiments.py 中对应函数 (RUN-026) 已修复分类 except + 日志，但 aggregate_results.py 仍是 bare except。影响 _strict_manifest_and_artifact_checks、_collect_execution_coverage 的准确性。 — D2 full-scan, confidence: 90% -- fixed
 - [ ] **AGG-048** `[MED]` _safe_t_crit(inf) 返回 0.0 导致 cnt=inf 时 CI 输出 0.0 而非 NaN，产生"零误差"伪像 (aggregate_results.py:227-233): `_safe_t_crit(inf)` 因 `not np.isfinite(inf)=True` 返回 0.0；`cnt.clip(lower=1)=inf`；`sem=std/sqrt(inf)=0.0`；`ci_half=0.0*0.0=0.0`；`.where(inf>1, np.nan)` 因 inf>1=True 保留 0.0。最终 ci95_half=0.0 在图表中呈现为"精确度极高"而非"数据无效"，误导读者。修复建议：在 _add_ci95_columns 开头添加 `cnt = cnt.replace([np.inf, -np.inf], np.nan)`，使 inf 经 `.where(cnt>1, np.nan)` 变为 NaN。 — D1, confidence: 82%
 - [x] **AGG-047** `[MED]` _same_commit_prefix 将 empty/unknown 视为兼容 (aggregate_results.py:465-471): `not a or not b → True`，`a=="unknown" → True`，与 run_experiments.py 中已修复的 RUN-018 语义相反。aggregate_results.py 的 strict 模式 commit 一致性检查对 "unknown" commit 全部静默通过，不同代码版本混入同一 run 无法被检测。 — D2 full-scan, confidence: 85% -- fixed
@@ -107,7 +107,7 @@
 - [x] **KVC-002** `[HIGH]` ~~KIVI INT4 未实现 bit-packing~~ **事实已变更**：bit-packing 已实现，pack_int4 offset +7→+8 已修复 (commit a60cbe6)。远端 decode 维度 bug 需远端验证。 -- fixed
 - [x] **KVC-016** `[LOW]` INT4 vs INT8 行为切换逻辑正确 -- false_positive
 - [x] **KVC-017** `[HIGH]` KIVIStyleKVCache._ensure_capacity grow 路径缺少溢出防护（kivi_style_cache.py:209-237）：grow 分支执行 `new_capacity = max(target_len, capacity*2)` 后再 `min(new_capacity, max_seq_len)` 截断，但**缺少** `if new_capacity < target_len: raise ValueError` 防护（INT8KVCache L179-182 和 INT4KVCache L232-235 均有此检查）。若 max_seq_len 小于 target_len，截断后 new_capacity < target_len，后续切片赋值 `[:, :, old_len:target_len, :]` 在 CUDA 层越界崩溃且错误信息无意义。触发条件：grow 分支（而非初始分配分支）中 max_seq_len 被超过时。 — D5, confidence: 88% -- fixed
-- [ ] **KVC-018** `[MED]` INT8KVCache/INT4KVCache.get_kv() 在 clear() 后调用时静默返回零长度 tensor（int8_cache.py:394-406, int4_cache.py:437-453）：clear() 将 _layer_seq_lens 清零但保留已分配 buffer（不为 None）。此后 get_kv() 的 `_k_cache[layer_id] is not None` 检查通过，seq_len=0，返回形状 [B,H,0,D] 的空 tensor，下游注意力计算不保证能处理 S=0。批次间复用 cache 实例（clear 不 release）时可触发。 — D5, confidence: 82%
+- [x] **KVC-018** `[MED]` INT8KVCache/INT4KVCache.get_kv() 在 clear() 后调用时静默返回零长度 tensor（int8_cache.py:394-406, int4_cache.py:437-453）：clear() 将 _layer_seq_lens 清零但保留已分配 buffer（不为 None）。此后 get_kv() 的 `_k_cache[layer_id] is not None` 检查通过，seq_len=0，返回形状 [B,H,0,D] 的空 tensor，下游注意力计算不保证能处理 S=0。批次间复用 cache 实例（clear 不 release）时可触发。 — D5, confidence: 82% -- fixed
 
 ### PRF. 性能分析 — `scripts/profile_*.py`
 - [x] **PRF-002** `[MED]` quant_bits CSV 推断 fallback 为 16 (eval_ppl.py -- fixed
@@ -150,14 +150,14 @@
 - [x] **RUN-031** `[MED]` safe_prompt_budget 可为负值但无 max(0,...) 防护 (run_experiments.py:251): peak_gen > base_total_budget 时 budget 为负，warning 消息中打印负值无物理意义。 — D1+D5 RUN rotation, confidence: 80% -- fixed
 - [x] **RUN-032** `[MED]` resolve_quant_params 不做数值类型和范围校验 (run_experiments.py:460-484): YAML 中 clip_percentile="high" 或 group_size=-1 原样传给子脚本，模型加载后才崩溃浪费 GPU 时间。 — D1+D5 RUN rotation, confidence: 88% -- fixed
 - [x] **RUN-033** `[MED]` _existing_result_git_commits bare except 静默跳过损坏 CSV (run_experiments.py:166-167): `except Exception: continue` 无日志，append 时某个 CSV 因损坏/权限无法读取时，该文件的 commit 信息被静默跳过。若所有 CSV 均损坏则返回空列表，_validate_append_commit 无法检测跨 commit 不一致，append 防护失效。 — D2 full-scan, confidence: 82% -- fixed
-- [ ] **RUN-034** `[HIGH]` --subprocess_timeout 新增参数隐式改变原有"无限等待"行为（breaking change for existing callers），默认 3600s 而非原 None (run_experiments.py:853-861, L1437): 原 subprocess.run 无 timeout（RUN-022 记录）；修复后默认 3600 秒。已有 overnight batch 运行可能在 1 小时后被强制终止（returncode=124, failure_type="timeout"）。影响范围：所有通过 shell 脚本调用 run_experiments.py 的自动化流程，若任务确实需要超过 1 小时（大模型 eval_longbench/eval_ruler 全量评测），必须显式传 --subprocess_timeout 0 或更大值。当前 AGENTS.md / experiment_sop.md 中无相关说明。向后兼容性破坏：调用方若依赖原无限等待语义将静默失败（任务被 timeout 终止但 run_experiments 退出 1）。 — D4, confidence: 88%
+- [x] **RUN-034** `[HIGH]` --subprocess_timeout 新增参数隐式改变原有"无限等待"行为（breaking change for existing callers），默认 3600s 而非原 None (run_experiments.py:853-861, L1437): 原 subprocess.run 无 timeout（RUN-022 记录）；修复后默认 3600 秒。已有 overnight batch 运行可能在 1 小时后被强制终止（returncode=124, failure_type="timeout"）。影响范围：所有通过 shell 脚本调用 run_experiments.py 的自动化流程，若任务确实需要超过 1 小时（大模型 eval_longbench/eval_ruler 全量评测），必须显式传 --subprocess_timeout 0 或更大值。当前 AGENTS.md / experiment_sop.md 中无相关说明。向后兼容性破坏：调用方若依赖原无限等待语义将静默失败（任务被 timeout 终止但 run_experiments 退出 1）。 — D4, confidence: 88% -- fixed
 
 ### SMK. Smoke 测试 — `scripts/smoke_test.py`
 - [x] **SMK-001** `[HIGH]` CUDA 不可用时 exit(0) → CI smoke test 假通过 (smoke_test.py:130-135): sys.exit(0) 在 CUDA 不可用时被调用，自动化管线检查 exit code 会认为 smoke test 通过。应 exit 非零或使用特殊 exit code 区分 "跳过" 与 "通过"。 — D2 RUN rotation, confidence: 95% -- fixed
 - [x] **SMK-002** `[MED]` get_hardware_info bare except 返回 N/A 无 warning (smoke_test.py:53-61): torch.cuda.is_available()=True 后 get_device_name 失败时静默返回 N/A，设备异常被隐藏。 — D2 RUN rotation, confidence: 78% -- fixed
 - [x] **SMK-003** `[MED]` 生成文本提取用 prompt 字符串长度偏移而非 token 偏移 (smoke_test.py:188-190): tokenizer decode 可能因规范化改变文本，len(prompt) 截断不精确。应用 token ID 切片后 decode。 — D1+D2+D5+D7 RUN rotation, confidence: 80% -- fixed
 - [x] **SMK-004** `[MED]` 输出 JSON 无 encoding="utf-8"，C/POSIX locale 下非 ASCII 写入失败 (smoke_test.py:245-247): ensure_ascii=False 配合默认 locale 编码，Docker 容器默认 C locale 时中文生成结果触发 UnicodeEncodeError。 — D5 RUN rotation, confidence: 82% -- fixed
-- [ ] **SMK-005** `[MED]` --cpu-ok 新增参数改变 smoke_test.py CUDA 不可用时的 exit 语义，现有无参数调用方在 CPU-only 环境将从 exit(0) 变为 exit(1) (smoke_test.py:111-119, L145-155): 修复 SMK-001 的方式是引入 --cpu-ok flag：无此 flag 时 CUDA 不可用 exit(1)，有此 flag 时 exit(0)。这是接口行为 breaking change：所有现有 CI 脚本若无参数调用 `python scripts/smoke_test.py` 且运行于 CPU-only 环境，将从静默通过（旧 exit 0）变为失败（exit 1），直至显式加 --cpu-ok。smoke_test.py docstring（L13-14）仅列 --prompt/--max_new_tokens，未展示 --cpu-ok；AGENTS.md、start_agents.sh 等调用入口均未更新。向后兼容性影响：全部 CPU-only CI/CD 对该脚本的无参数调用。 — D4, confidence: 85%
+- [x] **SMK-005** `[MED]` --cpu-ok 新增参数改变 smoke_test.py CUDA 不可用时的 exit 语义，现有无参数调用方在 CPU-only 环境将从 exit(0) 变为 exit(1) (smoke_test.py:111-119, L145-155): 修复 SMK-001 的方式是引入 --cpu-ok flag：无此 flag 时 CUDA 不可用 exit(1)，有此 flag 时 exit(0)。这是接口行为 breaking change：所有现有 CI 脚本若无参数调用 `python scripts/smoke_test.py` 且运行于 CPU-only 环境，将从静默通过（旧 exit 0）变为失败（exit 1），直至显式加 --cpu-ok。smoke_test.py docstring（L13-14）仅列 --prompt/--max_new_tokens，未展示 --cpu-ok；AGENTS.md、start_agents.sh 等调用入口均未更新。向后兼容性影响：全部 CPU-only CI/CD 对该脚本的无参数调用。 — D4, confidence: 85% -- fixed
 
 ### TST. 测试覆盖 — `tests/`
 - [ ] **TST-003** `[HIGH]` calibrate_behavior.py 完全无单元测试
@@ -222,11 +222,11 @@
 
 ### QUA. 代码质量增量 — D7 全项目审查 2026-02-24
 
-- [ ] **QUA-001** `[HIGH]` `get_git_commit()` 在 9 个脚本中重复定义，无规范化入口 (scripts/eval_ruler.py:607, profile_memory.py:45, profile_latency.py:40, eval_ppl.py:67, smoke_test.py:38, eval_needle.py:39, eval_longbench.py:69, profile_baseline.py:37, collect_env.py:20): 与已规范化的 `get_hardware_info()` (`src/utils/repro.py:42`) 形成对比——后者有标准实现，前者 9 份几乎相同副本。任何修改（增加 `cwd` 参数、修改截断长度）需要改 9 处。建议将 `get_git_commit()` 加入 `src/utils/repro.py` 并替换各脚本的本地副本。 — D7 全项目, confidence: 98%
+- [x] **QUA-001** `[HIGH]` `get_git_commit()` 在 9 个脚本中重复定义，无规范化入口 (scripts/eval_ruler.py:607, profile_memory.py:45, profile_latency.py:40, eval_ppl.py:67, smoke_test.py:38, eval_needle.py:39, eval_longbench.py:69, profile_baseline.py:37, collect_env.py:20): 与已规范化的 `get_hardware_info()` (`src/utils/repro.py:42`) 形成对比——后者有标准实现，前者 9 份几乎相同副本。任何修改（增加 `cwd` 参数、修改截断长度）需要改 9 处。建议将 `get_git_commit()` 加入 `src/utils/repro.py` 并替换各脚本的本地副本。 — D7 全项目, confidence: 98% -- fixed
 
 - [x] **QUA-002** `[HIGH]` `run_experiments.py` 完全缺少 `import logging`，全部诊断输出用裸 `print()` (scripts/run_experiments.py:1-20, L92, L103, L121, L125, L176-179): `aggregate_results.py` 在 AGG-034 修复后已使用 `logging.basicConfig` + `logger.warning/info`；`check_run_completeness.py`、`export_tables_latex.py` 均有 `logger`；但 `run_experiments.py` 作为核心编排脚本从未 `import logging`，所有 "Warning:"/"Error:" 均为 `print()`。后果：(1) 无法通过日志级别过滤；(2) 无时间戳；(3) Warning 输出到 stdout（重定向到文件则警告消失）；(4) 与同目录其他脚本日志策略不一致。 — D7 全项目, confidence: 95% -- fixed
 
-- [ ] **QUA-003** `[MED]` `_safe_t_crit` 内联函数定义在 `_add_ci95_columns` 循环体内，每列均重建函数对象 (scripts/aggregate_results.py:227-230): `def _safe_t_crit(n: float) -> float:` 定义在 `for col in list(out.columns):` 循环体内，每次迭代都创建新函数对象。该函数不依赖任何循环变量，应提取为模块级私有函数，避免循环内函数定义的反模式。 — D7 全项目, confidence: 90%
+- [x] **QUA-003** `[MED]` `_safe_t_crit` 内联函数定义在 `_add_ci95_columns` 循环体内，每列均重建函数对象 (scripts/aggregate_results.py:227-230): `def _safe_t_crit(n: float) -> float:` 定义在 `for col in list(out.columns):` 循环体内，每次迭代都创建新函数对象。该函数不依赖任何循环变量，应提取为模块级私有函数，避免循环内函数定义的反模式。 — D7 全项目, confidence: 90% -- fixed
 
 - [ ] **QUA-004** `[MED]` `INT8CacheWrapper` 类含开发时遗留悬挂注释，参数缺少 type hints (src/engine/patch_model.py:64-91): `__init__` 参数 `cache_engine`, `layer_idx` 无类型注释；`update()` 方法注释包含 `"But we handle updates in generate_loop usually?"` 等疑问句开发笔记，在生产代码中不应存留；该类缺少 class-level docstring，仅 `INT8CacheWrapperContainer` 有说明。 — D7 全项目, confidence: 85%
 
@@ -257,7 +257,7 @@
 ## Resolved
 
 <details>
-<summary>234 fixed + 10 false_positive + 4 wont_fix (click to expand)</summary>
+<summary>243 fixed + 10 false_positive + 4 wont_fix (click to expand)</summary>
 
 ### AGG. 聚合
 - [x] **AGG-001** `[CRIT]` kivi_style 完全缺失显著性配对 — fixed commit 03ed4a0
