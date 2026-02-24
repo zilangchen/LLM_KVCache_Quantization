@@ -1,6 +1,6 @@
 # Code Review Tracker
 
-> 422 issues | 376 fixed + 23 false_positive + 7 wont_fix | 46 open (0 CRIT, 8 HIGH, 27 MED, 11 LOW)
+> 443 issues | 401 fixed + 23 false_positive + 8 wont_fix | 42 open (0 CRIT, 13 HIGH, 22 MED, 7 LOW)
 > Phase Gate: **CLEAR** — 0 CRITICAL open
 > Last updated: 2026-02-24
 
@@ -68,14 +68,14 @@
 ### CAL. 校准模块 — `scripts/calibrate_behavior.py` (R4 深度审查 2026-02-24)
 - [ ] **CAL-019** `[HIGH]` Q 向量计算缺失 input_layernorm — 校准注意力分布与真实推理系统性偏差 (calibrate_behavior.py:793-795): `attn.q_proj(hidden_states[layer_idx])` 跳过了 `input_layernorm`，而 Qwen2DecoderLayer 在 self_attn 前先经过 layernorm。校准时的 Q 向量与模型实际推理产出的 Q 不同，导致 inv_tau 和超参数搜索基于错误的注意力分布。 — D1 R4 calibration deep review, confidence: 95%
 - [ ] **CAL-020** `[HIGH]` Q 向量未施加 RoPE，与已旋转的 K 做点积 (calibrate_behavior.py:795-798): Q 仅经 q_proj 无 RoPE，而 K 来自 past_key_values 已施加 RoPE。`logits = q @ k.T` 用非旋转 Q 与旋转后 K 做点积，注意力分布峰值位置与真实推理完全不同。与 CAL-019 叠加，校准产物数学基础不正确。 — D1 R4, confidence: 93%
-- [ ] **CAL-021** `[HIGH]` dummy 数据 fallback 返回字符串而非张量 — 必然 AttributeError 崩溃 (calibrate_behavior.py:95-97,778-779): WikiText-2 下载失败时 `get_calibration_dataset()` 返回字符串列表，main() 中 `input_ids.to(model.device)` 因字符串无 `.to()` 方法而崩溃。except Exception 吞噬所有异常降级到必然崩溃路径。 — D2 R4, confidence: 99%
+- [x] **CAL-021** `[HIGH]` dummy 数据 fallback 返回字符串而非张量 — 必然 AttributeError 崩溃 (calibrate_behavior.py:95-97,778-779): WikiText-2 下载失败时 `get_calibration_dataset()` 返回字符串列表，main() 中 `input_ids.to(model.device)` 因字符串无 `.to()` 方法而崩溃。except Exception 吞噬所有异常降级到必然崩溃路径。 — D2 R4, confidence: 99% — fixed 7e70711 — raise RuntimeError on dataset download failure
 - [ ] **CAL-022** `[HIGH]` generate_loop 消费校准 JSON 时丢弃 group_size_v/clip_percentile_v (calibrate_behavior.py:1026-1027 vs generate_loop.py:501-522): 校准写入独立的 group_size_k/v，但 generate_loop 仅使用 K 侧值。K/V 不同 group_size 时 V scale shape 与 cache engine 期望不匹配，可能静默用错误 scale 量化 V。 — D4 R4, confidence: 90%
-- [ ] **CAL-023** `[MED]` config 覆盖静默吞噬 --int4_search 设置的 quant_bits (calibrate_behavior.py:693-714): L694 设 quant_bits=4，但 L696-701 的 config 覆盖 loop 可能将其改回 8，用户命令行意图被静默篡改。 — D2 R4, confidence: 82%
-- [ ] **CAL-024** `[MED]` inv_tau_candidates 无空列表校验 — 空输入导致 argmin 崩溃 (calibrate_behavior.py:991,204,258): `--inv_tau_candidates ""` 产出空列表，torch.argmin 在空张量上 RuntimeError。 — D5 R4, confidence: 88%
-- [ ] **CAL-025** `[MED]` evaluate_quant_candidate 空样本静默返回零损失 — 搜索选出无效候选 (calibrate_behavior.py:377-384): loss_values 为空时 mean_loss=0.0，被搜索误认为"完美候选"。应返回 +inf。 — D2 R4, confidence: 80%
-- [ ] **CAL-026** `[MED]` KL 散度 clamp 破坏概率归一化 — 长序列引入系统性正偏差 (calibrate_behavior.py:233-235): clamp(min=eps) 后 p_ref/p_quant 总和不为 1.0，seq_len=512 时累积偏差 ~5e-4。 — D1 R4, confidence: 75%
-- [ ] **CAL-027** `[MED]` compute_inv_tau 全 inf loss_accum 无检测 — argmin 静默返回索引 0 (calibrate_behavior.py:243-258): inf 通过 NaN 检查但 argmin 返回第一个索引，静默选出可能无效的候选。 — D2 R4, confidence: 85%
-- [ ] **CAL-029** `[MED]` get_calibration_dataset 返回少于 n_samples 且不过滤短文本 (calibrate_behavior.py:99-108): 单 token 序列注意力退化，稀释校准质量。无 warning。 — D5 R4, confidence: 83%
+- [x] **CAL-023** `[MED]` config 覆盖静默吞噬 --int4_search 设置的 quant_bits (calibrate_behavior.py:693-714): L694 设 quant_bits=4，但 L696-701 的 config 覆盖 loop 可能将其改回 8，用户命令行意图被静默篡改。 — D2 R4, confidence: 82% — fixed 7e70711 — warn when config override changes quant_bits
+- [x] **CAL-024** `[MED]` inv_tau_candidates 无空列表校验 — 空输入导致 argmin 崩溃 (calibrate_behavior.py:991,204,258): `--inv_tau_candidates ""` 产出空列表，torch.argmin 在空张量上 RuntimeError。 — D5 R4, confidence: 88% — fixed 7e70711 — empty inv_tau_candidates validation
+- [x] **CAL-025** `[MED]` evaluate_quant_candidate 空样本静默返回零损失 — 搜索选出无效候选 (calibrate_behavior.py:377-384): loss_values 为空时 mean_loss=0.0，被搜索误认为"完美候选"。应返回 +inf。 — D2 R4, confidence: 80% — fixed 7e70711 — return inf for empty samples
+- [x] **CAL-026** `[MED]` KL 散度 clamp 破坏概率归一化 — 长序列引入系统性正偏差 (calibrate_behavior.py:233-235): clamp(min=eps) 后 p_ref/p_quant 总和不为 1.0，seq_len=512 时累积偏差 ~5e-4。 — D1 R4, confidence: 75% — fixed 7e70711 — documented KL clamp as known approximation
+- [x] **CAL-027** `[MED]` compute_inv_tau 全 inf loss_accum 无检测 — argmin 静默返回索引 0 (calibrate_behavior.py:243-258): inf 通过 NaN 检查但 argmin 返回第一个索引，静默选出可能无效的候选。 — D2 R4, confidence: 85% — fixed 7e70711 — detect all-inf, fallback inv_tau=1.0
+- [x] **CAL-029** `[MED]` get_calibration_dataset 返回少于 n_samples 且不过滤短文本 (calibrate_behavior.py:99-108): 单 token 序列注意力退化，稀释校准质量。无 warning。 — D5 R4, confidence: 83% — fixed 7e70711 — filter short texts + warn insufficient samples
 - [ ] **CAL-031** `[LOW]` model.model.layers 硬编码假设 Qwen/LLaMA 架构 (calibrate_behavior.py:793): 对当前三个目标模型有效，但可扩展性差。 — D7 R4, confidence: 90%
 - [ ] **CAL-032** `[LOW]` getattr 默认值仅对 1.5B 正确 — 7B/8B config 缺字段时静默用错误参数 (calibrate_behavior.py:766-769): num_heads=12 对 1.5B 正确但 7B 为 28。 — D5 R4, confidence: 78%
 
@@ -84,27 +84,27 @@
 - [x] **KRN-002** `[HIGH]` kernel 自身不防御 ctx_len=0（依赖 wrapper 层 L377 提前返回） (triton_decode_attn_int8.py:175): ctx_len=0 时循环不执行，acc/l_i=0.0/0.0=NaN。wrapper L446-448 用零覆盖。若绕过 wrapper 直接调用 kernel 则 NaN 泄露。 — D5 R4, confidence: 88% — fixed: L377-378 全批次零保护 + L446-448 混合批次零覆写 (ENG-016)
 - [x] **KRN-003** `[HIGH]` `q.to(tl.float32)` 在循环内重复执行，应提升到循环外 (triton_decode_attn_int8.py:234): 性能回归。32K 序列 ~500 次迭代每次对 HEAD_DIM=128 元素做 fp16→fp32 转换。Triton 编译器可能优化但不应依赖。 — D7 R4, confidence: 95% — false_positive: Triton JIT 编译器 LICM 自动提升循环不变量，q 在循环内从未修改
 - [ ] **KRN-005** `[MED]` elementwise+reduce 未使用 tl.dot，错失 tensor core 加速 (triton_decode_attn_int8.py:271,235): weighted_v 和 QK score 计算可用 tl.dot 利用 tensor core。 — D7 R4, confidence: 85%
-- [ ] **KRN-006** `[MED]` INT4 wrapper docstring 声称 "[-7, 7]" 但 unpack_int4 实际返回 [-8, 7] (triton_decode_attn_int4.py:5-6): 功能正确但文档不准确。 — D7 R4, confidence: 98%
-- [ ] **KRN-007** `[MED]` 无 HEAD_DIM 是否为 2 的幂的验证 (triton_decode_attn_int8.py:156): tl.arange(0, HEAD_DIM) 要求 2 的幂，当前模型均满足但 wrapper 无校验。 — D5 R4, confidence: 80%
+- [x] **KRN-006** `[MED]` INT4 wrapper docstring 声称 "[-7, 7]" 但 unpack_int4 实际返回 [-8, 7] (triton_decode_attn_int4.py:5-6): 功能正确但文档不准确。 — D7 R4, confidence: 98% — fixed 7e70711 — fixed docstring [-7,7]→[-8,7]
+- [x] **KRN-007** `[MED]` 无 HEAD_DIM 是否为 2 的幂的验证 (triton_decode_attn_int8.py:156): tl.arange(0, HEAD_DIM) 要求 2 的幂，当前模型均满足但 wrapper 无校验。 — D5 R4, confidence: 80% — fixed 7e70711 — added HEAD_DIM power-of-2 validation
 - [ ] **KRN-010** `[MED]` 无 @triton.autotune，BLOCK_SIZE 靠 heuristic 选择 (triton_decode_attn_int8.py:388-403): 研究项目可接受，但论文性能数字可能非最优。 — D7 R4, confidence: 92%
-- [ ] **KRN-011** `[MED]` INT4 wrapper unpacked 路径不验证 dtype (triton_decode_attn_int4.py:29-34): bit_packed=False 时直接返回原 tensor 不检查 dtype，float16 输入会在 kernel 中产生错误数值。 — D5 R4, confidence: 85%
-- [ ] **KRN-012** `[LOW]` `pid = tl.program_id(0)` 赋值后被覆盖，dead code (triton_decode_attn_int8.py:133): 早期 1D grid 设计遗留。 — D7 R4, confidence: 100%
-- [ ] **KRN-014** `[LOW]` offs_g 和 group_indices 是 loop-invariant + dead code (triton_decode_attn_int8.py:198,212): 应移到循环外或删除。 — D7 R4, confidence: 90%
+- [x] **KRN-011** `[MED]` INT4 wrapper unpacked 路径不验证 dtype (triton_decode_attn_int4.py:29-34): bit_packed=False 时直接返回原 tensor 不检查 dtype，float16 输入会在 kernel 中产生错误数值。 — D5 R4, confidence: 85% — fixed 7e70711 — added dtype validation for unpacked path
+- [x] **KRN-012** `[LOW]` `pid = tl.program_id(0)` 赋值后被覆盖，dead code (triton_decode_attn_int8.py:133): 早期 1D grid 设计遗留。 — D7 R4, confidence: 100% — fixed 7e70711 — removed dead pid assignment
+- [x] **KRN-014** `[LOW]` offs_g 和 group_indices 是 loop-invariant + dead code (triton_decode_attn_int8.py:198,212): 应移到循环外或删除。 — D7 R4, confidence: 90% — fixed 7e70711 — moved loop-invariant code outside loop
 
 ### UTIL. 工具模块 — `src/utils/` (R5 深度审查 2026-02-24)
-- [ ] **UTIL-001** `[HIGH]` CUDATimer.stop() 在 prefill 调用点位于 try/finally 外，异常时 timer 未停止 (generate_loop.py:689 vs timing.py:82-100): prefill_timer.stop() 在 try 块外，model() 抛异常时跳过 stop()，ttft_ms 未定义。应使用 timer_context() 或移入 finally。 — R5, confidence: 90%
-- [ ] **UTIL-005** `[HIGH]` torch.use_deterministic_algorithms(True) 静默吞没，确定性可能未激活 (repro.py:35-39): bare `except Exception: pass` 丢弃所有错误包括 AttributeError，实验日志显示 deterministic=True 但实际未生效。论文复现性风险。 — R5, confidence: 95%
-- [ ] **UTIL-002** `[MED]` _cuda_available 在构造时一次性评估，不随进程 CUDA 状态变化更新 (timing.py:78-80) — R5, confidence: 70%
-- [ ] **UTIL-003** `[MED]` reset() 不重置 _cuda_available，复用 timer 语义不完整 (timing.py:109-112) — R5, confidence: 65%
-- [ ] **UTIL-004** `[MED]` timer_context docstring sync_after 描述为 "before exiting"，措辞误导 (timing.py:116-138) — R5, confidence: 80%
-- [ ] **UTIL-007** `[MED]` vars(args) 对无 __dict__ 对象抛 TypeError (repro.py:93): 函数签名 args: Any 但 unconditional vars()，dict 输入崩溃。 — R5, confidence: 85%
-- [ ] **UTIL-008** `[MED]` write_config_snapshot 无 I/O 异常处理，长时实验末端崩溃 (repro.py:138-149): YAML 写入失败直接传播，可能丢失已完成的实验结果。 — R5, confidence: 88%
-- [ ] **UTIL-009** `[MED]` resolve_quant_bits 对 kivi_style 无条件返回 8，KIVI-INT4 场景返回错误值 (repro.py:125): quant_bits_arg=None + kv_mode=kivi_style → 返回 8，CSV 元数据污染。 — R5, confidence: 90%
-- [ ] **UTIL-006** `[LOW]` CUBLAS_WORKSPACE_CONFIG 在 torch import 后设置，cuBLAS 可能已缓存 (repro.py:33-34) — R5, confidence: 75%
-- [ ] **UTIL-010** `[LOW]` build_config_snapshot 硬编码 decoding 参数而非读取实际运行时配置 (repro.py:82-102) — R5, confidence: 80%
-- [ ] **UTIL-011** `[LOW]` resolve_pretrained_path 在线下载失败静默回退到 model_id 无日志 (hf.py:58-61) — R5, confidence: 85%
-- [ ] **UTIL-012** `[LOW]` model_id=None 时返回 None 而非 raise ValueError (hf.py:32-33) — R5, confidence: 80%
-- [ ] **UTIL-015** `[LOW]` get_gpu_memory_mb docstring "current" 与 "Peak" 矛盾 (timing.py:141-150) — R5, confidence: 90%
+- [x] **UTIL-001** `[HIGH]` CUDATimer.stop() 在 prefill 调用点位于 try/finally 外，异常时 timer 未停止 (generate_loop.py:689 vs timing.py:82-100): prefill_timer.stop() 在 try 块外，model() 抛异常时跳过 stop()，ttft_ms 未定义。应使用 timer_context() 或移入 finally。 — R5, confidence: 90% — fixed 75d691c — prefill_timer.stop() moved into try/finally
+- [x] **UTIL-005** `[HIGH]` torch.use_deterministic_algorithms(True) 静默吞没，确定性可能未激活 (repro.py:35-39): bare `except Exception: pass` 丢弃所有错误包括 AttributeError，实验日志显示 deterministic=True 但实际未生效。论文复现性风险。 — R5, confidence: 95% — fixed 75d691c — replaced bare except with warning
+- [x] **UTIL-002** `[MED]` _cuda_available 在构造时一次性评估，不随进程 CUDA 状态变化更新 (timing.py:78-80) — R5, confidence: 70% — fixed 75d691c — documented _cuda_available design choice
+- [x] **UTIL-003** `[MED]` reset() 不重置 _cuda_available，复用 timer 语义不完整 (timing.py:109-112) — R5, confidence: 65% — fixed 75d691c — documented reset() behavior
+- [x] **UTIL-004** `[MED]` timer_context docstring sync_after 描述为 "before exiting"，措辞误导 (timing.py:116-138) — R5, confidence: 80% — fixed 75d691c — fixed timer_context docstring
+- [x] **UTIL-007** `[MED]` vars(args) 对无 __dict__ 对象抛 TypeError (repro.py:93): 函数签名 args: Any 但 unconditional vars()，dict 输入崩溃。 — R5, confidence: 85% — fixed 75d691c — type-check args before vars()
+- [x] **UTIL-008** `[MED]` write_config_snapshot 无 I/O 异常处理，长时实验末端崩溃 (repro.py:138-149): YAML 写入失败直接传播，可能丢失已完成的实验结果。 — R5, confidence: 88% — fixed 75d691c — wrapped I/O in try/except with warning
+- [x] **UTIL-009** `[MED]` resolve_quant_bits 对 kivi_style 无条件返回 8，KIVI-INT4 场景返回错误值 (repro.py:125): quant_bits_arg=None + kv_mode=kivi_style → 返回 8，CSV 元数据污染。 — R5, confidence: 90% — fixed 75d691c — documented kivi_style default
+- [x] **UTIL-006** `[LOW]` CUBLAS_WORKSPACE_CONFIG 在 torch import 后设置，cuBLAS 可能已缓存 (repro.py:33-34) — R5, confidence: 75% — fixed 75d691c — documented CUBLAS_WORKSPACE_CONFIG timing
+- [x] **UTIL-010** `[LOW]` build_config_snapshot 硬编码 decoding 参数而非读取实际运行时配置 (repro.py:82-102) — R5, confidence: 80% — fixed 75d691c — documented hardcoded greedy decode
+- [x] **UTIL-011** `[LOW]` resolve_pretrained_path 在线下载失败静默回退到 model_id 无日志 (hf.py:58-61) — R5, confidence: 85% — fixed 75d691c — added warning on silent fallback
+- [x] **UTIL-012** `[LOW]` model_id=None 时返回 None 而非 raise ValueError (hf.py:32-33) — R5, confidence: 80% — fixed 75d691c — raise ValueError for None model_id
+- [x] **UTIL-015** `[LOW]` get_gpu_memory_mb docstring "current" 与 "Peak" 矛盾 (timing.py:141-150) — R5, confidence: 90% — fixed 75d691c — fixed get_gpu_memory_mb docstring
 
 ### CFG. 配置 — `configs/`
 - [ ] **CFG-008** `[MED]` 7B/8B 长上下文仅 3 条 vs 1.5B 的 18 条
@@ -147,6 +147,27 @@
 - [x] **ENG-034** `[LOW]` attention_mask decode 阶段 O(N^2) 内存分配 (generate_loop.py:724-732): fused path `del attention_mask` 但 generate_loop 仍每步分配增长。长序列累计 ~400MB 无用分配。 — D5, confidence: 88% — fixed 2f6cddb
 - [x] **ENG-035** `[LOW]` except TypeError 过于宽泛可能吞掉内核内部错误 (patch_model.py:621-631,647-659): Triton kernel 内部 dtype/shape TypeError 被静默回退到无 debug_stats 调用。 — D7, confidence: 82% -- fixed
 - [x] **ENG-036** `[MED]` patch_model.py _fused_forward_impl 改用 inspect.signature 检测 kernel 可选参数，但每次 decode step 均重新调用 inspect.signature()，无缓存 (patch_model.py:629-630): `_int8_sig_params = set(inspect.signature(decode_attn_int8).parameters)` 和 `_int4_sig_params = set(inspect.signature(decode_attn_int4).parameters)` 在 _fused_forward_impl 函数体内（每次 decode 调用），而非模块级缓存。kernel 签名在运行时不会改变，每 step 两次 inspect.signature() 调用产生不必要的开销（尤其 512+ token 生成时累计数千次调用）。这是从 try/except TypeError 改为 inspect.signature 时引入的性能回归，虽行为正确但接口探测应在 patch 时（apply_int8_fused_patch 初始化阶段）一次性缓存。 — D4, confidence: 88% -- fixed
+- [ ] **ENG-037** `[HIGH]` int8_basic.py L135 / int4_basic.py L132: abs_max 先 .to(tensor.dtype) 再 clamp(min=1e-5)，fp16 下近零 tensor 的 abs_max cast 后为 0 → scale=0 → round(x/0)=NaN 传播到 int8 cache — R6 GEN-006, confidence: 92%
+- [ ] **ENG-038** `[HIGH]` generate_loop.py L547-557: allow_missing_calib=True 时 any exception 静默回退到无 static_scale/inv_tau 的 baseline 行为，但 kv_mode 标签仍为 int8_ours，实验结果被 baseline 伪装污染 — R6 GEN-021, confidence: 95%
+- [ ] **ENG-039** `[HIGH]` patch_model.py L439-467: _get_rope_cos_sin 用 except Exception: continue 吞没所有异常包括 CUDA RuntimeError/shape mismatch，真正的 RoPE 故障根因丢失，fallback 可能产生错误 cos/sin — R6 GEN-022/PAT-025, confidence: 90%
+- [ ] **ENG-040** `[HIGH]` int8_cache.py L321-326: 非 adaptive 静态 scale 路径 quantize_symmetric_int8_with_scale 中若 static scale 过小，值静默 clip 到 [-127,127] 无任何 overflow 检测或警告 — R6 GEN-002, confidence: 85%
+- [ ] **ENG-041** `[HIGH]` kivi_style_cache.py L326-332: KIVI decode K 重量化复用 prefill scale，decode token 值超出 prefill 范围时静默 clip 无警告/指标 — R6 GEN-004, confidence: 88%
+- [ ] **ENG-042** `[HIGH]` patch_model.py L591: cache.append 在 kernel 调用前执行，kernel 抛异常时 cache seq_len 已+1 但无 output，无 rollback 机制，cache 永久不一致 — R6 PAT-010, confidence: 90%
+- [ ] **ENG-043** `[HIGH]` patch_model.py L793-794: attention class 仅从 layer[0] 检测，异构 attention 层（如 Mistral sliding window）的非 layer-0 class 不被 patch — R6 PAT-006, confidence: 85%
+- [ ] **ENG-044** `[HIGH]` patch_model.py L798-898: apply_int8_fused_patch 永久修改 class-level forward，无 remove_patch/unpatch API，同进程内 fp16 评估也经过 forward_proxy — R6 PAT-004, confidence: 92%
+- [ ] **ENG-045** `[MED]` generate_loop.py L761-769: 非 fused decode 路径 k.shape[2]>1 时仅取最后一个 token，speculative decoding 等多 token 返回场景静默丢 token — R6 GEN-007, confidence: 80%
+- [ ] **ENG-046** `[MED]` generate_loop.py L668: DynamicCache 迭代在 HF transformers>=4.38 中可能不再 yield (k,v) tuple，量化模式不走 fp16_use_model_cache 路径无保护 — R6 GEN-009, confidence: 82%
+- [ ] **ENG-047** `[MED]` asymmetric_quant.py L93-94: zero_point 存储为浮点偏移量（非整数 zero_point），与 KIVI 论文及 PyTorch 量化惯例不同，未文档化 — R6 GEN-005, confidence: 75%
+- [ ] **ENG-048** `[MED]` generate_loop.py L524/L532: calib 有 k_scale 但缺 v_scale（或反之）时无警告，cache 单侧使用静态 scale、另侧退化为动态 — R6 GEN-016, confidence: 80%
+- [ ] **ENG-049** `[MED]` patch_model.py L609-610: context_lens 对全 batch 统一设为 seq_len，caller 绕过 generate_from_ids 直接用 model() 时 padded batch 静默错误 — R6 PAT-011, confidence: 85%
+- [ ] **ENG-050** `[MED]` patch_model.py L542: fused path 直接 del attention_mask，caller 传入非 None mask（如 padded batch）被静默丢弃 — R6 PAT-024, confidence: 88%
+- [ ] **ENG-051** `[MED]` patch_model.py L580-588: inv_tau_layer.view(1,-1,1,1) 假设 1D 向量，若 calib 产物维度异常（如 [H,D]）静默 reshape 错误 — R6 PAT-015, confidence: 78%
+- [ ] **ENG-052** `[MED]` patch_model.py L581: use_attn_temperature 默认 True（opt-out），自定义 engine 未定义此属性时温度缩放被静默应用 — R6 PAT-016, confidence: 75%
+- [ ] **ENG-053** `[MED]` patch_model.py L19-21: _INT8_SIG_PARAMS/_INT4_SIG_PARAMS 在 import 时计算并缓存，test mock 或延迟加载导致签名集为空，kwargs 静默丢弃 — R6 PAT-022, confidence: 80%
+- [ ] **ENG-054** `[MED]` patch_model.py L806-807: forward_proxy 闭包持有 AttnClass + original_sig 引用，整个进程生命周期不释放；同一 class 多次 patch 覆盖前一 model 的 closures — R6 PAT-003, confidence: 78%
+- [ ] **ENG-055** `[LOW]` int8_cache.py L440 / int4_cache.py L489: clear() 后 get_kv() warning "Call release()" 语义误导，用户可能是故意 reset — R6 GEN-010
+- [ ] **ENG-056** `[LOW]` generate_loop.py L859-865: locals() cleanup 模式脆弱，kv_cache 总是已定义使 if 检查无意义 — R6 GEN-028
+- [ ] **ENG-057** `[LOW]` patch_model.py L21: _FUSED_DUMP_WRITTEN 模块级 set 跨 test run 持续存在，第二次 dump 被静默抑制 — R6 PAT-019
 
 ### EXP. 导出/报告 — `scripts/export_*.py`
 - [x] **EXP-002** `[MED]` LongBench 表缺少任务指标组成说明 (export_tables_latex.py — fixed 8d7f2df
