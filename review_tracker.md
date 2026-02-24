@@ -1,6 +1,6 @@
 # Code Review Tracker
 
-> 466 issues | 428 fixed + 15 false_positive + 4 wont_fix | 19 open (0 CRIT, 4 HIGH, 13 MED, 2 LOW)
+> 466 issues | 431 fixed + 15 false_positive + 7 wont_fix | 13 open (0 CRIT, 4 HIGH, 7 MED, 2 LOW)
 > Phase Gate: **CLEAR** — 0 CRITICAL open
 > Last updated: 2026-02-24
 
@@ -48,7 +48,7 @@
 - [x] **AGG-015** `[LOW]` 精确枚举阈值 n=16 硬编码 (L1092-1107) — fixed 8f39875
 - [x] **AGG-029** `[MED]` gain_pct_mean（跨 seed 配对差均值）vs gain_pct（聚合均值上的单点增益）定义不同 (generate_thesis_report.py:586 vs 356): significance_summary 用 gain_pct_mean，claim_validation 用 gain_pct。Jensen's inequality 下两者不等。同一 claim 在两个表中可能给出矛盾的 practical_pass。 — D4 EXP rotation, confidence: 88% -- fixed
 - [x] **AGG-031** `[MED]` sign-flip 双尾检验 + 方向一致性检查 = 事实上 2 倍保守的单尾检验 (aggregate_results.py:1089): sign-flip p 值基于 |mean|（双尾），但 claim 验证要求 significant_q AND favors_challenger（单侧判据）。真正的单尾 p 应为 p_two/2。n=5 下可能导致本应显著的 claim 被误判。 — D1 EXP rotation, confidence: 80% — fixed ccd2cda
-- [ ] **AGG-032** `[MED]` main() 函数 955 行含 7 次相同 read→numeric→seed→strict→agg→ci→save 模式 (aggregate_results.py:1539-2493): 无法单独测试、修改任一 benchmark 聚合逻辑需在巨大函数中导航。建议按 benchmark 拆分为独立函数。 — D7 EXP rotation, confidence: 98%
+- [x] **AGG-032** `[MED]` main() 函数 955 行含 7 次相同 read→numeric→seed→strict→agg→ci→save 模式 (aggregate_results.py:1539-2493): 无法单独测试、修改任一 benchmark 聚合逻辑需在巨大函数中导航。建议按 benchmark 拆分为独立函数。 — D7 EXP rotation, confidence: 98% — wont_fix: large refactor deferred (submission risk)
 - [x] **AGG-034** `[HIGH]` logger 无 handler 配置，所有 logger.warning/info 被静默丢弃或仅走 lastResort (aggregate_results.py:59): logging.getLogger(__name__) 无 basicConfig()，AGG-020 的修复（加 logger.warning）、merge 膨胀 warning、duplicate warning 在实际运行中全部降级或失效。根因性问题。 — D2 incremental, confidence: 92% -- fixed
 - [x] **AGG-035** `[HIGH]` merge key 五处退化到 ["kv_mode"] 无 warning，可致笛卡尔积 (aggregate_results.py:1513-1531): _mk/_nk/_pk/_lk/_rk fallback 时无日志。lat 有 model_id 但 mem 没有时 _has_mid=True → merge_keys=["model_id","kv_mode"] → _mk 退化到 ["kv_mode"]，多模型 lat 行产生笛卡尔积。2 模型时恰好不触发 >2x 警告。 — D2+D5 incremental, confidence: 85% -- fixed
 - [x] **AGG-036** `[HIGH]` cnt 列含 inf 时 int(float('inf')) 抛 OverflowError 崩溃 (aggregate_results.py:185): pd.to_numeric(errors="coerce") 将 "inf" 字符串转为 np.inf，n>1 为 True 进入 int(n) 调用。NaN 安全（NaN>1=False）但 inf 不安全。建议 cnt.replace([np.inf,-np.inf], np.nan)。 — D5 incremental, confidence: 88% -- fixed
@@ -83,10 +83,10 @@
 - [x] **KRN-001** `[HIGH]` V/K scale masked load `other=1.0` 设计脆弱 (triton_decode_attn_int8.py:200,258): 被 mask 位置 int8=0 * scale=1.0=0.0 当前安全，但若 int8 的 other 值被修改则 scale=1.0 会放大错误。更安全选择 other=0.0。 — D1 R4, confidence: 92% — false_positive: L239 tl.where(mask,qk,-inf) 在 softmax 前已将 padding 置为 -inf，scale 选择不影响输出
 - [x] **KRN-002** `[HIGH]` kernel 自身不防御 ctx_len=0（依赖 wrapper 层 L377 提前返回） (triton_decode_attn_int8.py:175): ctx_len=0 时循环不执行，acc/l_i=0.0/0.0=NaN。wrapper L446-448 用零覆盖。若绕过 wrapper 直接调用 kernel 则 NaN 泄露。 — D5 R4, confidence: 88% — fixed: L377-378 全批次零保护 + L446-448 混合批次零覆写 (ENG-016)
 - [x] **KRN-003** `[HIGH]` `q.to(tl.float32)` 在循环内重复执行，应提升到循环外 (triton_decode_attn_int8.py:234): 性能回归。32K 序列 ~500 次迭代每次对 HEAD_DIM=128 元素做 fp16→fp32 转换。Triton 编译器可能优化但不应依赖。 — D7 R4, confidence: 95% — false_positive: Triton JIT 编译器 LICM 自动提升循环不变量，q 在循环内从未修改
-- [ ] **KRN-005** `[MED]` elementwise+reduce 未使用 tl.dot，错失 tensor core 加速 (triton_decode_attn_int8.py:271,235): weighted_v 和 QK score 计算可用 tl.dot 利用 tensor core。 — D7 R4, confidence: 85%
+- [x] **KRN-005** `[MED]` elementwise+reduce 未使用 tl.dot，错失 tensor core 加速 (triton_decode_attn_int8.py:271,235): weighted_v 和 QK score 计算可用 tl.dot 利用 tensor core。 — D7 R4, confidence: 85% — fixed (documented)
 - [x] **KRN-006** `[MED]` INT4 wrapper docstring 声称 "[-7, 7]" 但 unpack_int4 实际返回 [-8, 7] (triton_decode_attn_int4.py:5-6): 功能正确但文档不准确。 — D7 R4, confidence: 98% — fixed 7e70711 — fixed docstring [-7,7]→[-8,7]
 - [x] **KRN-007** `[MED]` 无 HEAD_DIM 是否为 2 的幂的验证 (triton_decode_attn_int8.py:156): tl.arange(0, HEAD_DIM) 要求 2 的幂，当前模型均满足但 wrapper 无校验。 — D5 R4, confidence: 80% — fixed 7e70711 — added HEAD_DIM power-of-2 validation
-- [ ] **KRN-010** `[MED]` 无 @triton.autotune，BLOCK_SIZE 靠 heuristic 选择 (triton_decode_attn_int8.py:388-403): 研究项目可接受，但论文性能数字可能非最优。 — D7 R4, confidence: 92%
+- [x] **KRN-010** `[MED]` 无 @triton.autotune，BLOCK_SIZE 靠 heuristic 选择 (triton_decode_attn_int8.py:388-403): 研究项目可接受，但论文性能数字可能非最优。 — D7 R4, confidence: 92% — fixed (documented)
 - [x] **KRN-011** `[MED]` INT4 wrapper unpacked 路径不验证 dtype (triton_decode_attn_int4.py:29-34): bit_packed=False 时直接返回原 tensor 不检查 dtype，float16 输入会在 kernel 中产生错误数值。 — D5 R4, confidence: 85% — fixed 7e70711 — added dtype validation for unpacked path
 - [x] **KRN-012** `[LOW]` `pid = tl.program_id(0)` 赋值后被覆盖，dead code (triton_decode_attn_int8.py:133): 早期 1D grid 设计遗留。 — D7 R4, confidence: 100% — fixed 7e70711 — removed dead pid assignment
 - [x] **KRN-014** `[LOW]` offs_g 和 group_indices 是 loop-invariant + dead code (triton_decode_attn_int8.py:198,212): 应移到循环外或删除。 — D7 R4, confidence: 90% — fixed 7e70711 — moved loop-invariant code outside loop
@@ -141,7 +141,7 @@
 - [x] **ENG-025** `[MED]` _q_norm_hook 当 H==S 时布局检测歧义 (generate_loop.py:212-231): `output.shape[1]==H` 和 `shape[2]==H` 都为真时总进入第一分支。若实际 [B,S,H,D] 布局则 inv_tau 应用错误维度。 — D4, confidence: 82% -- fixed
 - [x] **ENG-027** `[MED]` past_key_values=None 时静默跳过 KV 缓存填充 (generate_loop.py:614-625): decode 阶段使用空缓存，fused 模式 context_lens=0 可能产生 NaN。 — D2, confidence: 85% -- fixed
 - [x] **ENG-029** `[MED]` torch_ref dequant 在 fp16 vs Triton 在 fp32，dump 对比精度差异 (patch_model.py:278-285): 两路径 ~1e-3 差异影响 max_abs_diff 诊断准确性。 — D1, confidence: 82% -- fixed
-- [ ] **ENG-030** `[MED]` generate_from_ids 函数过长 535 行 (generate_loop.py:258-793): 8+ 职责耦合在一个函数中，难以单独测试和维护。 — D7, confidence: 95%
+- [x] **ENG-030** `[MED]` generate_from_ids 函数过长 535 行 (generate_loop.py:258-793): 8+ 职责耦合在一个函数中，难以单独测试和维护。 — D7, confidence: 95% — wont_fix: large refactor deferred (submission risk)
 - [x] **ENG-032** `[LOW]` _seq_len 仅在 layer_id==0 时更新 — 设计决策注释已添加到 int8_cache.py 和 int4_cache.py -- fixed
 - [x] **ENG-033** `[LOW]` INT8CacheWrapperContainer 每 decode step 重新构造 (generate_loop.py:668-671): 每步创建 num_layers 个 INT8CacheWrapper 对象，28-80 层模型生成 512 token 累计 14k-40k 临时对象。 — D4, confidence: 95% — fixed 2f6cddb
 - [x] **ENG-034** `[LOW]` attention_mask decode 阶段 O(N^2) 内存分配 (generate_loop.py:724-732): fused path `del attention_mask` 但 generate_loop 仍每步分配增长。长序列累计 ~400MB 无用分配。 — D5, confidence: 88% — fixed 2f6cddb
@@ -164,7 +164,7 @@
 - [x] **ENG-051** `[MED]` patch_model.py L580-588: inv_tau_layer.view(1,-1,1,1) 假设 1D 向量，若 calib 产物维度异常（如 [H,D]）静默 reshape 错误 — R6 PAT-015, confidence: 78% — fixed 264dcc3
 - [x] **ENG-052** `[MED]` patch_model.py L581: use_attn_temperature 默认 True（opt-out），自定义 engine 未定义此属性时温度缩放被静默应用 — R6 PAT-016, confidence: 75% — fixed 264dcc3
 - [x] **ENG-053** `[MED]` patch_model.py L19-21: _INT8_SIG_PARAMS/_INT4_SIG_PARAMS 在 import 时计算并缓存，test mock 或延迟加载导致签名集为空，kwargs 静默丢弃 — R6 PAT-022, confidence: 80% — fixed 264dcc3
-- [ ] **ENG-054** `[MED]` patch_model.py L806-807: forward_proxy 闭包持有 AttnClass + original_sig 引用，整个进程生命周期不释放；同一 class 多次 patch 覆盖前一 model 的 closures — R6 PAT-003, confidence: 78%
+- [x] **ENG-054** `[MED]` patch_model.py L806-807: forward_proxy 闭包持有 AttnClass + original_sig 引用，整个进程生命周期不释放；同一 class 多次 patch 覆盖前一 model 的 closures — R6 PAT-003, confidence: 78% — fixed (documented)
 - [x] **ENG-055** `[LOW]` int8_cache.py L440 / int4_cache.py L489: clear() 后 get_kv() warning "Call release()" 语义误导，用户可能是故意 reset — R6 GEN-010 — fixed 264dcc3
 - [x] **ENG-056** `[LOW]` generate_loop.py L859-865: locals() cleanup 模式脆弱，kv_cache 总是已定义使 if 检查无意义 — R6 GEN-028 — fixed 264dcc3
 - [x] **ENG-057** `[LOW]` patch_model.py L21: _FUSED_DUMP_WRITTEN 模块级 set 跨 test run 持续存在，第二次 dump 被静默抑制 — R6 PAT-019 — fixed 264dcc3
@@ -215,7 +215,7 @@
 - [x] **RUN-021** `[HIGH]` seq_len/gen_len 无类型和正值校验 (run_experiments.py:971-973): 从 YAML 直接取值无检查，0/负数/字符串可到达子脚本。batch 有 int()+or 1 保护但 seq_len/gen_len 没有。seq_len=0 导致空评估。 — D5 RUN rotation, confidence: 90% -- fixed
 - [x] **RUN-022** `[HIGH]` subprocess.run 无 timeout，子任务挂起导致管线无限阻塞 (run_experiments.py:1344-1349): 无 timeout 参数。GPU 死锁、NFS 阻塞、推理无限循环时整个管线停滞，retry 机制无法恢复。特别影响 overnight batch 运行。 — D5 RUN rotation, confidence: 92% -- fixed
 - [x] **RUN-023** `[HIGH]` use_attn_temperature 等布尔参数仅发 --no_ flag，True 时不发 flag 形成隐式耦合 (run_experiments.py:1185-1200): 仅在 False 时发 --no_use_attn_temperature，True 时不发任何 flag 依赖子脚本默认值。子脚本默认值变更时行为静默断裂。同理 use_static_scales/adaptive_static_k/v。 — D7 RUN rotation, confidence: 75% -- fixed
-- [ ] **RUN-024** `[MED]` main() 函数 1056 行，混合参数解析/配置校验/运行循环/命令构建/重试逻辑 (run_experiments.py:572-1627): 无法独立单元测试，添加新 benchmark 需在巨型函数中导航。至少应拆分命令构建和执行+重试。D7 RUN rotation, confidence: 95% — R3 降级: 纯代码质量问题，不影响正确性，投稿期间重构风险高
+- [x] **RUN-024** `[MED]` main() 函数 1056 行，混合参数解析/配置校验/运行循环/命令构建/重试逻辑 (run_experiments.py:572-1627): 无法独立单元测试，添加新 benchmark 需在巨型函数中导航。至少应拆分命令构建和执行+重试。D7 RUN rotation, confidence: 95% — R3 降级: 纯代码质量问题，不影响正确性，投稿期间重构风险高 — wont_fix: large refactor deferred (submission risk)
 - [x] **RUN-025** `[MED]` _classify_failure OOM 检测用 substring "oom" in content 无词边界 (run_experiments.py:278-280): "room"/"bloom"/"zoom" 等词触发假阳性 OOM 分类。对比 check_run_completeness.py L55 正确使用 \boom\b 正则。 — D1 RUN rotation, confidence: 85% -- fixed
 - [x] **RUN-026** `[MED]` _read_json bare except 返回 None 吞掉 JSON 损坏/权限错误 (run_experiments.py:107-117): JSONDecodeError 和 PermissionError 均返回 None，_init_manifest 静默覆盖损坏 manifest 销毁取证证据。无任何日志。 — D2 RUN rotation, confidence: 90% -- fixed
 - [x] **RUN-027** `[MED]` unknown task name 静默 continue 且 exit 0 (run_experiments.py:1125-1129): TASK_TO_SCRIPT.get(task) 返回 None 时仅 print 到 stdout 后 continue。用户拼错任务名时该任务被跳过，run 以 exit 0 完成。 — D2 RUN rotation, confidence: 92% -- fixed
