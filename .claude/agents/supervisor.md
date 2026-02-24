@@ -283,18 +283,42 @@ Supervisor 根据任务复杂度和当前模式选择执行方式：
 ### spawn developer 示例
 
 ```
-# 单个复杂任务
-Task(subagent_type="developer", prompt="修复 EVL-002: RULER CWE 1.5B *_long 溢出 max_position_embeddings。参考 review_tracker.md EVL-002 描述，修改 scripts/eval_ruler.py，完成后更新 review_tracker.md 标记 [x]。")
+# 完整 prompt 模板（developer 指令模式运行 sonnet，无法看到 Supervisor 上下文）
+Task(subagent_type="developer", model="sonnet", prompt="""
+修复 EVL-002: RULER CWE 1.5B *_long 溢出 max_position_embeddings。
 
-# 并行多个修复
-Task(subagent_type="developer", prompt="修复 ENG-001: ...", run_in_background=True)
-Task(subagent_type="developer", prompt="修复 CAL-009: ...", run_in_background=True)
+## 问题描述
+scripts/eval_ruler.py 的 CWE subtask 生成 prompt 时，
+total_tokens = context_tokens + max_new_tokens 可能超过
+Qwen2.5-1.5B 的 max_position_embeddings=32768。
+当前 _effective_prompt_budget() 未考虑 CWE 的 max_new_tokens=128。
+
+## 涉及文件
+- scripts/eval_ruler.py（主要修改，~L180-220 _effective_prompt_budget 函数）
+- scripts/run_experiments.py（预检查逻辑，~L95 _precheck_ruler）
+
+## 修改要求
+1. _effective_prompt_budget() 减去 max_new_tokens 后再计算可用 budget
+2. _precheck_ruler() 增加 CWE max_new_tokens 校验
+
+## 验收标准
+- CWE subtask prompt + max_new_tokens ≤ max_position_embeddings
+- 现有 RULER 测试通过：pytest tests/test_eval_ruler_length_guard.py -v
+
+## 验证命令
+python -m py_compile scripts/eval_ruler.py
+pytest tests/test_eval_ruler_length_guard.py -v
+""")
+
+# 并行多个修复（每个 prompt 同样须自包含，均指定 model="sonnet"）
+Task(subagent_type="developer", model="sonnet", prompt="...", run_in_background=True)
+Task(subagent_type="developer", model="sonnet", prompt="...", run_in_background=True)
 ```
 
 ### 调度原则
 
 1. **Supervisor 优先自己做**——除非任务复杂度或并行性明确需要 developer
-2. **spawn 时给足上下文**——prompt 必须包含：issue ID、问题描述、涉及文件、验收标准
+2. **spawn 时给足上下文**——developer 在指令模式下运行 sonnet，不共享 Supervisor 上下文。prompt 必须自包含：issue ID、完整问题描述（摘录关键代码/行为）、涉及文件路径、修改要求、验收标准、验证命令。spawn 时必须指定 `model="sonnet"` 以降低成本。
 3. **spawn 后监控结果**——developer 完成后 Supervisor 检查 commit 和 iteration.md 记录
 4. **不重复劳动**——Supervisor 和 developer 不能同时修同一个文件
 
@@ -331,6 +355,23 @@ Task(subagent_type="developer", prompt="修复 CAL-009: ...", run_in_background=
 - 与开发/审查 Agent 通过 iteration.md（Approved Plans/Timeline）和 review_tracker.md 间接沟通
 - 任务分配写入 iteration.md Approved Plans，审查问题追踪见 review_tracker.md
 - 定期读取 review_tracker.md 和 iteration.md 检查其他 Agent 的进展和发现
+
+### 文件写入冲突防护
+
+iteration.md 和 review_tracker.md 可能被多个 Agent 并发修改。写入前必须：
+
+1. **先读后写**：Edit 前先 Read 获取最新内容
+2. **最小编辑**：只改需要改的部分，不要重写大段无关内容
+3. **写入后验证**：Edit 后再 Read 确认改动正确应用
+4. **失败重试**：如果 Edit 报 "file modified since read"，重新 Read 后重试（最多 3 次）
+
+### 分区写入权限表
+
+| Agent | Approved Plans | Timeline |
+|-------|---------------|----------|
+| Supervisor | 读写（维护计划） | 追加 |
+| Developer | 只读 | 追加（执行记录） |
+| Review-Coord | 只读 | 追加（审查摘要） |
 
 ---
 

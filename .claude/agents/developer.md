@@ -72,6 +72,13 @@ skills:
 
 ## 启动流程（必须严格执行）
 
+Developer 支持两种启动模式：
+
+- **指令模式**（被 Supervisor spawn，prompt 包含具体任务）：跳过步骤 2-4，直接从 prompt 中获取任务，进入主任务循环 Step 1。完成后执行 Step 6 落地，然后结束（不循环）。
+- **自主模式**（独立启动 / start_agents.sh）：执行完整启动流程。
+
+### 自主模式启动步骤
+
 1. `date '+%Y-%m-%d %H:%M'` — 获取真实时间
 2. 读取 `review_tracker.md` — 获取 Phase Blockers 和 open issues
 3. 读取 `iteration.md` — 获取 Approved Plans、Timeline 最近条目
@@ -143,9 +150,11 @@ skills:
 
 ### Step 7: 下一个任务
 
-- 重新读取 review_tracker.md（审查 Agent 可能已新增发现）
-- 按优先级矩阵选择下一个任务
-- 回到 Step 1
+- **指令模式**：任务完成，结束退出
+- **自主模式**：
+  - 重新读取 review_tracker.md（审查 Agent 可能已新增发现）
+  - 按优先级矩阵选择下一个任务
+  - 回到 Step 1
 
 ---
 
@@ -209,14 +218,14 @@ skills:
 
 ### 已知 DRY 违规
 
-`_resolve_quant_bits()` 在 6 个脚本中重复定义。修改逻辑时必须全部同步，或提取到 `src/utils/`。
+`resolve_quant_bits()` 已提取到 `src/utils/repro.py`，6 个脚本统一从 `src.utils.repro` 导入。修改逻辑时只需改一处。
 
 ### 固定决策
 
 - 主模型：`Qwen/Qwen2.5-1.5B-Instruct`，扩展：7B + LLaMA-3.1-8B
 - Python 3.12、PyTorch 2.8.0（CUDA 12.8）
 - greedy 解码：`temperature=0.0, top_p=1.0, top_k=0`
-- 量化方法：fp16, int8_baseline, int8_ours, int4_baseline, int4_ours, kivi_style
+- 量化方法：fp16, int8_baseline, int8_ours, int4_baseline, int4_fused, int4_ours, int4_ours_mixed, kivi_style
 
 ---
 
@@ -246,3 +255,20 @@ skills:
 - 完成任务后在 iteration.md Timeline 记录，其他 Agent 会看到
 - 修复 issue 后编辑 review_tracker.md（见 Step 6）
 - 定期重新读取 review_tracker.md 检查审查 Agent 新发现的问题
+
+### 文件写入冲突防护
+
+iteration.md 和 review_tracker.md 可能被多个 Agent 并发修改。写入前必须：
+
+1. **先读后写**：Edit 前先 Read 获取最新内容
+2. **最小编辑**：只改需要改的部分，不要重写大段无关内容
+3. **写入后验证**：Edit 后再 Read 确认改动正确应用
+4. **失败重试**：如果 Edit 报 "file modified since read"，重新 Read 后重试（最多 3 次）
+
+### 分区写入权限表
+
+| Agent | Approved Plans | Timeline |
+|-------|---------------|----------|
+| Supervisor | 读写（维护计划） | 追加 |
+| Developer | 只读 | 追加（执行记录） |
+| Review-Coord | 只读 | 追加（审查摘要） |

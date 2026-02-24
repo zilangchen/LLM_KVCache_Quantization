@@ -4,20 +4,6 @@ This file is the only progress tracker for the repository.
 `lang.md` is deprecated and archived.
 Canonical agent workflow directory is `.agents/`.
 
-## TODO Backlog
-
-> **审查问题追踪见 `review_tracker.md`**（根目录权威文件）
->
-> ```bash
-> python scripts/review_tool.py stats       # 统计
-> python scripts/review_tool.py phase-gate  # 门禁
-> python scripts/review_tool.py progress    # 各模块进度
-> python scripts/review_tool.py open        # 列出 open issues
-> python scripts/review_tool.py open --sev HIGH --section AG  # 筛选
-> ```
-
----
-
 ## Approved Plans
 
 > 经讨论并被用户认可的阶段性执行方案（与审查问题分开，审查问题见 `review_tracker.md`）。
