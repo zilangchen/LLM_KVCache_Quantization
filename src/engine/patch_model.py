@@ -16,9 +16,34 @@ logger = logging.getLogger(__name__)
 
 # ENG-036: cache inspect.signature results at module level to avoid calling
 # inspect.signature on every decode step inside _fused_forward_impl.
+# ENG-053: These sets are cached at import time (intentional design). If a kernel
+# is monkey-patched in tests (e.g. replaced with a mock that has different
+# parameters), tests must call _reset_fused_state() after patching to invalidate
+# the cache, then restore the originals in tearDown.
 _INT8_SIG_PARAMS = set(inspect.signature(decode_attn_int8).parameters)
 _INT4_SIG_PARAMS = set(inspect.signature(decode_attn_int4).parameters)
 _FUSED_DUMP_WRITTEN = set()
+
+
+def _reset_fused_state() -> None:
+    """
+    ENG-057: Reset module-level mutable state for test isolation.
+
+    _FUSED_DUMP_WRITTEN is a module-level set that persists across test runs
+    within the same process. Tests that exercise the fused-dump path must call
+    this function in setUp/tearDown to ensure each test starts with a clean slate.
+
+    Also refreshes _INT8_SIG_PARAMS / _INT4_SIG_PARAMS so that tests that
+    monkey-patch the kernels (replacing decode_attn_int8/decode_attn_int4 with
+    stubs) see the updated parameter sets. After patching the kernels, call:
+        import src.engine.patch_model as pm
+        pm._reset_fused_state()
+    and restore the originals in tearDown.
+    """
+    global _INT8_SIG_PARAMS, _INT4_SIG_PARAMS, _FUSED_DUMP_WRITTEN
+    _INT8_SIG_PARAMS = set(inspect.signature(decode_attn_int8).parameters)
+    _INT4_SIG_PARAMS = set(inspect.signature(decode_attn_int4).parameters)
+    _FUSED_DUMP_WRITTEN = set()
 
 
 def _parse_optional_int_env(name: str) -> Optional[int]:
@@ -559,6 +584,21 @@ def _fused_forward_impl(
     """
     Decode-only fused attention path (q_len == 1).
     """
+    # ENG-050: Warn if caller passes a non-None attention_mask. The fused path
+    # unconditionally discards the mask (custom Triton kernel handles causality
+    # internally via context_lens). Silently dropping a non-None mask could
+    # confuse users who expect masking to be applied (e.g., for padded batches).
+    if attention_mask is not None:
+        import warnings
+        warnings.warn(
+            "Fused INT8/INT4 decode path received a non-None attention_mask, "
+            "which will be silently ignored. The fused Triton kernel handles "
+            "causality via context_lens and does not support external masks. "
+            "If you need padding support, use kv_mode='fp16' or ensure "
+            "attention_mask is None for fused decode.",
+            UserWarning,
+            stacklevel=3,
+        )
     del attention_mask, cache_position, kwargs
 
     layer_idx = getattr(cache_wrapper, "layer_idx", getattr(self, "layer_idx", 0))
@@ -598,6 +638,10 @@ def _fused_forward_impl(
 
     # Optional per-head temperature correction (inv_tau) for int8_ours.
     inv_tau = getattr(cache_wrapper.engine, "inv_tau", None)
+    # ENG-052: use_attn_temperature defaults to True (opt-out design). Users who
+    # do NOT want temperature correction must explicitly pass use_attn_temperature=False
+    # when constructing the cache engine. This matches the calibration workflow
+    # where inv_tau is always present but can be disabled for ablation studies.
     if inv_tau is not None and getattr(cache_wrapper.engine, "use_attn_temperature", True):
         # ENG-019: Bounds check for layer_idx, consistent with prefill path.
         if layer_idx >= inv_tau.shape[0]:
@@ -605,9 +649,25 @@ def _fused_forward_impl(
                 f"inv_tau has {inv_tau.shape[0]} layers but fused decode got layer_idx={layer_idx}."
             )
         inv_tau_layer = inv_tau[layer_idx].to(device=query_states.device, dtype=query_states.dtype)
+        # ENG-051: Validate that inv_tau_layer is a 1D vector [H] before reshaping
+        # to [1, H, 1, 1]. If inv_tau has an unexpected shape (e.g. [H, D] from a
+        # mis-saved calibration file), view(1, -1, 1, 1) would silently broadcast
+        # incorrectly, causing subtle scaling errors.
+        if inv_tau_layer.ndim != 1:
+            raise ValueError(
+                f"inv_tau[{layer_idx}] must be a 1D tensor [num_heads], "
+                f"got shape {tuple(inv_tau_layer.shape)}. "
+                "Check calibration file format."
+            )
         query_states = query_states * inv_tau_layer.view(1, -1, 1, 1)
 
     # Append current KV into the INT8 cache (quantizes internally).
+    # ENG-042: cache.append is called before the kernel. If the kernel later
+    # raises an exception, the cache seq_len has already been incremented by 1
+    # but no corresponding output is produced. Full rollback of cache internal
+    # state is not feasible here (the quantized data has been written into
+    # pre-allocated buffers and seq_len updated). We therefore wrap the kernel
+    # call in try/except and emit a warning so the inconsistency is visible.
     cache_wrapper.engine.append(layer_idx, key_states, value_states)
 
     # Fetch quantized cache for this layer (includes the appended token).
@@ -627,6 +687,11 @@ def _fused_forward_impl(
         )
 
     seq_len = int(k_quant.shape[2])
+    # ENG-049: context_lens is set uniformly to seq_len for all batch entries.
+    # This assumes a non-padded batch where every sequence has the same valid
+    # length (generate_from_ids enforces all-ones attention_mask for batch>1).
+    # Padded batches with variable context lengths are NOT supported here; if
+    # padding is introduced, per-sample context_lens must be tracked separately.
     context_lens = torch.full((bsz,), seq_len, dtype=torch.int32, device=hidden_states.device)
 
     # Decode attention (q_len == 1)
@@ -651,65 +716,81 @@ def _fused_forward_impl(
             bit_packed=bool(getattr(cache_wrapper.engine, "bit_packed", True)),
         )
 
-    if decode_impl == "triton_fused":
-        # ENG-035: Use inspect.signature to detect whether the kernel accepts the
-        # optional debug_stats / layer_idx kwargs, instead of relying on a broad
-        # `except TypeError` which would also swallow TypeErrors raised *inside* the
-        # kernel (e.g. wrong tensor dtype, shape mismatch). This makes signature
-        # probing explicit and keeps real kernel errors visible.
-        # ENG-036: signature results are cached at module level (_INT8_SIG_PARAMS,
-        # _INT4_SIG_PARAMS) to avoid per-decode-step inspect.signature overhead.
-        stats = getattr(cache_wrapper.engine, "decode_stats", None)
-        if cache_kind == "int8":
-            _int8_extra = {}
-            if "debug_stats" in _INT8_SIG_PARAMS:
-                _int8_extra["debug_stats"] = stats
-            if "layer_idx" in _INT8_SIG_PARAMS:
-                _int8_extra["layer_idx"] = layer_idx
-            attn_output_val = decode_attn_int8(
+    # ENG-042: Wrap the kernel call in try/except. If the kernel raises,
+    # cache.append has already committed (seq_len incremented, data written).
+    # Full rollback is not feasible without cache-internal undo support, so we
+    # warn that the cache may be in an inconsistent state and re-raise.
+    try:
+        if decode_impl == "triton_fused":
+            # ENG-035: Use inspect.signature to detect whether the kernel accepts the
+            # optional debug_stats / layer_idx kwargs, instead of relying on a broad
+            # `except TypeError` which would also swallow TypeErrors raised *inside* the
+            # kernel (e.g. wrong tensor dtype, shape mismatch). This makes signature
+            # probing explicit and keeps real kernel errors visible.
+            # ENG-036: signature results are cached at module level (_INT8_SIG_PARAMS,
+            # _INT4_SIG_PARAMS) to avoid per-decode-step inspect.signature overhead.
+            stats = getattr(cache_wrapper.engine, "decode_stats", None)
+            if cache_kind == "int8":
+                _int8_extra = {}
+                if "debug_stats" in _INT8_SIG_PARAMS:
+                    _int8_extra["debug_stats"] = stats
+                if "layer_idx" in _INT8_SIG_PARAMS:
+                    _int8_extra["layer_idx"] = layer_idx
+                attn_output_val = decode_attn_int8(
+                    q_kernel,
+                    k_quant,
+                    v_quant,
+                    k_scale,
+                    v_scale,
+                    context_lens,
+                    sm_scale=sm_scale,
+                    **_int8_extra,
+                )
+            else:
+                _int4_extra = {}
+                if "debug_stats" in _INT4_SIG_PARAMS:
+                    _int4_extra["debug_stats"] = stats
+                if "layer_idx" in _INT4_SIG_PARAMS:
+                    _int4_extra["layer_idx"] = layer_idx
+                attn_output_val = decode_attn_int4(
+                    q_kernel,
+                    k_quant,
+                    v_quant,
+                    k_scale,
+                    v_scale,
+                    context_lens,
+                    sm_scale=sm_scale,
+                    bit_packed=bool(getattr(cache_wrapper.engine, "bit_packed", True)),
+                    head_dim=head_dim,
+                    **_int4_extra,
+                )
+        elif decode_impl == "torch_ref":
+            if k_int8_for_ref is None or v_int8_for_ref is None:
+                raise RuntimeError("torch_ref decode for int4 requires materialized INT8 tensors.")
+            attn_output_val = _decode_attn_int8_torch_ref(
                 q_kernel,
-                k_quant,
-                v_quant,
+                k_int8_for_ref,
+                v_int8_for_ref,
                 k_scale,
                 v_scale,
                 context_lens,
                 sm_scale=sm_scale,
-                **_int8_extra,
             )
         else:
-            _int4_extra = {}
-            if "debug_stats" in _INT4_SIG_PARAMS:
-                _int4_extra["debug_stats"] = stats
-            if "layer_idx" in _INT4_SIG_PARAMS:
-                _int4_extra["layer_idx"] = layer_idx
-            attn_output_val = decode_attn_int4(
-                q_kernel,
-                k_quant,
-                v_quant,
-                k_scale,
-                v_scale,
-                context_lens,
-                sm_scale=sm_scale,
-                bit_packed=bool(getattr(cache_wrapper.engine, "bit_packed", True)),
-                head_dim=head_dim,
-                **_int4_extra,
+            raise ValueError(
+                f"Unknown decode_attn_impl={decode_impl!r}. Use 'triton_fused' or 'torch_ref'."
             )
-    elif decode_impl == "torch_ref":
-        if k_int8_for_ref is None or v_int8_for_ref is None:
-            raise RuntimeError("torch_ref decode for int4 requires materialized INT8 tensors.")
-        attn_output_val = _decode_attn_int8_torch_ref(
-            q_kernel,
-            k_int8_for_ref,
-            v_int8_for_ref,
-            k_scale,
-            v_scale,
-            context_lens,
-            sm_scale=sm_scale,
+    except Exception:
+        import warnings
+        warnings.warn(
+            f"ENG-042: Kernel call failed at layer_idx={layer_idx} after cache.append() "
+            "already committed. The cache seq_len has been incremented but no attention "
+            "output was produced. Cache state is potentially inconsistent; generation "
+            "quality may be degraded for subsequent steps.",
+            RuntimeWarning,
+            stacklevel=3,
         )
-    else:
-        raise ValueError(
-            f"Unknown decode_attn_impl={decode_impl!r}. Use 'triton_fused' or 'torch_ref'."
-        )
+        raise
 
     _maybe_dump_fused_decode(
         layer_idx=layer_idx,
@@ -810,6 +891,14 @@ def apply_int8_fused_patch(model):
             if kv_heads is not None:
                 setattr(attn, "_kv_num_key_value_heads", int(kv_heads))
 
+    # ENG-043: AttnClass is detected from layer[0] only. This assumes all
+    # attention layers use the same class (homogeneous model architecture).
+    # Heterogeneous models where different layers use different attention classes
+    # (e.g. some layers with sliding-window attention, or hybrid MoE+dense models)
+    # will have the patch applied only to the class of layer[0]; other attention
+    # classes will NOT be patched and will fall through to the original forward.
+    # If your model uses heterogeneous attention, collect all unique attention
+    # classes from all layers and patch each one separately.
     first_attn = model.model.layers[0].self_attn
     AttnClass = first_attn.__class__
 
@@ -916,3 +1005,57 @@ def apply_int8_fused_patch(model):
         return AttnClass._original_forward(self, hidden_states, **kwargs_fwd)
 
     AttnClass.forward = forward_proxy
+    # ENG-044: Store the patched class reference so remove_int8_fused_patch()
+    # can restore the original forward without needing the model argument.
+    apply_int8_fused_patch._patched_class = AttnClass
+
+
+def remove_int8_fused_patch(model=None) -> bool:
+    """
+    ENG-044: Restore the original attention forward after apply_int8_fused_patch().
+
+    Without an unpatch API, the class-level monkey-patch is permanent for the
+    process lifetime, making it impossible to test the baseline forward or to
+    switch KV modes mid-run. This function restores the saved _original_forward.
+
+    Args:
+        model: Optional. If provided, the AttnClass is detected from
+               model.model.layers[0].self_attn (same as apply_int8_fused_patch).
+               If None, the class stored by the last apply_int8_fused_patch()
+               call is used (via apply_int8_fused_patch._patched_class).
+
+    Returns:
+        True if the patch was removed, False if no patch was active.
+    """
+    AttnClass = None
+    if model is not None:
+        try:
+            AttnClass = model.model.layers[0].self_attn.__class__
+        except Exception:
+            AttnClass = None
+
+    if AttnClass is None:
+        AttnClass = getattr(apply_int8_fused_patch, "_patched_class", None)
+
+    if AttnClass is None:
+        logger.warning(
+            "remove_int8_fused_patch: no patched class found. "
+            "Either apply_int8_fused_patch() was never called, or the model "
+            "argument is required to identify the class."
+        )
+        return False
+
+    original = getattr(AttnClass, "_original_forward", None)
+    if original is None:
+        logger.warning(
+            "remove_int8_fused_patch: %s has no _original_forward; "
+            "patch may not have been applied.",
+            AttnClass.__name__,
+        )
+        return False
+
+    AttnClass.forward = original
+    del AttnClass._original_forward
+    apply_int8_fused_patch._patched_class = None
+    logger.info("Removed INT8 fused patch from %s.forward.", AttnClass.__name__)
+    return True

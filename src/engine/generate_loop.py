@@ -504,15 +504,23 @@ def generate_from_ids(
                 calib_clip_v = calib.get("clip_percentile_v", calib.get("clip_percentile", clip_percentile))
 
                 if calib_group_k and calib_group_v and calib_group_k != calib_group_v:
+                    # CAL-022: group_size_v is read from calib but the cache engine
+                    # uses a single group_size for both K and V. Warn explicitly that
+                    # group_size_v is discarded so users know V-side calibration differs.
                     warnings.warn(
-                        f"Calibration group_size_k ({calib_group_k}) != group_size_v ({calib_group_v}); "
-                        "using group_size_k for both.",
+                        f"CAL-022: Calibration group_size_k ({calib_group_k}) != group_size_v ({calib_group_v}); "
+                        "the cache engine uses a single group_size for both K and V. "
+                        "group_size_k will be used for both; group_size_v is discarded. "
+                        "Re-calibrate with symmetric group sizes to avoid this mismatch.",
                         UserWarning,
                     )
                 if calib_clip_k and calib_clip_v and calib_clip_k != calib_clip_v:
+                    # CAL-022: clip_percentile_v is read from calib but the cache engine
+                    # uses a single clip_percentile for both K and V. Warn explicitly.
                     warnings.warn(
-                        f"Calibration clip_percentile_k ({calib_clip_k}) != clip_percentile_v ({calib_clip_v}); "
-                        "using clip_percentile_k for both.",
+                        f"CAL-022: Calibration clip_percentile_k ({calib_clip_k}) != clip_percentile_v ({calib_clip_v}); "
+                        "the cache engine uses a single clip_percentile for both K and V. "
+                        "clip_percentile_k will be used for both; clip_percentile_v is discarded.",
                         UserWarning,
                     )
 
@@ -531,6 +539,29 @@ def generate_from_ids(
                     static_k_scale = torch.tensor(calib["k_scale"], dtype=torch.float16)
                 if use_static_scales and "v_scale" in calib:
                     static_v_scale = torch.tensor(calib["v_scale"], dtype=torch.float16)
+
+                # ENG-048: Detect asymmetric k_scale / v_scale presence and warn.
+                # Having k_scale without v_scale (or vice versa) means one side uses
+                # static scales while the other uses dynamic quantization. This is
+                # almost always unintentional and indicates a corrupt or partial
+                # calibration file. Without this warning, the mismatch is silent.
+                if use_static_scales:
+                    _has_k_scale = "k_scale" in calib
+                    _has_v_scale = "v_scale" in calib
+                    if _has_k_scale and not _has_v_scale:
+                        warnings.warn(
+                            "ENG-048: Calibration file has 'k_scale' but no 'v_scale'. "
+                            "K uses static scales; V will use dynamic quantization. "
+                            "This asymmetry is usually unintentional. Verify calibration file.",
+                            UserWarning,
+                        )
+                    elif _has_v_scale and not _has_k_scale:
+                        warnings.warn(
+                            "ENG-048: Calibration file has 'v_scale' but no 'k_scale'. "
+                            "V uses static scales; K will use dynamic quantization. "
+                            "This asymmetry is usually unintentional. Verify calibration file.",
+                            UserWarning,
+                        )
                 if use_attn_temperature and "inv_tau" in calib:
                     inv_tau = torch.tensor(calib["inv_tau"], dtype=torch.float32)
                 outlier_rescue_ratio = float(calib.get("int4_outlier_ratio", 0.0) or 0.0)
@@ -674,6 +705,15 @@ def generate_from_ids(
 
             # Extract and store KV cache (prefill)
             if outputs.past_key_values is not None:
+                # ENG-046: We iterate outputs.past_key_values as an iterable of
+                # (k, v) tuples. For transformers < 4.36 this is a plain tuple.
+                # For transformers >= 4.36, model.forward may return a DynamicCache
+                # object. We rely on DynamicCache.__iter__ yielding per-layer
+                # (key_cache[i], value_cache[i]) tuples, which is the documented
+                # behavior as of transformers 4.40 but may change in future versions.
+                # If the iteration behavior changes (e.g. yields layer objects instead
+                # of tensor tuples), this loop will break with a TypeError at unpack.
+                # Pin transformers version in requirements.txt to avoid silent drift.
                 for i, (k, v) in enumerate(outputs.past_key_values):
                     kv_cache.append(i, k, v)
                 if (
@@ -773,6 +813,24 @@ def generate_from_ids(
                         # Only append the newly produced token when model returns full cache.
                         # This avoids re-quantizing historical tokens already stored in kv_cache.
                         if k.shape[2] > 1:
+                            # ENG-045: The model returned more than one new KV token
+                            # (k.shape[2] > 1). This occurs with speculative decoding
+                            # or models that return the full cumulative cache instead
+                            # of only the new token. We take only the last token to
+                            # avoid re-appending previously cached tokens, but any
+                            # accepted draft tokens beyond the last one are silently
+                            # dropped. Speculative decoding multi-token returns are
+                            # NOT correctly handled by this non-fused decode path.
+                            import warnings
+                            warnings.warn(
+                                f"ENG-045: Layer {i} decode step returned k.shape[2]={k.shape[2]} > 1. "
+                                "Only the last token will be appended to the KV cache. "
+                                "Speculative decoding with multiple accepted tokens is not "
+                                "supported in non-fused mode; extra tokens will be dropped, "
+                                "which may degrade output quality.",
+                                RuntimeWarning,
+                                stacklevel=2,
+                            )
                             k_new = k[:, :, -1:, :]
                             v_new = v[:, :, -1:, :]
                             kv_cache.append(i, k_new, v_new)
@@ -866,14 +924,23 @@ def generate_from_ids(
         batch=int(batch_size),
     )
 
-    # Cleanup memory to prevent OOM across runs
-    if "kv_cache" in locals():
+    # ENG-056: Use explicit try/del instead of `if name in locals()` checks.
+    # locals() inspection is fragile: it captures the snapshot at call time and
+    # can miss names that were conditionally assigned in branches not taken.
+    # Direct del with try/except NameError is more robust and intent-clear.
+    try:
         kv_cache.clear()
         del kv_cache
-    if "outputs" in locals():
+    except NameError:
+        pass
+    try:
         del outputs
-    if "current_past_key_values" in locals():
+    except NameError:
+        pass
+    try:
         del current_past_key_values
+    except NameError:
+        pass
 
     gc.collect()
     torch.cuda.empty_cache()

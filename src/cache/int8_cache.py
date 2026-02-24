@@ -434,12 +434,21 @@ class INT8KVCache:
             raise ValueError(f"Cache for layer {layer_id} is empty")
 
         seq_len = self._layer_seq_lens[layer_id]
-        # KVC-018: warn on zero-length get_kv after clear()
+        # KVC-018 / ENG-055: warn on zero-length get_kv, distinguishing between
+        # the clear() state (buffers allocated, seq_len reset to 0) and the
+        # fully-released state (buffers are None, already handled above).
+        # After clear(), seq_len==0 but _k_cache is still allocated. Telling
+        # the user to "Call release()" is misleading when they may have called
+        # clear() intentionally (e.g. to reuse buffers for a new sequence).
+        # Instead, inform them that get_kv() returns an empty slice and that
+        # release() is only needed if they want to free the buffer memory.
         if seq_len == 0 and self._k_cache[layer_id] is not None:
             logger.warning(
-                "get_kv(layer_id=%d) returning zero-length tensors; "
-                "buffers are still allocated (likely after clear()). "
-                "Call release() to free memory.",
+                "get_kv(layer_id=%d) returning zero-length tensors. "
+                "The cache was cleared (clear() resets seq_len to 0 but keeps "
+                "pre-allocated buffers for reuse). If you intended to append new "
+                "tokens, call append() first. Call release() only if you want to "
+                "free the underlying buffer memory.",
                 layer_id,
             )
         q_k = self._k_cache[layer_id][:, :, :seq_len, :]
