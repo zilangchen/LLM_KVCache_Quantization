@@ -1,6 +1,6 @@
 # Code Review Tracker
 
-> 367 issues | 243 fixed + 10 false_positive + 4 wont_fix | 106 open (0 CRIT, 27 HIGH, 53 MED, 26 LOW)
+> 367 issues | 254 fixed + 10 false_positive + 4 wont_fix | 95 open (0 CRIT, 27 HIGH, 49 MED, 19 LOW)
 > Phase Gate: **CLEAR** — 0 CRITICAL open
 > Last updated: 2026-02-24
 
@@ -36,7 +36,7 @@
 - [ ] **AGG-008** `[MED]` KIVI quant_bits 在 pairings 中未区分 INT8/INT4 (aggregate_results.py
 - [ ] **AGG-009** `[MED]` kv_mode 显示顺序依赖默认排序 (aggregate_results.py
 - [ ] **AGG-012** `[LOW]` Bootstrap seed 基于 SHA256 hash 的独立性
-- [ ] **AGG-014** `[LOW]` Bootstrap CI 单样本情况返回 (value, value) 无警告 (L1059-1060)
+- [x] **AGG-014** `[LOW]` Bootstrap CI 单样本情况返回 (value, value) 无警告 (L1059-1060) -- fixed
 - [ ] **AGG-015** `[LOW]` 精确枚举阈值 n=16 硬编码 (L1092-1107)
 - [x] **AGG-029** `[MED]` gain_pct_mean（跨 seed 配对差均值）vs gain_pct（聚合均值上的单点增益）定义不同 (generate_thesis_report.py:586 vs 356): significance_summary 用 gain_pct_mean，claim_validation 用 gain_pct。Jensen's inequality 下两者不等。同一 claim 在两个表中可能给出矛盾的 practical_pass。 — D4 EXP rotation, confidence: 88% -- fixed
 - [ ] **AGG-031** `[MED]` sign-flip 双尾检验 + 方向一致性检查 = 事实上 2 倍保守的单尾检验 (aggregate_results.py:1089): sign-flip p 值基于 |mean|（双尾），但 claim 验证要求 significant_q AND favors_challenger（单侧判据）。真正的单尾 p 应为 p_two/2。n=5 下可能导致本应显著的 claim 被误判。 — D1 EXP rotation, confidence: 80%
@@ -74,13 +74,13 @@
 - [ ] **ENG-004** `[HIGH]` KIVI 模式静默忽略参数 (L412-486, L563)
 - [x] **ENG-005** `[MED]` generate_loop.py batch>1 填充检查移除 -- fixed
 - [x] **ENG-006** `[MED]` KIVI kv_mode 未校验 quant_bits∈{4,8} (L294-310) -- fixed
-- [ ] **ENG-007** `[MED]` KIVI decode 路径 dequant→requant 精度累积（已知 D2 但补充细节）
-- [ ] **ENG-008** `[MED]` Batch 约束重复校验 (L344-361)
+- [x] **ENG-007** `[MED]` KIVI decode 路径 dequant→requant 精度累积（已知 D2 但补充细节） -- fixed
+- [x] **ENG-008** `[MED]` Batch 约束重复校验 (L344-361) -- fixed
 - [x] **ENG-009** `[MED]` kivi_style_cache.py V scale/zp 缓冲区 dtype 隐性转换 (L140-149, L240-241) -- fixed
 - [x] **ENG-010** `[MED]` patch_model.py kv_heads 推断失败静默降级 (L473-477) -- fixed
 - [x] **ENG-011** `[MED]` patch_model.py KIVI 缓存若被错误路由到 fused forward (L556-567) -- fixed
-- [ ] **ENG-012** `[LOW]` docstring 未说明 KIVI 模式行为 (L258-292)
-- [ ] **ENG-013** `[LOW]` KIVI docstring 缺失 (L288-291)
+- [x] **ENG-012** `[LOW]` docstring 未说明 KIVI 模式行为 (L258-292) -- fixed
+- [x] **ENG-013** `[LOW]` KIVI docstring 缺失 (L288-291) -- fixed
 - [x] **ENG-014** `[LOW]` generate_loop.py kivi_style 接受但静默忽略 calib_file/use_attn_temperature/adaptive_static_scales 参数 (L412-485, L563-566): 已... -- fixed
 - [x] **ENG-021** `[MED]` static_k_scale/v_scale 以 fp16 加载，小 scale 精度损失 (generate_loop.py:480-482): 低活跃度 head 的 scale 接近 fp16 subnormal 范围仅 ~3 位有效数字。inv_tau 正确用 float32。 — D1, confidence: 85% -- fixed
 - [x] **ENG-023** `[MED]` fused 路径静默忽略 output_attentions=True (patch_model.py:778,808-818): fused path 返回 None 代替 attention weights，可解释性工具得到 None 无报错。 — D2+D4, confidence: 85% -- fixed
@@ -114,7 +114,7 @@
 - [x] **PRF-003** `[MED]` profile_latency.py run 间无显式 CUDA sync (profile_latency.py -- fixed
 - [x] **PRF-004** `[MED]` kivi_style decode_attn_impl 参数被静默忽略 (profile_latency.py -- fixed
 - [x] **PRF-005** `[MED]` profile_memory.py GPU 峰值来源判断逻辑 (L383-385) -- fixed
-- [ ] **PRF-009** `[LOW]` calib_file 对 kivi_style 静默无操作 (eval_ppl.py
+- [x] **PRF-009** `[LOW]` calib_file 对 kivi_style 静默无操作 (eval_ppl.py -- fixed
 - [ ] **PRF-010** `[LOW]` output 属性可靠性 (L348-352)
 
 ### QNT. 量化模块 — `src/quant/`
@@ -133,7 +133,7 @@
 - [ ] **RUN-012** `[LOW]` append_history 未记录 kv_mode/quant_bits 变化 (L272-278)
 - [ ] **RUN-013** `[LOW]` manifest history 仅保留最近 20 条 (L334)
 - [x] **RUN-014** `[LOW]` 消融 output dir 命名含双重 seed — run_name 含 seed 是设计意图（消融每 seed 独立 run），不影响功能 -- wont_fix
-- [ ] **RUN-017** `[LOW]` run_experiments.py RULER 截断 warning 仅 print 未写入 manifest: `_compute_ruler_truncation_warning()` 结果只打印到 stdout，不记录到 `run_manifest.json`。批量实验中 warning 混入大量日志难以追溯。 — D2 incremental, confidence: 82%
+- [x] **RUN-017** `[LOW]` run_experiments.py RULER 截断 warning 仅 print 未写入 manifest: `_compute_ruler_truncation_warning()` 结果只打印到 stdout，不记录到 `run_manifest.json`。批量实验中 warning 混入大量日志难以追溯。 — D2 incremental, confidence: 82% -- fixed
 - [x] **RUN-018** `[HIGH]` _same_commit_prefix 将 empty/unknown 视为兼容，允许跨 commit append 静默通过 (run_experiments.py:152-159): 空字符串和 "unknown" 均返回 True。非 git 环境或 git 损坏时 _get_git_commit 返回 "unknown"，append 校验全部通过，不同代码版本结果可混入同一 run_dir。 — D2+D5 RUN rotation, confidence: 88% -- fixed
 - [x] **RUN-019** `[HIGH]` _collect_env_info 静默吞掉 torch/transformers import 错误 (run_experiments.py:84-104): except Exception 设置 "unavailable" 回退值无任何日志。环境根本性损坏（如 CUDA 驱动不匹配）被隐藏，子进程才崩溃导致难以诊断。 — D2 RUN rotation, confidence: 78% -- fixed
 - [x] **RUN-020** `[HIGH]` load_config 对空 YAML 返回 None → 后续 .get() 崩溃 (run_experiments.py:819): yaml.safe_load 对空文件/仅注释文件返回 None，L835 config.get("project") 产生 AttributeError，报错信息完全不可理解。 — D5 RUN rotation, confidence: 95% -- fixed
@@ -228,19 +228,19 @@
 
 - [x] **QUA-003** `[MED]` `_safe_t_crit` 内联函数定义在 `_add_ci95_columns` 循环体内，每列均重建函数对象 (scripts/aggregate_results.py:227-230): `def _safe_t_crit(n: float) -> float:` 定义在 `for col in list(out.columns):` 循环体内，每次迭代都创建新函数对象。该函数不依赖任何循环变量，应提取为模块级私有函数，避免循环内函数定义的反模式。 — D7 全项目, confidence: 90% -- fixed
 
-- [ ] **QUA-004** `[MED]` `INT8CacheWrapper` 类含开发时遗留悬挂注释，参数缺少 type hints (src/engine/patch_model.py:64-91): `__init__` 参数 `cache_engine`, `layer_idx` 无类型注释；`update()` 方法注释包含 `"But we handle updates in generate_loop usually?"` 等疑问句开发笔记，在生产代码中不应存留；该类缺少 class-level docstring，仅 `INT8CacheWrapperContainer` 有说明。 — D7 全项目, confidence: 85%
+- [x] **QUA-004** `[MED]` `INT8CacheWrapper` 类含开发时遗留悬挂注释，参数缺少 type hints (src/engine/patch_model.py:64-91): `__init__` 参数 `cache_engine`, `layer_idx` 无类型注释；`update()` 方法注释包含 `"But we handle updates in generate_loop usually?"` 等疑问句开发笔记，在生产代码中不应存留；该类缺少 class-level docstring，仅 `INT8CacheWrapperContainer` 有说明。 — D7 全项目, confidence: 85% -- fixed
 
 - [ ] **QUA-005** `[MED]` `KV_MODE_ORDER` 在两处独立定义，两脚本之间无共享源 (scripts/aggregate_results.py:87-97, scripts/export_tables_latex.py:55-65): 当前两处顺序恰好一致，但两处独立维护——若一处新增 kv_mode，另一处不会自动更新，导致排序或显示名不一致。建议提取到 `src/utils/constants.py` 统一管理（`generate_loop.py:316-326` 的 kv_mode 合法值列表也应同步）。 — D7 全项目, confidence: 88%
 
 - [ ] **QUA-006** `[MED]` `eval_ppl.py` 文件顶部保留大段开发决策笔记作为行内注释 (scripts/eval_ppl.py:23-43): L23-43 共 21 行注释描述"为何用 HF 滑动窗口而非自定义引擎"，写作风格为开发过程思考（"LIMITATION:", "DECISION:", "Wait, PPL is ..."），不适合留在生产源码顶部，应移入 `docs/` 或作为 ADR 记录。 — D7 全项目, confidence: 82%
 
-- [ ] **QUA-007** `[MED]` `run_experiments.py` 中 `_timeout` 局部变量以下划线前缀命名，违反 Python 惯例 (scripts/run_experiments.py:1437): `_timeout = int(args.subprocess_timeout) if int(args.subprocess_timeout) > 0 else None`——下划线前缀惯例用于模块级/类级私有名，局部变量无需此前缀。与同函数其他局部变量（`returncode`, `failure_type`, `log_mode`）风格不一致。建议命名为 `timeout_sec`。 — D7 全项目, confidence: 82%
+- [x] **QUA-007** `[MED]` `run_experiments.py` 中 `_timeout` 局部变量以下划线前缀命名，违反 Python 惯例 (scripts/run_experiments.py:1437): `_timeout = int(args.subprocess_timeout) if int(args.subprocess_timeout) > 0 else None`——下划线前缀惯例用于模块级/类级私有名，局部变量无需此前缀。与同函数其他局部变量（`returncode`, `failure_type`, `log_mode`）风格不一致。建议命名为 `timeout_sec`。 — D7 全项目, confidence: 82% -- fixed
 
 - [ ] **QUA-008** `[LOW]` `_safe_t_crit` 中 `return 0.0`（n<=1 分支）被后续 `.where(cnt > 1, np.nan)` 覆盖，存在语义冗余 (scripts/aggregate_results.py:227-233): `_safe_t_crit` 在 `n <= 1` 时返回 `0.0`（使 `t_crit * sem = 0`），但紧接着 `ci_half = ci_half.where(cnt > 1, np.nan)` 将 `cnt <= 1` 处强制置 `NaN`，使该返回值永远不进入最终输出。应在注释中说明双重保护的分工，或简化逻辑。 — D7 全项目, confidence: 80%
 
-- [ ] **QUA-009** `[LOW]` `aggregate_results.py` import 块违反 PEP 8 顺序，标准库 `logging` 插入第三方库块中间 (scripts/aggregate_results.py:14-26): `import logging`（L25）出现在 `matplotlib`（L23）和 `numpy`（L24）第三方库之间，PEP 8 要求标准库导入集中在第三方库之前。应将 `import logging` 上移至标准库导入组（L14-21）。 — D7 全项目, confidence: 90%
+- [x] **QUA-009** `[LOW]` `aggregate_results.py` import 块违反 PEP 8 顺序，标准库 `logging` 插入第三方库块中间 (scripts/aggregate_results.py:14-26): `import logging`（L25）出现在 `matplotlib`（L23）和 `numpy`（L24）第三方库之间，PEP 8 要求标准库导入集中在第三方库之前。应将 `import logging` 上移至标准库导入组（L14-21）。 — D7 全项目, confidence: 90% -- fixed
 
-- [ ] **QUA-010** `[LOW]` `profile_latency.py` / `profile_memory.py` 的 `_resolve_quant_bits` DEPRECATED 副本未加 `warnings.warn` (scripts/profile_latency.py:54-66, scripts/profile_memory.py:59-71): `eval_ppl.py:83` 的副本在 PRF-002 修复时加了 `warnings.warn`，但 `profile_latency.py` 和 `profile_memory.py` 的副本仅有注释 `# DEPRECATED`，调用方不会收到运行时提示，与 `eval_ppl.py` 的处理不一致。 — D7 全项目, confidence: 85%
+- [x] **QUA-010** `[LOW]` `profile_latency.py` / `profile_memory.py` 的 `_resolve_quant_bits` DEPRECATED 副本未加 `warnings.warn` (scripts/profile_latency.py:54-66, scripts/profile_memory.py:59-71): `eval_ppl.py:83` 的副本在 PRF-002 修复时加了 `warnings.warn`，但 `profile_latency.py` 和 `profile_memory.py` 的副本仅有注释 `# DEPRECATED`，调用方不会收到运行时提示，与 `eval_ppl.py` 的处理不一致。 — D7 全项目, confidence: 85% -- fixed
 
 ### SEC. 安全漏洞 — 全项目 (D3 审查 2026-02-24)
 
@@ -257,7 +257,7 @@
 ## Resolved
 
 <details>
-<summary>243 fixed + 10 false_positive + 4 wont_fix (click to expand)</summary>
+<summary>254 fixed + 10 false_positive + 4 wont_fix (click to expand)</summary>
 
 ### AGG. 聚合
 - [x] **AGG-001** `[CRIT]` kivi_style 完全缺失显著性配对 — fixed commit 03ed4a0
