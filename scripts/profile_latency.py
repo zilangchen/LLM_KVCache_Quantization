@@ -24,31 +24,17 @@ from src.utils.hf import resolve_pretrained_path
 from src.utils.timing import reset_gpu_memory_stats
 from src.utils.repro import (
     build_config_snapshot,
+    get_git_commit,  # QUA-001: centralized
     get_hardware_info,
     set_seed,
     write_config_snapshot,
 )
 from scripts.config_utils import load_config, normalize_kv_params, resolve_run_config
 from transformers import AutoModelForCausalLM, AutoTokenizer
-import subprocess
 
 EXIT_OOM = 73
 EXIT_EXCEPTION = 74
 _LAST_ARGS: argparse.Namespace | None = None
-
-
-def get_git_commit() -> str:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=project_root,
-        )
-        return result.stdout.strip()[:8]
-    except Exception:
-        return "unknown"
 
 
 # DEPRECATED: local copy kept for standalone execution.  Canonical version

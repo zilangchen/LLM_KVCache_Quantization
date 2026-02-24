@@ -22,7 +22,6 @@ import logging
 import random
 import re
 import string
-import subprocess
 import sys
 import traceback
 
@@ -45,6 +44,7 @@ from src.engine.generate_loop import generate_from_ids
 from src.utils.hf import resolve_pretrained_path
 from src.utils.repro import (
     build_config_snapshot,
+    get_git_commit,  # QUA-001: centralized
     get_hardware_info,
     set_seed,
     write_config_snapshot,
@@ -64,20 +64,6 @@ class LongBenchSample:
     question: str
     answers: List[str]
     sample_id: str
-
-
-def get_git_commit() -> str:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=project_root,
-        )
-        return result.stdout.strip()[:8]
-    except Exception:
-        return "unknown"
 
 
 def _resolve_out_dir(out_dir_arg: str) -> Path:

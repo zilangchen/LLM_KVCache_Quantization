@@ -14,7 +14,6 @@ import numpy as np
 import traceback
 from datetime import datetime
 from pathlib import Path
-import subprocess
 
 script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
@@ -24,6 +23,7 @@ from src.engine.generate_loop import generate_from_ids
 from src.utils.hf import resolve_pretrained_path
 from src.utils.repro import (
     build_config_snapshot,
+    get_git_commit,  # QUA-001: centralized
     get_hardware_info,
     set_seed,
     write_config_snapshot,
@@ -34,20 +34,6 @@ from scripts.config_utils import load_config, normalize_kv_params, resolve_run_c
 EXIT_OOM = 73
 EXIT_EXCEPTION = 74
 _LAST_ARGS: argparse.Namespace | None = None
-
-
-def get_git_commit() -> str:
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=project_root,
-        )
-        return result.stdout.strip()[:8]
-    except Exception:
-        return "unknown"
 
 
 # DEPRECATED: local copy kept for standalone execution.  Canonical version

@@ -16,19 +16,12 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Add project root to path
+script_dir = Path(__file__).resolve().parent
+project_root = script_dir.parent
+sys.path.insert(0, str(project_root))
 
-def get_git_commit() -> str:
-    """Get current git commit hash."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return result.stdout.strip()[:8]
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return "unknown"
+from src.utils.repro import get_git_commit  # QUA-001: centralized
 
 
 def get_gpu_info() -> str:

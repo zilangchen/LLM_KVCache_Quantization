@@ -22,7 +22,6 @@ Output:
 import argparse
 import csv
 import os
-import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -33,20 +32,7 @@ project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
 from scripts.config_utils import load_config, resolve_run_config
-
-def get_git_commit() -> str:
-    """Get current git commit hash."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=project_root,
-        )
-        return result.stdout.strip()[:8]
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return "unknown"
+from src.utils.repro import get_git_commit  # QUA-001: centralized
 
 
 def generate_prompt(target_tokens: int, tokenizer) -> str:

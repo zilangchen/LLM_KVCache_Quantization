@@ -5,7 +5,9 @@ Reproducibility utilities (seed control and metadata helpers).
 
 from __future__ import annotations
 
+import subprocess
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Optional
 import os
 import random
@@ -37,6 +39,32 @@ def set_seed(seed: int = 1234, deterministic: bool = True) -> None:
             pass
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+
+
+def get_git_commit() -> str:
+    """Get current git commit hash (short, 8 chars).
+
+    Attempts to resolve the project root by walking up from this file's
+    location; falls back to the current working directory if the heuristic
+    fails.  Returns ``"unknown"`` when git is unavailable or the directory
+    is not a repository.
+    """
+    # Best-effort project root: src/utils/repro.py -> ../../
+    try:
+        _project_root = str(Path(__file__).resolve().parent.parent.parent)
+    except Exception:
+        _project_root = None
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=_project_root,
+        )
+        return result.stdout.strip()[:8]
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "unknown"
 
 
 def get_hardware_info() -> Dict[str, str]:

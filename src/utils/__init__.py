@@ -9,6 +9,7 @@ from src.utils.timing import (
 )
 from src.utils.repro import (
     set_seed,
+    get_git_commit,
     get_hardware_info,
     build_config_snapshot,
     ensure_dir,
@@ -23,6 +24,7 @@ __all__ = [
     "get_gpu_memory_mb",
     "reset_gpu_memory_stats",
     "set_seed",
+    "get_git_commit",
     "get_hardware_info",
     "build_config_snapshot",
     "ensure_dir",

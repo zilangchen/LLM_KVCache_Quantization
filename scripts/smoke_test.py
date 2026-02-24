@@ -22,7 +22,6 @@ import argparse
 import json
 import logging
 import os
-import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -31,36 +30,8 @@ script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from src.utils.repro import set_seed
+from src.utils.repro import get_git_commit, get_hardware_info, set_seed  # QUA-001: centralized
 from src.utils.hf import resolve_pretrained_path
-
-
-def get_git_commit() -> str:
-    """Get current git commit hash."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return result.stdout.strip()[:8]
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return "unknown"
-
-
-def get_hardware_info() -> dict:
-    """Get hardware information."""
-    info = {"gpu": "N/A", "gpu_memory": "N/A"}
-    try:
-        import torch
-        if torch.cuda.is_available():
-            info["gpu"] = torch.cuda.get_device_name(0)
-            props = torch.cuda.get_device_properties(0)
-            info["gpu_memory"] = f"{props.total_memory / 1e9:.1f} GB"
-    except Exception as exc:
-        logging.warning("get_hardware_info: failed to query GPU info: %s", exc)
-    return info
 
 
 def main():
@@ -107,6 +78,11 @@ def main():
         default="results/runs",
         help="Output directory for JSON (default: results/runs)",
     )
+    # SMK-005: BREAKING CHANGE — This flag changes exit code semantics.
+    # Without --cpu-ok, missing CUDA causes exit(1) (failure).  With
+    # --cpu-ok, missing CUDA causes exit(0) (success/skip).  CI pipelines
+    # that previously expected exit(1) on CPU-only runners must be updated
+    # if --cpu-ok is added to their invocation.
     parser.add_argument(
         "--cpu-ok",
         action="store_true",
