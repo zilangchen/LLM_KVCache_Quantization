@@ -25,6 +25,7 @@ from src.utils.repro import (
     build_config_snapshot,
     get_git_commit,  # QUA-001: centralized
     get_hardware_info,
+    resolve_quant_bits,
     set_seed,
     write_config_snapshot,
 )
@@ -34,21 +35,6 @@ from scripts.config_utils import load_config, normalize_kv_params, resolve_run_c
 EXIT_OOM = 73
 EXIT_EXCEPTION = 74
 _LAST_ARGS: argparse.Namespace | None = None
-
-
-# DEPRECATED: local copy kept for standalone execution.  Canonical version
-# lives in ``src.utils.repro.resolve_quant_bits``; update there first.
-def _resolve_quant_bits(kv_mode: str, quant_bits_arg: int | None) -> int:
-    if quant_bits_arg is not None:
-        return int(quant_bits_arg)
-    mode = str(kv_mode)
-    if mode == "kivi_style":
-        return 8
-    if "int4" in mode:
-        return 4
-    if "int8" in mode:
-        return 8
-    return 16
 
 
 def _resolve_out_dir(out_dir_arg: str) -> Path:
@@ -466,7 +452,7 @@ def main():
             "model_id": args.model_id,
             "run_name": args.run_name,
             "kv_mode": args.kv_mode,
-            "quant_bits": _resolve_quant_bits(
+            "quant_bits": resolve_quant_bits(
                 args.kv_mode,
                 getattr(args, "quant_bits", None),
             ),

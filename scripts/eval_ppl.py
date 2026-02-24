@@ -42,6 +42,7 @@ from src.utils.repro import (
     build_config_snapshot,
     get_git_commit,  # QUA-001: centralized
     get_hardware_info,
+    resolve_quant_bits,
     set_seed,
     write_config_snapshot,
 )
@@ -83,31 +84,6 @@ def _write_task_failure(
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=True), encoding="utf-8")
 
 
-# DEPRECATED: local copy kept for standalone execution.  Canonical version
-# lives in ``src.utils.repro.resolve_quant_bits``; update there first.
-def _resolve_quant_bits(kv_mode: str, quant_bits_arg: int | None) -> int:
-    if quant_bits_arg is not None:
-        return int(quant_bits_arg)
-    mode = str(kv_mode)
-    if mode == "kivi_style":
-        return 8
-    if "int4" in mode:
-        return 4
-    if "int8" in mode:
-        return 8
-    # PRF-002: no specific quant_bits rule matched; falling back to 16 (fp16).
-    # This is correct for kv_mode="fp16" but unexpected for any unrecognised
-    # mode string.  Warn so the caller can catch accidental mismatches.
-    import warnings as _warnings
-    if mode not in {"fp16"}:
-        _warnings.warn(
-            f"_resolve_quant_bits: unrecognised kv_mode={mode!r}; "
-            "falling back to quant_bits=16.  Pass --quant_bits explicitly "
-            "to suppress this warning.",
-            UserWarning,
-            stacklevel=2,
-        )
-    return 16
 
 
 def maybe_to_dynamic_cache(past_key_values):
@@ -938,7 +914,7 @@ def main():
             "run_id": f"ppl_{timestamp}",
             "model_id": args.model_id,
             "kv_mode": kv_mode_used,
-            "quant_bits": _resolve_quant_bits(
+            "quant_bits": resolve_quant_bits(
                 kv_mode_used,
                 getattr(args, "quant_bits", None),
             ),

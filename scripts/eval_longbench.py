@@ -46,6 +46,7 @@ from src.utils.repro import (
     build_config_snapshot,
     get_git_commit,  # QUA-001: centralized
     get_hardware_info,
+    resolve_quant_bits,
     set_seed,
     write_config_snapshot,
 )
@@ -107,21 +108,6 @@ def _split_csv(text: str | None) -> List[str]:
     if not text:
         return []
     return [x.strip() for x in str(text).split(",") if x.strip()]
-
-
-# DEPRECATED: local copy kept for standalone execution.  Canonical version
-# lives in ``src.utils.repro.resolve_quant_bits``; update there first.
-def _resolve_quant_bits(kv_mode: str, quant_bits_arg: int | None) -> int:
-    if quant_bits_arg is not None:
-        return int(quant_bits_arg)
-    mode = str(kv_mode)
-    if mode == "kivi_style":
-        return 8
-    if "int4" in mode:
-        return 4
-    if "int8" in mode:
-        return 8
-    return 16
 
 
 def _normalize_text(text: str) -> str:
@@ -880,7 +866,7 @@ def main() -> None:
             }
         )
 
-    quant_bits = _resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
+    quant_bits = resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
 
     summary_row = {
         "run_id": f"longbench_{timestamp}",

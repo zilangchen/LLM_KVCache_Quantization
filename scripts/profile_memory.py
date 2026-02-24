@@ -27,6 +27,7 @@ from src.utils.repro import (
     build_config_snapshot,
     get_git_commit,  # QUA-001: centralized
     get_hardware_info,
+    resolve_quant_bits,
     set_seed,
     write_config_snapshot,
 )
@@ -41,23 +42,6 @@ except ImportError:
 EXIT_OOM = 73
 EXIT_EXCEPTION = 74
 _LAST_ARGS: argparse.Namespace | None = None
-
-# DEPRECATED: local copy kept for standalone execution.  Canonical version
-# lives in ``src.utils.repro.resolve_quant_bits``; update there first.
-def _resolve_quant_bits(kv_mode: str, quant_bits_arg: int | None) -> int:
-    # QUA-010: warn callers that this copy is deprecated.
-    import warnings
-    warnings.warn("Use resolve_quant_bits from src.utils.repro", DeprecationWarning)
-    if quant_bits_arg is not None:
-        return int(quant_bits_arg)
-    mode = str(kv_mode)
-    if mode == "kivi_style":
-        return 8
-    if "int4" in mode:
-        return 4
-    if "int8" in mode:
-        return 8
-    return 16
 
 
 def _resolve_out_dir(out_dir_arg: str) -> Path:
@@ -279,7 +263,7 @@ def main():
     normalize_kv_params(args)
     set_seed(seed=args.seed, deterministic=True)
     runtime_quant_bits = (
-        _resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
+        resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
         if args.kv_mode == "kivi_style"
         else getattr(args, "quant_bits", None)
     )
@@ -430,7 +414,7 @@ def main():
             "model_id": args.model_id,
             "run_name": args.run_name,
             "kv_mode": args.kv_mode,
-            "quant_bits": _resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None)),
+            "quant_bits": resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None)),
             "clip_percentile": args.clip_percentile,
             "group_size": args.group_size,
             "dtype": str(model.dtype),

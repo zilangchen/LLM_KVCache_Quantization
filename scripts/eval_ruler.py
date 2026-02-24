@@ -49,6 +49,7 @@ from src.utils.repro import (
     build_config_snapshot,
     get_git_commit,  # QUA-001: centralized
     get_hardware_info,
+    resolve_quant_bits,
     set_seed,
     write_config_snapshot,
 )
@@ -132,21 +133,6 @@ def _normalize_text(text: str) -> str:
     text = text.translate(str.maketrans("", "", string.punctuation))
     text = re.sub(r"\s+", " ", text)
     return text
-
-
-# DEPRECATED: local copy kept for standalone execution.  Canonical version
-# lives in ``src.utils.repro.resolve_quant_bits``; update there first.
-def _resolve_quant_bits(kv_mode: str, quant_bits_arg: int | None) -> int:
-    if quant_bits_arg is not None:
-        return int(quant_bits_arg)
-    mode = str(kv_mode)
-    if mode == "kivi_style":
-        return 8
-    if "int4" in mode:
-        return 4
-    if "int8" in mode:
-        return 8
-    return 16
 
 
 def _token_f1(pred: str, truth: str) -> float:
@@ -793,7 +779,7 @@ def main() -> None:
     normalize_kv_params(args)
     set_seed(seed=args.seed, deterministic=True)
     runtime_quant_bits = (
-        _resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
+        resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
         if args.kv_mode == "kivi_style"
         else getattr(args, "quant_bits", None)
     )
@@ -1109,7 +1095,7 @@ def main() -> None:
         )
 
     # ---- Summary row (backward compatible schema) ----
-    quant_bits = _resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
+    quant_bits = resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
 
     # EVL-026: Aggregation dimension note — overall_pass_rate uses a task-level
     # MACRO average (mean of per-task pass rates), not a case-level MICRO
