@@ -533,4 +533,20 @@ Canonical agent workflow directory is `.agents/`.
 - **Commits**: d045f08 (test files), 6cd295d (tracker)
 - **Running total**: 367 issues, 301 fixed + 10 fp + 4 wf = 315 resolved, 48 open (0 CRIT, 21 HIGH, 25 MED, 2 LOW)
 
+### 2026-02-25 01:35 | Wave 18 — CAL-019/020 fix + deep analysis closes 10 items
+- **Goal**: Resolve remaining 13 open review_tracker items through deep code analysis
+- **Key findings**:
+  - **CAL-019/020 [HIGH]**: Confirmed as real bugs — calibration Q vector lacked input_layernorm and RoPE, causing distorted attention distribution for inv_tau optimization
+  - **8 items false_positive/wont_fix**: CFG-008/011/012/013/023/024/028 confirmed as intentional design choices through config file analysis; CFG-009 is cosmetic naming
+  - **Annotation normalization**: 10 items (ENG-001/003/004, AGG-018~027) had non-standard annotations, normalized to standard `— fixed`/`— false_positive` format
+- **Code fix**: Added `_rotate_half`, `_apply_rope_to_q`, `_get_rope_for_position` helpers to calibrate_behavior.py; Q now goes through `layer.input_layernorm()` → `attn.q_proj()` → `q_norm` (if present) → `RoPE` before collection
+- **Impact**: Existing calibration artifacts (kv_calib_*.json) should be regenerated for optimal quality
+- **Changed files**: scripts/calibrate_behavior.py, review_tracker.md
+- **Commits**: 227f4e3 (annotation normalization), d56278d (CAL-019/020 fix), 30c5aa8 (tracker update)
+- **Running total**: 466 issues | 430 fixed + 25 false_positive + 8 wont_fix | 3 open (0 CRIT, 2 HIGH, 1 MED)
+- **Remaining 3 open** (all need user decisions):
+  - CFG-022 [MED]: 1.5B throughput int8_ours b1-b16 temp=true vs b24-b32 temp=false (inconsistency within config)
+  - CFG-026 [HIGH]: 7B/8B calib_files missing in artifacts/ (need GPU to generate)
+  - CFG-029 [HIGH]: LLaMA-3.1-8B model_revision: null (need to pin commit hash)
+
 > 更早的条目见 `development_history/iteration_archive_202602.md`
