@@ -208,7 +208,10 @@ def _agg_mean_std(df: pd.DataFrame, keys: List[str], values: List[str]) -> pd.Da
 def _safe_t_crit(n: float) -> float:
     """QUA-003: module-level helper (moved out of _add_ci95_columns loop).
     Return t critical value for sample size *n*; returns 0.0 for non-finite
-    or n <= 1 so that CI half-width becomes 0 (later masked to NaN)."""
+    or n <= 1 so that CI half-width becomes 0 (later masked to NaN).
+
+    # QUA-008: _safe_t_crit returns 0.0 for n<=1 as a first guard; _add_ci95_columns then applies .where(cnt>1, NaN) as a second guard. Both layers are intentional defense-in-depth.
+    """
     # AGG-036: guard against cnt containing inf, which would cause int(inf) OverflowError.
     if not np.isfinite(n) or n <= 1:
         return 0.0
@@ -1332,6 +1335,7 @@ def _build_paired_metric_rows(
     return out.reset_index(drop=True)
 
 
+# AGG-012: seed is derived from SHA256 hash of string inputs, providing deterministic but well-distributed seeds across different (metric, kv_mode) combinations.
 def _stable_random_seed(base_seed: int, *parts: object) -> int:
     txt = "||".join(str(p) for p in parts)
     digest = hashlib.sha256(txt.encode("utf-8")).hexdigest()
@@ -2499,6 +2503,7 @@ def main() -> int:
             )
 
     # Significance / paired-difference summaries by seed.
+    # AGG-008: KIVI quant_bits (4 or 8) is not distinguished in pairings. Currently only INT8 KIVI runs exist in the experiment matrix.
     pairings = [
         ("int8_baseline", "int8_ours"),
         ("int4_baseline", "int4_ours"),

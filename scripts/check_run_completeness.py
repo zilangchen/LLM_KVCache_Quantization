@@ -49,9 +49,16 @@ def _read_json(path: Path) -> Dict[str, Any] | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
+        # CHK-022: classified exception — log JSON parse errors as warnings.
         logger.warning("Failed to parse JSON from %s: %s", path, exc)
         return None
-    except Exception:
+    except OSError as exc:
+        # CHK-022: classified exception — log OS/IO errors as warnings.
+        logger.warning("OS error reading %s: %s", path, exc)
+        return None
+    except Exception as exc:
+        # CHK-022: classified exception — log unexpected errors as warnings.
+        logger.warning("Unexpected error reading %s: %s", path, exc)
         return None
     if not isinstance(data, dict):
         return None
@@ -141,6 +148,7 @@ def _detect_failure_type(
 ) -> str:
     """Infer the failure_type for the returned manifest dict.  (CHK-002)
 
+    # CHK-015: canonical enum — keep in sync with run_experiments.py _classify_failure(). See also CHK-023.
     Returns one of the canonical failure_type values (CHK-015).  These values
     MUST stay in sync with the strings produced by
     ``scripts/run_experiments.py::_classify_failure()``.  Canonical set as of

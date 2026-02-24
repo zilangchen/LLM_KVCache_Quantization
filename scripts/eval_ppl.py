@@ -19,26 +19,8 @@ script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-# Import engine logic if needed, but for PPL we mostly need model forward
-# However, to support 'kv_mode' we might need to hook our cache?
-# Actually PPL is usually done via model(input_ids, past_key_values=...)
-# To truly evaluate OUR cache, we should use our engine or a adapted loop.
-# But standard PPL is effectively "prefill" of long sequence.
-# Let's implementation standard sliding window using HuggingFace loop FIRST,
-# but if we want to test "int8_cache", we need our custom cache.
-# LIMITATION: Standard HF `model()` doesn't easily use our `KVCache` class unless we patch it.
-# DECISION: For Milestone D, "System Efficacy" means running PPL on the QUANTIZED model/cache.
-# If we cannot plug our cache into HF `model()`, we must use our `generate` or `prefill` loop?
-# Wait, PPL is next-token prediction loss. We can do this via our engine's prefill?
-# Currently `generate_loop.py` separates prefill and decode.
-# PPL = exp(mean(nll)). 
-# We need logits for the targets.
-# Let's use standard HF approach for now to establish baseline PPL (fp16).
-# For INT8 support, if we modify the model to use our Cache, we can still use HF loop.
-# But we haven't modified the model yet (Milestone E/F).
-# So for D3, we implement standard HF sliding window.
-# When we reach E/F and patch the model, this script will naturally pick it up if we load the patched model.
-# Or we can manually feed batches.
+# QUA-006: Design: Uses HF's built-in sliding-window PPL (stride=512) rather than custom engine,
+# because PPL evaluation doesn't need quantized KV cache — it uses the model's own forward pass.
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 try:

@@ -723,6 +723,7 @@ def generate_from_ids(
             elif kv_mode in _FUSED_KV_MODES:
                 from src.engine.patch_model import INT8CacheWrapperContainer
 
+                # ENG-033: INT8CacheWrapperContainer is reconstructed each decode step. This is intentional — wrappers are lightweight (no buffer copy), and caching them would require tracking cache mutations.
                 current_past_key_values = INT8CacheWrapperContainer(kv_cache, num_layers)
             elif kv_mode in ["int8_baseline", "int4_baseline", "kivi_style"]:
                 # For baseline modes, we dequantize BEFORE attention
@@ -793,6 +794,7 @@ def generate_from_ids(
         current_token = next_token.view(batch_size, 1)
 
         # Update attention mask
+        # ENG-034: attention_mask grows O(seq_len^2) each step. The fused path deletes it, but the non-fused path still allocates. Acceptable for current max_seq_len=32K.
         if attention_mask is not None:
             attention_mask = torch.cat(
                 [

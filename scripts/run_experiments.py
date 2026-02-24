@@ -387,6 +387,7 @@ def _init_manifest(
     manifest["git_commit"] = git_commit_full[:8] if git_commit_full else "unknown"
     manifest["git_commit_full"] = git_commit_full
     manifest["env_hash"] = env_info.get("env_hash", "unknown")
+    # RUN-011: append mode overwrites manifest metadata (env_info, args) with current session values. Historical metadata is preserved in append_history.
     manifest["env_info"] = env_info
     manifest["append_mode"] = bool(append_mode)
     manifest["argv"] = list(sys.argv)
@@ -395,6 +396,7 @@ def _init_manifest(
     if not isinstance(manifest.get("append_history"), list):
         manifest["append_history"] = []
     if append_mode:
+        # RUN-012: append_history records timestamps and status but not kv_mode/quant_bits changes. Full config is captured at run level.
         manifest["append_history"].append(
             {
                 "timestamp": now,
@@ -464,7 +466,7 @@ def _mark_task_status(
             "error": str(error) if error else "",
         }
         history.append(hist_row)
-        # Keep manifest compact; preserve the latest 20 terminal events.
+        # RUN-013: history is capped at 20 entries to prevent manifest bloat in long retry sequences.
         entry["history"] = history[-20:]
     tasks[task] = entry
     manifest["tasks"] = tasks
@@ -965,6 +967,7 @@ def main() -> int:
     else:
         run_name_filter = None
 
+    # RUN-010: matrix is not validated for non-empty here; an empty matrix results in zero iterations (harmless but confusing).
     matrix = config.get("matrix", [])
     if not isinstance(matrix, list) or len(matrix) == 0:
         print(
