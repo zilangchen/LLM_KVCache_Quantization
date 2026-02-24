@@ -265,13 +265,22 @@ def pack_int4(tensor: Tensor) -> Tensor:
     Returns:
         Packed INT8 tensor with shape [..., N//2]
     """
-    assert tensor.shape[-1] % 2 == 0, "Last dimension must be even for packing"
+    if tensor.dtype != torch.int8:
+        raise ValueError(f"pack_int4 expects int8 input, got {tensor.dtype}")
+    if tensor.shape[-1] % 2 != 0:
+        raise ValueError("Last dimension must be even for packing")
+    if tensor.numel() > 0:
+        qmin = int(tensor.min().item())
+        qmax = int(tensor.max().item())
+        if qmin < -8 or qmax > 7:
+            raise ValueError(
+                f"pack_int4 expects values in [-8, 7], got min={qmin}, max={qmax}"
+            )
 
     # Shift values to unsigned range [0, 15] for packing.
     # Offset +8 maps the full INT4 signed range [-8, 7] -> [0, 15].
-    # This correctly handles both symmetric ([-7, 7]) and asymmetric ([-8, 7]) quantization.
-    # (Previous offset of +7 failed for -8: -8+7=-1 overflowed to 255 in uint8.)
-    shifted = (tensor + 8).to(torch.uint8)
+    # Use int16 intermediate to avoid any potential int8 arithmetic edge cases.
+    shifted = (tensor.to(torch.int16) + 8).to(torch.uint8)
     
     # Reshape to [..., N//2, 2]
     shape = tensor.shape[:-1] + (tensor.shape[-1] // 2, 2)
@@ -305,6 +314,7 @@ def unpack_int4(packed: Tensor) -> Tensor:
     unpacked = unpacked.view(*packed.shape[:-1], packed.shape[-1] * 2)
 
     # Shift back to signed range [-8, 7] (inverse of +8 offset in pack_int4).
-    unpacked = (unpacked.to(torch.int8) - 8)
+    # Use int16 intermediate to avoid any potential int8 arithmetic edge cases.
+    unpacked = (unpacked.to(torch.int16) - 8).to(torch.int8)
 
     return unpacked

@@ -324,6 +324,13 @@ class KIVIStyleKVCache:
                 raise RuntimeError(
                     f"K scale/zp not initialized for layer {layer_id} during decode append."
                 )
+            expected_shape = (batch, heads, head_dim)
+            if tuple(k_scale.shape) != expected_shape or tuple(k_zp.shape) != expected_shape:
+                raise ValueError(
+                    f"Inconsistent decode K scale/zp shape for layer {layer_id}: "
+                    f"expected {expected_shape}, got scale={tuple(k_scale.shape)}, "
+                    f"zp={tuple(k_zp.shape)}"
+                )
             if self.quant_bits == 8:
                 qmin, qmax_val = -128, 127
             else:
