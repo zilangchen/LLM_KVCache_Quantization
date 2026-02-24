@@ -15,6 +15,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, TypedDict
 
+from config_utils import read_json, read_text, split_csv
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,6 +34,7 @@ class TaskStateResult(TypedDict):
     has_valid_csv: bool
     has_task_artifacts: bool
     csv_paths: List[str]
+    csv_content_warnings: List[str]  # CHK-004: CSV content validation warnings
     has_log: bool
     log_path: str
     # Fields added by _check_group() after _check_task_state() returns:
@@ -62,52 +65,45 @@ TASK_TO_CSV_PATTERN = {
     "eval_ruler": "profile_ruler_*.csv",
 }
 
+# CHK-004: Expected columns per task CSV.  These are the minimal columns that
+# must be present for the CSV to be considered structurally valid.  Additional
+# columns may be present and are silently accepted.
+TASK_TO_EXPECTED_COLUMNS: Dict[str, List[str]] = {
+    "profile_latency": ["kv_mode", "seq_len", "gen_len", "tpot_ms"],
+    "profile_memory": ["kv_mode", "seq_len", "gpu_mem_peak_mb"],
+    "eval_ppl": ["kv_mode", "seq_len", "perplexity"],
+    "eval_needle": ["kv_mode", "seq_len", "needle_pass_rate"],
+    "eval_longbench": ["kv_mode", "seq_len", "longbench_score"],
+    "eval_ruler": ["kv_mode", "seq_len", "ruler_pass_rate"],
+}
+
+
+# CHK-005: Expected task-level artifact sub-files for LongBench and RULER.
+# These are the summary CSVs that eval scripts produce alongside the main CSV.
+LONGBENCH_EXPECTED_TASK_PATTERNS: List[str] = [
+    "longbench_task_summary_*.csv",
+]
+
+RULER_EXPECTED_TASK_PATTERNS: List[str] = [
+    "ruler_task_summary_*.csv",
+    "ruler_depth_summary_*.csv",
+]
+
+
+# CHK-018: _split_csv, _read_json, _read_text are now thin wrappers around the
+# shared implementations in config_utils.py.  Local names are preserved so that
+# all call-sites within this module remain unchanged.
 
 def _split_csv(values: str | None) -> List[str]:
-    if not values:
-        return []
-    return [x.strip() for x in str(values).split(",") if x.strip()]
+    return split_csv(values)
 
 
 def _read_json(path: Path) -> Dict[str, Any] | None:
-    """Read a JSON file, returning None if missing or not a dict.
-
-    Logs a warning on JSON decode errors instead of silently returning None.
-    (CHK-009)
-    """
-    if not path.exists():
-        return None
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        # CHK-022: classified exception — log JSON parse errors as warnings.
-        logger.warning("Failed to parse JSON from %s: %s", path, exc)
-        return None
-    except OSError as exc:
-        # CHK-022: classified exception — log OS/IO errors as warnings.
-        logger.warning("OS error reading %s: %s", path, exc)
-        return None
-    except Exception as exc:
-        # CHK-022: classified exception — log unexpected errors as warnings.
-        logger.warning("Unexpected error reading %s: %s", path, exc)
-        return None
-    if not isinstance(data, dict):
-        return None
-    return data
+    return read_json(path)
 
 
 def _read_text(path: Path) -> str:
-    """Read a text file, using replacement characters for non-UTF-8 bytes.
-
-    Uses errors='replace' instead of 'ignore' so that corrupted bytes are
-    visible as U+FFFD rather than silently dropped.  (CHK-008)
-    """
-    if not path.exists():
-        return ""
-    try:
-        return path.read_text(encoding="utf-8", errors="replace")
-    except Exception:
-        return ""
+    return read_text(path)
 
 
 def _is_oom_from_log(content: str) -> bool:
@@ -155,6 +151,39 @@ def _csv_has_rows(path: Path) -> bool:
     return _csv_status(path) == CSV_HAS_ROWS
 
 
+def _validate_csv_content(path: Path, task: str) -> List[str]:
+    """CHK-004: Validate CSV content completeness.
+
+    Returns a list of warning strings.  An empty list means the CSV passes all
+    content checks.  Checks:
+      1. File must have at least one data row (beyond the header).
+      2. Expected columns for the task must be present.
+    """
+    warnings_list: List[str] = []
+    expected_columns = TASK_TO_EXPECTED_COLUMNS.get(task, [])
+    if not path.exists():
+        return [f"CSV not found: {path}"]
+    try:
+        with open(path, "r", encoding="utf-8", newline="") as f:
+            reader = csv.reader(f)
+            header_row = next(reader, None)
+            if header_row is None:
+                return [f"CSV is empty (no header): {path.name}"]
+            header_set = {col.strip() for col in header_row}
+            data_row = next(reader, None)
+            if data_row is None:
+                warnings_list.append(f"CSV has header but no data rows: {path.name}")
+            if expected_columns:
+                missing = [col for col in expected_columns if col not in header_set]
+                if missing:
+                    warnings_list.append(
+                        f"CSV {path.name} missing expected columns: {missing}"
+                    )
+    except Exception as exc:
+        warnings_list.append(f"CSV read error for {path.name}: {exc}")
+    return warnings_list
+
+
 def _find_csv_paths(run_dir: Path, pattern: str) -> List[Path]:
     if not pattern:
         return []
@@ -162,13 +191,33 @@ def _find_csv_paths(run_dir: Path, pattern: str) -> List[Path]:
 
 
 def _has_task_level_artifacts(run_dir: Path, task: str) -> bool:
-    # Task-level summaries help detect partially written outputs.
+    """Check whether expected task-level summary artifacts exist.
+
+    CHK-005: For LongBench and RULER, also emits warning-level logs when
+    expected sub-artifact patterns are missing.  This is advisory — the
+    function still returns True/False based on the primary artifact check.
+    """
     if task == "eval_longbench":
-        return any(run_dir.glob("longbench_task_summary_*.csv"))
+        has_primary = any(run_dir.glob("longbench_task_summary_*.csv"))
+        # CHK-005: warn on missing expected sub-artifacts
+        for pattern in LONGBENCH_EXPECTED_TASK_PATTERNS:
+            if not any(run_dir.glob(pattern)):
+                logger.warning(
+                    "CHK-005: run_dir=%s task=%s: expected artifact pattern %r not found.",
+                    run_dir.name, task, pattern,
+                )
+        return has_primary
     if task == "eval_ruler":
-        return any(run_dir.glob("ruler_task_summary_*.csv")) and any(
-            run_dir.glob("ruler_depth_summary_*.csv")
-        )
+        has_task = any(run_dir.glob("ruler_task_summary_*.csv"))
+        has_depth = any(run_dir.glob("ruler_depth_summary_*.csv"))
+        # CHK-005: warn on each missing expected sub-artifact
+        for pattern in RULER_EXPECTED_TASK_PATTERNS:
+            if not any(run_dir.glob(pattern)):
+                logger.warning(
+                    "CHK-005: run_dir=%s task=%s: expected artifact pattern %r not found.",
+                    run_dir.name, task, pattern,
+                )
+        return has_task and has_depth
     return True
 
 
@@ -255,6 +304,13 @@ def _check_task_state(
     csv_paths = _find_csv_paths(run_dir, csv_pattern)
     has_csv = bool(csv_paths)
     has_valid_csv = any(_csv_has_rows(path) for path in csv_paths)
+    # CHK-004: validate CSV content (expected columns, at least 1 data row).
+    csv_content_warnings: List[str] = []
+    for csv_path in csv_paths:
+        csv_content_warnings.extend(_validate_csv_content(csv_path, task))
+    if csv_content_warnings:
+        for w in csv_content_warnings:
+            logger.warning("CHK-004: run_id=%s task=%s: %s", run_id, task, w)
     has_task_artifacts = _has_task_level_artifacts(run_dir, task)
     log_path = (logs_dir / run_id / f"{task}.log") if logs_dir is not None else None
     has_log = bool(log_path and log_path.exists())
@@ -340,6 +396,7 @@ def _check_task_state(
         "has_valid_csv": bool(has_valid_csv),
         "has_task_artifacts": bool(has_task_artifacts),
         "csv_paths": [str(p) for p in csv_paths],
+        "csv_content_warnings": csv_content_warnings,  # CHK-004
         "has_log": bool(has_log),
         "log_path": str(log_path) if log_path is not None else "",
     }

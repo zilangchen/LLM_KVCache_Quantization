@@ -27,7 +27,7 @@ script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from scripts.config_utils import load_config
+from scripts.config_utils import load_config, read_json, read_text
 
 
 TASK_TO_SCRIPT = {
@@ -112,23 +112,9 @@ def _collect_env_info() -> Dict[str, Any]:
     return info
 
 
+# CHK-018: _read_json delegates to the shared implementation in config_utils.py.
 def _read_json(path: Path) -> Dict[str, Any] | None:
-    if not path.exists():
-        return None
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, dict):
-            return data
-    except json.JSONDecodeError as exc:
-        # RUN-026: log JSON corruption explicitly instead of swallowing silently.
-        print(f"Warning: JSON decode error reading {path}: {exc}")
-        return None
-    except OSError as exc:
-        # RUN-026: log permission/IO errors explicitly.
-        print(f"Warning: OS error reading {path}: {exc}")
-        return None
-    return None
+    return read_json(path)
 
 
 def _write_json(path: Path, data: Dict[str, Any]) -> None:
@@ -298,13 +284,10 @@ def _compute_ruler_truncation_warning(
     )
 
 
+# CHK-018: _read_text_best_effort delegates to the shared read_text in config_utils.py.
+# The shared version uses errors='replace' (CHK-008) instead of errors='ignore'.
 def _read_text_best_effort(path: Path) -> str:
-    if not path.exists():
-        return ""
-    try:
-        return path.read_text(encoding="utf-8", errors="ignore")
-    except Exception:
-        return ""
+    return read_text(path)
 
 
 def _classify_failure(*, log_path: Path, returncode: int | None) -> str:

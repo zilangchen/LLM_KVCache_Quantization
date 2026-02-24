@@ -5,10 +5,15 @@ Config utilities for experiment matrix loading.
 
 from __future__ import annotations
 
+import json
+import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 import warnings
 
 import yaml
+
+_logger = logging.getLogger(__name__)
 
 
 # QUA-005: Canonical KV mode ordering, shared across aggregate_results.py
@@ -24,6 +29,56 @@ KV_MODE_ORDER: List[str] = [
     "int4_fused",
     "kivi_style",
 ]
+
+
+# ---------------------------------------------------------------------------
+# CHK-018: Shared IO helpers — used by check_run_completeness.py and
+# run_experiments.py.  Moved here to eliminate duplication.
+# ---------------------------------------------------------------------------
+
+
+def split_csv(values: str | None) -> List[str]:
+    """Split a comma-separated string into stripped, non-empty tokens."""
+    if not values:
+        return []
+    return [x.strip() for x in str(values).split(",") if x.strip()]
+
+
+def read_json(path: Path) -> Dict[str, Any] | None:
+    """Read a JSON file, returning None if missing or not a dict.
+
+    Logs a warning on JSON decode errors instead of silently returning None.
+    """
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        _logger.warning("Failed to parse JSON from %s: %s", path, exc)
+        return None
+    except OSError as exc:
+        _logger.warning("OS error reading %s: %s", path, exc)
+        return None
+    except Exception as exc:
+        _logger.warning("Unexpected error reading %s: %s", path, exc)
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+def read_text(path: Path) -> str:
+    """Read a text file, using replacement characters for non-UTF-8 bytes.
+
+    Uses errors='replace' so that corrupted bytes are visible as U+FFFD rather
+    than silently dropped.
+    """
+    if not path.exists():
+        return ""
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
