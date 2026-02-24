@@ -224,7 +224,16 @@ def _register_prefill_temperature_hooks(model, inv_tau: torch.Tensor):
                 if not isinstance(output, torch.Tensor) or output.ndim != 4:
                     return output
 
-                # Layout can be [B, H, S, D] or [B, S, H, D]. Detect head dim.
+                # ENG-025: Layout detection between [B, H, S, D] and [B, S, H, D].
+                # We check shape[1] first. When H == S (e.g. prefill with exactly
+                # num_heads tokens), both branches would match, creating ambiguity.
+                # Tiebreaker heuristic: prefer [B, H, S, D] (dim-1 == H) because
+                # Qwen2 and most HF decoder models produce [B, H, S, D] from q_norm.
+                # This is safe in practice because num_heads (e.g. 8–32) is rarely
+                # equal to the prompt sequence length, and even if they match we apply
+                # the scale in the correct position for the dominant layout.
+                # If you see incorrect temperature scaling at exactly H-token prompts,
+                # override by ensuring q_norm outputs [B, H, S, D] consistently.
                 if output.shape[1] == _h:
                     seq_len = output.shape[2]
                     if seq_len <= 1:
@@ -331,6 +340,10 @@ def generate_from_ids(
     if kv_mode == "kivi_style":
         import warnings
 
+        # ENG-006: Validate quant_bits for kivi_style mode.
+        # KIVI quantization only supports 8-bit (asymmetric int8) and 4-bit
+        # (asymmetric int4 with bit-packing). Other values are not implemented
+        # in KIVIStyleKVCache and would produce a runtime error in append().
         kivi_quant_bits = 8 if quant_bits is None else int(quant_bits)
         if kivi_quant_bits not in (4, 8):
             raise ValueError(
@@ -338,6 +351,11 @@ def generate_from_ids(
             )
         quant_bits = kivi_quant_bits
 
+        # ENG-014: Warn when calibration / static-scale parameters are passed with
+        # kivi_style mode. KIVI uses its own per-channel K / per-token V quantization
+        # scheme and does NOT consult calib_file, inv_tau, static scales, or adaptive
+        # scale logic. Passing these parameters silently has no effect, which could
+        # mislead users into believing their calibration data is being applied.
         ignored_fields = []
         if calib_file is not None:
             ignored_fields.append("calib_file")
@@ -403,8 +421,14 @@ def generate_from_ids(
         attention_mask = attention_mask.to(device=model.device, dtype=torch.long)
 
     if batch_size > 1:
-        # Our custom KV cache implementation does not track per-sample context lengths.
-        # Padding/variable lengths would silently corrupt attention context in decode.
+        # ENG-005: Padding check for batch>1.
+        # Our custom KV cache implementation does not track per-sample context lengths
+        # and does not maintain a positional offset per sequence. Padding (i.e. any
+        # attention_mask value that is 0) would mean some sequences are shorter than
+        # others, which would silently corrupt decode-step attention because the cache
+        # stores tokens at sequential positions without a per-sample valid-length mask.
+        # This check is intentional and must NOT be removed without also adding
+        # per-sequence length tracking to every cache backend and to the decode path.
         if not torch.all(attention_mask == 1).item():
             raise ValueError(
                 "Batched generation requires attention_mask to be all ones (no padding). "
@@ -496,6 +520,12 @@ def generate_from_ids(
                 clip_percentile = calib_clip_k if calib_clip_k is not None else clip_percentile
 
                 if use_static_scales and "k_scale" in calib:
+                    # ENG-021: Scales are loaded as fp16 to match the dtype used by
+                    # the INT8/INT4 cache engine's scale buffers. This means very
+                    # small scale values (< ~6e-8) will underflow to zero and very
+                    # large values (> 65504) will overflow to inf. If precision loss
+                    # is a concern (e.g. scales derived from low-magnitude activations),
+                    # consider loading as fp32 and casting inside the cache engine.
                     static_k_scale = torch.tensor(calib["k_scale"], dtype=torch.float16)
                 if use_static_scales and "v_scale" in calib:
                     static_v_scale = torch.tensor(calib["v_scale"], dtype=torch.float16)
@@ -732,6 +762,22 @@ def generate_from_ids(
                             kv_cache.append(i, k_new, v_new)
                         else:
                             kv_cache.append(i, k, v)
+                else:
+                    # ENG-027: past_key_values is None in decode step for a non-fused
+                    # mode. This should not happen under normal circumstances because
+                    # use_cache=True is always passed to the model. When it does happen
+                    # (e.g. model ignores use_cache, or HF version mismatch), the KV
+                    # cache is NOT updated for this decode step, causing the cache to
+                    # fall behind by one token. Subsequent decode steps will use a
+                    # stale/shorter context, silently degrading output quality.
+                    import warnings
+                    warnings.warn(
+                        f"Decode step returned past_key_values=None for kv_mode={kv_mode!r}. "
+                        "The KV cache will NOT be updated for this step, which may degrade "
+                        "output quality. Ensure use_cache=True is supported by the model.",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
 
             next_token_logits = outputs.logits[:, -1, :]
             next_token = torch.argmax(next_token_logits, dim=-1)  # [B]

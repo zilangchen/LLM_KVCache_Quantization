@@ -76,7 +76,17 @@ class KIVIStyleKVCache:
         # head_dim.  head_dim is unknown at __init__ time (it comes from the
         # first append() call), so the actual check is enforced in append().
         self.bit_packed = bool(quant_bits == 4)
-        # Keep scale/zp in float32 to avoid silent precision truncation.
+        # ENG-009: V scale/zp (and K scale/zp) buffers are always allocated and
+        # stored in float32 (_scale_dtype = torch.float32). This is intentional:
+        # - Per-token V scales can be very small (e.g. < 1e-4 for near-zero tokens),
+        #   which would underflow or lose precision in fp16 (min normal ~6e-8, but
+        #   fp16 has only 10-bit mantissa giving ~0.1% relative error).
+        # - Per-channel K scales are computed once at prefill and reused for all
+        #   decode tokens; fp32 avoids cumulative rounding across long sequences.
+        # Any code path that reads _v_scale / _v_zp / _k_scale / _k_zp must
+        # preserve float32 precision (do NOT cast to fp16 before the dequant
+        # multiply). The dequantized output is then cast to self.dtype (fp16 by
+        # default) at the end of get_kv(), which is the intended precision point.
         self._scale_dtype = torch.float32
 
         # Used by patch_model.py routing — KIVI always uses torch_ref.
@@ -171,6 +181,12 @@ class KIVIStyleKVCache:
             new_capacity = max(target_len, self._min_capacity)
             if self.max_seq_len is not None:
                 new_capacity = min(new_capacity, self.max_seq_len)
+            # ENG-009: Assert scale dtype contract before allocation to catch any
+            # accidental reassignment of self._scale_dtype elsewhere in the class.
+            assert self._scale_dtype == torch.float32, (
+                f"KIVIStyleKVCache._scale_dtype must be torch.float32, got {self._scale_dtype}. "
+                "Changing this may cause precision loss in V scale/zp buffers."
+            )
             self._k_cache[layer_id] = torch.empty(
                 (batch, heads, new_capacity, head_dim), device=self.device, dtype=torch.int8
             )

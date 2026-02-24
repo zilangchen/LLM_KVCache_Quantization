@@ -205,6 +205,12 @@ def dequantize_symmetric_int4(
     Returns:
         Dequantized tensor in float16 (or scale.dtype)
     """
+    # QNT-008: Input type validation for defense-in-depth.
+    if quantized.dtype != torch.int8:
+        raise ValueError(f"quantized must be torch.int8, got {quantized.dtype}")
+    if not scale.is_floating_point():
+        raise ValueError(f"scale must be floating point, got {scale.dtype}")
+
     # Check dimensions to detect group-wise scaling
     # quantized: [B, H, S, D]
     # scale: [B, H, S, num_groups] or [B, H, S, num_groups, 1] or [B, H, S, 1]

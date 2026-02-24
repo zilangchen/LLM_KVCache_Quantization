@@ -416,6 +416,11 @@ class INT4KVCache:
         self._v_scale[layer_id][:, :, old_len:target_len, :] = scale_v
         self._layer_seq_lens[layer_id] = target_len
 
+        # ENG-032: _seq_len is only updated on layer_id==0 for performance.
+        # generate_loop always appends layers in order 0..N-1, so layer 0 is
+        # always the first to be updated each step.  _layer_seq_lens[layer_id]
+        # tracks per-layer lengths for correctness; _seq_len is a fast-path
+        # shortcut used by get_seq_len() for the common sequential case.
         if layer_id == 0:
             self._seq_len = target_len
 

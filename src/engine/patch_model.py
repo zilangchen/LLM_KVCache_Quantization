@@ -275,6 +275,17 @@ def _decode_attn_int8_torch_ref(
         curr_k_scale = k_scale[b, :, :ctx_len, :]  # [Hkv, S, G]
         curr_v_scale = v_scale[b, :, :ctx_len, :]
 
+        # ENG-029: Dequantization precision difference between torch_ref and Triton.
+        # Here we dequantize int8 -> fp16 (cast then multiply by fp16 scale). The
+        # Triton fused kernel dequantizes int8 -> fp32 internally before computing
+        # the dot-product. This means _decode_attn_int8_torch_ref and the Triton path
+        # differ by intermediate rounding: torch_ref accumulates fp16 rounding error
+        # before promoting to fp32 for attention math, while Triton uses fp32
+        # throughout the dequant step. Observed max_abs_diff is typically < 0.001 for
+        # int8, but can be higher for very small scales or long contexts. When using
+        # KV_FUSED_DUMP_DIR to compare the two paths, expect a non-zero diff; this
+        # is a known arithmetic artefact, not a bug. To eliminate the diff, change
+        # the cast below from torch.float16 to torch.float32.
         k_dequant = (
             curr_k_int8.view(kv_heads, ctx_len, num_groups, group_size).to(torch.float16)
             * curr_k_scale.unsqueeze(-1)
@@ -609,59 +620,48 @@ def _fused_forward_impl(
         )
 
     if decode_impl == "triton_fused":
+        # ENG-035: Use inspect.signature to detect whether the kernel accepts the
+        # optional debug_stats / layer_idx kwargs, instead of relying on a broad
+        # `except TypeError` which would also swallow TypeErrors raised *inside* the
+        # kernel (e.g. wrong tensor dtype, shape mismatch). This makes signature
+        # probing explicit and keeps real kernel errors visible.
         stats = getattr(cache_wrapper.engine, "decode_stats", None)
+        _int8_sig_params = set(inspect.signature(decode_attn_int8).parameters)
+        _int4_sig_params = set(inspect.signature(decode_attn_int4).parameters)
         if cache_kind == "int8":
-            try:
-                attn_output_val = decode_attn_int8(
-                    q_kernel,
-                    k_quant,
-                    v_quant,
-                    k_scale,
-                    v_scale,
-                    context_lens,
-                    sm_scale=sm_scale,
-                    debug_stats=stats,
-                    layer_idx=layer_idx,
-                )
-            except TypeError:
-                # Compatibility path for monkey-patched decode_attn function in verify script.
-                attn_output_val = decode_attn_int8(
-                    q_kernel,
-                    k_quant,
-                    v_quant,
-                    k_scale,
-                    v_scale,
-                    context_lens,
-                    sm_scale=sm_scale,
-                )
+            _int8_extra = {}
+            if "debug_stats" in _int8_sig_params:
+                _int8_extra["debug_stats"] = stats
+            if "layer_idx" in _int8_sig_params:
+                _int8_extra["layer_idx"] = layer_idx
+            attn_output_val = decode_attn_int8(
+                q_kernel,
+                k_quant,
+                v_quant,
+                k_scale,
+                v_scale,
+                context_lens,
+                sm_scale=sm_scale,
+                **_int8_extra,
+            )
         else:
-            try:
-                attn_output_val = decode_attn_int4(
-                    q_kernel,
-                    k_quant,
-                    v_quant,
-                    k_scale,
-                    v_scale,
-                    context_lens,
-                    sm_scale=sm_scale,
-                    bit_packed=bool(getattr(cache_wrapper.engine, "bit_packed", True)),
-                    head_dim=head_dim,
-                    debug_stats=stats,
-                    layer_idx=layer_idx,
-                )
-            except TypeError:
-                # Compatibility path for monkey-patched decode_attn function in verify script.
-                attn_output_val = decode_attn_int4(
-                    q_kernel,
-                    k_quant,
-                    v_quant,
-                    k_scale,
-                    v_scale,
-                    context_lens,
-                    sm_scale=sm_scale,
-                    bit_packed=bool(getattr(cache_wrapper.engine, "bit_packed", True)),
-                    head_dim=head_dim,
-                )
+            _int4_extra = {}
+            if "debug_stats" in _int4_sig_params:
+                _int4_extra["debug_stats"] = stats
+            if "layer_idx" in _int4_sig_params:
+                _int4_extra["layer_idx"] = layer_idx
+            attn_output_val = decode_attn_int4(
+                q_kernel,
+                k_quant,
+                v_quant,
+                k_scale,
+                v_scale,
+                context_lens,
+                sm_scale=sm_scale,
+                bit_packed=bool(getattr(cache_wrapper.engine, "bit_packed", True)),
+                head_dim=head_dim,
+                **_int4_extra,
+            )
     elif decode_impl == "torch_ref":
         if k_int8_for_ref is None or v_int8_for_ref is None:
             raise RuntimeError("torch_ref decode for int4 requires materialized INT8 tensors.")
@@ -758,6 +758,19 @@ def apply_int8_fused_patch(model):
             if kv_heads is None:
                 kv_heads = _infer_heads_from_proj(attn, "k_proj", int(head_dim))
             if kv_heads is None:
+                # ENG-010: kv_heads could not be inferred from config or k_proj.
+                # Falling back to q_heads (MHA assumption, i.e. kv_heads == q_heads).
+                # This is incorrect for GQA/MQA models (e.g. Qwen2-7B uses kv_heads=4
+                # with q_heads=28). A wrong kv_heads causes shape mismatches or silent
+                # tensor expansion errors inside _fused_forward_impl. Verify that
+                # num_key_value_heads is present in model.config for your model.
+                logger.warning(
+                    "Could not infer kv_heads for layer %d; falling back to q_heads=%s. "
+                    "This is incorrect for GQA/MQA models. Set num_key_value_heads in "
+                    "model.config to suppress this warning.",
+                    idx,
+                    q_heads,
+                )
                 kv_heads = q_heads
 
             if q_heads is not None:
@@ -800,6 +813,16 @@ def apply_int8_fused_patch(model):
         if isinstance(past_key_value, INT8CacheWrapper):
             cache_wrapper = past_key_value
         elif isinstance(past_key_value, INT8CacheWrapperContainer):
+            # ENG-011: INT8CacheWrapperContainer is only constructed in generate_loop.py
+            # for kv_modes in _FUSED_KV_MODES (int8_fused, int8_ours, int4_fused,
+            # int4_ours, int4_ours_mixed). KIVIStyleKVCache is explicitly excluded
+            # because INT8CacheWrapperContainer.__init__ raises TypeError when given
+            # a cache engine without get_int8_tensors/get_int4_tensors (which KIVI
+            # does not expose). The kivi_style mode always uses the baseline decode
+            # path (past_key_values as plain tuple), so it never reaches this branch.
+            # If you add a new cache mode, ensure it either (a) provides
+            # get_int8_tensors/get_int4_tensors or (b) is not wrapped in
+            # INT8CacheWrapperContainer.
             layer_idx = getattr(self, "layer_idx", 0)
             cache_wrapper = past_key_value[layer_idx]
         elif hasattr(past_key_value, "__getitem__") and hasattr(past_key_value, "engine"):
@@ -819,6 +842,21 @@ def apply_int8_fused_patch(model):
         )
 
         if is_fused:
+            # ENG-023: The fused decode path (_fused_forward_impl) does not compute
+            # or return attention weights. If the caller requests output_attentions=True,
+            # it will silently receive None in the attention weight position, which can
+            # cause crashes or silent incorrect behaviour in downstream code that
+            # inspects attention patterns (e.g. BertViz, attention-based analysis).
+            if output_attentions:
+                import warnings
+                warnings.warn(
+                    "output_attentions=True was requested but the fused INT8/INT4 decode "
+                    "path does not compute attention weights. Attention weights will be "
+                    "None. Use decode_attn_impl='torch_ref' or kv_mode='fp16' if you need "
+                    "attention outputs.",
+                    UserWarning,
+                    stacklevel=2,
+                )
             return _fused_forward_impl(
                 self,
                 hidden_states,

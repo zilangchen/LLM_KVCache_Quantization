@@ -236,6 +236,12 @@ def dequantize_symmetric_int8(
     Returns:
         Dequantized tensor in scale.dtype
     """
+    # QNT-008: Input type validation for defense-in-depth.
+    if quantized.dtype != torch.int8:
+        raise ValueError(f"quantized must be torch.int8, got {quantized.dtype}")
+    if not scale.is_floating_point():
+        raise ValueError(f"scale must be floating point, got {scale.dtype}")
+
     # --- Path A: 5-D scale with trailing singleton ---
     if scale.ndim == quantized.ndim + 1:
         B, H, S, D = quantized.shape
