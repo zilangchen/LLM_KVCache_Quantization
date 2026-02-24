@@ -811,5 +811,558 @@ class TestParseOptionalIntEnv(unittest.TestCase):
             del os.environ[key]
 
 
+# ---------------------------------------------------------------------------
+# TST-026: apply_int8_fused_patch monkey-patch logic
+# ---------------------------------------------------------------------------
+
+
+@_require_torch
+class TestApplyInt8FusedPatch(unittest.TestCase):
+    """Tests for apply_int8_fused_patch: monkey-patching, forward_proxy dispatch,
+    is_fused determination, cache type detection, and _filter_kwargs."""
+
+    # -- helpers --
+
+    @staticmethod
+    def _make_mock_model(
+        num_layers=2,
+        head_dim=8,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        original_sig_params=("self", "hidden_states", "attention_mask",
+                             "position_ids", "past_key_value",
+                             "output_attentions", "use_cache"),
+    ):
+        """Build a minimal mock model that satisfies apply_int8_fused_patch requirements.
+
+        Returns (model, original_forward_fn) where original_forward_fn is the
+        callable installed as the 'original' forward so tests can verify delegation.
+        """
+        from unittest.mock import MagicMock, PropertyMock
+        import inspect
+
+        # --- build a real class with a real forward signature ---
+        # We need a genuine function with the right parameter names so that
+        # inspect.signature works correctly inside apply_int8_fused_patch.
+        param_list = [inspect.Parameter(p, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+                      for p in original_sig_params]
+        # Build a minimal forward that records calls.
+        call_log = []
+
+        def _original_forward(self, hidden_states, attention_mask=None,
+                              position_ids=None, past_key_value=None,
+                              output_attentions=False, use_cache=False):
+            call_log.append({
+                "hidden_states": hidden_states,
+                "attention_mask": attention_mask,
+                "position_ids": position_ids,
+                "past_key_value": past_key_value,
+                "output_attentions": output_attentions,
+                "use_cache": use_cache,
+            })
+            return ("original_output", None)
+
+        # Create an actual class so that AttnClass.__class__ and patching work.
+        AttnClass = type("MockAttn", (), {"forward": _original_forward})
+
+        layers = []
+        for idx in range(num_layers):
+            attn = AttnClass()
+            attn.head_dim = head_dim
+            attn.layer_idx = idx
+            layer = MagicMock()
+            layer.self_attn = attn
+            layers.append(layer)
+
+        config = MagicMock()
+        config.num_attention_heads = num_attention_heads
+        config.num_key_value_heads = num_key_value_heads
+
+        model = MagicMock()
+        model.model.layers = layers
+        model.config = config
+
+        return model, call_log, AttnClass
+
+    # ----------------------------------------------------------------
+    # 1. Basic patching: forward is replaced, _original_forward saved
+    # ----------------------------------------------------------------
+
+    def test_forward_is_replaced(self):
+        """After patching, AttnClass.forward should no longer be the original."""
+        from src.engine.patch_model import apply_int8_fused_patch
+
+        model, _call_log, AttnClass = self._make_mock_model()
+        original_fwd = AttnClass.forward
+        apply_int8_fused_patch(model)
+        self.assertIsNot(AttnClass.forward, original_fwd,
+                         "forward should be replaced by forward_proxy")
+
+    def test_original_forward_saved(self):
+        """After patching, AttnClass._original_forward should reference the original."""
+        from src.engine.patch_model import apply_int8_fused_patch
+
+        model, _call_log, AttnClass = self._make_mock_model()
+        original_fwd = AttnClass.forward
+        apply_int8_fused_patch(model)
+        self.assertIs(AttnClass._original_forward, original_fwd)
+
+    def test_double_patch_preserves_original(self):
+        """Patching twice should not overwrite _original_forward with the proxy."""
+        from src.engine.patch_model import apply_int8_fused_patch
+
+        model, _call_log, AttnClass = self._make_mock_model()
+        original_fwd = AttnClass.forward
+        apply_int8_fused_patch(model)
+        apply_int8_fused_patch(model)
+        self.assertIs(AttnClass._original_forward, original_fwd,
+                      "_original_forward must remain the true original after double patching")
+
+    # ----------------------------------------------------------------
+    # 2. Layer metadata: layer_idx, _kv_num_attention_heads, etc.
+    # ----------------------------------------------------------------
+
+    def test_layer_idx_set(self):
+        """apply_int8_fused_patch should assign layer_idx on each self_attn."""
+        from src.engine.patch_model import apply_int8_fused_patch
+
+        model, _, _ = self._make_mock_model(num_layers=3)
+        # Remove existing layer_idx to test auto-assignment.
+        for layer in model.model.layers:
+            delattr(layer.self_attn, "layer_idx")
+        apply_int8_fused_patch(model)
+        for idx, layer in enumerate(model.model.layers):
+            self.assertEqual(layer.self_attn.layer_idx, idx)
+
+    def test_kv_heads_attributes_set(self):
+        """Patching should set _kv_num_attention_heads and _kv_num_key_value_heads."""
+        from src.engine.patch_model import apply_int8_fused_patch
+
+        model, _, _ = self._make_mock_model(
+            num_attention_heads=8, num_key_value_heads=2)
+        apply_int8_fused_patch(model)
+        for layer in model.model.layers:
+            attn = layer.self_attn
+            self.assertEqual(attn._kv_num_attention_heads, 8)
+            self.assertEqual(attn._kv_num_key_value_heads, 2)
+
+    # ----------------------------------------------------------------
+    # 3. No layers => ValueError
+    # ----------------------------------------------------------------
+
+    def test_no_layers_raises(self):
+        """If model.model.layers is inaccessible, should raise ValueError."""
+        from unittest.mock import MagicMock, PropertyMock
+        from src.engine.patch_model import apply_int8_fused_patch
+
+        model = MagicMock()
+        # Make model.model.layers raise an exception.
+        type(model.model).layers = PropertyMock(side_effect=AttributeError)
+        with self.assertRaises(ValueError):
+            apply_int8_fused_patch(model)
+
+    # ----------------------------------------------------------------
+    # 4. is_fused determination
+    # ----------------------------------------------------------------
+
+    def test_is_fused_true_single_token_with_cache(self):
+        """is_fused should be True when hidden_states.shape[1]==1 and cache_wrapper is not None."""
+        from unittest.mock import MagicMock, patch as mock_patch
+        from src.engine.patch_model import apply_int8_fused_patch, INT8CacheWrapper
+
+        model, call_log, AttnClass = self._make_mock_model()
+        apply_int8_fused_patch(model)
+
+        attn_instance = model.model.layers[0].self_attn
+        cache_wrapper = MagicMock(spec=INT8CacheWrapper)
+        hidden = torch.randn(1, 1, 32)  # seq_len=1 => is_fused=True
+
+        # Mock _fused_forward_impl to capture that it is called.
+        with mock_patch("src.engine.patch_model._fused_forward_impl") as mock_fused:
+            mock_fused.return_value = ("fused_output", None, cache_wrapper)
+            result = AttnClass.forward(
+                attn_instance,
+                hidden,
+                past_key_value=cache_wrapper,
+            )
+            mock_fused.assert_called_once()
+
+    def test_is_fused_false_multi_token(self):
+        """is_fused should be False when hidden_states.shape[1]>1 (prefill)."""
+        from unittest.mock import MagicMock, patch as mock_patch
+        from src.engine.patch_model import apply_int8_fused_patch, INT8CacheWrapper
+
+        model, call_log, AttnClass = self._make_mock_model()
+        apply_int8_fused_patch(model)
+
+        attn_instance = model.model.layers[0].self_attn
+        cache_wrapper = MagicMock(spec=INT8CacheWrapper)
+        hidden = torch.randn(1, 5, 32)  # seq_len=5 => not fused
+
+        with mock_patch("src.engine.patch_model._fused_forward_impl") as mock_fused:
+            result = AttnClass.forward(
+                attn_instance,
+                hidden,
+                past_key_value=cache_wrapper,
+            )
+            mock_fused.assert_not_called()
+        # Original forward should have been called instead.
+        self.assertEqual(len(call_log), 1)
+
+    def test_is_fused_false_no_cache(self):
+        """is_fused should be False when past_key_value is None."""
+        from unittest.mock import patch as mock_patch
+        from src.engine.patch_model import apply_int8_fused_patch
+
+        model, call_log, AttnClass = self._make_mock_model()
+        apply_int8_fused_patch(model)
+
+        attn_instance = model.model.layers[0].self_attn
+        hidden = torch.randn(1, 1, 32)  # seq_len=1 but no cache
+
+        with mock_patch("src.engine.patch_model._fused_forward_impl") as mock_fused:
+            result = AttnClass.forward(
+                attn_instance,
+                hidden,
+                past_key_value=None,
+            )
+            mock_fused.assert_not_called()
+        self.assertEqual(len(call_log), 1)
+
+    # ----------------------------------------------------------------
+    # 5. Cache type detection (INT8CacheWrapper vs INT8CacheWrapperContainer
+    #    vs duck-typed cache-like)
+    # ----------------------------------------------------------------
+
+    def test_cache_detection_int8_cache_wrapper(self):
+        """Passing an INT8CacheWrapper directly should trigger fused path."""
+        from unittest.mock import MagicMock, patch as mock_patch
+        from src.engine.patch_model import (
+            apply_int8_fused_patch,
+            INT8CacheWrapper,
+        )
+
+        model, _, AttnClass = self._make_mock_model()
+        apply_int8_fused_patch(model)
+
+        engine = _FakeCacheEngine(num_layers=2, seq_len=10)
+        wrapper = INT8CacheWrapper(engine, layer_idx=0)
+        hidden = torch.randn(1, 1, 32)
+
+        with mock_patch("src.engine.patch_model._fused_forward_impl") as mock_fused:
+            mock_fused.return_value = ("fused_out", None, wrapper)
+            attn = model.model.layers[0].self_attn
+            AttnClass.forward(attn, hidden, past_key_value=wrapper)
+            # _fused_forward_impl should receive the wrapper directly.
+            args, kwargs = mock_fused.call_args
+            self.assertIs(args[2], wrapper)
+
+    def test_cache_detection_container(self):
+        """Passing INT8CacheWrapperContainer should extract per-layer wrapper."""
+        from unittest.mock import MagicMock, patch as mock_patch
+        from src.engine.patch_model import (
+            apply_int8_fused_patch,
+            INT8CacheWrapperContainer,
+            INT8CacheWrapper,
+        )
+
+        model, _, AttnClass = self._make_mock_model(num_layers=2)
+        apply_int8_fused_patch(model)
+
+        engine = _FakeCacheEngine(num_layers=2, seq_len=10)
+        container = INT8CacheWrapperContainer(engine, num_layers=2)
+        hidden = torch.randn(1, 1, 32)
+
+        with mock_patch("src.engine.patch_model._fused_forward_impl") as mock_fused:
+            mock_fused.return_value = ("fused_out", None, container[0])
+            attn = model.model.layers[0].self_attn
+            AttnClass.forward(attn, hidden, past_key_value=container)
+            args, kwargs = mock_fused.call_args
+            # The extracted wrapper should be an INT8CacheWrapper for layer 0.
+            self.assertIsInstance(args[2], INT8CacheWrapper)
+            self.assertEqual(args[2].layer_idx, 0)
+
+    def test_cache_detection_duck_typed_fallback(self):
+        """A duck-typed object with __getitem__ + engine that yields INT8CacheWrapper."""
+        from unittest.mock import MagicMock, patch as mock_patch
+        from src.engine.patch_model import (
+            apply_int8_fused_patch,
+            INT8CacheWrapper,
+        )
+
+        model, _, AttnClass = self._make_mock_model(num_layers=2)
+        apply_int8_fused_patch(model)
+
+        engine = _FakeCacheEngine(num_layers=2, seq_len=10)
+        wrapper_0 = INT8CacheWrapper(engine, layer_idx=0)
+
+        # Duck-typed cache object: has __getitem__ and .engine.
+        class DuckCache:
+            def __init__(self):
+                self.engine = engine
+            def __getitem__(self, idx):
+                return wrapper_0
+
+        duck = DuckCache()
+        hidden = torch.randn(1, 1, 32)
+
+        with mock_patch("src.engine.patch_model._fused_forward_impl") as mock_fused:
+            mock_fused.return_value = ("fused_out", None, wrapper_0)
+            attn = model.model.layers[0].self_attn
+            AttnClass.forward(attn, hidden, past_key_value=duck)
+            args, _ = mock_fused.call_args
+            self.assertIs(args[2], wrapper_0)
+
+    def test_cache_detection_non_cache_falls_through(self):
+        """A plain dict/string should NOT be detected as cache => fallback path."""
+        from unittest.mock import patch as mock_patch
+        from src.engine.patch_model import apply_int8_fused_patch
+
+        model, call_log, AttnClass = self._make_mock_model()
+        apply_int8_fused_patch(model)
+        hidden = torch.randn(1, 1, 32)
+
+        with mock_patch("src.engine.patch_model._fused_forward_impl") as mock_fused:
+            attn = model.model.layers[0].self_attn
+            AttnClass.forward(attn, hidden, past_key_value="not_a_cache")
+            mock_fused.assert_not_called()
+        self.assertEqual(len(call_log), 1)
+
+    def test_cache_detection_past_key_values_alias(self):
+        """past_key_values (plural) should be normalized to past_key_value."""
+        from unittest.mock import MagicMock, patch as mock_patch
+        from src.engine.patch_model import apply_int8_fused_patch, INT8CacheWrapper
+
+        model, _, AttnClass = self._make_mock_model()
+        apply_int8_fused_patch(model)
+
+        engine = _FakeCacheEngine(num_layers=2, seq_len=5)
+        wrapper = INT8CacheWrapper(engine, layer_idx=0)
+        hidden = torch.randn(1, 1, 32)
+
+        with mock_patch("src.engine.patch_model._fused_forward_impl") as mock_fused:
+            mock_fused.return_value = ("fused_out", None, wrapper)
+            attn = model.model.layers[0].self_attn
+            # Pass via past_key_values (plural), not past_key_value.
+            AttnClass.forward(attn, hidden, past_key_values=wrapper)
+            mock_fused.assert_called_once()
+
+    # ----------------------------------------------------------------
+    # 6. _filter_kwargs: filters out unknown parameters from original sig
+    # ----------------------------------------------------------------
+
+    def test_filter_kwargs_removes_unknown(self):
+        """forward_proxy should filter out kwargs not in the original forward signature."""
+        from src.engine.patch_model import apply_int8_fused_patch
+
+        model, call_log, AttnClass = self._make_mock_model()
+        apply_int8_fused_patch(model)
+
+        attn = model.model.layers[0].self_attn
+        hidden = torch.randn(1, 5, 32)  # multi-token => original forward path
+
+        # Pass extra kwargs that the original forward does NOT accept.
+        AttnClass.forward(
+            attn,
+            hidden,
+            past_key_value=None,
+            cache_position=torch.tensor([0]),  # not in original sig
+            position_embeddings=(torch.randn(1), torch.randn(1)),  # not in original sig
+        )
+        self.assertEqual(len(call_log), 1)
+        # These should have been filtered out.
+        logged = call_log[0]
+        self.assertNotIn("cache_position", logged)
+        self.assertNotIn("position_embeddings", logged)
+
+    def test_filter_kwargs_preserves_known(self):
+        """forward_proxy should preserve kwargs that are in the original forward signature."""
+        from src.engine.patch_model import apply_int8_fused_patch
+
+        model, call_log, AttnClass = self._make_mock_model()
+        apply_int8_fused_patch(model)
+
+        attn = model.model.layers[0].self_attn
+        hidden = torch.randn(1, 5, 32)
+        mask = torch.ones(1, 1, 5, 5)
+
+        AttnClass.forward(attn, hidden, attention_mask=mask)
+        self.assertEqual(len(call_log), 1)
+        self.assertIs(call_log[0]["attention_mask"], mask)
+
+    def test_filter_kwargs_with_past_key_values_sig(self):
+        """When original sig uses 'past_key_values' (plural), it should be routed correctly."""
+        from unittest.mock import MagicMock
+        import inspect
+        from src.engine.patch_model import apply_int8_fused_patch
+
+        # Build a model whose original forward uses 'past_key_values' instead of 'past_key_value'.
+        call_log_plural = []
+
+        def _original_fwd_plural(self, hidden_states, attention_mask=None,
+                                 position_ids=None, past_key_values=None,
+                                 output_attentions=False, use_cache=False):
+            call_log_plural.append({
+                "hidden_states": hidden_states,
+                "past_key_values": past_key_values,
+            })
+            return ("original_output", None)
+
+        AttnClassPlural = type("MockAttnPlural", (), {"forward": _original_fwd_plural})
+
+        layers = []
+        for idx in range(2):
+            attn = AttnClassPlural()
+            attn.head_dim = 8
+            attn.layer_idx = idx
+            layer = MagicMock()
+            layer.self_attn = attn
+            layers.append(layer)
+
+        config = MagicMock()
+        config.num_attention_heads = 4
+        config.num_key_value_heads = 2
+
+        model = MagicMock()
+        model.model.layers = layers
+        model.config = config
+
+        apply_int8_fused_patch(model)
+
+        attn = model.model.layers[0].self_attn
+        hidden = torch.randn(1, 5, 32)  # multi-token => original path
+        dummy_cache = "some_cache"
+
+        AttnClassPlural.forward(attn, hidden, past_key_value=dummy_cache)
+        self.assertEqual(len(call_log_plural), 1)
+        # Should be passed as 'past_key_values' (plural) to the original forward.
+        self.assertEqual(call_log_plural[0]["past_key_values"], dummy_cache)
+
+    # ----------------------------------------------------------------
+    # 7. output_attentions warning on fused path
+    # ----------------------------------------------------------------
+
+    def test_output_attentions_warning_on_fused(self):
+        """When fused path is active and output_attentions=True, a UserWarning should be emitted."""
+        import warnings
+        from unittest.mock import patch as mock_patch
+        from src.engine.patch_model import apply_int8_fused_patch, INT8CacheWrapper
+
+        model, _, AttnClass = self._make_mock_model()
+        apply_int8_fused_patch(model)
+
+        engine = _FakeCacheEngine(num_layers=2, seq_len=5)
+        wrapper = INT8CacheWrapper(engine, layer_idx=0)
+        hidden = torch.randn(1, 1, 32)
+
+        with mock_patch("src.engine.patch_model._fused_forward_impl") as mock_fused:
+            mock_fused.return_value = ("fused_out", None, wrapper)
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                attn = model.model.layers[0].self_attn
+                AttnClass.forward(
+                    attn, hidden,
+                    past_key_value=wrapper,
+                    output_attentions=True,
+                )
+                user_warnings = [x for x in w if issubclass(x.category, UserWarning)]
+                self.assertGreaterEqual(len(user_warnings), 1)
+                self.assertIn("output_attentions", str(user_warnings[0].message))
+
+    # ----------------------------------------------------------------
+    # 8. kv_heads fallback to q_heads when config lacks num_key_value_heads
+    # ----------------------------------------------------------------
+
+    def test_kv_heads_fallback_to_q_heads(self):
+        """When num_key_value_heads is None and k_proj is absent, kv_heads should fall back to q_heads."""
+        from src.engine.patch_model import apply_int8_fused_patch
+
+        model, _, AttnClass = self._make_mock_model(
+            num_attention_heads=4, num_key_value_heads=2)
+        # Remove num_key_value_heads from config and k_proj from attn.
+        model.config.num_key_value_heads = None
+        for layer in model.model.layers:
+            # Ensure k_proj doesn't exist so _infer_heads_from_proj returns None.
+            if hasattr(layer.self_attn, "k_proj"):
+                delattr(layer.self_attn, "k_proj")
+
+        apply_int8_fused_patch(model)
+        # kv_heads should have fallen back to q_heads=4.
+        for layer in model.model.layers:
+            self.assertEqual(layer.self_attn._kv_num_key_value_heads, 4)
+
+
+@_require_torch
+class TestApplyInt8FusedPatchDuckTypedCacheEdgeCases(unittest.TestCase):
+    """Edge cases for the duck-typed cache detection branch in forward_proxy."""
+
+    @staticmethod
+    def _make_patched_model():
+        """Helper to build and patch a model, returning (model, AttnClass)."""
+        from unittest.mock import MagicMock
+        from src.engine.patch_model import apply_int8_fused_patch
+
+        def _original_forward(self, hidden_states, attention_mask=None,
+                              position_ids=None, past_key_value=None,
+                              output_attentions=False, use_cache=False):
+            return ("original_output", None)
+
+        AttnClass = type("MockAttnEdge", (), {"forward": _original_forward})
+
+        layers = []
+        for idx in range(2):
+            attn = AttnClass()
+            attn.head_dim = 8
+            attn.layer_idx = idx
+            layer = MagicMock()
+            layer.self_attn = attn
+            layers.append(layer)
+
+        config = MagicMock()
+        config.num_attention_heads = 4
+        config.num_key_value_heads = 2
+
+        model = MagicMock()
+        model.model.layers = layers
+        model.config = config
+
+        apply_int8_fused_patch(model)
+        return model, AttnClass
+
+    def test_duck_cache_getitem_raises_falls_back(self):
+        """If duck-typed cache __getitem__ raises, cache_wrapper should be None (fallback)."""
+        from unittest.mock import patch as mock_patch
+
+        model, AttnClass = self._make_patched_model()
+        hidden = torch.randn(1, 1, 32)
+
+        class BadDuckCache:
+            engine = "has_engine"
+            def __getitem__(self, idx):
+                raise RuntimeError("broken cache")
+
+        with mock_patch("src.engine.patch_model._fused_forward_impl") as mock_fused:
+            attn = model.model.layers[0].self_attn
+            AttnClass.forward(attn, hidden, past_key_value=BadDuckCache())
+            mock_fused.assert_not_called()
+
+    def test_duck_cache_getitem_returns_non_wrapper(self):
+        """If duck-typed cache __getitem__ returns something other than INT8CacheWrapper, fallback."""
+        from unittest.mock import patch as mock_patch
+
+        model, AttnClass = self._make_patched_model()
+        hidden = torch.randn(1, 1, 32)
+
+        class NonWrapperDuckCache:
+            engine = "has_engine"
+            def __getitem__(self, idx):
+                return "not_a_wrapper"
+
+        with mock_patch("src.engine.patch_model._fused_forward_impl") as mock_fused:
+            attn = model.model.layers[0].self_attn
+            AttnClass.forward(attn, hidden, past_key_value=NonWrapperDuckCache())
+            mock_fused.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
