@@ -92,6 +92,35 @@ def _display_kv_mode(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _split_by_model(
+    df: pd.DataFrame,
+) -> List[tuple]:
+    """Split a DataFrame by model_id for per-model table generation.
+
+    Returns a list of ``(model_suffix, model_label, sub_df)`` tuples.
+    When only one model is present (or model_id is absent), returns a single
+    entry with empty suffix and label so callers can iterate uniformly.
+
+    - ``model_suffix``: filesystem-safe string for filenames (e.g. ``"_qwen2.5_1.5b"``),
+      empty when there is only one model.
+    - ``model_label``: LaTeX-safe string for labels/captions, empty for single model.
+    """
+    if "model_id" not in df.columns or df["model_id"].nunique() <= 1:
+        return [("", "", df)]
+
+    result: List[tuple] = []
+    for model_id in sorted(df["model_id"].dropna().unique()):
+        sub = df[df["model_id"] == model_id].copy()
+        # Build filesystem-safe suffix: "Qwen/Qwen2.5-1.5B-Instruct" → "_qwen2.5_1.5b_instruct"
+        safe = re.sub(r"[^a-zA-Z0-9._-]", "_", str(model_id)).strip("_").lower()
+        suffix = f"_{safe}"
+        # Short display name for captions: keep text after last "/"
+        short_name = str(model_id).rsplit("/", 1)[-1]
+        label = f" ({short_name})"
+        result.append((suffix, label, sub))
+    return result
+
+
 def _pivot_metric(
     df: pd.DataFrame,
     metric_col: str,
@@ -139,20 +168,28 @@ def _pivot_metric(
     return pivot
 
 
-def _latex_table_env(tabular_latex: str, *, caption: str, label: str) -> str:
+def _latex_table_env(
+    tabular_latex: str,
+    *,
+    caption: str,
+    label: str,
+    footnote: Optional[str] = None,
+) -> str:
     tabular_latex = tabular_latex.rstrip()
-    return "\n".join(
-        [
-            r"\begin{table}[t]",
-            r"\centering",
-            rf"\caption{{{caption}}}",
-            rf"\label{{{label}}}",
-            r"\small",
-            tabular_latex,
-            r"\end{table}",
-            "",
-        ]
-    )
+    lines = [
+        r"\begin{table}[t]",
+        r"\centering",
+        rf"\caption{{{caption}}}",
+        rf"\label{{{label}}}",
+        r"\small",
+        tabular_latex,
+    ]
+    if footnote:
+        lines.append(r"\vspace{1mm}")
+        lines.append(rf"\parbox{{\linewidth}}{{\footnotesize {footnote}}}")
+    lines.append(r"\end{table}")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def _to_latex_tabular(df: pd.DataFrame, *, index: bool = False) -> str:
@@ -205,16 +242,25 @@ def _export_profile_table(
     df = _sort_kv_mode(df)
     df = _display_kv_mode(df)
 
-    for metric, fname, caption, digits in metrics:
-        pivot = _pivot_metric(df, metric, round_digits=digits)
-        if pivot.empty:
-            continue
-        tabular = _to_latex_tabular(pivot, index=False)
-        label = f"{label_prefix}:{label_category}:{metric}"
-        latex = _latex_table_env(tabular, caption=caption, label=label)
-        out_path = out_dir / fname
-        _write(out_path, latex)
-        paths.append(out_path)
+    for model_suffix, model_label, model_df in _split_by_model(df):
+        for metric, fname, caption, digits in metrics:
+            pivot = _pivot_metric(model_df, metric, round_digits=digits)
+            if pivot.empty:
+                continue
+            tabular = _to_latex_tabular(pivot, index=False)
+            safe_suffix = _sanitize_label(model_suffix)
+            label = f"{label_prefix}:{label_category}:{metric}{safe_suffix}"
+            # Insert model suffix into filename: "foo.tex" → "foo_model.tex"
+            stem, ext = fname.rsplit(".", 1) if "." in fname else (fname, "tex")
+            out_fname = f"{stem}{model_suffix}.{ext}" if model_suffix else fname
+            latex = _latex_table_env(
+                tabular,
+                caption=f"{caption}{model_label}",
+                label=label,
+            )
+            out_path = out_dir / out_fname
+            _write(out_path, latex)
+            paths.append(out_path)
     return paths
 
 
@@ -257,15 +303,22 @@ def export_needle(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List
     df = _sort_kv_mode(df)
     df = _display_kv_mode(df)
 
-    pivot = _pivot_metric(df, "needle_pass_rate_mean", round_digits=2)
-    if pivot.empty:
-        return paths
-    tabular = _to_latex_tabular(pivot, index=False)
-    label = f"{label_prefix}:needle:pass_rate"
-    latex = _latex_table_env(tabular, caption="Needle pass rate vs context length (%)", label=label)
-    out_path = out_dir / "needle_pass_rate_vs_seq.tex"
-    _write(out_path, latex)
-    paths.append(out_path)
+    for model_suffix, model_label, model_df in _split_by_model(df):
+        pivot = _pivot_metric(model_df, "needle_pass_rate_mean", round_digits=2)
+        if pivot.empty:
+            continue
+        tabular = _to_latex_tabular(pivot, index=False)
+        safe_suffix = _sanitize_label(model_suffix)
+        label = f"{label_prefix}:needle:pass_rate{safe_suffix}"
+        latex = _latex_table_env(
+            tabular,
+            caption=f"Needle pass rate vs context length (\\%){model_label}",
+            label=label,
+        )
+        fname = f"needle_pass_rate_vs_seq{model_suffix}.tex" if model_suffix else "needle_pass_rate_vs_seq.tex"
+        out_path = out_dir / fname
+        _write(out_path, latex)
+        paths.append(out_path)
     return paths
 
 
@@ -282,25 +335,32 @@ def export_ppl(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[Pa
     df = _sort_kv_mode(df)
     df = _display_kv_mode(df)
 
-    cols = [c for c in ["kv_mode", "perplexity_mean", "tokens_evaluated_mean"] if c in df.columns]
-    if not cols:
-        return paths
-    out = df[cols].copy()
-    if "perplexity_mean" in out.columns:
-        out["perplexity_mean"] = pd.to_numeric(out["perplexity_mean"], errors="coerce").round(4)
-    if "tokens_evaluated_mean" in out.columns:
-        out["tokens_evaluated_mean"] = pd.to_numeric(out["tokens_evaluated_mean"], errors="coerce").round(0)
-        try:
-            out["tokens_evaluated_mean"] = out["tokens_evaluated_mean"].astype("Int64")
-        except Exception:
-            pass
+    for model_suffix, model_label, model_df in _split_by_model(df):
+        cols = [c for c in ["kv_mode", "perplexity_mean", "tokens_evaluated_mean"] if c in model_df.columns]
+        if not cols:
+            continue
+        out = model_df[cols].copy()
+        if "perplexity_mean" in out.columns:
+            out["perplexity_mean"] = pd.to_numeric(out["perplexity_mean"], errors="coerce").round(4)
+        if "tokens_evaluated_mean" in out.columns:
+            out["tokens_evaluated_mean"] = pd.to_numeric(out["tokens_evaluated_mean"], errors="coerce").round(0)
+            try:
+                out["tokens_evaluated_mean"] = out["tokens_evaluated_mean"].astype("Int64")
+            except Exception:
+                pass
 
-    tabular = _to_latex_tabular(out, index=False)
-    label = f"{label_prefix}:ppl:summary"
-    latex = _latex_table_env(tabular, caption="Perplexity summary (kv_cache mode)", label=label)
-    out_path = out_dir / "ppl_summary.tex"
-    _write(out_path, latex)
-    paths.append(out_path)
+        tabular = _to_latex_tabular(out, index=False)
+        safe_suffix = _sanitize_label(model_suffix)
+        label = f"{label_prefix}:ppl:summary{safe_suffix}"
+        latex = _latex_table_env(
+            tabular,
+            caption=f"Perplexity summary (kv\\_cache mode){model_label}",
+            label=label,
+        )
+        fname = f"ppl_summary{model_suffix}.tex" if model_suffix else "ppl_summary.tex"
+        out_path = out_dir / fname
+        _write(out_path, latex)
+        paths.append(out_path)
     return paths
 
 
@@ -319,19 +379,85 @@ def export_longbench(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> L
     df = _sort_kv_mode(df)
     df = _display_kv_mode(df)
 
-    pivot = _pivot_metric(df, "longbench_score_mean", round_digits=2)
-    if pivot.empty:
-        return paths
-    tabular = _to_latex_tabular(pivot, index=False)
-    label = f"{label_prefix}:longbench:score"
-    latex = _latex_table_env(
-        tabular,
-        caption="LongBench macro score vs context length (%)",
-        label=label,
+    longbench_footnote = (
+        "LongBench score is the macro-average of task-level official metrics "
+        "(Rouge-L for summarization, Accuracy for classification, "
+        "Edit Similarity for code completion)."
     )
-    out_path = out_dir / "longbench_score_vs_seq.tex"
-    _write(out_path, latex)
-    paths.append(out_path)
+
+    for model_suffix, model_label, model_df in _split_by_model(df):
+        pivot = _pivot_metric(model_df, "longbench_score_mean", round_digits=2)
+        if pivot.empty:
+            continue
+        tabular = _to_latex_tabular(pivot, index=False)
+        safe_suffix = _sanitize_label(model_suffix)
+        label = f"{label_prefix}:longbench:score{safe_suffix}"
+        latex = _latex_table_env(
+            tabular,
+            caption=f"LongBench macro score vs context length (\\%){model_label}",
+            label=label,
+            footnote=longbench_footnote,
+        )
+        fname = f"longbench_score_vs_seq{model_suffix}.tex" if model_suffix else "longbench_score_vs_seq.tex"
+        out_path = out_dir / fname
+        _write(out_path, latex)
+        paths.append(out_path)
+    return paths
+
+
+def _export_ruler_subtask_tables(
+    tables_dir: Path,
+    out_dir: Path,
+    *,
+    label_prefix: str,
+    batch_filter_df: Optional[pd.DataFrame] = None,
+) -> List[Path]:
+    """Export per-subtask RULER tables if ruler_subtask_summary.csv is available.
+
+    Returns a list of written paths (empty if subtask data is unavailable).
+    """
+    paths: List[Path] = []
+    subtask_src = tables_dir / "ruler_subtask_summary.csv"
+    stdf = _read_csv(subtask_src)
+    if stdf.empty or "ruler_task" not in stdf.columns:
+        return paths
+
+    if "batch" in stdf.columns:
+        batch = pd.to_numeric(stdf["batch"], errors="coerce")
+        if (batch == 1).any():
+            stdf = stdf[batch == 1]
+
+    # Canonical subtask display names
+    subtask_display = {
+        "single_niah": "S-NIAH",
+        "multi_keys_niah": "MK-NIAH",
+        "variable_tracking": "VT",
+        "common_words_extraction": "CWE",
+    }
+
+    stdf = _sort_kv_mode(stdf)
+    stdf = _display_kv_mode(stdf)
+
+    for task_key, task_label in subtask_display.items():
+        task_df = stdf[stdf["ruler_task"] == task_key]
+        if task_df.empty:
+            continue
+        pivot = _pivot_metric(task_df, "ruler_pass_rate_mean", round_digits=2)
+        if pivot.empty:
+            continue
+        tabular = _to_latex_tabular(pivot, index=False)
+        safe_key = _sanitize_label(task_key)
+        label = f"{label_prefix}:ruler:{safe_key}"
+        latex = _latex_table_env(
+            tabular,
+            caption=f"RULER {task_label} pass rate vs context length (\\%)",
+            label=label,
+        )
+        fname = f"ruler_{safe_key}_vs_seq.tex"
+        out_path = out_dir / fname
+        _write(out_path, latex)
+        paths.append(out_path)
+
     return paths
 
 
@@ -350,19 +476,42 @@ def export_ruler(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[
     df = _sort_kv_mode(df)
     df = _display_kv_mode(df)
 
-    pivot = _pivot_metric(df, "ruler_pass_rate_mean", round_digits=2)
-    if pivot.empty:
-        return paths
-    tabular = _to_latex_tabular(pivot, index=False)
-    label = f"{label_prefix}:ruler:pass_rate"
-    latex = _latex_table_env(
-        tabular,
-        caption="RULER pass rate vs context length (%)",
-        label=label,
+    # --- Per-subtask tables (from ruler_subtask_summary.csv if available) ---
+    subtask_paths = _export_ruler_subtask_tables(
+        tables_dir, out_dir, label_prefix=label_prefix,
     )
-    out_path = out_dir / "ruler_pass_rate_vs_seq.tex"
-    _write(out_path, latex)
-    paths.append(out_path)
+    paths.extend(subtask_paths)
+
+    # --- Overall pass rate table (per-model when multiple models present) ---
+    # TODO(EXP-003): When ruler_subtask_summary.csv is available, the per-subtask
+    # tables above will provide S-NIAH / MK-NIAH / VT / CWE breakdowns.  Until
+    # then, include a footnote directing readers to the full aggregated results.
+    ruler_footnote: Optional[str] = None
+    if not subtask_paths:
+        ruler_footnote = (
+            "This table shows overall pass rate only. "
+            "Detailed per-subtask results (S-NIAH, MK-NIAH, VT, CWE) "
+            "are available in the full aggregated results "
+            "(\\texttt{ruler\\_subtask\\_summary.csv})."
+        )
+
+    for model_suffix, model_label, model_df in _split_by_model(df):
+        pivot = _pivot_metric(model_df, "ruler_pass_rate_mean", round_digits=2)
+        if pivot.empty:
+            continue
+        tabular = _to_latex_tabular(pivot, index=False)
+        safe_suffix = _sanitize_label(model_suffix)
+        label = f"{label_prefix}:ruler:pass_rate{safe_suffix}"
+        latex = _latex_table_env(
+            tabular,
+            caption=f"RULER pass rate vs context length (\\%){model_label}",
+            label=label,
+            footnote=ruler_footnote,
+        )
+        fname = f"ruler_pass_rate_vs_seq{model_suffix}.tex" if model_suffix else "ruler_pass_rate_vs_seq.tex"
+        out_path = out_dir / fname
+        _write(out_path, latex)
+        paths.append(out_path)
     return paths
 
 
@@ -392,29 +541,33 @@ def export_main_claims(tables_dir: Path, out_dir: Path, *, label_prefix: str) ->
     ]
     if not keep_cols:
         return paths
-    out = df[keep_cols].copy()
-    for col, digits in [
-        ("tpot_ms_mean", 2),
-        ("kv_cache_mem_mb_mean", 0),
-        ("needle_pass_rate_mean", 2),
-        ("needle_exact_match_rate_mean", 2),
-        ("longbench_score_mean", 2),
-        ("ruler_pass_rate_mean", 2),
-        ("perplexity_mean", 4),
-    ]:
-        if col in out.columns:
-            out[col] = pd.to_numeric(out[col], errors="coerce").round(digits)
 
-    tabular = _to_latex_tabular(out, index=False)
-    label = f"{label_prefix}:main:claims32k"
-    latex = _latex_table_env(
-        tabular,
-        caption="Main claims at long context (32K or nearest available point)",
-        label=label,
-    )
-    out_path = out_dir / "main_claims_32k.tex"
-    _write(out_path, latex)
-    paths.append(out_path)
+    for model_suffix, model_label, model_df in _split_by_model(df):
+        out = model_df[keep_cols].copy()
+        for col, digits in [
+            ("tpot_ms_mean", 2),
+            ("kv_cache_mem_mb_mean", 0),
+            ("needle_pass_rate_mean", 2),
+            ("needle_exact_match_rate_mean", 2),
+            ("longbench_score_mean", 2),
+            ("ruler_pass_rate_mean", 2),
+            ("perplexity_mean", 4),
+        ]:
+            if col in out.columns:
+                out[col] = pd.to_numeric(out[col], errors="coerce").round(digits)
+
+        tabular = _to_latex_tabular(out, index=False)
+        safe_suffix = _sanitize_label(model_suffix)
+        label = f"{label_prefix}:main:claims32k{safe_suffix}"
+        latex = _latex_table_env(
+            tabular,
+            caption=f"Main claims at long context (32K or nearest available point){model_label}",
+            label=label,
+        )
+        fname = f"main_claims_32k{model_suffix}.tex" if model_suffix else "main_claims_32k.tex"
+        out_path = out_dir / fname
+        _write(out_path, latex)
+        paths.append(out_path)
     return paths
 
 
@@ -451,37 +604,40 @@ def export_relative_gain(tables_dir: Path, out_dir: Path, *, label_prefix: str) 
     if df.empty:
         return paths
 
-    out = df.copy()
-    out["baseline_mode"] = out["baseline_mode"].map(KV_MODE_DISPLAY).fillna(out["baseline_mode"])
-    out["challenger_mode"] = out["challenger_mode"].map(KV_MODE_DISPLAY).fillna(out["challenger_mode"])
-    keep = [
-        c
-        for c in [
-            "metric",
-            "seq_len",
-            "baseline_mode",
-            "challenger_mode",
-            "baseline_value",
-            "challenger_value",
-            "gain_pct",
-        ]
-        if c in out.columns
-    ]
-    out = out[keep].copy()
-    for col, digits in [("baseline_value", 4), ("challenger_value", 4), ("gain_pct", 2)]:
-        if col in out.columns:
-            out[col] = pd.to_numeric(out[col], errors="coerce").round(digits)
+    df["baseline_mode"] = df["baseline_mode"].map(KV_MODE_DISPLAY).fillna(df["baseline_mode"])
+    df["challenger_mode"] = df["challenger_mode"].map(KV_MODE_DISPLAY).fillna(df["challenger_mode"])
 
-    tabular = _to_latex_tabular(out, index=False)
-    label = f"{label_prefix}:summary:gain"
-    latex = _latex_table_env(
-        tabular,
-        caption="Relative gain summary on key pairs (positive gain means challenger is better)",
-        label=label,
-    )
-    out_path = out_dir / "relative_gain_summary.tex"
-    _write(out_path, latex)
-    paths.append(out_path)
+    for model_suffix, model_label, model_df in _split_by_model(df):
+        keep = [
+            c
+            for c in [
+                "metric",
+                "seq_len",
+                "baseline_mode",
+                "challenger_mode",
+                "baseline_value",
+                "challenger_value",
+                "gain_pct",
+            ]
+            if c in model_df.columns
+        ]
+        out = model_df[keep].copy()
+        for col, digits in [("baseline_value", 4), ("challenger_value", 4), ("gain_pct", 2)]:
+            if col in out.columns:
+                out[col] = pd.to_numeric(out[col], errors="coerce").round(digits)
+
+        tabular = _to_latex_tabular(out, index=False)
+        safe_suffix = _sanitize_label(model_suffix)
+        label = f"{label_prefix}:summary:gain{safe_suffix}"
+        latex = _latex_table_env(
+            tabular,
+            caption=f"Relative gain summary on key pairs (positive gain means challenger is better){model_label}",
+            label=label,
+        )
+        fname = f"relative_gain_summary{model_suffix}.tex" if model_suffix else "relative_gain_summary.tex"
+        out_path = out_dir / fname
+        _write(out_path, latex)
+        paths.append(out_path)
     return paths
 
 
