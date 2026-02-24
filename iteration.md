@@ -1018,3 +1018,7 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - 在远端 conda 环境补跑 `tests/test_aggregate_results_stats.py` 与 `tests/test_generate_thesis_report.py`。
   - 合并前对 `aggregate_results.py` 与 `run_experiments.py` 做一次冲突审查（Claude 已标注中风险）。
+
+### 2026-02-25 00:56 | Phase5v2 v8 收口提交记录
+- Commit:
+  - `b0b877a` fix: close v8 aggregation and completeness gaps
