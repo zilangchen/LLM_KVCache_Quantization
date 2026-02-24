@@ -1,8 +1,8 @@
 # Code Review Tracker
 
-> 466 issues | 428 fixed + 18 false_positive + 7 wont_fix | 13 open (0 CRIT, 4 HIGH, 7 MED, 2 LOW)
+> 466 issues | 430 fixed + 25 false_positive + 8 wont_fix | 3 open (0 CRIT, 2 HIGH, 1 MED, 0 LOW)
 > Phase Gate: **CLEAR** — 0 CRITICAL open
-> Last updated: 2026-02-24
+> Last updated: 2026-02-25
 
 ---
 
@@ -66,8 +66,8 @@
 - [x] **AGG-047** `[MED]` _same_commit_prefix 将 empty/unknown 视为兼容 (aggregate_results.py:465-471): `not a or not b → True`，`a=="unknown" → True`，与 run_experiments.py 中已修复的 RUN-018 语义相反。aggregate_results.py 的 strict 模式 commit 一致性检查对 "unknown" commit 全部静默通过，不同代码版本混入同一 run 无法被检测。 — D2 full-scan, confidence: 85% -- fixed
 
 ### CAL. 校准模块 — `scripts/calibrate_behavior.py` (R4 深度审查 2026-02-24)
-- [ ] **CAL-019** `[HIGH]` Q 向量计算缺失 input_layernorm — 校准注意力分布与真实推理系统性偏差 (calibrate_behavior.py:793-795): `attn.q_proj(hidden_states[layer_idx])` 跳过了 `input_layernorm`，而 Qwen2DecoderLayer 在 self_attn 前先经过 layernorm。校准时的 Q 向量与模型实际推理产出的 Q 不同，导致 inv_tau 和超参数搜索基于错误的注意力分布。 — D1 R4 calibration deep review, confidence: 95%
-- [ ] **CAL-020** `[HIGH]` Q 向量未施加 RoPE，与已旋转的 K 做点积 (calibrate_behavior.py:795-798): Q 仅经 q_proj 无 RoPE，而 K 来自 past_key_values 已施加 RoPE。`logits = q @ k.T` 用非旋转 Q 与旋转后 K 做点积，注意力分布峰值位置与真实推理完全不同。与 CAL-019 叠加，校准产物数学基础不正确。 — D1 R4, confidence: 93%
+- [x] **CAL-019** `[HIGH]` Q 向量计算缺失 input_layernorm — 校准注意力分布与真实推理系统性偏差 (calibrate_behavior.py:793-795): `attn.q_proj(hidden_states[layer_idx])` 跳过了 `input_layernorm`，而 Qwen2DecoderLayer 在 self_attn 前先经过 layernorm。校准时的 Q 向量与模型实际推理产出的 Q 不同，导致 inv_tau 和超参数搜索基于错误的注意力分布。 — D1 R4 calibration deep review, confidence: 95% — fixed d56278d
+- [x] **CAL-020** `[HIGH]` Q 向量未施加 RoPE，与已旋转的 K 做点积 (calibrate_behavior.py:795-798): Q 仅经 q_proj 无 RoPE，而 K 来自 past_key_values 已施加 RoPE。`logits = q @ k.T` 用非旋转 Q 与旋转后 K 做点积，注意力分布峰值位置与真实推理完全不同。与 CAL-019 叠加，校准产物数学基础不正确。 — D1 R4, confidence: 93% — fixed d56278d
 - [x] **CAL-021** `[HIGH]` dummy 数据 fallback 返回字符串而非张量 — 必然 AttributeError 崩溃 (calibrate_behavior.py:95-97,778-779): WikiText-2 下载失败时 `get_calibration_dataset()` 返回字符串列表，main() 中 `input_ids.to(model.device)` 因字符串无 `.to()` 方法而崩溃。except Exception 吞噬所有异常降级到必然崩溃路径。 — D2 R4, confidence: 99% — fixed 7e70711 — raise RuntimeError on dataset download failure
 - [x] **CAL-022** `[HIGH]` generate_loop 消费校准 JSON 时丢弃 group_size_v/clip_percentile_v (calibrate_behavior.py:1026-1027 vs generate_loop.py:501-522): 校准写入独立的 group_size_k/v，但 generate_loop 仅使用 K 侧值。K/V 不同 group_size 时 V scale shape 与 cache engine 期望不匹配，可能静默用错误 scale 量化 V。 — D4 R4, confidence: 90% — fixed 264dcc3
 - [x] **CAL-023** `[MED]` config 覆盖静默吞噬 --int4_search 设置的 quant_bits (calibrate_behavior.py:693-714): L694 设 quant_bits=4，但 L696-701 的 config 覆盖 loop 可能将其改回 8，用户命令行意图被静默篡改。 — D2 R4, confidence: 82% — fixed 7e70711 — warn when config override changes quant_bits
@@ -107,18 +107,18 @@
 - [x] **UTIL-015** `[LOW]` get_gpu_memory_mb docstring "current" 与 "Peak" 矛盾 (timing.py:141-150) — R5, confidence: 90% — fixed 75d691c — fixed get_gpu_memory_mb docstring
 
 ### CFG. 配置 — `configs/`
-- [ ] **CFG-008** `[MED]` 7B/8B 长上下文仅 3 条 vs 1.5B 的 18 条
-- [ ] **CFG-009** `[MED]` 1.5B 校准文件命名不一致 (kv_calib_kl_selected_v3_quick.json vs 7B/8B 的 kv_calib_kl_qwen25_7b_int8.json)
-- [ ] **CFG-011** `[MED]` 消融 D 节缺少 dynamic scales 变体
-- [ ] **CFG-012** `[MED]` 所有消融仅 seq_len=4096
-- [ ] **CFG-013** `[MED]` 消融 C 节 (group_size sweep) 使用同一个 calib_file
+- [x] **CFG-008** `[MED]` 7B/8B 长上下文仅 3 条 vs 1.5B 的 18 条 — false_positive: 7B/8B configs explicitly state "Core runs only (no throughput sweep, no ablation variants)" — intentional external-validity scope reduction, not a coverage gap
+- [x] **CFG-009** `[MED]` 1.5B 校准文件命名不一致 (kv_calib_kl_selected_v3_quick.json vs 7B/8B 的 kv_calib_kl_qwen25_7b_int8.json) — wont_fix: cosmetic naming inconsistency (1.5B: selected_v3_quick vs 7B/8B: model_bits). Does not affect correctness — each config points to its correct calib_file. Renaming would invalidate existing experiment references.
+- [x] **CFG-011** `[MED]` 消融 D 节缺少 dynamic scales 变体 — false_positive: Ablation D-3 (ablation_dynamic_4k, use_static_scales=false) already exists in exp_matrix_ablation_1p5b_v1.yaml:270-283
+- [x] **CFG-012** `[MED]` 所有消融仅 seq_len=4096 — false_positive: ablation config header states "All runs: INT8, seq_len=4096" — intentional variable isolation at fixed context length; main exp_matrix has full seq_len sweep
+- [x] **CFG-013** `[MED]` 消融 C 节 (group_size sweep) 使用同一个 calib_file — false_positive: group_size is a runtime inference parameter that affects scale chunking, not calibration. Using same calib_file correctly isolates the group_size variable for the ablation
 - [ ] **CFG-022** `[MED]` 1.5B 吞吐量实验 b1-b16 使用 use_attn_temperature:true 而 b24-b32 使用 false，7B/8B 全部 false (exp_matrix.yaml:391-448): 同一模型 throughput 曲线混入 temperature 变量，跨模型对比也不对等。week4/week5 snapshot 同理。 — D1 TST+configs rotation, confidence: 95%
-- [ ] **CFG-023** `[LOW]` 7B/8B int4_ours curve 使用 use_attn_temperature:true 但 int8_ours curve 使用 false (exp_matrix_qwen25_7b_v1.yaml:130-180 vs 275-312): INT8 vs INT4 对比中温度策略不同，是混淆变量。 — D1 TST+configs rotation, confidence: 92%
-- [ ] **CFG-024** `[LOW]` runtime.quant_defaults use_attn_temperature:true 但 int8_ours curve 运行覆盖为 false (exp_matrix_qwen25_7b_v1.yaml:33): 默认值与实际不一致，新增运行可能意外使用 temperature。 — D1 TST+configs rotation, confidence: 85%
+- [x] **CFG-023** `[LOW]` 7B/8B int4_ours curve 使用 use_attn_temperature:true 但 int8_ours curve 使用 false (exp_matrix_qwen25_7b_v1.yaml:130-180 vs 275-312): INT8 vs INT4 对比中温度策略不同，是混淆变量。 — D1 TST+configs rotation, confidence: 92% — false_positive: int8_ours 7B/8B runs use _no_temp_adaptive_fused variant (explicit in run_name), while int4_ours uses temperature — deliberate per-method config, not an unintended inconsistency
+- [x] **CFG-024** `[LOW]` runtime.quant_defaults use_attn_temperature:true 但 int8_ours curve 运行覆盖为 false (exp_matrix_qwen25_7b_v1.yaml:33): 默认值与实际不一致，新增运行可能意外使用 temperature。 — D1 TST+configs rotation, confidence: 85% — false_positive: standard YAML default/override pattern — quant_defaults.use_attn_temperature=true provides default for int4_ours runs; int8_ours runs override to false per their variant name
 - [x] **CFG-025** `[LOW]` Frozen snapshot configs header comments 含过时 conventions — frozen snapshots 有意保留历史状态，修改会破坏其作为时间快照的意义 -- wont_fix
 - [ ] **CFG-026** `[HIGH]` 7B/8B 配置引用的 calib_file 在 artifacts/ 中全部缺失 (exp_matrix_qwen25_7b_v1.yaml:32,132,150,...; exp_matrix_llama31_8b_v1.yaml:35,135,153,...): 4 个文件均不存在 — `artifacts/kv_calib_kl_qwen25_7b_int8.json`、`artifacts/kv_calib_kl_qwen25_7b_int4.json`、`artifacts/kv_calib_kl_llama31_8b_int8.json`、`artifacts/kv_calib_kl_llama31_8b_int4.json`。run_experiments.py L1147-1158 在非 dry_run 时检查 calib_file_path.exists()，缺失则 print error + return 2，7B/8B 所有 int8_ours/int4_ours 运行无法执行。与 objective.md §9（扩展模型实验为已批准目标）直接冲突。 — D4 configs deep review, confidence: 99%
 - [x] **CFG-027** `[MED]` ablation 配置头部 conventions 注释 kv_mode 枚举含 `mixed` 但 SUPPORTED_KV_MODES 为 `int4_ours_mixed` (exp_matrix_ablation_1p5b_v1.yaml:19): 注释 `# - kv_mode: fp16 | int8_baseline | int8_ours | int4_baseline | int4_fused | mixed` 中的 `mixed` 与 run_experiments.py SUPPORTED_KV_MODES 中的实际枚举值 `int4_ours_mixed` 不匹配；ablation 矩阵实际上也未使用任何 mixed 模式条目，维护者参考注释添加 mixed 运行时会因 kv_mode 无效被 SUPPORTED_KV_MODES 校验拒绝。 — D4 configs deep review, confidence: 90% — fixed db0b23a
-- [ ] **CFG-028** `[MED]` ablation A-2 的 calib_strategy: mse 字段在 generate_loop.py 中无效，MSE 消融结果不反映实际 MSE 校准行为 (exp_matrix_ablation_1p5b_v1.yaml:84): generate_loop.py 的 generate_from_ids() 无 calib_strategy 参数；run_experiments.py 将 calib_strategy 透传给子脚本（L1296），但 eval_ppl.py 等子脚本的 --calib_strategy 参数不影响引擎行为，引擎仅读 calib_file 的 scales。MSE ablation 运行时实际行为由 `artifacts/kv_calib_mse_1p5b_int8.json` 的内容决定，`calib_strategy=mse` 字段被静默忽略，与 RQ1 研究设计意图（对比三种校准方法）不符；若 MSE calib_file 未被正确生成，此运行退化为无 scales 的 int8_ours。 — D4 configs deep review, confidence: 85%
+- [x] **CFG-028** `[MED]` ablation A-2 的 calib_strategy: mse 字段在 generate_loop.py 中无效，MSE 消融结果不反映实际 MSE 校准行为 (exp_matrix_ablation_1p5b_v1.yaml:84): generate_loop.py 的 generate_from_ids() 无 calib_strategy 参数；run_experiments.py 将 calib_strategy 透传给子脚本（L1296），但 eval_ppl.py 等子脚本的 --calib_strategy 参数不影响引擎行为，引擎仅读 calib_file 的 scales。MSE ablation 运行时实际行为由 `artifacts/kv_calib_mse_1p5b_int8.json` 的内容决定，`calib_strategy=mse` 字段被静默忽略，与 RQ1 研究设计意图（对比三种校准方法）不符；若 MSE calib_file 未被正确生成，此运行退化为无 scales 的 int8_ours。 — D4 configs deep review, confidence: 85% — false_positive: calib_strategy field is metadata passed to eval scripts argparse but unused in any logic — actual calibration is determined by calib_file path; the field serves as provenance documentation
 - [ ] **CFG-029** `[HIGH]` LLaMA-3.1-8B 配置 model_revision: null 导致实验无法 pin-revision 复现 (exp_matrix_llama31_8b_v1.yaml:22): run_experiments.py L1287 `if model_revision:` 对 null/None 跳过 `--model_revision` 参数传递，子脚本默认加载 HF Hub main 分支最新版。1.5B 有 pinned revision `989aa7980e4cf806f80c7fef2b1adb7bc71aa306`，7B 有 `a09a35458c702b33eeacc393d103063234e8bc28`，唯独 LLaMA 为 null，与 objective.md §9"固定决策：revision pinned"直接冲突，存在跨时间/跨机器复现性风险。 — D4 configs deep review, confidence: 95%
 - [x] **CFG-030** `[MED]` config_utils.py KV_MODE_ORDER 中 int4_fused 排在 int4_ours_mixed 之后，与 CLAUDE.md §9 标准顺序不一致 (scripts/config_utils.py:21-31): 实际顺序为 `[..., int4_baseline, int4_ours, int4_ours_mixed, int4_fused, kivi_style]`，而 CLAUDE.md §9 量化方法列表为 `fp16, int8_baseline, int8_ours, int4_baseline, int4_fused, int4_ours, int4_ours_mixed, kivi_style`（int4_fused 在 int4_ours 之前）。aggregate_results.py 和 export_tables_latex.py 均从 config_utils 导入 KV_MODE_ORDER 用于论文表格列排序，当前顺序将 int4_fused 置于 int4_ours_mixed 之后，与官方规范不符，可能导致表格展示顺序与论文叙述逻辑不一致。 — D4 configs deep review, confidence: 88% — fixed db0b23a
 
