@@ -514,4 +514,17 @@ Canonical agent workflow directory is `.agents/`.
 - **Commits**: 9bc6414 (quant/cache tests), 3c1b23c (stats tests)
 - **Running total**: 367 issues, 293 fixed + 10 fp + 4 wf = 307 resolved, 56 open (0 CRIT, 27 HIGH, 27 MED, 2 LOW)
 
+### 2026-02-24 14:55 | Review Tracker Fix — Wave 10 (test coverage, utils & tools)
+- **Goal**: Write 137 unit tests covering 8 TST issues for config_utils, run_experiments, review_tool, check_run_completeness
+- **TST-053**: test_config_utils.py (22 tests: load_config error paths, split_csv, read_json, read_text)
+- **TST-054**: TestSameCommitPrefix (12 tests: hash prefix matching, empty/unknown, whitespace, case sensitivity)
+- **TST-055**: TestResolveQuantParams (15 tests: overrides, validation, boolean rejection, boundary)
+- **TST-057**: TestSafeTCrit (10 tests: NaN/Inf/n<=1 guards, distribution correctness)
+- **TST-019/038**: test_review_tool.py (37 tests: regex patterns, tracker parsing, all CLI commands)
+- **TST-032**: test_check_run_completeness_utils.py (32 tests: split_csv, is_oom_from_log, expected_run_ids)
+- **TST-040**: TestClassifyFailureExtended (19 tests: all _classify_failure paths)
+- **Changed files**: tests/test_config_utils.py (NEW), tests/test_run_experiments.py (NEW), tests/test_review_tool.py (NEW), tests/test_check_run_completeness_utils.py (NEW), tests/test_aggregate_results_stats.py (extended)
+- **Commits**: d045f08 (test files), 6cd295d (tracker)
+- **Running total**: 367 issues, 301 fixed + 10 fp + 4 wf = 315 resolved, 48 open (0 CRIT, 21 HIGH, 25 MED, 2 LOW)
+
 > 更早的条目见 `development_history/iteration_archive_202602.md`
