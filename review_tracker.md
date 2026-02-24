@@ -1,6 +1,6 @@
 # Code Review Tracker
 
-> 379 issues | 321 fixed + 6 false_positive | 52 open (0 CRIT, 22 HIGH, 27 MED, 3 LOW)
+> 422 issues | 376 fixed + 23 false_positive + 7 wont_fix | 46 open (0 CRIT, 8 HIGH, 27 MED, 11 LOW)
 > Phase Gate: **CLEAR** — 0 CRITICAL open
 > Last updated: 2026-02-24
 
@@ -24,14 +24,22 @@
 
 - [x] **EVL-023** `[LOW]` eval_longbench.py logger 定义位置：logger = logging.getLogger(__name__) 在 import 块中间（介于 traceback 和 from collections impor... -- fixed
 - [x] **EVL-026** `[LOW]` eval_ruler.py summary row 聚合维度不一致 (L1008-1016): `overall_pass_rate` 基于 task-level macro average（4 tasks），而 `overall_f1` 和 `overall_contains` 基于 depth-level macro average（N depth ratios），同一 summary_row 内三个指标的聚合基底不同。主指标 `ruler_score` 不受影响（等于 task-level pass_rate） -- fixed
+- [x] **EVL-029** `[HIGH]` eval_ppl.py 缺少标准化 OOM 退出码和 task_failure JSON (eval_ppl.py:840-844): except RuntimeError 捕获 OOM 子类后 sys.exit(1) 而非 EXIT_OOM=73，不写 task_failure JSON。run_experiments.py _classify_failure() 依赖 returncode==73 识别 OOM，eval_ppl OOM 被错分为 generic failure，完整性检查统计遗漏。eval_longbench 和 eval_ruler 均已实现标准化 OOM 处理（exit 73 + failure JSON）。 — D2 R3 eval deep review, confidence: 95% — fixed fe7cc34
+- [x] **EVL-030** `[MED]` eval_longbench.py _truncate_prompt_ids 使用纯右保留截断，丢失 system prompt 和 context 开头 (eval_longbench.py:320-325): ids=ids[-max_tokens:] 截断丢失开头 system prompt + context 开头。EVL-007 已修复 eval_ruler.py 为 head+tail 截断，但 eval_longbench 仍用旧方案。HF 真实数据（gov_report/multi_news）几乎必然超长触发。与 RULER 截断策略不一致。 — D2 R3 eval deep review, confidence: 90% — fixed fe7cc34
+- [x] **EVL-031** `[MED]` eval_ppl.py ppl_ci95_low/ppl_ci95_high 填充点估计值，字段名语义欺骗 (eval_ppl.py:906-907): CSV 输出 ppl_ci95_low=ppl_ci95_high=perplexity（点估计），未做任何 CI 计算。下游直接读取单 run CSV 会得到零宽度 CI。aggregate_results.py 从多 seed 重新计算 CI 不受影响。 — D1 R3 eval deep review, confidence: 92% — fixed fe7cc34
+- [x] **EVL-032** `[MED]` eval_ruler.py CWE exact_match 仅检查 recall==1.0，与其他 RULER 子任务 exact_match 语义不一致 (eval_ruler.py:225): CWE 的 exact_match 定义为 intersection==truth_words（所有真值词出现在预测中即得 1.0），允许预测含大量额外词汇。s_niah/mk_niah/vt 要求归一化后完全匹配或全部出现。CWE 系统性偏宽松，可能拉高 ruler_pass_rate 总分。 — D1 R3 eval deep review, confidence: 88% — fixed 0a0b05a
+- [x] **EVL-033** `[MED]` eval_ppl.py int8_baseline 获得 decode_attn_impl=triton_fused 属性但实际不使用 (eval_ppl.py:298-315): int8_baseline 不在 ours 白名单中，scales=None 正确。但 cache 对象存储 decode_attn_impl="triton_fused"。当前 build_past_key_values 条件不包含 int8_baseline 故无功能影响，但配置语义不精确，未来修改可能意外启用 fused path。 — D4 R3 eval deep review, confidence: 75% — fixed fe7cc34
+- [x] **EVL-034** `[LOW]` eval_ppl.py kivi_style 经过 maybe_to_dynamic_cache 的静默转换/回退链 (eval_ppl.py:332-336,365): KIVI 返回 tuple，maybe_to_dynamic_cache 尝试 from_legacy_cache，shape 不兼容时 except 静默回退，可能产生非预期 cache 格式。 — D2 R3 eval deep review, confidence: 70% — fixed 0a0b05a
+- [x] **EVL-035** `[LOW]` export_tables_latex.py LongBench footnote 遗漏 QA 类任务的 token-F1 指标说明 (export_tables_latex.py:382-386): footnote 列举 Rouge-L/Accuracy/Edit Similarity 但遗漏 QA 任务（8/21 任务）使用的 token-F1。 — D7 R3 eval deep review, confidence: 95% — fixed fe7cc34
+- [x] **EVL-036** `[LOW]` eval_ppl.py RuntimeError 捕获过宽，非 OOM 的 RuntimeError 也无 traceback 无 failure JSON (eval_ppl.py:840-844): 所有 RuntimeError 统一 sys.exit(1)，Triton kernel 编译失败/dtype 不匹配等非 OOM 错误无调试信息输出。eval_longbench/eval_ruler 在 except 块中写 task_failure JSON 包含完整 traceback。 — D2 R3 eval deep review, confidence: 90% — fixed fe7cc34
 
 ---
 
 ## Open Issues
 
 ### AGG. 聚合 — `scripts/aggregate_results.py`
-- [ ] **AGG-002** `[HIGH]` RULER 聚合缺少子任务分拆 (aggregate_results.py
-- [ ] **AGG-003** `[HIGH]` 多模型对比缺少分层表
+- [x] **AGG-002** `[HIGH]` RULER 聚合缺少子任务分拆 (aggregate_results.py) — D3 R3 验证: RULER 子任务聚合已在 aggregate_results.py L2471-2511 实现，输出 ruler_task_summary.csv 和 ruler_subtask_summary.csv -- fixed
+- [x] **AGG-003** `[HIGH]` 多模型对比缺少分层表 — D3 R3 验证: _export_per_model_layered_tables() 已在 L280-335 实现，按 model_id 拆分输出到 tables/per_model/ -- fixed
 - [x] **AGG-007** `[MED]` LongBench 聚合同时包含 3 个近义指标 (aggregate_results.py — fixed 081e3a9
 - [x] **AGG-008** `[MED]` KIVI quant_bits 在 pairings 中未区分 INT8/INT4 (aggregate_results.py — fixed 2f6cddb
 - [x] **AGG-009** `[MED]` kv_mode 显示顺序依赖默认排序 (aggregate_results.py — fixed 016b460
@@ -56,6 +64,47 @@
 - [x] **AGG-046** `[MED]` _read_json bare except 静默吞掉 JSON 损坏与 IO 错误 (aggregate_results.py:460-461): `except Exception: return {}` 对 JSONDecodeError、PermissionError、OSError 均静默返回空 dict，manifest 读取失败与 manifest 不存在无法区分。run_experiments.py 中对应函数 (RUN-026) 已修复分类 except + 日志，但 aggregate_results.py 仍是 bare except。影响 _strict_manifest_and_artifact_checks、_collect_execution_coverage 的准确性。 — D2 full-scan, confidence: 90% -- fixed
 - [x] **AGG-048** `[MED]` _safe_t_crit(inf) 返回 0.0 导致 cnt=inf 时 CI 输出 0.0 而非 NaN，产生"零误差"伪像 (aggregate_results.py:227-233): `_safe_t_crit(inf)` 因 `not np.isfinite(inf)=True` 返回 0.0；`cnt.clip(lower=1)=inf`；`sem=std/sqrt(inf)=0.0`；`ci_half=0.0*0.0=0.0`；`.where(inf>1, np.nan)` 因 inf>1=True 保留 0.0。最终 ci95_half=0.0 在图表中呈现为"精确度极高"而非"数据无效"，误导读者。修复建议：在 _add_ci95_columns 开头添加 `cnt = cnt.replace([np.inf, -np.inf], np.nan)`，使 inf 经 `.where(cnt>1, np.nan)` 变为 NaN。 — D1, confidence: 82% — fixed 8f39875
 - [x] **AGG-047** `[MED]` _same_commit_prefix 将 empty/unknown 视为兼容 (aggregate_results.py:465-471): `not a or not b → True`，`a=="unknown" → True`，与 run_experiments.py 中已修复的 RUN-018 语义相反。aggregate_results.py 的 strict 模式 commit 一致性检查对 "unknown" commit 全部静默通过，不同代码版本混入同一 run 无法被检测。 — D2 full-scan, confidence: 85% -- fixed
+
+### CAL. 校准模块 — `scripts/calibrate_behavior.py` (R4 深度审查 2026-02-24)
+- [ ] **CAL-019** `[HIGH]` Q 向量计算缺失 input_layernorm — 校准注意力分布与真实推理系统性偏差 (calibrate_behavior.py:793-795): `attn.q_proj(hidden_states[layer_idx])` 跳过了 `input_layernorm`，而 Qwen2DecoderLayer 在 self_attn 前先经过 layernorm。校准时的 Q 向量与模型实际推理产出的 Q 不同，导致 inv_tau 和超参数搜索基于错误的注意力分布。 — D1 R4 calibration deep review, confidence: 95%
+- [ ] **CAL-020** `[HIGH]` Q 向量未施加 RoPE，与已旋转的 K 做点积 (calibrate_behavior.py:795-798): Q 仅经 q_proj 无 RoPE，而 K 来自 past_key_values 已施加 RoPE。`logits = q @ k.T` 用非旋转 Q 与旋转后 K 做点积，注意力分布峰值位置与真实推理完全不同。与 CAL-019 叠加，校准产物数学基础不正确。 — D1 R4, confidence: 93%
+- [ ] **CAL-021** `[HIGH]` dummy 数据 fallback 返回字符串而非张量 — 必然 AttributeError 崩溃 (calibrate_behavior.py:95-97,778-779): WikiText-2 下载失败时 `get_calibration_dataset()` 返回字符串列表，main() 中 `input_ids.to(model.device)` 因字符串无 `.to()` 方法而崩溃。except Exception 吞噬所有异常降级到必然崩溃路径。 — D2 R4, confidence: 99%
+- [ ] **CAL-022** `[HIGH]` generate_loop 消费校准 JSON 时丢弃 group_size_v/clip_percentile_v (calibrate_behavior.py:1026-1027 vs generate_loop.py:501-522): 校准写入独立的 group_size_k/v，但 generate_loop 仅使用 K 侧值。K/V 不同 group_size 时 V scale shape 与 cache engine 期望不匹配，可能静默用错误 scale 量化 V。 — D4 R4, confidence: 90%
+- [ ] **CAL-023** `[MED]` config 覆盖静默吞噬 --int4_search 设置的 quant_bits (calibrate_behavior.py:693-714): L694 设 quant_bits=4，但 L696-701 的 config 覆盖 loop 可能将其改回 8，用户命令行意图被静默篡改。 — D2 R4, confidence: 82%
+- [ ] **CAL-024** `[MED]` inv_tau_candidates 无空列表校验 — 空输入导致 argmin 崩溃 (calibrate_behavior.py:991,204,258): `--inv_tau_candidates ""` 产出空列表，torch.argmin 在空张量上 RuntimeError。 — D5 R4, confidence: 88%
+- [ ] **CAL-025** `[MED]` evaluate_quant_candidate 空样本静默返回零损失 — 搜索选出无效候选 (calibrate_behavior.py:377-384): loss_values 为空时 mean_loss=0.0，被搜索误认为"完美候选"。应返回 +inf。 — D2 R4, confidence: 80%
+- [ ] **CAL-026** `[MED]` KL 散度 clamp 破坏概率归一化 — 长序列引入系统性正偏差 (calibrate_behavior.py:233-235): clamp(min=eps) 后 p_ref/p_quant 总和不为 1.0，seq_len=512 时累积偏差 ~5e-4。 — D1 R4, confidence: 75%
+- [ ] **CAL-027** `[MED]` compute_inv_tau 全 inf loss_accum 无检测 — argmin 静默返回索引 0 (calibrate_behavior.py:243-258): inf 通过 NaN 检查但 argmin 返回第一个索引，静默选出可能无效的候选。 — D2 R4, confidence: 85%
+- [ ] **CAL-029** `[MED]` get_calibration_dataset 返回少于 n_samples 且不过滤短文本 (calibrate_behavior.py:99-108): 单 token 序列注意力退化，稀释校准质量。无 warning。 — D5 R4, confidence: 83%
+- [ ] **CAL-031** `[LOW]` model.model.layers 硬编码假设 Qwen/LLaMA 架构 (calibrate_behavior.py:793): 对当前三个目标模型有效，但可扩展性差。 — D7 R4, confidence: 90%
+- [ ] **CAL-032** `[LOW]` getattr 默认值仅对 1.5B 正确 — 7B/8B config 缺字段时静默用错误参数 (calibrate_behavior.py:766-769): num_heads=12 对 1.5B 正确但 7B 为 28。 — D5 R4, confidence: 78%
+
+### KRN. Triton Kernels — `src/kernels/` (R4 深度审查 2026-02-24)
+- [x] **KRN-001** `[HIGH]` V/K scale masked load `other=1.0` 设计脆弱 (triton_decode_attn_int8.py:200,258): 被 mask 位置 int8=0 * scale=1.0=0.0 当前安全，但若 int8 的 other 值被修改则 scale=1.0 会放大错误。更安全选择 other=0.0。 — D1 R4, confidence: 92% — false_positive: L239 tl.where(mask,qk,-inf) 在 softmax 前已将 padding 置为 -inf，scale 选择不影响输出
+- [x] **KRN-002** `[HIGH]` kernel 自身不防御 ctx_len=0（依赖 wrapper 层 L377 提前返回） (triton_decode_attn_int8.py:175): ctx_len=0 时循环不执行，acc/l_i=0.0/0.0=NaN。wrapper L446-448 用零覆盖。若绕过 wrapper 直接调用 kernel 则 NaN 泄露。 — D5 R4, confidence: 88% — fixed: L377-378 全批次零保护 + L446-448 混合批次零覆写 (ENG-016)
+- [x] **KRN-003** `[HIGH]` `q.to(tl.float32)` 在循环内重复执行，应提升到循环外 (triton_decode_attn_int8.py:234): 性能回归。32K 序列 ~500 次迭代每次对 HEAD_DIM=128 元素做 fp16→fp32 转换。Triton 编译器可能优化但不应依赖。 — D7 R4, confidence: 95% — false_positive: Triton JIT 编译器 LICM 自动提升循环不变量，q 在循环内从未修改
+- [ ] **KRN-005** `[MED]` elementwise+reduce 未使用 tl.dot，错失 tensor core 加速 (triton_decode_attn_int8.py:271,235): weighted_v 和 QK score 计算可用 tl.dot 利用 tensor core。 — D7 R4, confidence: 85%
+- [ ] **KRN-006** `[MED]` INT4 wrapper docstring 声称 "[-7, 7]" 但 unpack_int4 实际返回 [-8, 7] (triton_decode_attn_int4.py:5-6): 功能正确但文档不准确。 — D7 R4, confidence: 98%
+- [ ] **KRN-007** `[MED]` 无 HEAD_DIM 是否为 2 的幂的验证 (triton_decode_attn_int8.py:156): tl.arange(0, HEAD_DIM) 要求 2 的幂，当前模型均满足但 wrapper 无校验。 — D5 R4, confidence: 80%
+- [ ] **KRN-010** `[MED]` 无 @triton.autotune，BLOCK_SIZE 靠 heuristic 选择 (triton_decode_attn_int8.py:388-403): 研究项目可接受，但论文性能数字可能非最优。 — D7 R4, confidence: 92%
+- [ ] **KRN-011** `[MED]` INT4 wrapper unpacked 路径不验证 dtype (triton_decode_attn_int4.py:29-34): bit_packed=False 时直接返回原 tensor 不检查 dtype，float16 输入会在 kernel 中产生错误数值。 — D5 R4, confidence: 85%
+- [ ] **KRN-012** `[LOW]` `pid = tl.program_id(0)` 赋值后被覆盖，dead code (triton_decode_attn_int8.py:133): 早期 1D grid 设计遗留。 — D7 R4, confidence: 100%
+- [ ] **KRN-014** `[LOW]` offs_g 和 group_indices 是 loop-invariant + dead code (triton_decode_attn_int8.py:198,212): 应移到循环外或删除。 — D7 R4, confidence: 90%
+
+### UTIL. 工具模块 — `src/utils/` (R5 深度审查 2026-02-24)
+- [ ] **UTIL-001** `[HIGH]` CUDATimer.stop() 在 prefill 调用点位于 try/finally 外，异常时 timer 未停止 (generate_loop.py:689 vs timing.py:82-100): prefill_timer.stop() 在 try 块外，model() 抛异常时跳过 stop()，ttft_ms 未定义。应使用 timer_context() 或移入 finally。 — R5, confidence: 90%
+- [ ] **UTIL-005** `[HIGH]` torch.use_deterministic_algorithms(True) 静默吞没，确定性可能未激活 (repro.py:35-39): bare `except Exception: pass` 丢弃所有错误包括 AttributeError，实验日志显示 deterministic=True 但实际未生效。论文复现性风险。 — R5, confidence: 95%
+- [ ] **UTIL-002** `[MED]` _cuda_available 在构造时一次性评估，不随进程 CUDA 状态变化更新 (timing.py:78-80) — R5, confidence: 70%
+- [ ] **UTIL-003** `[MED]` reset() 不重置 _cuda_available，复用 timer 语义不完整 (timing.py:109-112) — R5, confidence: 65%
+- [ ] **UTIL-004** `[MED]` timer_context docstring sync_after 描述为 "before exiting"，措辞误导 (timing.py:116-138) — R5, confidence: 80%
+- [ ] **UTIL-007** `[MED]` vars(args) 对无 __dict__ 对象抛 TypeError (repro.py:93): 函数签名 args: Any 但 unconditional vars()，dict 输入崩溃。 — R5, confidence: 85%
+- [ ] **UTIL-008** `[MED]` write_config_snapshot 无 I/O 异常处理，长时实验末端崩溃 (repro.py:138-149): YAML 写入失败直接传播，可能丢失已完成的实验结果。 — R5, confidence: 88%
+- [ ] **UTIL-009** `[MED]` resolve_quant_bits 对 kivi_style 无条件返回 8，KIVI-INT4 场景返回错误值 (repro.py:125): quant_bits_arg=None + kv_mode=kivi_style → 返回 8，CSV 元数据污染。 — R5, confidence: 90%
+- [ ] **UTIL-006** `[LOW]` CUBLAS_WORKSPACE_CONFIG 在 torch import 后设置，cuBLAS 可能已缓存 (repro.py:33-34) — R5, confidence: 75%
+- [ ] **UTIL-010** `[LOW]` build_config_snapshot 硬编码 decoding 参数而非读取实际运行时配置 (repro.py:82-102) — R5, confidence: 80%
+- [ ] **UTIL-011** `[LOW]` resolve_pretrained_path 在线下载失败静默回退到 model_id 无日志 (hf.py:58-61) — R5, confidence: 85%
+- [ ] **UTIL-012** `[LOW]` model_id=None 时返回 None 而非 raise ValueError (hf.py:32-33) — R5, confidence: 80%
+- [ ] **UTIL-015** `[LOW]` get_gpu_memory_mb docstring "current" 与 "Peak" 矛盾 (timing.py:141-150) — R5, confidence: 90%
 
 ### CFG. 配置 — `configs/`
 - [ ] **CFG-008** `[MED]` 7B/8B 长上下文仅 3 条 vs 1.5B 的 18 条
@@ -145,7 +194,7 @@
 - [x] **RUN-021** `[HIGH]` seq_len/gen_len 无类型和正值校验 (run_experiments.py:971-973): 从 YAML 直接取值无检查，0/负数/字符串可到达子脚本。batch 有 int()+or 1 保护但 seq_len/gen_len 没有。seq_len=0 导致空评估。 — D5 RUN rotation, confidence: 90% -- fixed
 - [x] **RUN-022** `[HIGH]` subprocess.run 无 timeout，子任务挂起导致管线无限阻塞 (run_experiments.py:1344-1349): 无 timeout 参数。GPU 死锁、NFS 阻塞、推理无限循环时整个管线停滞，retry 机制无法恢复。特别影响 overnight batch 运行。 — D5 RUN rotation, confidence: 92% -- fixed
 - [x] **RUN-023** `[HIGH]` use_attn_temperature 等布尔参数仅发 --no_ flag，True 时不发 flag 形成隐式耦合 (run_experiments.py:1185-1200): 仅在 False 时发 --no_use_attn_temperature，True 时不发任何 flag 依赖子脚本默认值。子脚本默认值变更时行为静默断裂。同理 use_static_scales/adaptive_static_k/v。 — D7 RUN rotation, confidence: 75% -- fixed
-- [ ] **RUN-024** `[HIGH]` main() 函数 950 行，混合参数解析/配置校验/运行循环/命令构建/重试逻辑 (run_experiments.py:523-1473): 无法独立单元测试，添加新 benchmark 需在巨型函数中导航。至少应拆分命令构建(L1131-1279)和执行+重试(L1326-1470)。 — D7 RUN rotation, confidence: 95%
+- [ ] **RUN-024** `[MED]` main() 函数 1056 行，混合参数解析/配置校验/运行循环/命令构建/重试逻辑 (run_experiments.py:572-1627): 无法独立单元测试，添加新 benchmark 需在巨型函数中导航。至少应拆分命令构建和执行+重试。D7 RUN rotation, confidence: 95% — R3 降级: 纯代码质量问题，不影响正确性，投稿期间重构风险高
 - [x] **RUN-025** `[MED]` _classify_failure OOM 检测用 substring "oom" in content 无词边界 (run_experiments.py:278-280): "room"/"bloom"/"zoom" 等词触发假阳性 OOM 分类。对比 check_run_completeness.py L55 正确使用 \boom\b 正则。 — D1 RUN rotation, confidence: 85% -- fixed
 - [x] **RUN-026** `[MED]` _read_json bare except 返回 None 吞掉 JSON 损坏/权限错误 (run_experiments.py:107-117): JSONDecodeError 和 PermissionError 均返回 None，_init_manifest 静默覆盖损坏 manifest 销毁取证证据。无任何日志。 — D2 RUN rotation, confidence: 90% -- fixed
 - [x] **RUN-027** `[MED]` unknown task name 静默 continue 且 exit 0 (run_experiments.py:1125-1129): TASK_TO_SCRIPT.get(task) 返回 None 时仅 print 到 stdout 后 continue。用户拼错任务名时该任务被跳过，run 以 exit 0 完成。 — D2 RUN rotation, confidence: 92% -- fixed
@@ -165,15 +214,15 @@
 - [x] **SMK-005** `[MED]` --cpu-ok 新增参数改变 smoke_test.py CUDA 不可用时的 exit 语义，现有无参数调用方在 CPU-only 环境将从 exit(0) 变为 exit(1) (smoke_test.py:111-119, L145-155): 修复 SMK-001 的方式是引入 --cpu-ok flag：无此 flag 时 CUDA 不可用 exit(1)，有此 flag 时 exit(0)。这是接口行为 breaking change：所有现有 CI 脚本若无参数调用 `python scripts/smoke_test.py` 且运行于 CPU-only 环境，将从静默通过（旧 exit 0）变为失败（exit 1），直至显式加 --cpu-ok。smoke_test.py docstring（L13-14）仅列 --prompt/--max_new_tokens，未展示 --cpu-ok；AGENTS.md、start_agents.sh 等调用入口均未更新。向后兼容性影响：全部 CPU-only CI/CD 对该脚本的无参数调用。 — D4, confidence: 85% -- fixed
 
 ### TST. 测试覆盖 — `tests/`
-- [ ] **TST-003** `[HIGH]` calibrate_behavior.py 完全无单元测试
-- [ ] **TST-004** `[HIGH]` KIVI + asymmetric_quant 端到端集成测试缺失
-- [ ] **TST-005** `[HIGH]` B1 修复验证不完整
-- [ ] **TST-006** `[HIGH]` K decode 量化误差无测试
+- [x] **TST-003** `[HIGH]` calibrate_behavior.py 完全无单元测试 — fixed 4e3ac2b — test_calibrate_behavior.py (37 tests)
+- [x] **TST-004** `[HIGH]` KIVI + asymmetric_quant 端到端集成测试缺失 — fixed 4e3ac2b — test_kivi_cache.py KIVI integration e2e (12 tests)
+- [x] **TST-005** `[MED]` B1 修复验证不完整 — R3 降级: issue 描述过于模糊，未指明具体验证目标，部分相关量化测试已存在 — fixed 4e3ac2b — test_int8_cache.py batch>1 (7 tests)
+- [x] **TST-006** `[HIGH]` K decode 量化误差无测试 — fixed 4e3ac2b — test_int8_cache.py K decode quant error (4 tests)
 - [x] **TST-007** `[MED]` per-channel K 和 per-token V axis 独立性验证缺失 — fixed 9bc6414
 - [x] **TST-008** `[MED]` Bootstrap CI n=1 和 n=2 边界测试缺失 — fixed 3c1b23c
 - [x] **TST-009** `[MED]` Permutation test NaN 处理测试缺失 — fixed 3c1b23c
 - [x] **TST-010** `[MED]` BH-FDR 单调性验证缺失 — fixed 3c1b23c
-- [ ] **TST-011** `[MED]` eval_longbench.py / eval_ruler.py 完全无单元测试
+- [x] **TST-011** `[MED]` eval_longbench.py / eval_ruler.py 完全无单元测试 — fixed 4e3ac2b — test_eval_scripts.py eval_longbench/eval_ruler (56 tests)
 - [x] **TST-012** `[MED]` 缺少 float16 输入测试 — fixed 9bc6414
 - [x] **TST-013** `[MED]` 缺少 per-channel/per-token 轴语义验证 — fixed 9bc6414
 - [x] **TST-014** `[MED]` C1/C2 修复缺少边界值测试 — fixed 9bc6414
@@ -182,23 +231,23 @@
 - [x] **TST-017** `[LOW]` 缺少单 token、batch=0、head_dim=1 等极端边界测试 — fixed 9bc6414
 - [x] **TST-018** `[LOW]` 缺少多轮 clear→append 循环测试（生产中常见的 batch 间重用 cache 场景） — fixed 9bc6414
 - [x] **TST-019** `[HIGH]` review_tool.py 零测试覆盖 — 无 `tests/test_review_tool.py` (scripts/review_tool.py): 5 个子命令、2 个正则、文件写入逻辑均无自动化测试，任何重构无安全网 — gap_score: 9/10, confidence: 100% — fixed d045f08
-- [ ] **TST-020** `[HIGH]` _decode_attn_int8_torch_ref 无独立单元测试 (patch_model.py:215-300): 300 行核心参考实现（含 GQA repeat_interleave、group-wise dequant、fp32 softmax），tests/ 中无直接测试。test_triton_kernel.py 有独立实现但从未对比 patch_model 版本。 — D6, confidence: 95%
-- [ ] **TST-021** `[HIGH]` _apply_rope / _rotate_half 无单元测试 (patch_model.py:166-212): RoPE 是 fused decode 关键组件，支持 partial rotary 和多种 cos/sin 形状归一化。错误的 RoPE 导致 decode 注意力完全错误。 — D6, confidence: 95%
-- [ ] **TST-022** `[HIGH]` INT8CacheWrapperContainer / INT8CacheWrapper 无测试 (patch_model.py:65-164): HF Cache 适配层含 get_seq_length、get_mask_sizes、update 等，直接影响 attention mask 尺寸计算。off-by-one 错误无法检测。 — D6, confidence: 95%
-- [ ] **TST-023** `[MED]` _register_prefill_temperature_hooks 无测试 (generate_loop.py:161-255): 两种路径（q_norm hook vs q_proj hook）+ seq_len<=1 guard + 布局检测逻辑均无测试验证。 — D6, confidence: 90%
-- [ ] **TST-024** `[MED]` _cache_stats_from_past_key_values 无测试 (generate_loop.py:44-99): 3 条路径（新 API/legacy tuple/to_legacy_cache 转换）无验证。 — D6, confidence: 90%
-- [ ] **TST-025** `[MED]` _to_dynamic_cache_safely 无测试 (generate_loop.py:102-124): fallback 链（from_legacy_cache → ddp_cache_data → RuntimeError）无覆盖。 — D6, confidence: 90%
-- [ ] **TST-026** `[MED]` apply_int8_fused_patch monkey-patch 逻辑无测试 (patch_model.py:715-835): forward_proxy cache 类型检测、_filter_kwargs、is_fused 判定等核心调度逻辑零测试。 — D6, confidence: 95%
-- [ ] **TST-027** `[MED]` _get_rope_cos_sin 多 fallback 路径无测试 (patch_model.py:398-447): 5 种 fallback 全靠 try-except 消音，无测试验证正确路径被选中。 — D6, confidence: 85%
-- [ ] **TST-028** `[MED]` _resolve_attn_shape_meta 头数推断无测试 (patch_model.py:467-502): 6 种 fallback 推断 q_heads/kv_heads/head_dim，错误推断导致 fused attention 输出形状错误。 — D6, confidence: 90%
-- [ ] **TST-029** `[MED]` _materialize_int4_cache_as_int8 无测试 (patch_model.py:42-62): bit_packed vs unpacked 两条路径、形状 mismatch 校验无独立测试。 — D6, confidence: 85%
+- [x] **TST-020** `[HIGH]` _decode_attn_int8_torch_ref 无独立单元测试 (patch_model.py:215-300): 300 行核心参考实现（含 GQA repeat_interleave、group-wise dequant、fp32 softmax），tests/ 中无直接测试。test_triton_kernel.py 有独立实现但从未对比 patch_model 版本。 — D6, confidence: 95% — fixed 27bdc6d
+- [x] **TST-021** `[HIGH]` _apply_rope / _rotate_half 无单元测试 (patch_model.py:166-212): RoPE 是 fused decode 关键组件，支持 partial rotary 和多种 cos/sin 形状归一化。错误的 RoPE 导致 decode 注意力完全错误。 — D6, confidence: 95% — fixed 27bdc6d
+- [x] **TST-022** `[HIGH]` INT8CacheWrapperContainer / INT8CacheWrapper 无测试 (patch_model.py:65-164): HF Cache 适配层含 get_seq_length、get_mask_sizes、update 等，直接影响 attention mask 尺寸计算。off-by-one 错误无法检测。 — D6, confidence: 95% — fixed 27bdc6d
+- [x] **TST-023** `[MED]` _register_prefill_temperature_hooks 无测试 (generate_loop.py:161-255): 两种路径（q_norm hook vs q_proj hook）+ seq_len<=1 guard + 布局检测逻辑均无测试验证。 — D6, confidence: 90% — fixed c874c73
+- [x] **TST-024** `[MED]` _cache_stats_from_past_key_values 无测试 (generate_loop.py:44-99): 3 条路径（新 API/legacy tuple/to_legacy_cache 转换）无验证。 — D6, confidence: 90% — fixed c874c73
+- [x] **TST-025** `[MED]` _to_dynamic_cache_safely 无测试 (generate_loop.py:102-124): fallback 链（from_legacy_cache → ddp_cache_data → RuntimeError）无覆盖。 — D6, confidence: 90% — fixed c874c73
+- [x] **TST-026** `[MED]` apply_int8_fused_patch monkey-patch 逻辑无测试 (patch_model.py:715-835): forward_proxy cache 类型检测、_filter_kwargs、is_fused 判定等核心调度逻辑零测试。 — D6, confidence: 95% — fixed c874c73
+- [x] **TST-027** `[MED]` _get_rope_cos_sin 多 fallback 路径无测试 (patch_model.py:398-447): 5 种 fallback 全靠 try-except 消音，无测试验证正确路径被选中。 — D6, confidence: 85% — fixed c874c73
+- [x] **TST-028** `[MED]` _resolve_attn_shape_meta 头数推断无测试 (patch_model.py:467-502): 6 种 fallback 推断 q_heads/kv_heads/head_dim，错误推断导致 fused attention 输出形状错误。 — D6, confidence: 90% — fixed c874c73
+- [x] **TST-029** `[MED]` _materialize_int4_cache_as_int8 无测试 (patch_model.py:42-62): bit_packed vs unpacked 两条路径、形状 mismatch 校验无独立测试。 — D6, confidence: 85% — fixed 27bdc6d
 - [x] **TST-030** `[HIGH]` check_run_completeness.py 关键状态路径未测试: _check_task_state() 返回 8 种状态中 task_artifacts_missing、running、mixed_csv_non_success、missing 4 种无直接测试用例。当前仅覆盖 success、oom、csv_invalid、traceback 路径。 — D6 CHK rotation, confidence: 95% — fixed 7b6739c
 - [x] **TST-031** `[HIGH]` eval_longbench/eval_ruler 工件检测完全无测试 (check_run_completeness.py:85-90): `_has_task_level_artifacts()` 中 longbench 检查 task_summary CSV、ruler 需同时检查 task_summary + depth_summary，两条分支零测试。 — D6 CHK rotation, confidence: 100% — fixed 7b6739c
 - [x] **TST-032** `[MED]` check_run_completeness.py 8 个工具函数无独立单元测试: _split_csv, _read_json, _read_text, _is_oom_from_log, _is_traceback_from_log, _csv_has_rows, _has_task_level_artifacts, _expected_run_ids 均无单元测试，仅通过集成测试间接覆盖。 — D6 CHK rotation, confidence: 90% — fixed d045f08
 - [x] **TST-033** `[MED]` check_run_completeness.py 参数组合和错误路径测试不足: allow_oom_completion=False 影响、runs_dir 不存在 exit(2)、logs_dir=None 完整路径、allow_stress_unexpected_failures 标志均无测试。 — D6 CHK rotation, confidence: 88% — fixed 7b6739c
 - [x] **TST-034** `[HIGH]` export_tables_latex.py 零测试覆盖: 510 行代码、8 个 export 函数、2 个 helper 函数，tests/ 下无任何对应测试文件。_read_csv bare except、_pivot_metric 多模型平均、LaTeX 特殊字符转义等问题均无回归防护。 — D6 EXP rotation, confidence: 98% — fixed 54f282f
 - [x] **TST-035** `[HIGH]` aggregate_results.py 统计函数测试覆盖不足: `_stable_random_seed`、`_cohens_dz`、`_relative_gain_table`、`_build_paired_metric_rows`、`_paired_signflip_pvalue` 等核心统计函数缺少针对性单元测试。现有 test_aggregate_results_stats.py 仅覆盖部分路径。 — D6 EXP rotation, confidence: 92% — fixed 12a62bf
-- [ ] **TST-036** `[HIGH]` aggregate_results.py main() 管线无端到端测试: main() 函数 955 行，串联 7+ 子流程（read→CI→paired→claims→latex），无任何 e2e 测试验证从 CSV 输入到最终 tables/plots 产出的完整路径。配置变更可能静默破坏输出。 — D6 EXP rotation, confidence: 95%
+- [x] **TST-036** `[HIGH]` aggregate_results.py main() 管线无端到端测试: main() 函数 955 行，串联 7+ 子流程（read→CI→paired→claims→latex），无任何 e2e 测试验证从 CSV 输入到最终 tables/plots 产出的完整路径。配置变更可能静默破坏输出。 — D6 EXP rotation, confidence: 95% — fixed (test_aggregate_e2e.py)
 - [x] **TST-037** `[HIGH]` smoke_test.py 零测试覆盖: 254 行代码含 get_git_commit、get_hardware_info、main() 生成逻辑、结果保存等关键路径，tests/ 下无对应测试文件。CUDA 不可用 exit(0) 路径特别需要回归测试。 — D6 RUN rotation, confidence: 98% — fixed 12a62bf
 - [x] **TST-038** `[HIGH]` review_tool.py 零测试覆盖: 331 行代码含 parse_tracker（核心正则解析器）、cmd_add（文件写入）、cmd_phase_gate（CI gate 判定）、_update_summary 等 8 个函数，全无测试。正则匹配和字符串插入逻辑属高风险易错代码。 — D6 RUN rotation, confidence: 98% — fixed d045f08
 - [x] **TST-039** `[HIGH]` run_experiments.py resolve_quant/calib_params + _validate_append_commit 无测试: 量化参数三级 fallback 解析逻辑和 append 模式 git commit/env_hash 一致性校验均为实验正确性核心守卫，当前 test_run_experiments_resilience.py 16 个用例未覆盖。 — D6 RUN rotation, confidence: 92% — fixed 7b6739c
@@ -206,7 +255,7 @@
 - [x] **TST-041** `[HIGH]` _t_critical() 函数无单元测试 — TestTCritical class 已在 test_aggregate_results_stats.py 中添加（8 个测试用例覆盖 df=0/负数/1/120/1000、插值、有限性、alpha 默认值） -- fixed
 - [x] **TST-042** `[HIGH]` _add_ci95_columns n<=1→NaN 行为变更无回归测试 — TestAddCI95Columns class 已在 test_aggregate_results_stats.py 中添加（6 个测试用例覆盖 count=0/1/2/5、缺列、空 DataFrame） -- fixed
 - [x] **TST-043** `[HIGH]` Phipson-Smyth +1 修正无专门验证测试 — TestPhipsonSmythCorrection class 已在 test_aggregate_results_stats.py 中添加（3 个测试：corrected vs uncorrected 对比、lower bound >0、MC 路径），并更新了 test_exact_signflip_pvalue_known_case/mixed_signs 期望值使用修正公式 -- fixed
-- [ ] **TST-044** `[MED]` _main_claims_32k_table 多模型 merge 路径无场景测试: 新增动态 merge_keys 逻辑含 5 处 fallback 到 ["kv_mode"]，无测试覆盖有/无 model_id、混合场景。 — D6 incremental, confidence: 90%
+- [x] **TST-044** `[MED]` _main_claims_32k_table 多模型 merge 路径无场景测试: 新增动态 merge_keys 逻辑含 5 处 fallback 到 ["kv_mode"]，无测试覆盖有/无 model_id、混合场景。 — D6 incremental, confidence: 90% — fixed 27bdc6d
 - [x] **TST-045** `[MED]` Triton kernel test randint(-127,127) 上界排他性，永远不生成值 127 (test_triton_kernel.py:88-89,123-124,187-200,269-270): torch.randint 上界排他，实际范围 [-127,126]，而源码 .clamp(-127,127) 可产生 127。修复: 改为 randint(-127,128)。 — D1 TST+configs rotation, confidence: 98% -- fixed
 - [x] **TST-046** `[MED]` Long-context test 参考实现使用 fp16 dequant 而主参考用 fp32 (test_triton_kernel.py:229-233): test_long_context_gqa_correctness 参考 k_dequant 在 fp16 精度，而 _torch_ref_decode(L61-62) 使用 fp32。atol=3e-2 宽容差部分源于此精度不一致。 — D1 TST+configs rotation, confidence: 95% — fixed 12a62bf
 - [x] **TST-047** `[LOW]` INT4 cache test 添加量化误差上界断言 (err < 0.5) + pack_unpack 范围扩展至 [-8,8) -- fixed
@@ -218,16 +267,16 @@
 - [x] **TST-053** `[HIGH]` config_utils.load_config 新增异常路径无测试 (scripts/config_utils.py:17-28): 未提交变更新增空文件→ValueError 和非 dict 顶层→ValueError 两个防御分支，无对应测试。load_config 是所有 run_experiments/eval/profile 脚本的共享入口，此分支保护实验管线不在 model.get() 崩溃。需要：test_load_config_empty_file_raises、test_load_config_non_dict_raises、test_load_config_valid_returns_dict。 — gap_score: 8/10, confidence: 95% — fixed d045f08
 - [x] **TST-054** `[HIGH]` run_experiments.py _same_commit_prefix 语义反转无回归测试 (scripts/run_experiments.py:169-183): 未提交变更将 empty/unknown 从返回 True（兼容）改为返回 False（不兼容）。这是 RUN-018 修复，行为完全反转。test_run_experiments_resilience.py 中无任何 _same_commit_prefix 测试。若回滚则跨 commit append 校验静默失效。需要：test_same_commit_prefix_empty_is_incompatible、test_same_commit_prefix_unknown_is_incompatible、test_same_commit_prefix_matching_8chars。 — gap_score: 8/10, confidence: 93% — fixed d045f08
 - [x] **TST-055** `[HIGH]` run_experiments.py resolve_quant_params 新增数值校验无测试 (scripts/run_experiments.py:506-527): 未提交变更新增 clip_percentile 范围 (0,100] 和 group_size 正整数校验，共 4 个 ValueError 路径，均无测试。TST-039 记录了该函数整体无测试，此次修复增加了高优先级校验逻辑但仍无回归防护。需要：clip_percentile 字符串输入、负值、0 值、group_size 浮点/负数/零 各路径。 — gap_score: 8/10, confidence: 95% — fixed d045f08
-- [ ] **TST-056** `[MED]` run_experiments.py seq_len/gen_len 校验逻辑无测试 (scripts/run_experiments.py:1042-1056): 未提交变更新增 seq_len/gen_len 类型和正值校验（非 int 返回 2，<=0 返回 2），校验代码在 main() 内部，当前测试文件仅通过 subprocess 测试集成路径，无法直接单元测试。但 _compute_ruler_truncation_warning 的测试已直接传 seq_len/gen_len，表明可提取可测试 helper。影响：非法配置的 YAML 值将在早期拦截而非 GPU 加载后崩溃。 — gap_score: 6/10, confidence: 85%
+- [x] **TST-056** `[MED]` run_experiments.py seq_len/gen_len 校验逻辑无测试 (scripts/run_experiments.py:1042-1056): 未提交变更新增 seq_len/gen_len 类型和正值校验（非 int 返回 2，<=0 返回 2），校验代码在 main() 内部，当前测试文件仅通过 subprocess 测试集成路径，无法直接单元测试。但 _compute_ruler_truncation_warning 的测试已直接传 seq_len/gen_len，表明可提取可测试 helper。影响：非法配置的 YAML 值将在早期拦截而非 GPU 加载后崩溃。 — gap_score: 6/10, confidence: 85% — fixed 27bdc6d
 - [x] **TST-057** `[MED]` aggregate_results.py _safe_t_crit inf 防护无测试 (scripts/aggregate_results.py:227-230): 未提交变更将 lambda 替换为命名的 _safe_t_crit 函数，新增 not np.isfinite(n) 检查防止 int(inf) OverflowError（AGG-036 修复）。现有 TestAddCI95Columns 仅测试 count=0/1/2/5 正常值，未测试 count=inf 和 count=NaN 的 safe guard 路径。若守护逻辑被回滚，AGG-036 重现。 — gap_score: 6/10, confidence: 88% — fixed d045f08
-- [ ] **TST-058** `[MED]` run_experiments.py _write_json 原子写入 tmp 清理逻辑无测试 (scripts/run_experiments.py:130-146): 未提交变更新增 try/except 在 replace() 失败时删除孤立 .tmp 文件（RUN-028 修复）。写入失败场景（磁盘满、跨文件系统）无法在普通测试中复现，但 tmp_path 存在且 replace 抛异常时 unlink 被调用的逻辑路径可用 mock 验证。当前零测试。 — gap_score: 5/10, confidence: 82%
+- [x] **TST-058** `[MED]` run_experiments.py _write_json 原子写入 tmp 清理逻辑无测试 (scripts/run_experiments.py:130-146): 未提交变更新增 try/except 在 replace() 失败时删除孤立 .tmp 文件（RUN-028 修复）。写入失败场景（磁盘满、跨文件系统）无法在普通测试中复现，但 tmp_path 存在且 replace 抛异常时 unlink 被调用的逻辑路径可用 mock 验证。当前零测试。 — gap_score: 5/10, confidence: 82% — fixed 27bdc6d
 - [x] **TST-059** `[HIGH]` test_run_experiments_resilience.py 中已关闭的 TST-040/054/055 对应测试在文件中无法确认存在 (tests/test_run_experiments_resilience.py): TST-040（_classify_failure 5分类路径）、TST-054（_same_commit_prefix empty/unknown→False）、TST-055（resolve_quant_params 非法输入→ValueError）均标记为 fixed (d045f08)，但当前文件只有 2 个 _classify_failure 用例（returncode=73→oom、Traceback→traceback），无 _same_commit_prefix 测试，无 resolve_quant_params 测试。_same_commit_prefix 是防止跨 commit 数据混入的关键门控，行为语义反转若无回归测试极难被发现。需确认：这些测试是否在其他文件；若不存在则需补写 interrupt/runtime_error/unknown 分类路径、_same_commit_prefix 边界值（empty/unknown/matching）、resolve_quant_params 四条 ValueError 路径。 — gap_score: 9/10, confidence: 95% — false_positive: tests exist in test_run_experiments.py (d045f08), not in resilience file
 - [x] **TST-060** `[HIGH]` _cohens_dz 无单元测试且直接影响 claim 验证结论 (scripts/aggregate_results.py): _cohens_dz 计算公式 d_z = mean(diffs) / std(diffs, ddof=1) 是 probability_of_superiority = norm.cdf(d_z / sqrt(2)) 的基础，若 ddof 错误在 n=3 下系统性高估约 23%，可导致 claim 误判为实践意义显著。当前 test_aggregate_results_stats.py 无任何该函数的独立测试。需要：已知值精确比较（mean=1.0, std=1.0 → d_z=1.0）、单样本 std=0 防护测试、全零 diffs → d_z=0.0。 — gap_score: 7/10, confidence: 88% — false_positive: already covered by TST-035 in test_aggregate_results_stats.py (8 tests)
-- [ ] **TST-061** `[MED]` test_long_context_gqa_correctness 被环境变量静默跳过且参考实现精度与主参考不一致 (tests/test_triton_kernel.py:172-257): 该测试需 RUN_TRITON_LONG_TEST=1 才运行，常规 CI 永远跳过，32k 序列数值稳定性从未被自动验证。同时 L232-236 的内联参考使用 fp16 dequant，而 _torch_ref_decode 使用 fp32，atol=3e-2 宽容差部分源于此精度差距。建议：添加不依赖环境变量的轻量长序列烟雾测试（seq_len=4096, H=1, kv_heads=1）；统一参考实现精度后再分析是否需要收紧容差。 — gap_score: 7/10, confidence: 90%
+- [x] **TST-061** `[MED]` test_long_context_gqa_correctness 被环境变量静默跳过且参考实现精度与主参考不一致 (tests/test_triton_kernel.py:172-257): 该测试需 RUN_TRITON_LONG_TEST=1 才运行，常规 CI 永远跳过，32k 序列数值稳定性从未被自动验证。同时 L232-236 的内联参考使用 fp16 dequant，而 _torch_ref_decode 使用 fp32，atol=3e-2 宽容差部分源于此精度差距。建议：添加不依赖环境变量的轻量长序列烟雾测试（seq_len=4096, H=1, kv_heads=1）；统一参考实现精度后再分析是否需要收紧容差。 — gap_score: 7/10, confidence: 90% — fixed 4e3ac2b — test_triton_kernel.py lightweight long-seq smoke (5 tests)
 - [x] **TST-062** `[MED]` test_check_run_completeness.py 缺少 task_artifacts_missing / running / missing 三种状态的测试场景 (tests/test_check_run_completeness.py): 5个测试全部为 subprocess 集成测试，缺少：(1) task_artifacts_missing：eval_longbench manifest 为 success 但 longbench_task_summary_*.csv 不存在；(2) running：manifest 显示 status=running；(3) missing：run 目录存在但无 manifest 文件。三种状态在生产中均有触发路径，eval_longbench/eval_ruler 部分失败时 task_artifacts_missing 尤为常见，且 _has_task_level_artifacts() 的两条分支（longbench/ruler）均无覆盖（TST-031 仍 open）。 — gap_score: 6/10, confidence: 85% — fixed 7b6739c
 - [x] **TST-063** `[MED]` _stable_random_seed 无测试，影响统计推断可复现性 (scripts/aggregate_results.py): _stable_random_seed(run_name, metric_name) 基于 SHA256 hash 生成确定性 seed，是 bootstrap CI 和 sign-flip permutation 可复现的基础（AGG-012 修复相关）。当前无任何测试。需验证：相同输入产生相同 seed（确定性）；不同输入产生不同 seed（冲突抵抗）；seed 在 numpy 合法范围 [0, 2^31) 内；签名变更时 CI 立即报警。若 hash 实现被无声修改，所有历史实验统计结论不可复现但 CI 无警报。 — gap_score: 6/10, confidence: 85% — false_positive: already covered by TST-035 in test_aggregate_results_stats.py (7 tests)
-- [ ] **TST-064** `[MED]` INT4KVCache bit_packed=False 模式完全无测试 (tests/test_int4_cache.py): 当前所有 INT4 测试均使用 bit_packed=True，bit_packed=False 路径（不进行 nibble 压缩，直接以 int8 存储 INT4 值）零测试。若该路径 get_kv() 解码逻辑有 bug，测试集完全无法检测。需要：bit_packed=False 的 roundtrip 误差测试、append+get_kv 形状测试、clear→re-append 无污染测试。 — gap_score: 6/10, confidence: 82%
-- [ ] **TST-065** `[LOW]` KVC-017 grow 路径越界防护无专用回归测试 (tests/test_kivi_cache.py): KVC-017 修复在 kivi_style_cache.py grow 分支新增 `if new_capacity < target_len: raise ValueError`。现有 test_max_seq_len_enforced 只测直接超限（首次 append 11 tokens, max_seq_len=10），未测 grow 路径中的越界：先 append 少量 token 触发 capacity grow，再 append 使总长超 max_seq_len 且 grow 截断后 new_capacity < target_len 的复合场景。若 fix 回滚则 CUDA 层越界崩溃但 CI 无感知。 — gap_score: 4/10, confidence: 82%
+- [x] **TST-064** `[MED]` INT4KVCache bit_packed=False 模式完全无测试 (tests/test_int4_cache.py): 当前所有 INT4 测试均使用 bit_packed=True，bit_packed=False 路径（不进行 nibble 压缩，直接以 int8 存储 INT4 值）零测试。若该路径 get_kv() 解码逻辑有 bug，测试集完全无法检测。需要：bit_packed=False 的 roundtrip 误差测试、append+get_kv 形状测试、clear→re-append 无污染测试。 — gap_score: 6/10, confidence: 82% — fixed 27bdc6d
+- [x] **TST-065** `[LOW]` KVC-017 grow 路径越界防护无专用回归测试 (tests/test_kivi_cache.py): KVC-017 修复在 kivi_style_cache.py grow 分支新增 `if new_capacity < target_len: raise ValueError`。现有 test_max_seq_len_enforced 只测直接超限（首次 append 11 tokens, max_seq_len=10），未测 grow 路径中的越界：先 append 少量 token 触发 capacity grow，再 append 使总长超 max_seq_len 且 grow 截断后 new_capacity < target_len 的复合场景。若 fix 回滚则 CUDA 层越界崩溃但 CI 无感知。 — gap_score: 4/10, confidence: 82% — fixed 27bdc6d
 
 ### RVW. 审查工具与配置 — `scripts/review_tool.py`, `.claude/agents/review-*.md`
 - [x] **RVW-013** `[LOW]` Resolved KVC-003 前提失效: KVC-003 前提已变更，bit-packing 已实现且 pack offset 已修复 (commit a60cbe6)。论文描述无需注明"无 bit-packing" -- fixed
