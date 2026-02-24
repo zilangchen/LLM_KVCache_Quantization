@@ -498,4 +498,20 @@ Canonical agent workflow directory is `.agents/`.
   - Commits: 6f23824, 016b460, 8d7f2df
 - **Running total**: 367 issues, 282 fixed + 10 fp + 4 wf = 296 resolved, 67 open (0 CRIT, 27 HIGH, 35 MED, 5 LOW)
 
+### 2026-02-24 14:45 | Review Tracker Fix — Wave 9 (test coverage)
+- **Goal**: Write 56 unit tests covering 11 TST issues
+- **TST-007/013**: INT8+INT4 per-token axis independence (scale isolation, group independence)
+- **TST-008**: Bootstrap CI n=1/n=2 boundary + CI width monotonicity
+- **TST-009**: Sign-flip permutation NaN/Inf handling
+- **TST-010**: BH-FDR monotonicity, edge cases, NaN propagation
+- **TST-012**: Float16 input quantization (INT4+INT8), fp16 vs fp32 consistency
+- **TST-014**: INT4 pack/unpack boundary values (-8 to 7), full range sweep
+- **TST-015**: Mixed sign sign-flip scenarios (all-positive, balanced, mixed)
+- **TST-016**: INT4 vs INT8 error ratio (>= 3x), multi-seed robustness
+- **TST-017**: Edge cases (single token, head_dim=1, all zeros, constant input)
+- **TST-018**: Multi-round clear→append cycle (INT4+INT8, multi-layer)
+- **Changed files**: tests/test_int4_cache.py (+620 lines), tests/test_int8_cache.py (+500 lines), tests/test_aggregate_results_stats.py (+306 lines)
+- **Commits**: 9bc6414 (quant/cache tests), 3c1b23c (stats tests)
+- **Running total**: 367 issues, 293 fixed + 10 fp + 4 wf = 307 resolved, 56 open (0 CRIT, 27 HIGH, 27 MED, 2 LOW)
+
 > 更早的条目见 `development_history/iteration_archive_202602.md`

@@ -1,6 +1,6 @@
 # Code Review Tracker
 
-> 367 issues | 282 fixed + 10 false_positive + 4 wont_fix | 67 open (0 CRIT, 27 HIGH, 35 MED, 5 LOW)
+> 367 issues | 293 fixed + 10 false_positive + 4 wont_fix | 56 open (0 CRIT, 27 HIGH, 27 MED, 2 LOW)
 > Phase Gate: **CLEAR** — 0 CRITICAL open
 > Last updated: 2026-02-24
 
@@ -164,18 +164,18 @@
 - [ ] **TST-004** `[HIGH]` KIVI + asymmetric_quant 端到端集成测试缺失
 - [ ] **TST-005** `[HIGH]` B1 修复验证不完整
 - [ ] **TST-006** `[HIGH]` K decode 量化误差无测试
-- [ ] **TST-007** `[MED]` per-channel K 和 per-token V axis 独立性验证缺失
-- [ ] **TST-008** `[MED]` Bootstrap CI n=1 和 n=2 边界测试缺失
-- [ ] **TST-009** `[MED]` Permutation test NaN 处理测试缺失
-- [ ] **TST-010** `[MED]` BH-FDR 单调性验证缺失
+- [x] **TST-007** `[MED]` per-channel K 和 per-token V axis 独立性验证缺失 — fixed 9bc6414
+- [x] **TST-008** `[MED]` Bootstrap CI n=1 和 n=2 边界测试缺失 — fixed 3c1b23c
+- [x] **TST-009** `[MED]` Permutation test NaN 处理测试缺失 — fixed 3c1b23c
+- [x] **TST-010** `[MED]` BH-FDR 单调性验证缺失 — fixed 3c1b23c
 - [ ] **TST-011** `[MED]` eval_longbench.py / eval_ruler.py 完全无单元测试
-- [ ] **TST-012** `[MED]` 缺少 float16 输入测试
-- [ ] **TST-013** `[MED]` 缺少 per-channel/per-token 轴语义验证
-- [ ] **TST-014** `[MED]` C1/C2 修复缺少边界值测试
-- [ ] **TST-015** `[MED]` 统计测试缺少混合符号 sign-flip 场景
-- [ ] **TST-016** `[LOW]` INT4 vs INT8 误差比例测试缺失
-- [ ] **TST-017** `[LOW]` 缺少单 token、batch=0、head_dim=1 等极端边界测试
-- [ ] **TST-018** `[LOW]` 缺少多轮 clear→append 循环测试（生产中常见的 batch 间重用 cache 场景）
+- [x] **TST-012** `[MED]` 缺少 float16 输入测试 — fixed 9bc6414
+- [x] **TST-013** `[MED]` 缺少 per-channel/per-token 轴语义验证 — fixed 9bc6414
+- [x] **TST-014** `[MED]` C1/C2 修复缺少边界值测试 — fixed 9bc6414
+- [x] **TST-015** `[MED]` 统计测试缺少混合符号 sign-flip 场景 — fixed 3c1b23c
+- [x] **TST-016** `[LOW]` INT4 vs INT8 误差比例测试缺失 — fixed 9bc6414
+- [x] **TST-017** `[LOW]` 缺少单 token、batch=0、head_dim=1 等极端边界测试 — fixed 9bc6414
+- [x] **TST-018** `[LOW]` 缺少多轮 clear→append 循环测试（生产中常见的 batch 间重用 cache 场景） — fixed 9bc6414
 - [ ] **TST-019** `[HIGH]` review_tool.py 零测试覆盖 — 无 `tests/test_review_tool.py` (scripts/review_tool.py): 5 个子命令、2 个正则、文件写入逻辑均无自动化测试，任何重构无安全网 — gap_score: 9/10, confidence: 100%
 - [ ] **TST-020** `[HIGH]` _decode_attn_int8_torch_ref 无独立单元测试 (patch_model.py:215-300): 300 行核心参考实现（含 GQA repeat_interleave、group-wise dequant、fp32 softmax），tests/ 中无直接测试。test_triton_kernel.py 有独立实现但从未对比 patch_model 版本。 — D6, confidence: 95%
 - [ ] **TST-021** `[HIGH]` _apply_rope / _rotate_half 无单元测试 (patch_model.py:166-212): RoPE 是 fused decode 关键组件，支持 partial rotary 和多种 cos/sin 形状归一化。错误的 RoPE 导致 decode 注意力完全错误。 — D6, confidence: 95%
