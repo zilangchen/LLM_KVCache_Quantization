@@ -277,6 +277,109 @@ class TestAggregateResultsStats(unittest.TestCase):
                 (tables_dir / "per_model" / "meta-llama__Llama-3.1-8B-Instruct" / "needle_summary.csv").exists()
             )
 
+    def test_main_claims_table_keeps_kivi_quant_bits_separate(self):
+        latency_summary = pd.DataFrame(
+            [
+                {
+                    "kv_mode": "kivi_style",
+                    "quant_bits": 8,
+                    "seq_len": 32704,
+                    "batch": 1,
+                    "gen_len": 64,
+                    "tpot_ms_mean": 4.0,
+                    "ttft_ms_mean": 10.0,
+                    "tok_per_s_mean": 230.0,
+                },
+                {
+                    "kv_mode": "kivi_style",
+                    "quant_bits": 4,
+                    "seq_len": 32704,
+                    "batch": 1,
+                    "gen_len": 64,
+                    "tpot_ms_mean": 4.8,
+                    "ttft_ms_mean": 11.0,
+                    "tok_per_s_mean": 210.0,
+                },
+            ]
+        )
+        memory_summary = pd.DataFrame(
+            [
+                {
+                    "kv_mode": "kivi_style",
+                    "quant_bits": 8,
+                    "seq_len": 32704,
+                    "batch": 1,
+                    "gen_len": 64,
+                    "gpu_mem_peak_mb_mean": 9000.0,
+                    "kv_cache_mem_mb_mean": 1800.0,
+                },
+                {
+                    "kv_mode": "kivi_style",
+                    "quant_bits": 4,
+                    "seq_len": 32704,
+                    "batch": 1,
+                    "gen_len": 64,
+                    "gpu_mem_peak_mb_mean": 7600.0,
+                    "kv_cache_mem_mb_mean": 1200.0,
+                },
+            ]
+        )
+        needle_summary = pd.DataFrame(
+            [
+                {"kv_mode": "kivi_style", "quant_bits": 8, "seq_len": 32704, "needle_pass_rate_mean": 89.0},
+                {"kv_mode": "kivi_style", "quant_bits": 4, "seq_len": 32704, "needle_pass_rate_mean": 85.0},
+            ]
+        )
+        ppl_summary = pd.DataFrame(
+            [
+                {
+                    "kv_mode": "kivi_style",
+                    "quant_bits": 8,
+                    "ppl_mode": "kv_cache",
+                    "tokens_evaluated_mean": 1000000,
+                    "perplexity_mean": 8.6,
+                },
+                {
+                    "kv_mode": "kivi_style",
+                    "quant_bits": 4,
+                    "ppl_mode": "kv_cache",
+                    "tokens_evaluated_mean": 1000000,
+                    "perplexity_mean": 9.4,
+                },
+            ]
+        )
+        longbench_summary = pd.DataFrame(
+            [
+                {"kv_mode": "kivi_style", "quant_bits": 8, "seq_len": 32704, "longbench_score_mean": 0.41},
+                {"kv_mode": "kivi_style", "quant_bits": 4, "seq_len": 32704, "longbench_score_mean": 0.36},
+            ]
+        )
+        ruler_summary = pd.DataFrame(
+            [
+                {"kv_mode": "kivi_style", "quant_bits": 8, "seq_len": 32704, "ruler_pass_rate_mean": 78.0},
+                {"kv_mode": "kivi_style", "quant_bits": 4, "seq_len": 32704, "ruler_pass_rate_mean": 70.0},
+            ]
+        )
+
+        out = agg._main_claims_32k_table(  # pylint: disable=protected-access
+            latency_summary=latency_summary,
+            memory_summary=memory_summary,
+            needle_summary=needle_summary,
+            ppl_summary=ppl_summary,
+            longbench_summary=longbench_summary,
+            ruler_summary=ruler_summary,
+            target_seq_len=32704,
+        )
+        self.assertEqual(len(out), 2)
+        rows = {
+            int(row["quant_bits"]): row
+            for _, row in out[out["kv_mode"] == "kivi_style"].iterrows()
+        }
+        self.assertAlmostEqual(float(rows[8]["longbench_score_mean"]), 0.41, places=6)
+        self.assertAlmostEqual(float(rows[4]["longbench_score_mean"]), 0.36, places=6)
+        self.assertAlmostEqual(float(rows[8]["ruler_pass_rate_mean"]), 78.0, places=6)
+        self.assertAlmostEqual(float(rows[4]["ruler_pass_rate_mean"]), 70.0, places=6)
+
 
 if __name__ == "__main__":
     unittest.main()

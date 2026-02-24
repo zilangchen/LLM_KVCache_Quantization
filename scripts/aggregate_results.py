@@ -1435,14 +1435,29 @@ def _main_claims_32k_table(
             .drop_duplicates(subset=["kv_mode"], keep="first")
         )
 
-    lat_cols = [c for c in ["kv_mode", "tpot_ms_mean", "ttft_ms_mean", "tok_per_s_mean"] if c in lat.columns]
-    mem_cols = [c for c in ["kv_mode", "gpu_mem_peak_mb_mean", "kv_cache_mem_mb_mean"] if c in mem.columns]
-    ned_cols = [c for c in ["kv_mode", "needle_pass_rate_mean", "needle_exact_match_rate_mean"] if c in ned.columns]
-    ppl_cols = [c for c in ["kv_mode", "perplexity_mean", "tokens_evaluated_mean"] if c in ppl.columns]
+    lat_cols = [
+        c
+        for c in ["kv_mode", "quant_bits", "tpot_ms_mean", "ttft_ms_mean", "tok_per_s_mean"]
+        if c in lat.columns
+    ]
+    mem_cols = [
+        c
+        for c in ["kv_mode", "quant_bits", "gpu_mem_peak_mb_mean", "kv_cache_mem_mb_mean"]
+        if c in mem.columns
+    ]
+    ned_cols = [
+        c
+        for c in ["kv_mode", "quant_bits", "needle_pass_rate_mean", "needle_exact_match_rate_mean"]
+        if c in ned.columns
+    ]
+    ppl_cols = [
+        c for c in ["kv_mode", "quant_bits", "perplexity_mean", "tokens_evaluated_mean"] if c in ppl.columns
+    ]
     lb_cols = [
         c
         for c in [
             "kv_mode",
+            "quant_bits",
             "longbench_score_mean",
             "longbench_f1_macro_mean",
             "longbench_em_macro_mean",
@@ -1454,6 +1469,7 @@ def _main_claims_32k_table(
         c
         for c in [
             "kv_mode",
+            "quant_bits",
             "ruler_pass_rate_mean",
             "ruler_f1_mean_mean",
             "ruler_contains_rate_mean",
@@ -1465,21 +1481,28 @@ def _main_claims_32k_table(
         return pd.DataFrame()
 
     out = lat[lat_cols].copy()
-    if mem_cols:
-        out = out.merge(mem[mem_cols], on="kv_mode", how="outer")
-    if ned_cols:
-        out = out.merge(ned[ned_cols], on="kv_mode", how="outer")
-    if ppl_cols:
-        out = out.merge(ppl[ppl_cols], on="kv_mode", how="left")
-    if lb_cols:
-        out = out.merge(lb[lb_cols], on="kv_mode", how="left")
-    if rul_cols:
-        out = out.merge(rul[rul_cols], on="kv_mode", how="left")
+
+    def _merge_with_keys(base: pd.DataFrame, rhs: pd.DataFrame, cols: List[str], *, how: str) -> pd.DataFrame:
+        if not cols:
+            return base
+        rhs_df = rhs[cols].copy()
+        merge_keys = [c for c in ["kv_mode", "quant_bits"] if c in base.columns and c in rhs_df.columns]
+        if not merge_keys:
+            merge_keys = ["kv_mode"]
+        return base.merge(rhs_df, on=merge_keys, how=how)
+
+    out = _merge_with_keys(out, mem, mem_cols, how="outer")
+    out = _merge_with_keys(out, ned, ned_cols, how="outer")
+    out = _merge_with_keys(out, ppl, ppl_cols, how="left")
+    out = _merge_with_keys(out, lb, lb_cols, how="left")
+    out = _merge_with_keys(out, rul, rul_cols, how="left")
 
     out["claim_seq_len"] = int(
         lat_seq or mem_seq or ned_seq or lb_seq or rul_seq or target_seq_len
     )
     out = _sort_by_kv_mode(out)
+    if "quant_bits" in out.columns:
+        out = out.sort_values(["kv_mode", "quant_bits"], kind="stable").reset_index(drop=True)
     return out
 
 
@@ -2021,6 +2044,7 @@ def main() -> int:
             "model_id",
             "hardware",
             "kv_mode",
+            "quant_bits",
             "seq_len",
             "batch",
             "group_size",
@@ -2088,7 +2112,7 @@ def main() -> int:
             return 2
     longbench_task_keys = [
         c
-        for c in ["task_name", "kv_mode", "seq_len", "gen_len", "run_name"]
+        for c in ["task_name", "kv_mode", "quant_bits", "seq_len", "gen_len", "run_name"]
         if c in longbench_task.columns
     ]
     longbench_task_summary = _agg_mean_std(
@@ -2135,6 +2159,7 @@ def main() -> int:
             "model_id",
             "hardware",
             "kv_mode",
+            "quant_bits",
             "seq_len",
             "batch",
             "group_size",
@@ -2198,7 +2223,9 @@ def main() -> int:
             _print_strict_issues(strict_issues)
             return 2
     ruler_depth_keys = [
-        c for c in ["model_id", "kv_mode", "seq_len", "depth_ratio"] if c in ruler_depth.columns
+        c
+        for c in ["model_id", "kv_mode", "quant_bits", "seq_len", "depth_ratio"]
+        if c in ruler_depth.columns
     ]
     ruler_depth_summary = _agg_mean_std(
         ruler_depth,
@@ -2236,7 +2263,7 @@ def main() -> int:
             return 2
     ruler_task_keys = [
         c
-        for c in ["model_id", "hardware", "ruler_task", "kv_mode", "seq_len", "batch"]
+        for c in ["model_id", "hardware", "ruler_task", "kv_mode", "quant_bits", "seq_len", "batch"]
         if c in ruler_task.columns
     ]
     ruler_task_summary = _agg_mean_std(
@@ -2287,35 +2314,35 @@ def main() -> int:
             "df": latency,
             "metric_col": "tpot_ms",
             "metric_name": "tpot_ms",
-            "key_cols": ["model_id", "seq_len", "gen_len", "batch"],
+            "key_cols": ["model_id", "seq_len", "gen_len", "batch", "quant_bits"],
             "higher_is_better": False,
         },
         {
             "df": ppl,
             "metric_col": "perplexity",
             "metric_name": "perplexity",
-            "key_cols": ["model_id", "seq_len", "ppl_mode", "chunk_size"],
+            "key_cols": ["model_id", "seq_len", "ppl_mode", "chunk_size", "quant_bits"],
             "higher_is_better": False,
         },
         {
             "df": needle,
             "metric_col": "needle_pass_rate",
             "metric_name": "needle_pass_rate",
-            "key_cols": ["model_id", "seq_len"],
+            "key_cols": ["model_id", "seq_len", "quant_bits"],
             "higher_is_better": True,
         },
         {
             "df": longbench,
             "metric_col": "longbench_score",
             "metric_name": "longbench_score",
-            "key_cols": ["model_id", "seq_len", "longbench_source"],
+            "key_cols": ["model_id", "seq_len", "longbench_source", "quant_bits"],
             "higher_is_better": True,
         },
         {
             "df": ruler,
             "metric_col": "ruler_pass_rate",
             "metric_name": "ruler_pass_rate",
-            "key_cols": ["model_id", "seq_len", "ruler_num_kv_pairs"],
+            "key_cols": ["model_id", "seq_len", "ruler_num_kv_pairs", "quant_bits"],
             "higher_is_better": True,
         },
     ]
@@ -2362,6 +2389,7 @@ def main() -> int:
                 "seq_len",
                 "gen_len",
                 "batch",
+                "quant_bits",
                 "ppl_mode",
                 "chunk_size",
                 "longbench_source",

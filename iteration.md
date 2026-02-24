@@ -223,8 +223,8 @@ Canonical agent workflow directory is `.agents/`.
 
 > run_experiments.py 的 KIVI 集成、参数传递、skip 逻辑、配置解析审查。
 
-- [ ] `[HIGH]` kivi_style 的 calib_strategy 默认值继承陷阱 (L880-881, L1015-1016): 若 YAML 中 kivi_style 条目遗漏 `calib_strategy`，会从 `quant_defaults` 继承 `kl_attn`（与 kivi_asymmetric 不兼容），且 `--calib_strategy kl_attn` 被静默传递给子脚本。当前 ablation config 正确显式指定了 `kivi_asymmetric`，但缺少验证逻辑防止未来误配置
-- [ ] `[MEDIUM]` kivi_style decode_attn_impl 无强制验证 (L882-884, L1033-1034): kivi_style 必须用 `torch_ref`（KIVIStyleKVCache 硬编码），但运行器允许传入 `triton_fused` 而不报错。若 YAML 配置错误，参数被静默忽略，导致调试困惑
+- [x] `[HIGH]` kivi_style 的 calib_strategy 默认值继承陷阱 (L880-881, L1015-1016): ✅ 已修复（run_experiments 增加 fail-fast 校验：kivi_style 仅允许 `calib_strategy in {"", "kivi_asymmetric"}`）
+- [x] `[MEDIUM]` kivi_style decode_attn_impl 无强制验证 (L882-884, L1033-1034): ✅ 已修复（run_experiments 强制 `decode_attn_impl=torch_ref`，不兼容配置直接报错）
 - [ ] `[MEDIUM]` 无条件传递 quant 参数给所有 kv_mode (L987-998): `group_size`、`clip_percentile` 等参数对 fp16 和 kivi_style 无效，但始终加入命令行。污染日志、增加调试难度
 - [x] `[MEDIUM]` skip 时重复标记成功 (L1130-1138): ✅ 已修复（本分支：skip 路径 `record_history=False`，不再追加 terminal history）
 - [ ] `[LOW]` manifest history 仅保留最近 20 条 (L334): 超过 21 次重试时丢失早期记录。罕见场景但可能影响审计
@@ -233,11 +233,11 @@ Canonical agent workflow directory is `.agents/`.
 
 > check_run_completeness.py 的状态检测逻辑、OOM 分类、KIVI 覆盖审查。
 
-- [ ] `[CRITICAL]` OOM 分类被 elif 链短路 (L94-109): 当 `has_csv=True` + `manifest_failure="oom"` 时，L100 的 `manifest_status in {"", "failed", ...}` 先匹配 → 错误返回 "mixed_csv_non_success" 而非 "oom"。更严重：若 `has_success_history=True`（history 中有旧的 success 记录），L94 匹配 → 返回 "success"。OOM 运行被误报为完成。L102 OOM 检测从不被触达
-- [ ] `[HIGH]` manifest 无 failure_type 字段 (L85): `task_info.get("failure_type", "")` 对当前 manifest schema 始终返回空串。OOM 检测完全依赖日志文件解析 `_is_oom_from_log()`，若日志被截断或不含 "CUDA out of memory" 字符串则检测失败
-- [ ] `[HIGH]` 不验证 kivi_style 运行完整性: 当 kivi_style 被添加到配置矩阵后，completeness checker 的 `--required_run_names` 和 `--stress_run_names` 参数需手动更新。若遗漏，kivi_style 运行的缺失/OOM 不会被报告
-- [ ] `[MEDIUM]` 不验证 CSV 内容完整性 (L80): 仅检查 CSV 文件存在（glob 模式匹配），不验证行数、schema、数据正确性。残留的空/损坏 CSV 被视为有效
-- [ ] `[MEDIUM]` LongBench/RULER 任务级完整性无验证 (L16-23, L146-148): 仅检查 CSV 文件是否存在，不验证 7 任务/4 子任务是否全部完成。部分任务缺失不会被捕获
+- [x] `[CRITICAL]` OOM 分类被 elif 链短路 (L94-109): ✅ 已修复（OOM 检测前置，优先于 CSV/manifest 分支）
+- [x] `[HIGH]` manifest 无 failure_type 字段 (L85): ✅ 已修复（`_latest_failure_type()` 支持 history 回溯并结合日志兜底）
+- [x] `[HIGH]` 不验证 kivi_style 运行完整性: ✅ 已修复（新增 `--config` 自动推导 required/stress，避免手工名单遗漏 KIVI）
+- [x] `[MEDIUM]` 不验证 CSV 内容完整性 (L80): ✅ 已修复（新增 `_csv_has_rows()`，空/损坏 CSV 记为 `csv_invalid`）
+- [x] `[MEDIUM]` LongBench/RULER 任务级完整性无验证 (L16-23, L146-148): ✅ 已修复（`_has_task_level_artifacts()` 要求 LongBench/RULER 任务级汇总文件）
 
 #### U. 深度审查 — `src/engine/generate_loop.py` KIVI 路径 + `src/engine/patch_model.py`（第十轮审查）
 
@@ -319,7 +319,7 @@ Canonical agent workflow directory is `.agents/`.
 - [x] `[HIGH]` RULER 聚合缺少子任务分拆 (aggregate_results.py:1936-2078): ✅ 已修复（本分支：保留 `ruler_task_summary.csv` 并新增同口径 `ruler_subtask_summary.csv`，按 `ruler_task` 输出四子任务聚合）
 - [x] `[HIGH]` 多模型对比缺少分层表 (aggregate_results.py 全局): ✅ 已修复（本分支：新增 `_export_per_model_layered_tables()`，含 `per_model_table_manifest.csv`）
 - [ ] `[MEDIUM]` LongBench 聚合同时包含 3 个近义指标 (aggregate_results.py:1867-1874): `longbench_score`、`longbench_official_macro`、`longbench_f1_macro` 同时聚合。需确认哪个是 objective.md 定义的 primary endpoint（应为 `longbench_score`）。多指标并存增加混淆风险
-- [ ] `[MEDIUM]` KIVI quant_bits 在 pairings 中未区分 INT8/INT4 (aggregate_results.py:2105-2110): pairings 列表 `("kivi_style", "int8_ours")` 未指定 kivi 的 quant_bits。若结果 CSV 中混合了 kivi_int8 和 kivi_int4 行，统计检验可能混用两种精度的数据
+- [x] `[MEDIUM]` KIVI quant_bits 在 pairings 中未区分 INT8/INT4 (aggregate_results.py:2105-2110): ✅ 已修复（LongBench/RULER 聚合键与显著性 key_cols 均纳入 `quant_bits`，避免混算）
 - [ ] `[MEDIUM]` kv_mode 显示顺序依赖默认排序 (aggregate_results.py:705-732): 绘图/表格中 kv_mode 未定义固定显示顺序，使用 Python 默认字符串排序。建议定义 `KV_MODE_DISPLAY_ORDER` 常量确保论文一致性
 - [ ] `[LOW]` Bootstrap seed 基于 SHA256 hash 的独立性: 使用 `_stable_random_seed` 生成确定性 seed（可复现），但不同 metric 对之间的 seed 独立性依赖 hash 无碰撞假设。实际安全但缺少文档说明
 
@@ -979,3 +979,42 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - local environment cannot run pandas-dependent tests; run `tests/test_aggregate_results_stats.py` on remote conda env (`/root/miniconda3/bin/python`) before final PR merge gate.
   - proceed with remote hot-switch and `repair_phase5v2_ruler_light.py` dry-run/execute after current quality sessions finish.
+
+### 2026-02-25 00:47 | Phase5v2 v8 收口（quant_bits 防混算 + completeness 配置驱动）
+- Goal: close v8 remaining risks in aggregation/completeness and align docs with current KIVI INT4 implementation.
+- Scope:
+  - `aggregate_results.py`: LongBench/RULER 聚合与显著性键纳入 `quant_bits`；32K 主表按 `kv_mode+quant_bits` 对齐合并。
+  - `check_run_completeness.py`: 新增 `--config` 自动推导 required/stress 分组，减少手工 run_name 清单耦合并覆盖 KIVI。
+  - `repair_phase5v2_ruler_light.py`: 跳过 running/已有有效 CSV，补跑命令去掉 `--append`，避免不必要 append 语义。
+  - `exp_matrix_qwen25_7b_v1.yaml`: 修正 max_position 注释歧义。
+  - `objective.md`: 更新 KIVI INT4 bit-packing 现状声明。
+- Changed files:
+  - `scripts/aggregate_results.py`
+  - `scripts/check_run_completeness.py`
+  - `scripts/repair_phase5v2_ruler_light.py`
+  - `configs/snapshots/exp_matrix_qwen25_7b_v1.yaml`
+  - `tests/test_check_run_completeness.py`
+  - `tests/test_aggregate_results_stats.py`
+  - `objective.md`
+  - `iteration.md`
+- Commands:
+  - `python3 -m unittest tests/test_run_experiments_resilience.py -v`
+  - `python3 -m unittest tests/test_check_run_completeness.py -v`
+  - `python3 -m unittest tests/test_eval_ruler_length_guard.py -v`
+  - `python3 -m unittest tests/test_aggregate_results_stats.py -v`
+  - `python3 -m unittest tests/test_generate_thesis_report.py -v`
+  - `python3 -m compileall -f src scripts tests`
+  - `python3.12 -m unittest tests/test_aggregate_results_stats.py -v`
+- Validation:
+  - PASS: `test_run_experiments_resilience.py` (13/13)
+  - PASS: `test_check_run_completeness.py` (6/6, 含 config 自动推导 kivi 覆盖回归)
+  - PASS: `test_eval_ruler_length_guard.py`（4 skipped，依赖缺失环境）
+  - PASS: `compileall`（src/scripts/tests）
+  - BLOCKED: pandas 相关测试在本地环境失败
+    - `python3`: `ValueError: numpy.dtype size changed`（numpy/pandas 二进制不兼容）
+    - `python3.12`: `ModuleNotFoundError: pandas`
+- Commits:
+  - pending
+- Risks / follow-ups:
+  - 在远端 conda 环境补跑 `tests/test_aggregate_results_stats.py` 与 `tests/test_generate_thesis_report.py`。
+  - 合并前对 `aggregate_results.py` 与 `run_experiments.py` 做一次冲突审查（Claude 已标注中风险）。

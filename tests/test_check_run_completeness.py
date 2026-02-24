@@ -282,6 +282,97 @@ class TestCheckRunCompleteness(unittest.TestCase):
             report = json.loads(out_json.read_text(encoding="utf-8"))
             self.assertGreater(len(report["unexpected_failures"]), 0)
 
+    def test_auto_infer_run_groups_from_config_covers_kivi(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            runs_dir = root / "runs"
+            logs_dir = root / "logs"
+            out_json = root / "report.json"
+            cfg = root / "exp_matrix.yaml"
+            run_tag = "rt_cfg"
+
+            cfg.write_text(
+                """
+matrix:
+  - run_name: req_a
+    kv_mode: int8_ours
+    batch: 1
+  - run_name: kivi_style_int8_curve_8k
+    kv_mode: kivi_style
+    quant_bits: 8
+    batch: 1
+  - run_name: stress_b32_throughput_8k
+    kv_mode: int8_ours
+    batch: 32
+""".strip(),
+                encoding="utf-8",
+            )
+
+            req_id = f"req_a_{run_tag}"
+            _write(runs_dir / req_id / "profile_latency_ok.csv", "x\n1\n")
+            _write(
+                runs_dir / req_id / "run_manifest.json",
+                json.dumps(
+                    {
+                        "run_name": "req_a",
+                        "run_tag": run_tag,
+                        "tasks": {"profile_latency": {"status": "success"}},
+                    }
+                ),
+            )
+            _write(logs_dir / req_id / "profile_latency.log", "done\n")
+
+            kivi_id = f"kivi_style_int8_curve_8k_{run_tag}"
+            _write(runs_dir / kivi_id / "profile_latency_ok.csv", "x\n1\n")
+            _write(
+                runs_dir / kivi_id / "run_manifest.json",
+                json.dumps(
+                    {
+                        "run_name": "kivi_style_int8_curve_8k",
+                        "run_tag": run_tag,
+                        "tasks": {"profile_latency": {"status": "success"}},
+                    }
+                ),
+            )
+            _write(logs_dir / kivi_id / "profile_latency.log", "done\n")
+
+            stress_id = f"stress_b32_throughput_8k_{run_tag}"
+            _write(
+                runs_dir / stress_id / "run_manifest.json",
+                json.dumps(
+                    {
+                        "run_name": "stress_b32_throughput_8k",
+                        "run_tag": run_tag,
+                        "tasks": {"profile_latency": {"status": "failed", "failure_type": "oom"}},
+                    }
+                ),
+            )
+            _write(logs_dir / stress_id / "profile_latency.log", "CUDA out of memory\n")
+
+            cmd = [
+                sys.executable,
+                str(SCRIPT_PATH),
+                "--runs_dir",
+                str(runs_dir),
+                "--logs_dir",
+                str(logs_dir),
+                "--run_tag",
+                run_tag,
+                "--tasks",
+                "profile_latency",
+                "--config",
+                str(cfg),
+                "--out_json",
+                str(out_json),
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 0, msg=result.stdout + "\n" + result.stderr)
+            report = json.loads(out_json.read_text(encoding="utf-8"))
+            self.assertEqual(report["run_name_source"], f"config:{cfg}")
+            self.assertIn("kivi_style_int8_curve_8k", report["required_run_names"])
+            self.assertIn("stress_b32_throughput_8k", report["stress_run_names"])
+            self.assertEqual(len(report["unexpected_failures"]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

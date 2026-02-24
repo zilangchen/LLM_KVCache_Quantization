@@ -13,6 +13,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
+try:
+    import yaml
+except ModuleNotFoundError:  # pragma: no cover - depends on runtime env
+    yaml = None
+
 
 TASK_TO_CSV_PATTERN = {
     "profile_latency": "profile_latency_*.csv",
@@ -28,6 +33,84 @@ def _split_csv(values: str | None) -> List[str]:
     if not values:
         return []
     return [x.strip() for x in str(values).split(",") if x.strip()]
+
+
+def _run_name_is_stress(*, run_name: str, batch: int | None) -> bool:
+    lower = str(run_name).lower()
+    if "throughput" in lower:
+        return True
+    if batch is None:
+        return False
+    return int(batch) > 1
+
+
+def _load_matrix_entries(config_path: Path) -> List[Dict[str, Any]]:
+    if yaml is None:
+        return []
+    try:
+        raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    matrix_obj: Any = []
+    if isinstance(raw, dict):
+        matrix_obj = raw.get("matrix", [])
+        if isinstance(matrix_obj, dict):
+            matrix_obj = matrix_obj.get("runs", [])
+    elif isinstance(raw, list):
+        matrix_obj = raw
+    if not isinstance(matrix_obj, list):
+        return []
+    out: List[Dict[str, Any]] = []
+    for item in matrix_obj:
+        if isinstance(item, dict):
+            out.append(item)
+    return out
+
+
+def _infer_run_groups_from_config(config_path: Path) -> Dict[str, List[str]]:
+    required: List[str] = []
+    stress: List[str] = []
+    for row in _load_matrix_entries(config_path):
+        run_name = str(row.get("run_name", "")).strip()
+        if not run_name:
+            continue
+        batch_val = row.get("batch")
+        try:
+            batch = int(batch_val) if batch_val is not None else None
+        except Exception:
+            batch = None
+        if _run_name_is_stress(run_name=run_name, batch=batch):
+            stress.append(run_name)
+        else:
+            required.append(run_name)
+    return {
+        "required": sorted(set(required)),
+        "stress": sorted(set(stress)),
+    }
+
+
+def _infer_run_groups_from_manifests(*, runs_dir: Path, run_tag: str) -> Dict[str, List[str]]:
+    required: List[str] = []
+    stress: List[str] = []
+    for run_dir in sorted(runs_dir.iterdir()):
+        if not run_dir.is_dir():
+            continue
+        manifest = _read_json(run_dir / "run_manifest.json")
+        if not manifest:
+            continue
+        if str(manifest.get("run_tag", "")).strip() != str(run_tag).strip():
+            continue
+        run_name = str(manifest.get("run_name", "")).strip()
+        if not run_name:
+            continue
+        if _run_name_is_stress(run_name=run_name, batch=None):
+            stress.append(run_name)
+        else:
+            required.append(run_name)
+    return {
+        "required": sorted(set(required)),
+        "stress": sorted(set(stress)),
+    }
 
 
 def _read_json(path: Path) -> Dict[str, Any] | None:
@@ -253,6 +336,15 @@ def main() -> int:
     parser.add_argument("--seeds", type=str, default="")
     parser.add_argument("--required_run_names", type=str, default="")
     parser.add_argument("--stress_run_names", type=str, default="")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="",
+        help=(
+            "Optional experiment matrix config. When required/stress run-name lists are omitted, "
+            "groups are inferred from config matrix (stress = throughput or batch>1)."
+        ),
+    )
     parser.add_argument("--out_json", type=str, required=True)
     parser.add_argument(
         "--allow_stress_unexpected_failures",
@@ -267,6 +359,7 @@ def main() -> int:
     tasks = _split_csv(args.tasks)
     required_run_names = _split_csv(args.required_run_names)
     stress_run_names = _split_csv(args.stress_run_names)
+    run_name_source = "cli"
     seeds = [int(x) for x in _split_csv(args.seeds)] if args.seeds else []
     out_json = Path(args.out_json)
     if not out_json.is_absolute():
@@ -278,6 +371,38 @@ def main() -> int:
         return 2
     if not tasks:
         print("No tasks were provided.")
+        return 2
+
+    if not required_run_names and not stress_run_names:
+        if args.config:
+            if yaml is None:
+                print("PyYAML is required for --config auto inference but is not installed.")
+                return 2
+            cfg_path = Path(args.config)
+            if not cfg_path.is_absolute():
+                cfg_path = Path.cwd() / cfg_path
+            if not cfg_path.exists():
+                print(f"config not found: {cfg_path}")
+                return 2
+            inferred = _infer_run_groups_from_config(cfg_path)
+            required_run_names = inferred["required"]
+            stress_run_names = inferred["stress"]
+            run_name_source = f"config:{cfg_path}"
+        else:
+            inferred = _infer_run_groups_from_manifests(runs_dir=runs_dir, run_tag=args.run_tag)
+            required_run_names = inferred["required"]
+            stress_run_names = inferred["stress"]
+            run_name_source = "manifest"
+        print(
+            "Auto-inferred run-name groups: "
+            f"required={len(required_run_names)} stress={len(stress_run_names)} source={run_name_source}"
+        )
+
+    if not required_run_names and not stress_run_names:
+        print(
+            "No run names to check. Provide --required_run_names/--stress_run_names "
+            "or pass --config for auto inference."
+        )
         return 2
 
     required = _check_group(
@@ -315,6 +440,7 @@ def main() -> int:
         "seeds": seeds,
         "required_run_names": required_run_names,
         "stress_run_names": stress_run_names,
+        "run_name_source": run_name_source,
         "required_complete": len(required_missing) == 0,
         "stress_complete": len(stress_missing) == 0,
         "missing_required_run_names": required_missing,
