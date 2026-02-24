@@ -77,6 +77,10 @@ class CUDATimer:
         self.sync_after = sync_after
         self._start_time: Optional[float] = None
         self._elapsed_ms: Optional[float] = None
+        # UTIL-002: _cuda_available is evaluated once at construction time and
+        # cached for the lifetime of this timer instance. This is intentional:
+        # CUDA availability does not change during a process, and re-checking
+        # on every start()/stop() call would add unnecessary overhead.
         self._cuda_available = torch.cuda.is_available()
 
     def start(self) -> "CUDATimer":
@@ -107,7 +111,13 @@ class CUDATimer:
         return self._elapsed_ms
 
     def reset(self) -> None:
-        """Reset the timer for reuse."""
+        """Reset the timer for reuse.
+
+        Note (UTIL-003): This intentionally does NOT reset ``_cuda_available``.
+        CUDA availability is a process-level constant that cannot change after
+        initialization, so re-evaluating it on reset would be wasteful and
+        misleading (see UTIL-002).
+        """
         self._start_time = None
         self._elapsed_ms = None
 
@@ -124,8 +134,10 @@ def timer_context(sync_before: bool = True, sync_after: bool = True):
         print(f"Elapsed: {timer.elapsed_ms:.2f} ms")
 
     Args:
-        sync_before: Synchronize CUDA before entering the block.
-        sync_after: Synchronize CUDA before exiting the block.
+        sync_before: Synchronize CUDA before entering the timed block.
+        sync_after: Synchronize CUDA after the timed block completes
+            (i.e. when stop() is called), ensuring all GPU work is finished
+            before the elapsed time is recorded.
 
     Yields:
         CUDATimer: Timer object with elapsed_ms property after block exits.
@@ -140,10 +152,11 @@ def timer_context(sync_before: bool = True, sync_after: bool = True):
 
 def get_gpu_memory_mb() -> float:
     """
-    Get current GPU memory usage in MB.
+    Get peak GPU memory usage in MB.
 
     Returns:
-        Peak allocated GPU memory in MB, or 0.0 if CUDA not available.
+        Peak allocated GPU memory in MB (via ``torch.cuda.max_memory_allocated``),
+        or 0.0 if CUDA is not available.
     """
     if not torch.cuda.is_available():
         return 0.0

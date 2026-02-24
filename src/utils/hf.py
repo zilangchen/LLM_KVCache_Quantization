@@ -29,8 +29,13 @@ def resolve_pretrained_path(model_id: str, revision: Optional[str] = None) -> st
     - If all else fails, return the original `model_id` and let Transformers
       handle it (best-effort).
     """
+    # UTIL-012: Raise ValueError for None/empty model_id instead of silently
+    # returning None, which would cause confusing downstream errors.
     if not model_id:
-        return model_id
+        raise ValueError(
+            "model_id must be a non-empty string, got "
+            f"{model_id!r}. Provide a HuggingFace model ID or local path."
+        )
 
     candidate = Path(model_id).expanduser()
     if candidate.exists():
@@ -57,6 +62,14 @@ def resolve_pretrained_path(model_id: str, revision: Optional[str] = None) -> st
 
     try:
         return snapshot_download(repo_id=model_id, revision=revision)
-    except Exception:
+    except Exception as exc:
+        # UTIL-011: Log a warning when falling back to raw model_id so users
+        # know the download attempt failed and Transformers will handle resolution.
+        import warnings
+        warnings.warn(
+            f"snapshot_download('{model_id}') failed: {exc}. "
+            "Falling back to raw model_id for Transformers to resolve.",
+            RuntimeWarning,
+        )
         return model_id
 

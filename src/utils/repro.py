@@ -31,12 +31,23 @@ def set_seed(seed: int = 1234, deterministic: bool = True) -> None:
     torch.cuda.manual_seed_all(seed)
 
     if deterministic:
+        # UTIL-006: CUBLAS_WORKSPACE_CONFIG is set here, after torch has already
+        # been imported at module level. cuBLAS reads this env var lazily (on first
+        # kernel launch), so setting it here is effective in practice. However, if
+        # a cuBLAS kernel has already been launched before this call, the setting
+        # may have no effect for that specific workspace configuration.
         os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
         try:
             torch.use_deterministic_algorithms(True)
-        except Exception:
-            # Fall back to best-effort determinism if the backend disallows it.
-            pass
+        except Exception as exc:
+            # UTIL-005: Log a warning instead of silently swallowing the failure,
+            # so users know deterministic mode could not be enabled.
+            import warnings
+            warnings.warn(
+                f"torch.use_deterministic_algorithms(True) failed: {exc}. "
+                "Falling back to best-effort determinism.",
+                RuntimeWarning,
+            )
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
@@ -86,11 +97,23 @@ def build_config_snapshot(
 ) -> Dict[str, Any]:
     """
     Build a minimal, serializable config snapshot for a run.
+
+    Note (UTIL-010): The ``decoding`` dict is intentionally hardcoded to
+    greedy-decode parameters (temperature=0, top_p=1, top_k=0). This is a
+    fixed project decision (see CLAUDE.md §9 "Fixed Decisions") to ensure
+    all experiments use identical decoding settings for reproducibility.
     """
+    # UTIL-007: Guard against objects without __dict__ (e.g. plain dicts).
+    if isinstance(args, dict):
+        args_dict = args
+    elif hasattr(args, "__dict__"):
+        args_dict = vars(args)
+    else:
+        args_dict = {"_raw": str(args)}
     snapshot: Dict[str, Any] = {
         "script": script_name,
         "timestamp": datetime.now().isoformat(),
-        "args": vars(args),
+        "args": args_dict,
         "decoding": {
             "temperature": 0.0,
             "top_p": 1.0,
@@ -122,6 +145,9 @@ def resolve_quant_bits(kv_mode: str, quant_bits_arg: int | None = None) -> int:
         return int(quant_bits_arg)
     mode = str(kv_mode)
     if mode == "kivi_style":
+        # UTIL-009: KIVI supports both INT4 and INT8. Default to 8 only when
+        # the caller did not pass an explicit quant_bits_arg. For KIVI-INT4,
+        # callers MUST supply quant_bits_arg=4 (handled by the early return above).
         return 8
     if "int4" in mode:
         return 4
@@ -135,15 +161,25 @@ def ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
 
 
-def write_config_snapshot(run_dir: str, snapshot: Dict[str, Any]) -> str:
+def write_config_snapshot(run_dir: str, snapshot: Dict[str, Any]) -> Optional[str]:
     """
     Write config snapshot to a run directory.
 
     Returns:
-        Path to the written snapshot file.
+        Path to the written snapshot file, or None if writing failed.
     """
-    ensure_dir(run_dir)
-    path = os.path.join(run_dir, "config_snapshot.yaml")
-    with open(path, "w") as f:
-        yaml.safe_dump(snapshot, f, sort_keys=False)
-    return path
+    # UTIL-008: Wrap I/O in try/except so callers are not killed by
+    # permission errors or disk-full conditions during snapshot writes.
+    try:
+        ensure_dir(run_dir)
+        path = os.path.join(run_dir, "config_snapshot.yaml")
+        with open(path, "w") as f:
+            yaml.safe_dump(snapshot, f, sort_keys=False)
+        return path
+    except Exception as exc:
+        import warnings
+        warnings.warn(
+            f"Failed to write config snapshot to {run_dir}: {exc}",
+            RuntimeWarning,
+        )
+        return None

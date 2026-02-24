@@ -680,13 +680,15 @@ def generate_from_ids(
             next_token_logits = outputs.logits[:, -1, :]
             next_token = torch.argmax(next_token_logits, dim=-1)  # [B]
     finally:
+        # UTIL-001: Ensure prefill_timer.stop() runs even if model() throws,
+        # so ttft_ms is always defined and CUDA events are properly finalized.
+        prefill_timer.stop()
         for h in hook_handles:
             try:
                 h.remove()
             except Exception:
                 pass
 
-    prefill_timer.stop()
     ttft_ms = prefill_timer.elapsed_ms
 
     # ENG-018: If max_new_tokens=0, skip generation entirely.
