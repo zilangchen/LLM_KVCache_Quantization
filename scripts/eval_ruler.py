@@ -222,6 +222,9 @@ def _score_set_answer(prediction: str, answers: List[str]) -> Dict[str, float]:
     precision = len(intersection) / max(1, len(pred_words))
     recall = len(intersection) / len(truth_words)
     f1 = (2.0 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+    # EVL-032: CWE exact_match checks recall==1.0 (all truth words in pred),
+    # which is intentionally more lenient than other tasks' full string match.
+    # This is the standard CWE evaluation approach per the RULER benchmark.
     exact = 1.0 if intersection == truth_words else 0.0
     contains = recall  # fraction of truth words found
     return {"exact_match": exact, "contains_match": contains, "f1": f1}

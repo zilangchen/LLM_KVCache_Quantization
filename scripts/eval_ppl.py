@@ -121,6 +121,9 @@ def maybe_to_dynamic_cache(past_key_values):
         try:
             return DynamicCache.from_legacy_cache(past_key_values)
         except Exception:
+            # EVL-034: Conversion may fail for non-standard cache shapes
+            # (e.g. KIVI tuples with quantized tensors). Fall back to the
+            # raw tuple, which older Transformers versions accept directly.
             return past_key_values
     return past_key_values
 
