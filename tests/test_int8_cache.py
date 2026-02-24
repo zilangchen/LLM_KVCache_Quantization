@@ -858,5 +858,373 @@ class TestINT8OutlierHandling(unittest.TestCase):
                         "V output must be finite even with outlier input")
 
 
+# ===========================================================================
+# TST-005: B1 fix verification -- batch>1 cache correctness
+# ===========================================================================
+
+
+class TestINT8CacheBatchGreaterThanOne(unittest.TestCase):
+    """TST-005: Verify batch=2 cache append/get_kv behaves consistently with batch=1.
+
+    The B1 fix ensures that multi-batch INT8 cache operations produce the same
+    per-sample quantization results as single-batch operations. Each sample in
+    the batch should be quantized independently; batch dim must not cause
+    cross-contamination or shape errors.
+    """
+
+    def setUp(self):
+        torch.manual_seed(42)
+        self.H, self.D = 4, 128
+        self.group_size = 64
+
+    def test_batch2_append_get_kv_shapes(self):
+        """batch=2: shapes must be correct after append and get_kv."""
+        B = 2
+        cache = INT8KVCache(num_layers=1, device="cpu", group_size=self.group_size)
+        k = torch.randn(B, self.H, 8, self.D, dtype=torch.float16)
+        v = torch.randn(B, self.H, 8, self.D, dtype=torch.float16)
+        cache.append(0, k, v)
+
+        self.assertEqual(cache.get_seq_len(), 8)
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.shape, (B, self.H, 8, self.D))
+        self.assertEqual(v_out.shape, (B, self.H, 8, self.D))
+
+    def test_batch2_incremental_append(self):
+        """batch=2: incremental (prefill + decode) append must work."""
+        B = 2
+        cache = INT8KVCache(num_layers=1, device="cpu", group_size=self.group_size)
+
+        # Prefill
+        k1 = torch.randn(B, self.H, 5, self.D, dtype=torch.float16)
+        v1 = torch.randn(B, self.H, 5, self.D, dtype=torch.float16)
+        cache.append(0, k1, v1)
+
+        # Decode 3 tokens one at a time
+        for _ in range(3):
+            k = torch.randn(B, self.H, 1, self.D, dtype=torch.float16)
+            v = torch.randn(B, self.H, 1, self.D, dtype=torch.float16)
+            cache.append(0, k, v)
+
+        self.assertEqual(cache.get_seq_len(), 8)
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.shape, (B, self.H, 8, self.D))
+
+    def test_batch2_vs_batch1_per_sample_consistency(self):
+        """Each sample in batch=2 must match independent batch=1 processing.
+
+        We compare: run batch=2 as a single cache operation vs. run each
+        sample independently with batch=1. The quantized outputs should be
+        identical (not just similar), because INT8 group-wise quantization
+        is per (batch, head, seq, group) -- independent across batch dim.
+        """
+        B = 2
+        torch.manual_seed(42)
+        k_full = torch.randn(B, self.H, 8, self.D, dtype=torch.float16)
+        v_full = torch.randn(B, self.H, 8, self.D, dtype=torch.float16)
+
+        # Run with batch=2
+        cache_b2 = INT8KVCache(
+            num_layers=1, device="cpu", group_size=self.group_size,
+            clip_percentile=100.0,
+        )
+        cache_b2.append(0, k_full, v_full)
+        k_b2, v_b2 = cache_b2.get_kv(0)
+
+        # Run each sample independently with batch=1
+        for b in range(B):
+            cache_b1 = INT8KVCache(
+                num_layers=1, device="cpu", group_size=self.group_size,
+                clip_percentile=100.0,
+            )
+            k_single = k_full[b : b + 1]
+            v_single = v_full[b : b + 1]
+            cache_b1.append(0, k_single, v_single)
+            k_b1, v_b1 = cache_b1.get_kv(0)
+
+            # The outputs for each sample should be identical
+            self.assertTrue(
+                torch.equal(k_b2[b : b + 1], k_b1),
+                f"Sample {b}: batch=2 K differs from batch=1 K",
+            )
+            self.assertTrue(
+                torch.equal(v_b2[b : b + 1], v_b1),
+                f"Sample {b}: batch=2 V differs from batch=1 V",
+            )
+
+    def test_batch2_roundtrip_error_bounded(self):
+        """batch=2: quantization round-trip error must be bounded per sample."""
+        B = 2
+        torch.manual_seed(42)
+        cache = INT8KVCache(
+            num_layers=1, device="cpu", group_size=self.group_size,
+            clip_percentile=100.0,
+        )
+        k = torch.randn(B, self.H, 8, self.D, dtype=torch.float16)
+        v = torch.randn(B, self.H, 8, self.D, dtype=torch.float16)
+        cache.append(0, k, v)
+        k_out, v_out = cache.get_kv(0)
+
+        for b in range(B):
+            k_err = (k[b] - k_out[b]).abs().max().item()
+            v_err = (v[b] - v_out[b]).abs().max().item()
+            self.assertLess(
+                k_err, 0.1,
+                f"Sample {b}: K roundtrip max error {k_err:.4f} exceeds threshold",
+            )
+            self.assertLess(
+                v_err, 0.1,
+                f"Sample {b}: V roundtrip max error {v_err:.4f} exceeds threshold",
+            )
+
+    def test_batch2_clear_and_reappend(self):
+        """batch=2: clear() + re-append should not leave stale batch=2 data."""
+        B = 2
+        cache = INT8KVCache(
+            num_layers=1, device="cpu", group_size=self.group_size,
+            clip_percentile=100.0,
+        )
+
+        # First round
+        k1 = torch.randn(B, self.H, 4, self.D, dtype=torch.float16)
+        v1 = torch.randn(B, self.H, 4, self.D, dtype=torch.float16)
+        cache.append(0, k1, v1)
+        self.assertEqual(cache.get_seq_len(), 4)
+
+        cache.clear()
+        self.assertEqual(cache.get_seq_len(), 0)
+
+        # Second round with different data
+        torch.manual_seed(99)
+        k2 = torch.randn(B, self.H, 3, self.D, dtype=torch.float16)
+        v2 = torch.randn(B, self.H, 3, self.D, dtype=torch.float16)
+        cache.append(0, k2, v2)
+        self.assertEqual(cache.get_seq_len(), 3)
+
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.shape, (B, self.H, 3, self.D))
+        k_err = (k2 - k_out).abs().max().item()
+        v_err = (v2 - v_out).abs().max().item()
+        self.assertLess(k_err, 0.1, f"K error after clear+reappend: {k_err}")
+        self.assertLess(v_err, 0.1, f"V error after clear+reappend: {v_err}")
+
+    def test_batch2_multi_layer(self):
+        """batch=2 across multiple layers: all layers should work correctly."""
+        B = 2
+        num_layers = 3
+        cache = INT8KVCache(
+            num_layers=num_layers, device="cpu", group_size=self.group_size,
+            clip_percentile=100.0,
+        )
+
+        tensors = {}
+        for layer in range(num_layers):
+            torch.manual_seed(layer * 10)
+            k = torch.randn(B, self.H, 6, self.D, dtype=torch.float16)
+            v = torch.randn(B, self.H, 6, self.D, dtype=torch.float16)
+            cache.append(layer, k, v)
+            tensors[layer] = (k, v)
+
+        for layer in range(num_layers):
+            k_exp, v_exp = tensors[layer]
+            k_out, v_out = cache.get_kv(layer)
+            self.assertEqual(k_out.shape, (B, self.H, 6, self.D))
+            k_err = (k_exp - k_out).abs().max().item()
+            v_err = (v_exp - v_out).abs().max().item()
+            self.assertLess(k_err, 0.1, f"Layer {layer} K error: {k_err}")
+            self.assertLess(v_err, 0.1, f"Layer {layer} V error: {v_err}")
+
+    def test_batch2_decode_single_token(self):
+        """batch=2: single-token decode appends should not corrupt data."""
+        B = 2
+        cache = INT8KVCache(
+            num_layers=1, device="cpu", group_size=self.group_size,
+            clip_percentile=100.0,
+        )
+
+        all_k = []
+        all_v = []
+        for step in range(5):
+            torch.manual_seed(step * 7)
+            k = torch.randn(B, self.H, 1, self.D, dtype=torch.float16)
+            v = torch.randn(B, self.H, 1, self.D, dtype=torch.float16)
+            cache.append(0, k, v)
+            all_k.append(k)
+            all_v.append(v)
+
+        self.assertEqual(cache.get_seq_len(), 5)
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.shape, (B, self.H, 5, self.D))
+
+        # Each token's error should be bounded
+        for i, (k_ref, v_ref) in enumerate(zip(all_k, all_v)):
+            k_err = (k_ref - k_out[:, :, i : i + 1, :]).abs().max().item()
+            v_err = (v_ref - v_out[:, :, i : i + 1, :]).abs().max().item()
+            self.assertLess(
+                k_err, 0.1,
+                f"Token {i}: K error {k_err:.4f} exceeds threshold",
+            )
+            self.assertLess(
+                v_err, 0.1,
+                f"Token {i}: V error {v_err:.4f} exceeds threshold",
+            )
+
+
+class TestINT8KDecodeQuantError(unittest.TestCase):
+    """TST-006: K decode quantization error boundary test.
+
+    Verifies that when a single token is appended (simulating the decode phase),
+    the K quantization error is bounded and comparable to the prefill phase error.
+    This catches regressions where decode-phase quantization behaves differently
+    from prefill (e.g., scale drift, buffer corruption, or per-token axis bugs).
+    """
+
+    def setUp(self):
+        torch.manual_seed(42)
+        self.B, self.H, self.D = 1, 4, 128
+        self.group_size = 64
+
+    def test_decode_k_error_bounded(self):
+        """Single-token append (decode) K error must be bounded by INT8 theory."""
+        cache = INT8KVCache(
+            num_layers=1, device="cpu", group_size=self.group_size,
+            clip_percentile=100.0,
+        )
+        # Prefill: append a short prefix first
+        k_prefill = torch.randn(self.B, self.H, 8, self.D, dtype=torch.float16)
+        v_prefill = torch.randn(self.B, self.H, 8, self.D, dtype=torch.float16)
+        cache.append(0, k_prefill, v_prefill)
+
+        # Decode: append a single new token
+        k_decode = torch.randn(self.B, self.H, 1, self.D, dtype=torch.float16)
+        v_decode = torch.randn(self.B, self.H, 1, self.D, dtype=torch.float16)
+        cache.append(0, k_decode, v_decode)
+
+        self.assertEqual(cache.get_seq_len(), 9)
+
+        # Retrieve full KV and check the decode token's error
+        k_out, _ = cache.get_kv(0)
+        k_decode_out = k_out[:, :, 8:9, :]  # the last (decode) token
+
+        decode_err = (k_decode - k_decode_out).abs().max().item()
+        # INT8 symmetric max error ~ absmax / 127. For unit-variance randn fp16,
+        # absmax ~ 3-4, so max error ~ 0.03. Tolerance 0.1 is deliberately loose.
+        self.assertLess(
+            decode_err, 0.1,
+            f"Decode K quantization max error too large: {decode_err}"
+        )
+        # Also verify finiteness
+        self.assertTrue(
+            torch.isfinite(k_decode_out).all(),
+            "Decode K output must be finite"
+        )
+
+    def test_decode_error_vs_prefill_error(self):
+        """Decode-phase K error should be in the same ballpark as prefill error.
+
+        If decode error is drastically larger (e.g. >5x), it suggests a bug in
+        how scales are computed or applied for single-token appends.
+        """
+        cache = INT8KVCache(
+            num_layers=1, device="cpu", group_size=self.group_size,
+            clip_percentile=100.0,
+        )
+        # Prefill phase
+        k_prefill = torch.randn(self.B, self.H, 16, self.D, dtype=torch.float16)
+        v_prefill = torch.randn(self.B, self.H, 16, self.D, dtype=torch.float16)
+        cache.append(0, k_prefill, v_prefill)
+
+        k_out_prefill, _ = cache.get_kv(0)
+        prefill_err = (k_prefill - k_out_prefill).abs().max().item()
+
+        # Decode phase: 4 single-token appends
+        decode_errs = []
+        for step in range(4):
+            torch.manual_seed(100 + step)
+            k_tok = torch.randn(self.B, self.H, 1, self.D, dtype=torch.float16)
+            v_tok = torch.randn(self.B, self.H, 1, self.D, dtype=torch.float16)
+            cache.append(0, k_tok, v_tok)
+
+            k_all, _ = cache.get_kv(0)
+            pos = 16 + step
+            k_tok_out = k_all[:, :, pos:pos + 1, :]
+            tok_err = (k_tok - k_tok_out).abs().max().item()
+            decode_errs.append(tok_err)
+
+        avg_decode_err = sum(decode_errs) / len(decode_errs)
+        # Decode error should not be drastically worse than prefill error.
+        # Allow up to 5x ratio (generous, accounts for variance in single tokens).
+        ratio = avg_decode_err / max(prefill_err, 1e-8)
+        self.assertLess(
+            ratio, 5.0,
+            f"Avg decode K error ({avg_decode_err:.6f}) is {ratio:.1f}x the "
+            f"prefill K error ({prefill_err:.6f}); decode quantization may be broken"
+        )
+
+    def test_decode_k_error_with_static_scale(self):
+        """Decode K error with static scales should also be bounded."""
+        num_groups = self.D // self.group_size
+        static_k = torch.full(
+            (self.H, num_groups), 0.01, dtype=torch.float16
+        )
+        static_v = torch.full(
+            (self.H, num_groups), 0.01, dtype=torch.float16
+        )
+        cache = INT8KVCache(
+            num_layers=1, device="cpu", group_size=self.group_size,
+            static_k_scale=[static_k],
+            static_v_scale=[static_v],
+        )
+        # Prefill
+        k_pre = torch.randn(self.B, self.H, 4, self.D, dtype=torch.float16) * 0.5
+        v_pre = torch.randn(self.B, self.H, 4, self.D, dtype=torch.float16) * 0.5
+        cache.append(0, k_pre, v_pre)
+
+        # Decode token
+        k_dec = torch.randn(self.B, self.H, 1, self.D, dtype=torch.float16) * 0.5
+        v_dec = torch.randn(self.B, self.H, 1, self.D, dtype=torch.float16) * 0.5
+        cache.append(0, k_dec, v_dec)
+
+        k_out, _ = cache.get_kv(0)
+        k_dec_out = k_out[:, :, 4:5, :]
+        dec_err = (k_dec - k_dec_out).abs().max().item()
+        self.assertLess(
+            dec_err, 0.5,
+            f"Static-scale decode K error too large: {dec_err}"
+        )
+        self.assertTrue(torch.isfinite(k_dec_out).all())
+
+    def test_multi_layer_decode_k_error(self):
+        """Decode K error should be bounded across all layers."""
+        num_layers = 3
+        cache = INT8KVCache(
+            num_layers=num_layers, device="cpu", group_size=self.group_size,
+            clip_percentile=100.0,
+        )
+        # Prefill all layers
+        for layer in range(num_layers):
+            k = torch.randn(self.B, self.H, 8, self.D, dtype=torch.float16)
+            v = torch.randn(self.B, self.H, 8, self.D, dtype=torch.float16)
+            cache.append(layer, k, v)
+
+        # Decode: single token per layer
+        decode_tokens = {}
+        for layer in range(num_layers):
+            torch.manual_seed(500 + layer)
+            k = torch.randn(self.B, self.H, 1, self.D, dtype=torch.float16)
+            v = torch.randn(self.B, self.H, 1, self.D, dtype=torch.float16)
+            cache.append(layer, k, v)
+            decode_tokens[layer] = k
+
+        for layer in range(num_layers):
+            k_out, _ = cache.get_kv(layer)
+            k_dec_out = k_out[:, :, 8:9, :]
+            err = (decode_tokens[layer] - k_dec_out).abs().max().item()
+            self.assertLess(
+                err, 0.1,
+                f"Layer {layer} decode K error too large: {err}"
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

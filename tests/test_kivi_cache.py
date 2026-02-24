@@ -395,5 +395,286 @@ class TestKIVICacheInit(unittest.TestCase):
             KIVIStyleKVCache(num_layers=1, device="cpu", quant_bits=3)
 
 
+# ===========================================================================
+# TST-004: End-to-end integration tests for KIVI + asymmetric_quant
+# ===========================================================================
+
+
+class TestKIVICacheEndToEnd(unittest.TestCase):
+    """TST-004: Prefill -> decode -> get_kv full pipeline with asymmetric quant."""
+
+    def _make_cache(self, **kwargs):
+        defaults = dict(
+            num_layers=2,
+            device="cpu",
+            dtype=torch.float32,
+            max_seq_len=512,
+            quant_bits=8,
+        )
+        defaults.update(kwargs)
+        return KIVIStyleKVCache(**defaults)
+
+    def test_prefill_decode_get_kv_int8(self):
+        """Full prefill -> multi-step decode -> get_kv pipeline (INT8)."""
+        cache = self._make_cache(quant_bits=8)
+        B, H, D = 1, 2, 16
+        torch.manual_seed(42)
+
+        # Prefill: 16 tokens
+        k_prefill = torch.randn(B, H, 16, D)
+        v_prefill = torch.randn(B, H, 16, D)
+        cache.append(0, k_prefill, v_prefill)
+        self.assertEqual(cache.get_seq_len(), 16)
+        self.assertTrue(cache._k_scale_initialized[0])
+
+        # Decode: 8 tokens one at a time
+        decode_ks = []
+        decode_vs = []
+        for _ in range(8):
+            k_dec = torch.randn(B, H, 1, D)
+            v_dec = torch.randn(B, H, 1, D)
+            cache.append(0, k_dec, v_dec)
+            decode_ks.append(k_dec)
+            decode_vs.append(v_dec)
+
+        self.assertEqual(cache.get_seq_len(), 24)
+
+        # get_kv should return the full sequence
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.shape, (B, H, 24, D))
+        self.assertEqual(v_out.shape, (B, H, 24, D))
+        self.assertTrue(torch.isfinite(k_out).all())
+        self.assertTrue(torch.isfinite(v_out).all())
+
+        # Prefill K round-trip error should be bounded
+        k_prefill_out = k_out[:, :, :16, :]
+        k_err = (k_prefill - k_prefill_out).abs().mean() / k_prefill.abs().mean()
+        self.assertLess(k_err.item(), 0.05, "Prefill K round-trip error too large")
+
+        # V round-trip error for prefill tokens
+        v_prefill_out = v_out[:, :, :16, :]
+        v_err = (v_prefill - v_prefill_out).abs().mean() / v_prefill.abs().mean()
+        self.assertLess(v_err.item(), 0.05, "Prefill V round-trip error too large")
+
+    def test_prefill_decode_get_kv_int4(self):
+        """Full prefill -> decode -> get_kv pipeline (INT4 with bit packing)."""
+        cache = self._make_cache(quant_bits=4)
+        B, H, D = 1, 2, 16
+        torch.manual_seed(42)
+
+        k_prefill = torch.randn(B, H, 8, D)
+        v_prefill = torch.randn(B, H, 8, D)
+        cache.append(0, k_prefill, v_prefill)
+
+        for _ in range(4):
+            cache.append(0, torch.randn(B, H, 1, D), torch.randn(B, H, 1, D))
+
+        self.assertEqual(cache.get_seq_len(), 12)
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.shape, (B, H, 12, D))
+        self.assertEqual(v_out.shape, (B, H, 12, D))
+        self.assertTrue(torch.isfinite(k_out).all())
+        self.assertTrue(torch.isfinite(v_out).all())
+
+        # INT4 has larger error budget
+        k_err = (k_prefill - k_out[:, :, :8, :]).abs().mean() / k_prefill.abs().mean()
+        self.assertLess(k_err.item(), 0.25, "INT4 prefill K error too large")
+
+    def test_multi_layer_prefill_decode(self):
+        """Prefill and decode across multiple layers."""
+        num_layers = 4
+        cache = self._make_cache(num_layers=num_layers)
+        B, H, D = 1, 2, 16
+        torch.manual_seed(7)
+
+        # Prefill all layers
+        for layer_id in range(num_layers):
+            k = torch.randn(B, H, 8, D)
+            v = torch.randn(B, H, 8, D)
+            cache.append(layer_id, k, v)
+
+        # Decode one token per layer
+        for layer_id in range(num_layers):
+            k = torch.randn(B, H, 1, D)
+            v = torch.randn(B, H, 1, D)
+            cache.append(layer_id, k, v)
+
+        self.assertEqual(cache.get_seq_len(), 9)
+        for layer_id in range(num_layers):
+            k_out, v_out = cache.get_kv(layer_id)
+            self.assertEqual(k_out.shape, (B, H, 9, D))
+            self.assertTrue(torch.isfinite(k_out).all())
+            self.assertTrue(torch.isfinite(v_out).all())
+
+
+class TestKIVIAsymmetricScaleZP(unittest.TestCase):
+    """TST-004: Verify asymmetric quantization scale/zp computation correctness."""
+
+    def _make_cache(self, **kwargs):
+        defaults = dict(
+            num_layers=1,
+            device="cpu",
+            dtype=torch.float32,
+            max_seq_len=512,
+            quant_bits=8,
+        )
+        defaults.update(kwargs)
+        return KIVIStyleKVCache(**defaults)
+
+    def test_k_scale_zp_shape_and_dtype(self):
+        """K scale/zp should be [B, H, D] in float32."""
+        cache = self._make_cache()
+        B, H, S, D = 1, 2, 8, 16
+        k = torch.randn(B, H, S, D)
+        v = torch.randn(B, H, S, D)
+        cache.append(0, k, v)
+
+        k_scale = cache._k_scale[0]
+        k_zp = cache._k_zp[0]
+        self.assertEqual(k_scale.shape, (B, H, D))
+        self.assertEqual(k_zp.shape, (B, H, D))
+        # ENG-009: scales must be float32
+        self.assertEqual(k_scale.dtype, torch.float32)
+        self.assertEqual(k_zp.dtype, torch.float32)
+
+    def test_v_scale_zp_shape_and_dtype(self):
+        """V scale/zp should be [B, H, S] in float32."""
+        cache = self._make_cache()
+        B, H, S, D = 1, 2, 8, 16
+        k = torch.randn(B, H, S, D)
+        v = torch.randn(B, H, S, D)
+        cache.append(0, k, v)
+
+        v_scale = cache._v_scale[0][:, :, :S]
+        v_zp = cache._v_zp[0][:, :, :S]
+        self.assertEqual(v_scale.shape, (B, H, S))
+        self.assertEqual(v_zp.shape, (B, H, S))
+        self.assertEqual(v_scale.dtype, torch.float32)
+        self.assertEqual(v_zp.dtype, torch.float32)
+
+    def test_k_scale_positive(self):
+        """K scale should be strictly positive (no zero division)."""
+        cache = self._make_cache()
+        B, H, S, D = 1, 2, 8, 16
+        k = torch.randn(B, H, S, D)
+        v = torch.randn(B, H, S, D)
+        cache.append(0, k, v)
+        self.assertTrue((cache._k_scale[0] > 0).all())
+
+    def test_v_scale_positive(self):
+        """V scale should be strictly positive."""
+        cache = self._make_cache()
+        B, H, S, D = 1, 2, 8, 16
+        k = torch.randn(B, H, S, D)
+        v = torch.randn(B, H, S, D)
+        cache.append(0, k, v)
+        v_scale = cache._v_scale[0][:, :, :S]
+        self.assertTrue((v_scale > 0).all())
+
+    def test_asymmetric_zp_is_nonzero_for_biased_input(self):
+        """For biased (non-zero-mean) input, zero-point should be nonzero."""
+        cache = self._make_cache()
+        B, H, S, D = 1, 2, 8, 16
+        # Create strongly biased K (mean = 10.0)
+        k = torch.randn(B, H, S, D) + 10.0
+        v = torch.randn(B, H, S, D)
+        cache.append(0, k, v)
+
+        k_zp = cache._k_zp[0]
+        # For strongly biased data, zero_point should be significantly nonzero
+        self.assertGreater(k_zp.abs().mean().item(), 0.1,
+                           "Zero-point should be nonzero for biased input")
+
+    def test_decode_reuses_prefill_k_scale(self):
+        """Decode tokens must reuse prefill K scale, not recompute."""
+        cache = self._make_cache()
+        B, H, D = 1, 2, 16
+        torch.manual_seed(0)
+
+        # Prefill
+        k_pf = torch.randn(B, H, 8, D)
+        v_pf = torch.randn(B, H, 8, D)
+        cache.append(0, k_pf, v_pf)
+        k_scale_pf = cache._k_scale[0].clone()
+        k_zp_pf = cache._k_zp[0].clone()
+
+        # Decode (even with very different scale data)
+        k_dec = torch.randn(B, H, 1, D) * 100.0
+        v_dec = torch.randn(B, H, 1, D) * 100.0
+        cache.append(0, k_dec, v_dec)
+
+        # K scale/zp should NOT have changed
+        self.assertTrue(torch.equal(cache._k_scale[0], k_scale_pf))
+        self.assertTrue(torch.equal(cache._k_zp[0], k_zp_pf))
+
+    def test_v_per_token_independence(self):
+        """Each V token's scale should be independently computed."""
+        cache = self._make_cache()
+        B, H, D = 1, 2, 16
+
+        # Append two tokens with very different magnitudes
+        v1 = torch.randn(B, H, 1, D) * 0.01
+        v2 = torch.randn(B, H, 1, D) * 100.0
+        k_dummy = torch.randn(B, H, 1, D)
+
+        cache.append(0, k_dummy, v1)
+        cache.append(0, k_dummy.clone(), v2)
+
+        vs0 = cache._v_scale[0][:, :, 0].mean().item()
+        vs1 = cache._v_scale[0][:, :, 1].mean().item()
+        # The scale for the large-magnitude token should be much larger
+        self.assertGreater(vs1 / (vs0 + 1e-10), 10.0,
+                           "V scale should differ significantly for different magnitude tokens")
+
+    def test_dequant_reconstruction_within_bounds(self):
+        """Asymmetric dequant: x_hat = q * scale + zp should reconstruct within bounds."""
+        cache = self._make_cache(quant_bits=8)
+        B, H, S, D = 1, 4, 32, 64
+        torch.manual_seed(42)
+        k = torch.randn(B, H, S, D)
+        v = torch.randn(B, H, S, D)
+        cache.append(0, k, v)
+
+        k_out, v_out = cache.get_kv(0)
+        # INT8 asymmetric: expected NRMAE < 0.005 for unit-variance randn,
+        # tolerance 0.05 to account for per-channel/per-token granularity.
+        k_nrmae = (k - k_out).abs().mean() / k.abs().mean()
+        v_nrmae = (v - v_out).abs().mean() / v.abs().mean()
+        self.assertLess(k_nrmae.item(), 0.05, f"K NRMAE = {k_nrmae.item():.4f}")
+        self.assertLess(v_nrmae.item(), 0.05, f"V NRMAE = {v_nrmae.item():.4f}")
+
+    def test_clear_resets_scale_zp(self):
+        """After clear(), K scale/zp should be reset so next prefill recomputes.
+
+        V scale/zp are re-allocated (empty) to maintain _ensure_capacity invariant
+        when buffers are kept. K scale/zp are set to None since they are only
+        computed during prefill.
+        """
+        cache = self._make_cache()
+        B, H, D = 1, 2, 16
+        k = torch.randn(B, H, 4, D)
+        v = torch.randn(B, H, 4, D)
+        cache.append(0, k, v)
+        self.assertTrue(cache._k_scale_initialized[0])
+
+        cache.clear()
+        self.assertFalse(cache._k_scale_initialized[0])
+        self.assertIsNone(cache._k_scale[0])
+        self.assertIsNone(cache._k_zp[0])
+        # V scale/zp are re-allocated (not None) when buffers were allocated,
+        # to maintain the _ensure_capacity invariant.
+        self.assertIsNotNone(cache._v_scale[0])
+        self.assertIsNotNone(cache._v_zp[0])
+
+        # Re-append should work and recompute K scale
+        k2 = torch.randn(B, H, 4, D) * 5.0
+        v2 = torch.randn(B, H, 4, D) * 5.0
+        cache.append(0, k2, v2)
+        self.assertTrue(cache._k_scale_initialized[0])
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.shape, (B, H, 4, D))
+        self.assertTrue(torch.isfinite(k_out).all())
+
+
 if __name__ == "__main__":
     unittest.main()

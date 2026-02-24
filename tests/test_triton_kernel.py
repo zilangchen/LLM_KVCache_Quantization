@@ -295,5 +295,201 @@ class TestTritonDecodeAttn(unittest.TestCase):
         )
 
 
+class TestLightweightLongSequence(unittest.TestCase):
+    """TST-061: Lightweight long-sequence smoke test (CPU-only, no env vars).
+
+    Validates numerical stability of the reference decode-attention math on
+    long contexts (seq_len=2048 and 4096) using minimal head counts (H=1).
+    This test runs entirely on CPU with pure PyTorch -- it does NOT require
+    Triton, CUDA, or the RUN_TRITON_LONG_TEST env var.
+
+    The purpose is to catch numerical issues (NaN, inf, softmax collapse)
+    that only appear at longer sequence lengths, such as:
+    - Softmax overflow from large accumulated logits
+    - Loss of precision in fp16/fp32 attention computation
+    - Unexpected scale drift with many KV tokens
+    """
+
+    def _cpu_ref_decode_attn(
+        self,
+        q: torch.Tensor,       # [B, Hq, D]
+        k_int8: torch.Tensor,  # [B, Hkv, S, D]
+        v_int8: torch.Tensor,  # [B, Hkv, S, D]
+        k_scale: torch.Tensor, # [B, Hkv, S, G]
+        v_scale: torch.Tensor, # [B, Hkv, S, G]
+        group_size: int,
+    ) -> torch.Tensor:
+        """Pure-PyTorch CPU reference for int8 decode attention."""
+        batch, q_heads, head_dim = q.shape
+        kv_heads = k_int8.shape[1]
+        seq_len = k_int8.shape[2]
+        n_rep = q_heads // kv_heads
+        num_groups = head_dim // group_size
+        sm_scale = 1.0 / math.sqrt(head_dim)
+
+        outs = []
+        for b in range(batch):
+            curr_q = q[b].float()  # [Hq, D]
+
+            # Dequantize K and V
+            k_reshaped = k_int8[b].view(kv_heads, seq_len, num_groups, group_size)
+            k_dequant = (
+                k_reshaped.float() * k_scale[b].float().unsqueeze(-1)
+            ).view(kv_heads, seq_len, head_dim)
+
+            v_reshaped = v_int8[b].view(kv_heads, seq_len, num_groups, group_size)
+            v_dequant = (
+                v_reshaped.float() * v_scale[b].float().unsqueeze(-1)
+            ).view(kv_heads, seq_len, head_dim)
+
+            # GQA expansion
+            if n_rep > 1:
+                k_dequant = k_dequant.repeat_interleave(n_rep, dim=0)
+                v_dequant = v_dequant.repeat_interleave(n_rep, dim=0)
+
+            # Attention: q @ k^T / sqrt(d) -> softmax -> @ v
+            scores = torch.einsum("hd,hsd->hs", curr_q, k_dequant) * sm_scale
+            probs = torch.softmax(scores, dim=-1)
+            out = torch.einsum("hs,hsd->hd", probs, v_dequant)
+            outs.append(out)
+
+        return torch.stack(outs, dim=0)  # [B, Hq, D]
+
+    def test_long_seq_2048_numerical_stability(self):
+        """seq_len=2048, H=1: output must be finite with no NaN/inf."""
+        torch.manual_seed(42)
+        B, Hq, Hkv, D = 1, 1, 1, 64
+        S = 2048
+        group_size = 32
+        num_groups = D // group_size
+
+        q = torch.randn(B, Hq, D, dtype=torch.float32)
+        k_int8 = torch.randint(-128, 128, (B, Hkv, S, D), dtype=torch.int8)
+        v_int8 = torch.randint(-128, 128, (B, Hkv, S, D), dtype=torch.int8)
+        k_scale = torch.rand(B, Hkv, S, num_groups, dtype=torch.float32) * 0.1
+        v_scale = torch.rand(B, Hkv, S, num_groups, dtype=torch.float32) * 0.1
+
+        out = self._cpu_ref_decode_attn(q, k_int8, v_int8, k_scale, v_scale, group_size)
+
+        self.assertEqual(out.shape, (B, Hq, D))
+        self.assertTrue(
+            torch.isfinite(out).all(),
+            f"Output has NaN/inf at seq_len={S}: "
+            f"nan={torch.isnan(out).sum().item()}, inf={torch.isinf(out).sum().item()}"
+        )
+
+    def test_long_seq_4096_numerical_stability(self):
+        """seq_len=4096, H=1: output must be finite with no NaN/inf."""
+        torch.manual_seed(123)
+        B, Hq, Hkv, D = 1, 1, 1, 64
+        S = 4096
+        group_size = 32
+        num_groups = D // group_size
+
+        q = torch.randn(B, Hq, D, dtype=torch.float32)
+        k_int8 = torch.randint(-128, 128, (B, Hkv, S, D), dtype=torch.int8)
+        v_int8 = torch.randint(-128, 128, (B, Hkv, S, D), dtype=torch.int8)
+        k_scale = torch.rand(B, Hkv, S, num_groups, dtype=torch.float32) * 0.1
+        v_scale = torch.rand(B, Hkv, S, num_groups, dtype=torch.float32) * 0.1
+
+        out = self._cpu_ref_decode_attn(q, k_int8, v_int8, k_scale, v_scale, group_size)
+
+        self.assertEqual(out.shape, (B, Hq, D))
+        self.assertTrue(
+            torch.isfinite(out).all(),
+            f"Output has NaN/inf at seq_len={S}"
+        )
+
+    def test_long_seq_softmax_not_collapsed(self):
+        """Softmax probabilities at seq_len=2048 should not collapse to a single peak.
+
+        A healthy attention distribution at moderate scale should have non-trivial
+        entropy (not all mass on one token). This catches precision issues where
+        logits overflow and softmax degenerates.
+        """
+        torch.manual_seed(77)
+        B, Hq, Hkv, D = 1, 1, 1, 64
+        S = 2048
+        group_size = 32
+        num_groups = D // group_size
+        sm_scale = 1.0 / math.sqrt(D)
+
+        q = torch.randn(B, Hq, D, dtype=torch.float32)
+        k_int8 = torch.randint(-128, 128, (B, Hkv, S, D), dtype=torch.int8)
+        k_scale = torch.rand(B, Hkv, S, num_groups, dtype=torch.float32) * 0.1
+
+        # Dequantize K
+        k_reshaped = k_int8[0].view(Hkv, S, num_groups, group_size)
+        k_dequant = (
+            k_reshaped.float() * k_scale[0].float().unsqueeze(-1)
+        ).view(Hkv, S, D)
+
+        # Compute logits and softmax
+        logits = torch.einsum("hd,hsd->hs", q[0].float(), k_dequant) * sm_scale
+        probs = torch.softmax(logits, dim=-1)  # [Hq, S]
+
+        # Check: max probability should not be too close to 1.0
+        # (which would mean softmax collapsed to a single token)
+        max_prob = probs.max().item()
+        self.assertLess(
+            max_prob, 0.5,
+            f"Softmax collapsed: max_prob={max_prob:.4f}, expected spread distribution"
+        )
+        # Check: probabilities sum to 1
+        prob_sum = probs.sum(dim=-1)
+        self.assertTrue(
+            torch.allclose(prob_sum, torch.ones_like(prob_sum), atol=1e-5),
+            f"Softmax probs do not sum to 1: {prob_sum}"
+        )
+
+    def test_long_seq_fp16_dequant_stability(self):
+        """Even with fp16 scales, dequantized values at seq_len=2048 must be finite.
+
+        fp16 has limited range (~65504 max). This test ensures that int8 values
+        multiplied by fp16 scales do not produce inf at long sequence lengths.
+        """
+        torch.manual_seed(99)
+        B, Hkv, D = 1, 1, 64
+        S = 2048
+        group_size = 32
+        num_groups = D // group_size
+
+        k_int8 = torch.randint(-128, 128, (B, Hkv, S, D), dtype=torch.int8)
+        # Use fp16 scales at moderate magnitude
+        k_scale = (torch.rand(B, Hkv, S, num_groups, dtype=torch.float16) * 0.1).clamp(min=1e-5)
+
+        k_reshaped = k_int8[0].view(Hkv, S, num_groups, group_size)
+        k_dequant = (
+            k_reshaped.to(torch.float16) * k_scale[0].unsqueeze(-1)
+        ).view(Hkv, S, D)
+
+        self.assertTrue(
+            torch.isfinite(k_dequant).all(),
+            f"Dequantized K has non-finite values at seq_len={S} with fp16 scales"
+        )
+
+    def test_long_seq_gqa_2heads(self):
+        """Long sequence with GQA (q_heads=2, kv_heads=1) must produce finite output."""
+        torch.manual_seed(55)
+        B, Hq, Hkv, D = 1, 2, 1, 64
+        S = 2048
+        group_size = 32
+        num_groups = D // group_size
+
+        q = torch.randn(B, Hq, D, dtype=torch.float32)
+        k_int8 = torch.randint(-128, 128, (B, Hkv, S, D), dtype=torch.int8)
+        v_int8 = torch.randint(-128, 128, (B, Hkv, S, D), dtype=torch.int8)
+        k_scale = torch.rand(B, Hkv, S, num_groups, dtype=torch.float32) * 0.1
+        v_scale = torch.rand(B, Hkv, S, num_groups, dtype=torch.float32) * 0.1
+
+        out = self._cpu_ref_decode_attn(q, k_int8, v_int8, k_scale, v_scale, group_size)
+
+        self.assertEqual(out.shape, (B, Hq, D))
+        self.assertTrue(
+            torch.isfinite(out).all(),
+            "GQA long-sequence output must be finite"
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

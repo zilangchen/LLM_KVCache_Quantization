@@ -405,15 +405,33 @@ class KIVIStyleKVCache:
         return int(max(self._layer_seq_lens)) if self._layer_seq_lens else 0
 
     def clear(self) -> None:
-        """Clear cache contents but keep buffers allocated."""
+        """Clear cache contents but keep buffers allocated.
+
+        Resets seq_lens, K scale/zp (so next prefill recomputes), and
+        re-allocates V scale/zp buffers to match the existing V cache capacity.
+        This maintains the invariant that _ensure_capacity expects: if _k_cache
+        is not None, then _v_cache, _v_scale, and _v_zp must also be not None.
+        """
         self._layer_seq_lens = [0] * self.num_layers
         self._k_scale_initialized = [False] * self.num_layers
         # Reset K scale/zp so stale values from a previous batch don't persist.
         self._k_scale = [None] * self.num_layers
         self._k_zp = [None] * self.num_layers
-        # Reset V scale/zp as well to avoid stale per-token metadata.
-        self._v_scale = [None] * self.num_layers
-        self._v_zp = [None] * self.num_layers
+        # Re-allocate V scale/zp buffers to match existing cache capacity.
+        # This keeps the _ensure_capacity invariant (if k_buf exists, vs_buf/vzp_buf
+        # must also exist) while clearing stale per-token metadata.
+        for i in range(self.num_layers):
+            if self._v_cache[i] is not None:
+                B, H, cap, _ = self._v_cache[i].shape
+                self._v_scale[i] = torch.empty(
+                    (B, H, cap), device=self.device, dtype=self._scale_dtype
+                )
+                self._v_zp[i] = torch.empty(
+                    (B, H, cap), device=self.device, dtype=self._scale_dtype
+                )
+            else:
+                self._v_scale[i] = None
+                self._v_zp[i] = None
         self._seq_len = 0
 
     def release(self) -> None:
