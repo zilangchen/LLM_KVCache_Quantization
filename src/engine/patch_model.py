@@ -1008,6 +1008,13 @@ def apply_int8_fused_patch(model):
     # ENG-044: Store the patched class reference so remove_int8_fused_patch()
     # can restore the original forward without needing the model argument.
     apply_int8_fused_patch._patched_class = AttnClass
+    # ENG-054: forward_proxy closure captures AttnClass, original_sig, config
+    # refs, etc.  These are kept alive for the process lifetime because the
+    # closure is assigned to the **class** (not an instance).  Patching the
+    # same class twice overwrites the previous closure, so earlier closures
+    # become unreachable and eligible for GC.  Using weakrefs is not practical
+    # here because the closure must own strong refs to function correctly.
+    # Call remove_int8_fused_patch() to release the closure explicitly.
 
 
 def remove_int8_fused_patch(model=None) -> bool:

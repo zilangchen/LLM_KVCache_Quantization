@@ -254,6 +254,10 @@ def decode_attn_int8_kernel(
         # beta is [BLOCK_SIZE], v is [BLOCK_SIZE, HEAD_DIM]
         # weight v by beta
         # beta[:, None] * v_fp32 -> [BLOCK, HEAD_DIM] -> sum over BLOCK (all FP32)
+        # KRN-005: Using elementwise mul + reduce instead of tl.dot because beta is
+        # a 1-D vector (not a matrix), so tl.dot's tensor-core path doesn't apply.
+        # A future optimisation could reshape beta to [1, BLOCK] and use tl.dot
+        # for [1, BLOCK] x [BLOCK, HEAD_DIM] if profiling shows it's beneficial.
         weighted_v = tl.sum(beta[:, None] * v_fp32, axis=0)
         
         acc = acc * alpha + weighted_v  # Both are FP32 now
@@ -388,7 +392,11 @@ def decode_attn_int8(
                     f"KV_TRITON_BLOCK_SIZE must be an integer, got {env_block_size!r}"
                 ) from exc
         else:
-            # Longer context benefits from larger blocks by reducing loop overhead.
+            # KRN-010: Using heuristic block selection instead of @triton.autotune.
+            # Autotune adds warmup latency on first call per config, which is
+            # problematic for benchmarking with varying seq_len.  The two-tier
+            # heuristic (64 for short ctx, 128 for long) covers our target models
+            # well.  Override via KV_TRITON_BLOCK_SIZE env var if needed.
             block_size = 128 if max_ctx_in_batch >= 8192 else 64
 
     if block_size not in (32, 64, 128, 256):
