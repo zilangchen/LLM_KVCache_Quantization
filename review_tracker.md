@@ -1,6 +1,6 @@
 # Code Review Tracker
 
-> 466 issues | 390 fixed + 15 false_positive + 4 wont_fix | 57 open (0 CRIT, 15 HIGH, 32 MED, 10 LOW)
+> 466 issues | 428 fixed + 15 false_positive + 4 wont_fix | 19 open (0 CRIT, 4 HIGH, 13 MED, 2 LOW)
 > Phase Gate: **CLEAR** — 0 CRITICAL open
 > Last updated: 2026-02-24
 
@@ -69,7 +69,7 @@
 - [ ] **CAL-019** `[HIGH]` Q 向量计算缺失 input_layernorm — 校准注意力分布与真实推理系统性偏差 (calibrate_behavior.py:793-795): `attn.q_proj(hidden_states[layer_idx])` 跳过了 `input_layernorm`，而 Qwen2DecoderLayer 在 self_attn 前先经过 layernorm。校准时的 Q 向量与模型实际推理产出的 Q 不同，导致 inv_tau 和超参数搜索基于错误的注意力分布。 — D1 R4 calibration deep review, confidence: 95%
 - [ ] **CAL-020** `[HIGH]` Q 向量未施加 RoPE，与已旋转的 K 做点积 (calibrate_behavior.py:795-798): Q 仅经 q_proj 无 RoPE，而 K 来自 past_key_values 已施加 RoPE。`logits = q @ k.T` 用非旋转 Q 与旋转后 K 做点积，注意力分布峰值位置与真实推理完全不同。与 CAL-019 叠加，校准产物数学基础不正确。 — D1 R4, confidence: 93%
 - [x] **CAL-021** `[HIGH]` dummy 数据 fallback 返回字符串而非张量 — 必然 AttributeError 崩溃 (calibrate_behavior.py:95-97,778-779): WikiText-2 下载失败时 `get_calibration_dataset()` 返回字符串列表，main() 中 `input_ids.to(model.device)` 因字符串无 `.to()` 方法而崩溃。except Exception 吞噬所有异常降级到必然崩溃路径。 — D2 R4, confidence: 99% — fixed 7e70711 — raise RuntimeError on dataset download failure
-- [ ] **CAL-022** `[HIGH]` generate_loop 消费校准 JSON 时丢弃 group_size_v/clip_percentile_v (calibrate_behavior.py:1026-1027 vs generate_loop.py:501-522): 校准写入独立的 group_size_k/v，但 generate_loop 仅使用 K 侧值。K/V 不同 group_size 时 V scale shape 与 cache engine 期望不匹配，可能静默用错误 scale 量化 V。 — D4 R4, confidence: 90%
+- [x] **CAL-022** `[HIGH]` generate_loop 消费校准 JSON 时丢弃 group_size_v/clip_percentile_v (calibrate_behavior.py:1026-1027 vs generate_loop.py:501-522): 校准写入独立的 group_size_k/v，但 generate_loop 仅使用 K 侧值。K/V 不同 group_size 时 V scale shape 与 cache engine 期望不匹配，可能静默用错误 scale 量化 V。 — D4 R4, confidence: 90% — fixed 264dcc3
 - [x] **CAL-023** `[MED]` config 覆盖静默吞噬 --int4_search 设置的 quant_bits (calibrate_behavior.py:693-714): L694 设 quant_bits=4，但 L696-701 的 config 覆盖 loop 可能将其改回 8，用户命令行意图被静默篡改。 — D2 R4, confidence: 82% — fixed 7e70711 — warn when config override changes quant_bits
 - [x] **CAL-024** `[MED]` inv_tau_candidates 无空列表校验 — 空输入导致 argmin 崩溃 (calibrate_behavior.py:991,204,258): `--inv_tau_candidates ""` 产出空列表，torch.argmin 在空张量上 RuntimeError。 — D5 R4, confidence: 88% — fixed 7e70711 — empty inv_tau_candidates validation
 - [x] **CAL-025** `[MED]` evaluate_quant_candidate 空样本静默返回零损失 — 搜索选出无效候选 (calibrate_behavior.py:377-384): loss_values 为空时 mean_loss=0.0，被搜索误认为"完美候选"。应返回 +inf。 — D2 R4, confidence: 80% — fixed 7e70711 — return inf for empty samples
@@ -152,22 +152,22 @@
 - [x] **ENG-039** `[HIGH]` patch_model.py L439-467: _get_rope_cos_sin 用 except Exception: continue 吞没所有异常包括 CUDA RuntimeError/shape mismatch，真正的 RoPE 故障根因丢失，fallback 可能产生错误 cos/sin — R6 GEN-022/PAT-025, confidence: 90% — fixed 4e1a182
 - [x] **ENG-040** `[HIGH]` int8_cache.py L321-326: 非 adaptive 静态 scale 路径 quantize_symmetric_int8_with_scale 中若 static scale 过小，值静默 clip 到 [-127,127] 无任何 overflow 检测或警告 — R6 GEN-002, confidence: 85% — fixed 4e1a182
 - [x] **ENG-041** `[HIGH]` kivi_style_cache.py L326-332: KIVI decode K 重量化复用 prefill scale，decode token 值超出 prefill 范围时静默 clip 无警告/指标 — R6 GEN-004, confidence: 88% — fixed 4e1a182
-- [ ] **ENG-042** `[HIGH]` patch_model.py L591: cache.append 在 kernel 调用前执行，kernel 抛异常时 cache seq_len 已+1 但无 output，无 rollback 机制，cache 永久不一致 — R6 PAT-010, confidence: 90%
-- [ ] **ENG-043** `[HIGH]` patch_model.py L793-794: attention class 仅从 layer[0] 检测，异构 attention 层（如 Mistral sliding window）的非 layer-0 class 不被 patch — R6 PAT-006, confidence: 85%
-- [ ] **ENG-044** `[HIGH]` patch_model.py L798-898: apply_int8_fused_patch 永久修改 class-level forward，无 remove_patch/unpatch API，同进程内 fp16 评估也经过 forward_proxy — R6 PAT-004, confidence: 92%
-- [ ] **ENG-045** `[MED]` generate_loop.py L761-769: 非 fused decode 路径 k.shape[2]>1 时仅取最后一个 token，speculative decoding 等多 token 返回场景静默丢 token — R6 GEN-007, confidence: 80%
-- [ ] **ENG-046** `[MED]` generate_loop.py L668: DynamicCache 迭代在 HF transformers>=4.38 中可能不再 yield (k,v) tuple，量化模式不走 fp16_use_model_cache 路径无保护 — R6 GEN-009, confidence: 82%
+- [x] **ENG-042** `[HIGH]` patch_model.py L591: cache.append 在 kernel 调用前执行，kernel 抛异常时 cache seq_len 已+1 但无 output，无 rollback 机制，cache 永久不一致 — R6 PAT-010, confidence: 90% — fixed 264dcc3
+- [x] **ENG-043** `[HIGH]` patch_model.py L793-794: attention class 仅从 layer[0] 检测，异构 attention 层（如 Mistral sliding window）的非 layer-0 class 不被 patch — R6 PAT-006, confidence: 85% — fixed 264dcc3
+- [x] **ENG-044** `[HIGH]` patch_model.py L798-898: apply_int8_fused_patch 永久修改 class-level forward，无 remove_patch/unpatch API，同进程内 fp16 评估也经过 forward_proxy — R6 PAT-004, confidence: 92% — fixed 264dcc3
+- [x] **ENG-045** `[MED]` generate_loop.py L761-769: 非 fused decode 路径 k.shape[2]>1 时仅取最后一个 token，speculative decoding 等多 token 返回场景静默丢 token — R6 GEN-007, confidence: 80% — fixed 264dcc3
+- [x] **ENG-046** `[MED]` generate_loop.py L668: DynamicCache 迭代在 HF transformers>=4.38 中可能不再 yield (k,v) tuple，量化模式不走 fp16_use_model_cache 路径无保护 — R6 GEN-009, confidence: 82% — fixed 264dcc3
 - [x] **ENG-047** `[MED]` asymmetric_quant.py L93-94: zero_point 存储为浮点偏移量（非整数 zero_point），与 KIVI 论文及 PyTorch 量化惯例不同，未文档化 — R6 GEN-005, confidence: 75% — fixed 46ca296
-- [ ] **ENG-048** `[MED]` generate_loop.py L524/L532: calib 有 k_scale 但缺 v_scale（或反之）时无警告，cache 单侧使用静态 scale、另侧退化为动态 — R6 GEN-016, confidence: 80%
-- [ ] **ENG-049** `[MED]` patch_model.py L609-610: context_lens 对全 batch 统一设为 seq_len，caller 绕过 generate_from_ids 直接用 model() 时 padded batch 静默错误 — R6 PAT-011, confidence: 85%
-- [ ] **ENG-050** `[MED]` patch_model.py L542: fused path 直接 del attention_mask，caller 传入非 None mask（如 padded batch）被静默丢弃 — R6 PAT-024, confidence: 88%
-- [ ] **ENG-051** `[MED]` patch_model.py L580-588: inv_tau_layer.view(1,-1,1,1) 假设 1D 向量，若 calib 产物维度异常（如 [H,D]）静默 reshape 错误 — R6 PAT-015, confidence: 78%
-- [ ] **ENG-052** `[MED]` patch_model.py L581: use_attn_temperature 默认 True（opt-out），自定义 engine 未定义此属性时温度缩放被静默应用 — R6 PAT-016, confidence: 75%
-- [ ] **ENG-053** `[MED]` patch_model.py L19-21: _INT8_SIG_PARAMS/_INT4_SIG_PARAMS 在 import 时计算并缓存，test mock 或延迟加载导致签名集为空，kwargs 静默丢弃 — R6 PAT-022, confidence: 80%
+- [x] **ENG-048** `[MED]` generate_loop.py L524/L532: calib 有 k_scale 但缺 v_scale（或反之）时无警告，cache 单侧使用静态 scale、另侧退化为动态 — R6 GEN-016, confidence: 80% — fixed 264dcc3
+- [x] **ENG-049** `[MED]` patch_model.py L609-610: context_lens 对全 batch 统一设为 seq_len，caller 绕过 generate_from_ids 直接用 model() 时 padded batch 静默错误 — R6 PAT-011, confidence: 85% — fixed 264dcc3
+- [x] **ENG-050** `[MED]` patch_model.py L542: fused path 直接 del attention_mask，caller 传入非 None mask（如 padded batch）被静默丢弃 — R6 PAT-024, confidence: 88% — fixed 264dcc3
+- [x] **ENG-051** `[MED]` patch_model.py L580-588: inv_tau_layer.view(1,-1,1,1) 假设 1D 向量，若 calib 产物维度异常（如 [H,D]）静默 reshape 错误 — R6 PAT-015, confidence: 78% — fixed 264dcc3
+- [x] **ENG-052** `[MED]` patch_model.py L581: use_attn_temperature 默认 True（opt-out），自定义 engine 未定义此属性时温度缩放被静默应用 — R6 PAT-016, confidence: 75% — fixed 264dcc3
+- [x] **ENG-053** `[MED]` patch_model.py L19-21: _INT8_SIG_PARAMS/_INT4_SIG_PARAMS 在 import 时计算并缓存，test mock 或延迟加载导致签名集为空，kwargs 静默丢弃 — R6 PAT-022, confidence: 80% — fixed 264dcc3
 - [ ] **ENG-054** `[MED]` patch_model.py L806-807: forward_proxy 闭包持有 AttnClass + original_sig 引用，整个进程生命周期不释放；同一 class 多次 patch 覆盖前一 model 的 closures — R6 PAT-003, confidence: 78%
-- [ ] **ENG-055** `[LOW]` int8_cache.py L440 / int4_cache.py L489: clear() 后 get_kv() warning "Call release()" 语义误导，用户可能是故意 reset — R6 GEN-010
-- [ ] **ENG-056** `[LOW]` generate_loop.py L859-865: locals() cleanup 模式脆弱，kv_cache 总是已定义使 if 检查无意义 — R6 GEN-028
-- [ ] **ENG-057** `[LOW]` patch_model.py L21: _FUSED_DUMP_WRITTEN 模块级 set 跨 test run 持续存在，第二次 dump 被静默抑制 — R6 PAT-019
+- [x] **ENG-055** `[LOW]` int8_cache.py L440 / int4_cache.py L489: clear() 后 get_kv() warning "Call release()" 语义误导，用户可能是故意 reset — R6 GEN-010 — fixed 264dcc3
+- [x] **ENG-056** `[LOW]` generate_loop.py L859-865: locals() cleanup 模式脆弱，kv_cache 总是已定义使 if 检查无意义 — R6 GEN-028 — fixed 264dcc3
+- [x] **ENG-057** `[LOW]` patch_model.py L21: _FUSED_DUMP_WRITTEN 模块级 set 跨 test run 持续存在，第二次 dump 被静默抑制 — R6 PAT-019 — fixed 264dcc3
 
 ### EXP. 导出/报告 — `scripts/export_*.py`
 - [x] **EXP-002** `[MED]` LongBench 表缺少任务指标组成说明 (export_tables_latex.py — fixed 8d7f2df
@@ -226,29 +226,29 @@
 - [x] **RUN-032** `[MED]` resolve_quant_params 不做数值类型和范围校验 (run_experiments.py:460-484): YAML 中 clip_percentile="high" 或 group_size=-1 原样传给子脚本，模型加载后才崩溃浪费 GPU 时间。 — D1+D5 RUN rotation, confidence: 88% -- fixed
 - [x] **RUN-033** `[MED]` _existing_result_git_commits bare except 静默跳过损坏 CSV (run_experiments.py:166-167): `except Exception: continue` 无日志，append 时某个 CSV 因损坏/权限无法读取时，该文件的 commit 信息被静默跳过。若所有 CSV 均损坏则返回空列表，_validate_append_commit 无法检测跨 commit 不一致，append 防护失效。 — D2 full-scan, confidence: 82% -- fixed
 - [x] **RUN-034** `[HIGH]` --subprocess_timeout 新增参数隐式改变原有"无限等待"行为（breaking change for existing callers），默认 3600s 而非原 None (run_experiments.py:853-861, L1437): 原 subprocess.run 无 timeout（RUN-022 记录）；修复后默认 3600 秒。已有 overnight batch 运行可能在 1 小时后被强制终止（returncode=124, failure_type="timeout"）。影响范围：所有通过 shell 脚本调用 run_experiments.py 的自动化流程，若任务确实需要超过 1 小时（大模型 eval_longbench/eval_ruler 全量评测），必须显式传 --subprocess_timeout 0 或更大值。当前 AGENTS.md / experiment_sop.md 中无相关说明。向后兼容性破坏：调用方若依赖原无限等待语义将静默失败（任务被 timeout 终止但 run_experiments 退出 1）。 — D4, confidence: 88% -- fixed
-- [ ] **RUN-035** `[HIGH]` L1469-1504: TimeoutExpired 后未调用 proc.kill()，子进程成为孤儿继续占 GPU 显存，后续实验因残留 CUDA context OOM — R6, confidence: 95%
-- [ ] **RUN-038** `[HIGH]` L293-311: 重试时 log_mode="a" 使旧 OOM 痕迹保留，_classify_failure 读累积日志将后续非 OOM 失败误判为 oom (RUN-030 fix 可能不完整) — R6, confidence: 90%
-- [ ] **RUN-042** `[HIGH]` L1581-1589: max_retries>0 时 OOM/traceback 失败无条件重试，OOM 不调整配置直接重跑只会再次 OOM — R6, confidence: 92%
-- [ ] **RUN-045** `[HIGH]` L120-134: _write_json tmp 文件名固定，并发 --append 操作同一 manifest 时后写覆盖前写，task 状态丢失 — R6, confidence: 88%
-- [ ] **RUN-049** `[HIGH]` L970-993: run_name_filter 生效时无效 kv_mode 只 warning 不 error，continue 后 append 不可达，代码结构难审 — R6, confidence: 82%
-- [ ] **RUN-050** `[HIGH]` L1150-1163: kivi_style 排除在 calib_file 预校验外，用户误配不存在 calib_file 时静默忽略 — R6, confidence: 85%
-- [ ] **RUN-053** `[HIGH]` L460-480: 历史有 success 但当前 status=failed 时 _task_is_completed_successfully 仍返回 True，--skip_completed_success 跳过失败任务 — R6, confidence: 90%
-- [ ] **RUN-036** `[MED]` L1461-1467: 无 SIGINT 处理，Ctrl-C 时 manifest 留在 "running"，summary 不写入 — R6, confidence: 85%
-- [ ] **RUN-039** `[MED]` L296-297: returncode=130 (interrupt) 无特殊处理，Ctrl-C 终止的任务被重试 — R6, confidence: 82%
-- [ ] **RUN-040** `[MED]` L1539: returncode=0 即标 success 不验证 CSV 产物存在，子脚本静默 exit(0) 时数据缺失 — R6, confidence: 88%
-- [ ] **RUN-043** `[MED]` L1587-1589: retry_backoff_sec 固定 sleep 无指数退避 — R6, confidence: 70%
-- [ ] **RUN-046** `[MED]` L1436-1445: _mark_task_status 在 mkdir 前调用，磁盘满时 manifest 卡 "running" — R6, confidence: 75%
-- [ ] **RUN-047** `[MED]` L1398: 日志文件名固定 {task}.log，多次 append 无轮转可增长至 GB — R6, confidence: 80%
-- [ ] **RUN-051** `[MED]` L930-951: AutoConfig 使用 trust_remote_code=True 仅为读 max_position_embeddings — R6, confidence: 72%
-- [ ] **RUN-052** `[MED]` L1057-1103: 通用长度检查 (hard error) 与 RULER 专用检查 (warning) 不一致 — R6, confidence: 80%
-- [ ] **RUN-054** `[MED]` L229-233: _task_has_csv glob 可匹配遗留 CSV 误报任务完成 — R6, confidence: 68%
-- [ ] **RUN-057** `[MED]` 任务间无 GPU 显存释放等待，Triton context 异步释放影响下一任务 — R6, confidence: 75%
-- [ ] **RUN-060** `[MED]` L1455: subprocess.run 管道缓冲，OOM 崩溃前日志可能丢失 — R6, confidence: 78%
-- [ ] **RUN-037** `[LOW]` L1461: subprocess.run 未显式传 cwd=project_root — R6, confidence: 65%
-- [ ] **RUN-041** `[LOW]` L300-306: 大日志全量读入内存做 OOM 扫描无上限 — R6, confidence: 70%
-- [ ] **RUN-048** `[LOW]` L150-167: CSV 异常捕获 json.JSONDecodeError 而非 csv.Error — R6, confidence: 85%
-- [ ] **RUN-055** `[LOW]` L1041-1048: 缺失 run_name 的 entries 被跳过不计入 summary — R6, confidence: 72%
-- [ ] **RUN-061** `[LOW]` L867: logging.basicConfig 在 main() 中，模块级 warning 格式不一致 — R6, confidence: 65%
+- [x] **RUN-035** `[HIGH]` L1469-1504: TimeoutExpired 后未调用 proc.kill()，子进程成为孤儿继续占 GPU 显存，后续实验因残留 CUDA context OOM — R6, confidence: 95% — fixed a61f428
+- [x] **RUN-038** `[HIGH]` L293-311: 重试时 log_mode="a" 使旧 OOM 痕迹保留，_classify_failure 读累积日志将后续非 OOM 失败误判为 oom (RUN-030 fix 可能不完整) — R6, confidence: 90% — fixed a61f428
+- [x] **RUN-042** `[HIGH]` L1581-1589: max_retries>0 时 OOM/traceback 失败无条件重试，OOM 不调整配置直接重跑只会再次 OOM — R6, confidence: 92% — fixed a61f428
+- [x] **RUN-045** `[HIGH]` L120-134: _write_json tmp 文件名固定，并发 --append 操作同一 manifest 时后写覆盖前写，task 状态丢失 — R6, confidence: 88% — fixed a61f428
+- [x] **RUN-049** `[HIGH]` L970-993: run_name_filter 生效时无效 kv_mode 只 warning 不 error，continue 后 append 不可达，代码结构难审 — R6, confidence: 82% — fixed a61f428
+- [x] **RUN-050** `[HIGH]` L1150-1163: kivi_style 排除在 calib_file 预校验外，用户误配不存在 calib_file 时静默忽略 — R6, confidence: 85% — fixed a61f428
+- [x] **RUN-053** `[HIGH]` L460-480: 历史有 success 但当前 status=failed 时 _task_is_completed_successfully 仍返回 True，--skip_completed_success 跳过失败任务 — R6, confidence: 90% — fixed a61f428
+- [x] **RUN-036** `[MED]` L1461-1467: 无 SIGINT 处理，Ctrl-C 时 manifest 留在 "running"，summary 不写入 — R6, confidence: 85% — fixed a61f428
+- [x] **RUN-039** `[MED]` L296-297: returncode=130 (interrupt) 无特殊处理，Ctrl-C 终止的任务被重试 — R6, confidence: 82% — fixed a61f428
+- [x] **RUN-040** `[MED]` L1539: returncode=0 即标 success 不验证 CSV 产物存在，子脚本静默 exit(0) 时数据缺失 — R6, confidence: 88% — fixed a61f428
+- [x] **RUN-043** `[MED]` L1587-1589: retry_backoff_sec 固定 sleep 无指数退避 — R6, confidence: 70% — fixed a61f428
+- [x] **RUN-046** `[MED]` L1436-1445: _mark_task_status 在 mkdir 前调用，磁盘满时 manifest 卡 "running" — R6, confidence: 75% — fixed a61f428
+- [x] **RUN-047** `[MED]` L1398: 日志文件名固定 {task}.log，多次 append 无轮转可增长至 GB — R6, confidence: 80% — fixed a61f428
+- [x] **RUN-051** `[MED]` L930-951: AutoConfig 使用 trust_remote_code=True 仅为读 max_position_embeddings — R6, confidence: 72% — fixed a61f428
+- [x] **RUN-052** `[MED]` L1057-1103: 通用长度检查 (hard error) 与 RULER 专用检查 (warning) 不一致 — R6, confidence: 80% — fixed a61f428
+- [x] **RUN-054** `[MED]` L229-233: _task_has_csv glob 可匹配遗留 CSV 误报任务完成 — R6, confidence: 68% — fixed a61f428
+- [x] **RUN-057** `[MED]` 任务间无 GPU 显存释放等待，Triton context 异步释放影响下一任务 — R6, confidence: 75% — fixed a61f428
+- [x] **RUN-060** `[MED]` L1455: subprocess.run 管道缓冲，OOM 崩溃前日志可能丢失 — R6, confidence: 78% — fixed a61f428
+- [x] **RUN-037** `[LOW]` L1461: subprocess.run 未显式传 cwd=project_root — R6, confidence: 65% — fixed a61f428
+- [x] **RUN-041** `[LOW]` L300-306: 大日志全量读入内存做 OOM 扫描无上限 — R6, confidence: 70% — fixed a61f428
+- [x] **RUN-048** `[LOW]` L150-167: CSV 异常捕获 json.JSONDecodeError 而非 csv.Error — R6, confidence: 85% — fixed a61f428
+- [x] **RUN-055** `[LOW]` L1041-1048: 缺失 run_name 的 entries 被跳过不计入 summary — R6, confidence: 72% — fixed a61f428
+- [x] **RUN-061** `[LOW]` L867: logging.basicConfig 在 main() 中，模块级 warning 格式不一致 — R6, confidence: 65% — fixed a61f428
 
 ### SMK. Smoke 测试 — `scripts/smoke_test.py`
 - [x] **SMK-001** `[HIGH]` CUDA 不可用时 exit(0) → CI smoke test 假通过 (smoke_test.py:130-135): sys.exit(0) 在 CUDA 不可用时被调用，自动化管线检查 exit code 会认为 smoke test 通过。应 exit 非零或使用特殊 exit code 区分 "跳过" 与 "通过"。 — D2 RUN rotation, confidence: 95% -- fixed
