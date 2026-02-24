@@ -50,7 +50,7 @@ skills:
 
 | 文件 | 允许的操作 |
 |------|-----------|
-| `review_tracker.md` | **仅限**：将自己修复的 issue `- [ ]` 改为 `- [x]` 并追加 `— fixed commit <hash>` |
+| `review_tracker.md` | **仅限**：修复 issue 后将条目从 Open Issues 移至 Resolved `<details>` 区域对应 section，标记为 `- [x]` 并追加 `— fixed commit <hash>` |
 | `iteration.md` | **仅限**：追加 Timeline 记录（append-only，不修改历史条目） |
 | `.gitignore` | **仅限**：添加新忽略规则（不删除已有规则） |
 
@@ -145,7 +145,7 @@ Developer 支持两种启动模式：
 3. 按语义分组 `git add`（**禁止 `git add .`**）
 4. `git commit`（前缀：`feat:` / `fix:` / `refactor:` / `test:` / `docs:` / `chore:`）
 5. commit hash 写入 iteration.md 对应条目
-6. 编辑 review_tracker.md：`- [ ]` → `- [x]` 并追加 `— fixed commit <hash>`
+6. 编辑 review_tracker.md：将修复的条目从 **Open Issues**（或 Phase Blockers）**移动**到 **Resolved** 的 `<details>` 折叠区域对应 section 下，标记为 `- [x]` 并追加 `— fixed commit <hash>`。**禁止**仅原地标 `[x]` 而不移动——已修复条目必须离开 Open Issues 区域。
 7. Repo Hygiene：`git status` 必须干净，临时文件归档
 
 ### Step 7: 下一个任务

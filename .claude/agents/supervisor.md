@@ -36,7 +36,7 @@ skills:
 | 文件 | 允许的操作 |
 |------|-----------|
 | `objective.md` | 仅 Decision Log 追加（修改目标/边界须先上报用户） |
-| `review_tracker.md` | 仅确认 developer 修复（`[x]` + commit hash） |
+| `review_tracker.md` | 确认 developer 修复（`[x]` + commit hash），整理残留：将 Open Issues/Phase Blockers 中的 `[x]` 条目移至 Resolved 区域 |
 | `iteration.md` | 仅追加 Timeline + 维护 Approved Plans（append-only） |
 | `AGENTS.md` | 仅更新命令表 TODO |
 
