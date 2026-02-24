@@ -485,5 +485,311 @@ class TestPhipsonSmythCorrection(unittest.TestCase):
                                 "p must be >= 1/(n_perm+1) due to +1 correction in numerator")
 
 
+class TestBootstrapCIBoundary(unittest.TestCase):
+    """TST-008: Bootstrap CI boundary tests for n=1, n=2, n=3 and CI width
+    monotonically decreasing with n."""
+
+    def test_n1_ci_is_degenerate(self):
+        """n=1: Cannot compute a meaningful CI. Bootstrap returns identical bounds
+        (single value), and the higher-level _add_ci95_columns masks this to NaN.
+        Verify _bootstrap_ci_mean returns low == high == the single value."""
+        values = np.array([42.0], dtype=np.float64)
+        low, high = agg._bootstrap_ci_mean(  # pylint: disable=protected-access
+            values, n_bootstrap=5000, ci_level=0.95, seed=1234
+        )
+        # With n=1 the function returns (val, val) -- both bounds equal the single value.
+        self.assertAlmostEqual(low, 42.0, places=10)
+        self.assertAlmostEqual(high, 42.0, places=10)
+
+    def test_n1_add_ci95_columns_gives_nan(self):
+        """n=1: _add_ci95_columns should produce NaN CI half-width (can't compute
+        CI with a single sample)."""
+        df = pd.DataFrame({
+            "metric_mean": [5.0],
+            "metric_std": [1.0],
+            "metric_count": [1],
+        })
+        out = agg._add_ci95_columns(df)  # pylint: disable=protected-access
+        self.assertIn("metric_ci95_half", out.columns)
+        self.assertTrue(
+            np.isnan(float(out["metric_ci95_half"].iloc[0])),
+            "CI half-width must be NaN when n=1",
+        )
+
+    def test_n2_ci_finite_and_wide(self):
+        """n=2: CI should be finite but very wide (df=1, t_{0.975,1}=12.706)."""
+        values = np.array([10.0, 12.0], dtype=np.float64)
+        low, high = agg._bootstrap_ci_mean(  # pylint: disable=protected-access
+            values, n_bootstrap=10000, ci_level=0.95, seed=42
+        )
+        self.assertTrue(np.isfinite(low), f"low should be finite, got {low}")
+        self.assertTrue(np.isfinite(high), f"high should be finite, got {high}")
+        self.assertLess(low, high, "CI should have positive width for n=2")
+
+    def test_n2_add_ci95_columns_finite_and_very_wide(self):
+        """n=2 via _add_ci95_columns: CI half-width must be finite and very wide
+        because df=1 gives t_{0.975,1}=12.706."""
+        df = pd.DataFrame({
+            "val_mean": [11.0],
+            "val_std": [1.414],  # approx std of [10, 12]
+            "val_count": [2],
+        })
+        out = agg._add_ci95_columns(df)  # pylint: disable=protected-access
+        ci_half = float(out["val_ci95_half"].iloc[0])
+        self.assertTrue(np.isfinite(ci_half), f"CI half-width should be finite for n=2, got {ci_half}")
+        self.assertGreater(ci_half, 0.0)
+        # With df=1, t_crit=12.706, SEM=1.414/sqrt(2)=1.0, ci_half=12.706*1.0=12.706
+        # This is extremely wide compared to a z-based CI of 1.96*1.0=1.96.
+        sem = 1.414 / np.sqrt(2)
+        z_ci_half = 1.96 * sem
+        self.assertGreater(ci_half, z_ci_half * 3.0,
+                           "n=2 CI must be much wider than z-based CI (t_{0.975,1}=12.706)")
+
+    def test_n3_normal_case(self):
+        """n=3: Normal case -- CI should be finite, contain the mean, and be
+        wider than z-based CI (df=2, t_{0.975,2}=4.303)."""
+        values = np.array([10.0, 11.0, 12.0], dtype=np.float64)
+        low, high = agg._bootstrap_ci_mean(  # pylint: disable=protected-access
+            values, n_bootstrap=10000, ci_level=0.95, seed=42
+        )
+        mean = float(np.mean(values))
+        self.assertTrue(np.isfinite(low))
+        self.assertTrue(np.isfinite(high))
+        self.assertLessEqual(low, mean)
+        self.assertGreaterEqual(high, mean)
+        self.assertLess(low, high)
+
+    def test_ci_width_decreases_with_n(self):
+        """CI width should decrease as n increases (more data = narrower CI).
+        Test with _add_ci95_columns for n=3, 5, 10, 30."""
+        widths = []
+        for n in [3, 5, 10, 30]:
+            df = pd.DataFrame({
+                "m_mean": [100.0],
+                "m_std": [10.0],  # same std for all
+                "m_count": [n],
+            })
+            out = agg._add_ci95_columns(df)  # pylint: disable=protected-access
+            ci_half = float(out["m_ci95_half"].iloc[0])
+            self.assertTrue(np.isfinite(ci_half), f"CI half-width should be finite for n={n}")
+            widths.append(ci_half)
+        # Each CI width should be strictly less than the previous (for same std).
+        for i in range(len(widths) - 1):
+            self.assertGreater(
+                widths[i], widths[i + 1],
+                f"CI width for n={[3, 5, 10, 30][i]} ({widths[i]:.4f}) should be > "
+                f"CI width for n={[3, 5, 10, 30][i+1]} ({widths[i+1]:.4f})",
+            )
+
+
+class TestSignflipNaNHandling(unittest.TestCase):
+    """TST-009: Permutation test NaN handling tests for _paired_signflip_pvalue."""
+
+    def test_input_with_single_nan(self):
+        """A single NaN among valid values should be silently dropped.
+        E.g., [1.0, NaN, 2.0, 3.0] -> finite array [1.0, 2.0, 3.0] with n=3."""
+        diffs = np.array([1.0, np.nan, 2.0, 3.0], dtype=np.float64)
+        p_value, method, n_perm = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            diffs, n_permutations=5000, seed=42
+        )
+        # After dropping NaN, n=3, which is valid (>= 2). Should get exact_signflip.
+        self.assertEqual(method, "exact_signflip")
+        self.assertEqual(n_perm, 8)  # 2^3 = 8
+        self.assertTrue(np.isfinite(p_value), f"p-value should be finite, got {p_value}")
+        self.assertGreater(p_value, 0.0)
+        self.assertLessEqual(p_value, 1.0)
+
+    def test_all_nan_input(self):
+        """All-NaN input should return NaN p-value (insufficient pairs after filtering)."""
+        diffs = np.array([np.nan, np.nan, np.nan], dtype=np.float64)
+        p_value, method, n_perm = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            diffs, n_permutations=5000, seed=42
+        )
+        self.assertTrue(np.isnan(p_value), f"p-value should be NaN for all-NaN input, got {p_value}")
+        self.assertEqual(method, "insufficient_pairs")
+        self.assertEqual(n_perm, 0)
+
+    def test_single_nan_in_pair(self):
+        """Two values where one is NaN: after filtering n=1 < 2, should return insufficient."""
+        diffs = np.array([5.0, np.nan], dtype=np.float64)
+        p_value, method, n_perm = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            diffs, n_permutations=5000, seed=42
+        )
+        self.assertTrue(np.isnan(p_value), f"p-value should be NaN when only 1 valid value, got {p_value}")
+        self.assertEqual(method, "insufficient_pairs")
+        self.assertEqual(n_perm, 0)
+
+    def test_nan_plus_inf_filtered(self):
+        """NaN and Inf should both be filtered by np.isfinite.
+        [1.0, np.inf, np.nan, 2.0] -> [1.0, 2.0], n=2 is valid."""
+        diffs = np.array([1.0, np.inf, np.nan, 2.0], dtype=np.float64)
+        p_value, method, n_perm = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            diffs, n_permutations=5000, seed=42
+        )
+        self.assertEqual(method, "exact_signflip")
+        self.assertEqual(n_perm, 4)  # 2^2 = 4
+        self.assertTrue(np.isfinite(p_value))
+
+
+class TestBHFDRMonotonicity(unittest.TestCase):
+    """TST-010: BH-FDR monotonicity and edge-case verification for _add_bh_fdr_qvalues."""
+
+    def test_monotonicity_order_preserved(self):
+        """Adjusted p-values (q-values) should maintain the same relative order
+        as raw p-values: if p_i < p_j then q_i <= q_j."""
+        df = pd.DataFrame({"p_value": [0.001, 0.01, 0.03, 0.05, 0.10, 0.50]})
+        out = agg._add_bh_fdr_qvalues(df, p_col="p_value", q_col="q_value")  # pylint: disable=protected-access
+        q = out["q_value"].to_numpy(dtype=np.float64)
+        # q-values should be non-decreasing in the order of sorted p-values
+        for i in range(len(q) - 1):
+            self.assertLessEqual(
+                q[i], q[i + 1] + 1e-15,
+                f"q[{i}]={q[i]:.10f} should be <= q[{i+1}]={q[i+1]:.10f} "
+                f"(monotonicity violated)",
+            )
+
+    def test_all_pvalues_one(self):
+        """All p-values = 1.0 -> adjusted should all be 1.0."""
+        df = pd.DataFrame({"p_value": [1.0, 1.0, 1.0, 1.0]})
+        out = agg._add_bh_fdr_qvalues(df, p_col="p_value", q_col="q_value")  # pylint: disable=protected-access
+        q = out["q_value"].to_numpy(dtype=np.float64)
+        for i, qi in enumerate(q):
+            self.assertAlmostEqual(qi, 1.0, places=12,
+                                   msg=f"q[{i}] should be 1.0 when all p-values are 1.0, got {qi}")
+
+    def test_single_pvalue(self):
+        """Single p-value -> adjusted should equal the raw p-value.
+        BH correction with m=1: q = p * (1/1) = p."""
+        for p_raw in [0.01, 0.05, 0.50, 1.0]:
+            df = pd.DataFrame({"p_value": [p_raw]})
+            out = agg._add_bh_fdr_qvalues(df, p_col="p_value", q_col="q_value")  # pylint: disable=protected-access
+            q = float(out["q_value"].iloc[0])
+            self.assertAlmostEqual(q, p_raw, places=12,
+                                   msg=f"Single p-value {p_raw}: q should equal p, got {q}")
+
+    def test_multiple_identical_pvalues(self):
+        """Multiple identical p-values should produce identical q-values."""
+        df = pd.DataFrame({"p_value": [0.05, 0.05, 0.05]})
+        out = agg._add_bh_fdr_qvalues(df, p_col="p_value", q_col="q_value")  # pylint: disable=protected-access
+        q = out["q_value"].to_numpy(dtype=np.float64)
+        # All q-values should be the same
+        for i in range(1, len(q)):
+            self.assertAlmostEqual(q[0], q[i], places=12,
+                                   msg=f"q[0]={q[0]:.10f} != q[{i}]={q[i]:.10f} for identical p-values")
+
+    def test_adjusted_never_exceeds_one(self):
+        """Q-values should never exceed 1.0 (clipped)."""
+        # Large p-values that might produce q > 1 before clipping
+        df = pd.DataFrame({"p_value": [0.80, 0.90, 0.95, 0.99]})
+        out = agg._add_bh_fdr_qvalues(df, p_col="p_value", q_col="q_value")  # pylint: disable=protected-access
+        q = out["q_value"].to_numpy(dtype=np.float64)
+        for i, qi in enumerate(q):
+            self.assertLessEqual(qi, 1.0,
+                                 msg=f"q[{i}]={qi} should not exceed 1.0")
+
+    def test_adjusted_geq_raw(self):
+        """BH-adjusted q-values should be >= raw p-values (adjustment inflates)."""
+        df = pd.DataFrame({"p_value": [0.01, 0.04, 0.03, 0.20]})
+        out = agg._add_bh_fdr_qvalues(df, p_col="p_value", q_col="q_value")  # pylint: disable=protected-access
+        p = out["p_value"].to_numpy(dtype=np.float64)
+        q = out["q_value"].to_numpy(dtype=np.float64)
+        for i in range(len(p)):
+            self.assertGreaterEqual(
+                q[i], p[i] - 1e-15,
+                f"q[{i}]={q[i]:.10f} should be >= p[{i}]={p[i]:.10f}",
+            )
+
+    def test_nan_pvalues_produce_nan_qvalues(self):
+        """NaN p-values should result in NaN q-values (not crash)."""
+        df = pd.DataFrame({"p_value": [0.01, np.nan, 0.05]})
+        out = agg._add_bh_fdr_qvalues(df, p_col="p_value", q_col="q_value")  # pylint: disable=protected-access
+        q = out["q_value"].to_numpy(dtype=np.float64)
+        self.assertTrue(np.isfinite(q[0]))
+        self.assertTrue(np.isnan(q[1]), "NaN p-value should produce NaN q-value")
+        self.assertTrue(np.isfinite(q[2]))
+
+
+class TestSignflipMixedSignScenarios(unittest.TestCase):
+    """TST-015: Mixed sign sign-flip scenario tests for _paired_signflip_pvalue."""
+
+    def test_all_positive_diffs_small_pvalue(self):
+        """All-positive differences: strong signal -> p-value should be small.
+        For n=5 all-positive diffs, the observed |mean| equals the max achievable,
+        so only a tiny fraction of sign patterns can match or exceed it."""
+        diffs = np.array([2.0, 3.0, 1.5, 4.0, 2.5], dtype=np.float64)
+        p_value, method, n_perm = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            diffs, n_permutations=5000, seed=42
+        )
+        self.assertEqual(method, "exact_signflip")
+        self.assertEqual(n_perm, 32)  # 2^5 = 32
+        # All positive: strong directional effect -> small p-value
+        self.assertLess(p_value, 0.20,
+                        f"All-positive diffs should yield small p-value, got {p_value}")
+
+    def test_all_negative_diffs_small_pvalue(self):
+        """All-negative differences: strong signal (just opposite direction).
+        Two-sided test uses |mean|, so all-negative is equivalent to all-positive."""
+        diffs = np.array([-2.0, -3.0, -1.5, -4.0, -2.5], dtype=np.float64)
+        p_value, method, n_perm = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            diffs, n_permutations=5000, seed=42
+        )
+        self.assertEqual(method, "exact_signflip")
+        self.assertLess(p_value, 0.20,
+                        f"All-negative diffs should yield small p-value, got {p_value}")
+
+    def test_all_positive_equals_all_negative(self):
+        """Symmetric property: all-positive and all-negative (same magnitudes)
+        should produce the same p-value (two-sided test uses |mean|)."""
+        magnitudes = np.array([2.0, 3.0, 1.5, 4.0, 2.5], dtype=np.float64)
+        p_pos, _, _ = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            magnitudes, n_permutations=5000, seed=42
+        )
+        p_neg, _, _ = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            -magnitudes, n_permutations=5000, seed=42
+        )
+        self.assertAlmostEqual(p_pos, p_neg, places=12,
+                               msg="Two-sided test: all-positive and all-negative should give same p")
+
+    def test_mixed_signs_larger_pvalue(self):
+        """Mixed-sign differences: weaker signal -> p-value should be larger than
+        the all-positive case (same magnitudes)."""
+        all_pos = np.array([2.0, 3.0, 1.5, 4.0, 2.5], dtype=np.float64)
+        mixed = np.array([2.0, -3.0, 1.5, -4.0, 2.5], dtype=np.float64)
+        p_all_pos, _, _ = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            all_pos, n_permutations=5000, seed=42
+        )
+        p_mixed, _, _ = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            mixed, n_permutations=5000, seed=42
+        )
+        self.assertGreater(
+            p_mixed, p_all_pos,
+            f"Mixed-sign p ({p_mixed:.4f}) should be larger than all-positive p ({p_all_pos:.4f})",
+        )
+
+    def test_differences_sum_to_zero(self):
+        """Differences that sum to exactly zero: observed |mean| = 0.
+        The function has a special-case: observed==0 -> returns p=1.0, method='zero_effect'."""
+        diffs = np.array([1.0, -1.0, 2.0, -2.0], dtype=np.float64)
+        p_value, method, n_perm = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            diffs, n_permutations=5000, seed=42
+        )
+        self.assertAlmostEqual(p_value, 1.0, places=12,
+                               msg=f"Diffs summing to zero should give p=1.0, got {p_value}")
+        self.assertEqual(method, "zero_effect")
+        self.assertEqual(n_perm, 0)
+
+    def test_nearly_balanced_mixed_signs(self):
+        """Near-balanced mixed signs (mean close to 0) should produce a large p-value,
+        close to 1.0 (weak evidence against the null)."""
+        diffs = np.array([1.0, -1.0, 0.5, -0.5, 0.1, -0.1, 0.01], dtype=np.float64)
+        p_value, method, n_perm = agg._paired_signflip_pvalue(  # pylint: disable=protected-access
+            diffs, n_permutations=5000, seed=42
+        )
+        # Mean is very close to zero (0.01/7 ~ 0.0014), so most sign patterns
+        # will produce comparable or larger |mean| -> large p-value.
+        self.assertGreater(p_value, 0.50,
+                           f"Nearly balanced diffs should give large p-value, got {p_value}")
+
+
 if __name__ == "__main__":
     unittest.main()
