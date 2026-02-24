@@ -360,6 +360,15 @@ def _evaluate_claim_row(
     if rel_row is None:
         return _inconclusive_claim_row(claim, "missing relative_gain evidence row")
 
+    # AGG-029: gain_pct here is a single-point relative gain computed from
+    # aggregated (cross-seed) mean metric values in relative_gain_summary.csv.
+    # This differs from gain_pct_mean in significance_summary.csv, which is the
+    # mean of per-seed paired relative gains.  Due to Jensen's inequality these
+    # two quantities are NOT generally equal — gain_pct_mean (paired diff mean)
+    # is the more statistically rigorous measure.  We use gain_pct here for the
+    # practical threshold check because it reflects the best-estimate point
+    # improvement, while significance_summary uses gain_pct_mean for hypothesis
+    # testing with proper variance accounting.
     observed_gain_pct = float(pd.to_numeric(pd.Series([rel_row.get("gain_pct")]), errors="coerce").iloc[0])
 
     # NaN gain_pct (e.g. baseline=0) cannot be judged; treat as INCONCLUSIVE.

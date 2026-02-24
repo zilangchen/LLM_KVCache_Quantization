@@ -863,6 +863,10 @@ def main() -> int:
         default=None,
         help="Pass through to profile_latency.py --warmup (useful for long-context runs).",
     )
+    # RUN-034: BREAKING CHANGE — Prior to RUN-022, subprocess tasks waited
+    # indefinitely (no timeout).  The default is now 3600s (1 hour).  Callers
+    # that relied on infinite wait must pass --subprocess_timeout 0 to restore
+    # the old behaviour.
     parser.add_argument(
         "--subprocess_timeout",
         type=int,
@@ -870,7 +874,7 @@ def main() -> int:
         help=(
             # RUN-022: configurable per-task subprocess timeout to avoid infinite blocks.
             "Timeout in seconds for each subprocess task call (default: 3600 = 1 hour). "
-            "Set to 0 to disable the timeout."
+            "Set to 0 to disable the timeout and restore the pre-RUN-022 infinite-wait behaviour."
         ),
     )
     args = parser.parse_args()

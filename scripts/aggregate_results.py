@@ -38,9 +38,10 @@ try:
 
 except ImportError:
     _HAS_SCIPY = False
+    # AGG-045: Two-tailed t-distribution critical values at alpha=0.05,
+    # sourced from standard statistical tables (scipy.stats.t.ppf).
+    # Confirmed against Abramowitz & Stegun (1964), Table 26.7.
     # Fallback lookup table for t_{0.975, df} (two-tailed 95% CI).
-    # Values from standard t-distribution table, two-tailed alpha=0.05
-    # Source: Abramowitz & Stegun (1964), Table 26.7; confirmed against scipy.stats.t.
     _T_TABLE = {
         1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
         6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
@@ -67,7 +68,9 @@ except ImportError:
         if df < keys[0]:
             return _T_TABLE[keys[0]]
         if df > keys[-1]:
-            return 1.96
+            # AGG-043: use the df=120 table entry as upper-bound fallback to
+            # avoid a discontinuous jump from 1.980 at df=120 to 1.96 at df=121.
+            return _T_TABLE.get(120, 1.980)
         for i in range(len(keys) - 1):
             if keys[i] <= df <= keys[i + 1]:
                 lo, hi = keys[i], keys[i + 1]
@@ -202,6 +205,16 @@ def _agg_mean_std(df: pd.DataFrame, keys: List[str], values: List[str]) -> pd.Da
     return out
 
 
+def _safe_t_crit(n: float) -> float:
+    """QUA-003: module-level helper (moved out of _add_ci95_columns loop).
+    Return t critical value for sample size *n*; returns 0.0 for non-finite
+    or n <= 1 so that CI half-width becomes 0 (later masked to NaN)."""
+    # AGG-036: guard against cnt containing inf, which would cause int(inf) OverflowError.
+    if not np.isfinite(n) or n <= 1:
+        return 0.0
+    return _t_critical(max(1, int(n) - 1))
+
+
 def _add_ci95_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
     Add CI95 columns for every *_mean/*_std/*_count triplet in aggregated tables.
@@ -223,11 +236,6 @@ def _add_ci95_columns(df: pd.DataFrame) -> pd.DataFrame:
         sem = std / np.sqrt(cnt.clip(lower=1))
         # Use t-distribution critical value instead of fixed z=1.96.
         # For small n (e.g. n=5, df=4), t_{0.975}=2.776 vs z=1.96.
-        # AGG-036: guard against cnt containing inf, which would cause int(inf) OverflowError.
-        def _safe_t_crit(n: float) -> float:
-            if not np.isfinite(n) or n <= 1:
-                return 0.0
-            return _t_critical(max(1, int(n) - 1))
         t_crit = cnt.apply(_safe_t_crit)
         ci_half = t_crit * sem
         ci_half = ci_half.where(cnt > 1, np.nan)
@@ -1251,6 +1259,18 @@ def _build_paired_metric_rows(
         return pd.DataFrame()
 
     keys = [c for c in key_cols if c in work.columns]
+    # AGG-037: explicitly warn when key_cols specifies columns absent from the
+    # DataFrame (e.g. "model_id") — silent filtering can mask grouping errors.
+    _dropped_key_cols = [c for c in key_cols if c not in work.columns]
+    if _dropped_key_cols:
+        logger.warning(
+            "_build_paired_metric_rows: key_cols %r are specified but missing "
+            "from DataFrame columns; they will be silently ignored for grouping. "
+            "This may cause incorrect pairing if multiple values exist for the "
+            "missing columns.  metric=%s",
+            _dropped_key_cols,
+            metric_name,
+        )
     rows: List[pd.DataFrame] = []
     for base_mode, challenger_mode in pairings:
         sub = work[work["kv_mode"].isin([base_mode, challenger_mode])]
