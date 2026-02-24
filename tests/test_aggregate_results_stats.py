@@ -1244,5 +1244,143 @@ class TestPairedSignflipPvalueExtended(unittest.TestCase):
         self.assertEqual(n_perm, 2000, "Minimum n_permutations should be 2000")
 
 
+class TestMainClaims32kTableMergeKeys(unittest.TestCase):
+    """TST-044: Test _main_claims_32k_table dynamic merge_keys logic.
+
+    When input DataFrames contain a 'model_id' column, merge_keys should be
+    ["model_id", "kv_mode"]; when absent, merge_keys should be ["kv_mode"].
+    This prevents accidental Cartesian products in multi-model aggregation.
+    """
+
+    def _make_lat(self, kv_mode="int8_ours", seq_len=32704, model_id=None):
+        row = {
+            "kv_mode": kv_mode,
+            "seq_len": seq_len,
+            "batch": 1,
+            "gen_len": 64,
+            "tpot_ms_mean": 4.5,
+            "ttft_ms_mean": 12.0,
+            "tok_per_s_mean": 220.0,
+        }
+        if model_id is not None:
+            row["model_id"] = model_id
+        return pd.DataFrame([row])
+
+    def _make_mem(self, kv_mode="int8_ours", seq_len=32704, model_id=None):
+        row = {
+            "kv_mode": kv_mode,
+            "seq_len": seq_len,
+            "batch": 1,
+            "gen_len": 64,
+            "gpu_mem_peak_mb_mean": 8120.0,
+            "kv_cache_mem_mb_mean": 1530.0,
+        }
+        if model_id is not None:
+            row["model_id"] = model_id
+        return pd.DataFrame([row])
+
+    def _empty_df(self):
+        return pd.DataFrame()
+
+    def test_without_model_id_merges_on_kv_mode_only(self):
+        """When no model_id column, merge_keys=["kv_mode"]. Should produce 1 row."""
+        lat = self._make_lat()
+        mem = self._make_mem()
+        out = agg._main_claims_32k_table(  # pylint: disable=protected-access
+            latency_summary=lat,
+            memory_summary=mem,
+            needle_summary=self._empty_df(),
+            ppl_summary=self._empty_df(),
+            longbench_summary=self._empty_df(),
+            ruler_summary=self._empty_df(),
+            target_seq_len=32704,
+        )
+        self.assertEqual(len(out), 1)
+        self.assertNotIn("model_id", out.columns)
+        self.assertAlmostEqual(float(out.iloc[0]["tpot_ms_mean"]), 4.5)
+
+    def test_with_model_id_merges_on_model_id_and_kv_mode(self):
+        """When model_id present, merge_keys=["model_id", "kv_mode"]. Should produce 1 row per model."""
+        lat = self._make_lat(model_id="Qwen/Qwen2.5-1.5B-Instruct")
+        mem = self._make_mem(model_id="Qwen/Qwen2.5-1.5B-Instruct")
+        out = agg._main_claims_32k_table(  # pylint: disable=protected-access
+            latency_summary=lat,
+            memory_summary=mem,
+            needle_summary=self._empty_df(),
+            ppl_summary=self._empty_df(),
+            longbench_summary=self._empty_df(),
+            ruler_summary=self._empty_df(),
+            target_seq_len=32704,
+        )
+        self.assertEqual(len(out), 1)
+        self.assertIn("model_id", out.columns)
+        self.assertEqual(out.iloc[0]["model_id"], "Qwen/Qwen2.5-1.5B-Instruct")
+
+    def test_with_model_id_two_models_no_cartesian(self):
+        """Two models with model_id should produce 2 rows, not 4 (Cartesian)."""
+        lat = pd.concat([
+            self._make_lat(model_id="model_A"),
+            self._make_lat(kv_mode="int8_ours", model_id="model_B"),
+        ], ignore_index=True)
+        mem = pd.concat([
+            self._make_mem(model_id="model_A"),
+            self._make_mem(kv_mode="int8_ours", model_id="model_B"),
+        ], ignore_index=True)
+        out = agg._main_claims_32k_table(  # pylint: disable=protected-access
+            latency_summary=lat,
+            memory_summary=mem,
+            needle_summary=self._empty_df(),
+            ppl_summary=self._empty_df(),
+            longbench_summary=self._empty_df(),
+            ruler_summary=self._empty_df(),
+            target_seq_len=32704,
+        )
+        self.assertEqual(len(out), 2, "Two models should produce 2 rows, not a Cartesian product")
+
+    def test_without_model_id_same_kv_mode_multiple_merges(self):
+        """Without model_id, merging on kv_mode only with needle/ppl should still work."""
+        lat = self._make_lat()
+        mem = self._make_mem()
+        ned = pd.DataFrame([{
+            "kv_mode": "int8_ours",
+            "seq_len": 32704,
+            "needle_pass_rate_mean": 95.0,
+        }])
+        ppl = pd.DataFrame([{
+            "kv_mode": "int8_ours",
+            "ppl_mode": "kv_cache",
+            "perplexity_mean": 7.5,
+            "tokens_evaluated_mean": 500000,
+        }])
+        out = agg._main_claims_32k_table(  # pylint: disable=protected-access
+            latency_summary=lat,
+            memory_summary=mem,
+            needle_summary=ned,
+            ppl_summary=ppl,
+            longbench_summary=self._empty_df(),
+            ruler_summary=self._empty_df(),
+            target_seq_len=32704,
+        )
+        self.assertEqual(len(out), 1)
+        self.assertAlmostEqual(float(out.iloc[0]["needle_pass_rate_mean"]), 95.0)
+        self.assertAlmostEqual(float(out.iloc[0]["perplexity_mean"]), 7.5)
+
+    def test_model_id_in_latency_only_triggers_model_id_merge(self):
+        """If model_id exists only in latency, _has_mid should be True."""
+        lat = self._make_lat(model_id="model_X")
+        mem = self._make_mem()  # No model_id
+        out = agg._main_claims_32k_table(  # pylint: disable=protected-access
+            latency_summary=lat,
+            memory_summary=mem,
+            needle_summary=self._empty_df(),
+            ppl_summary=self._empty_df(),
+            longbench_summary=self._empty_df(),
+            ruler_summary=self._empty_df(),
+            target_seq_len=32704,
+        )
+        # Should still produce output (merge falls back to kv_mode for mem)
+        self.assertGreaterEqual(len(out), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

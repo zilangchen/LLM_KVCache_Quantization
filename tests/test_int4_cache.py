@@ -749,6 +749,287 @@ class TestINT4CacheClearAppendCycle(unittest.TestCase):
             self.assertLess(v_err, 0.5, f"Layer {layer}: V contamination after clear")
 
 
+class TestInt4CacheBitPackedFalse(unittest.TestCase):
+    """TST-064: Tests for INT4KVCache with bit_packed=False.
+
+    When bit_packed=False, INT4 quantized values are stored as plain int8
+    (one value per byte, no nibble packing). This exercises a different
+    code path than the default bit_packed=True.
+    """
+
+    def test_basic_append_get_unpacked(self):
+        """Append and retrieve with bit_packed=False should roundtrip correctly."""
+        torch.manual_seed(0)
+        B, H, D = 2, 4, 128
+        cache = INT4KVCache(
+            num_layers=2,
+            device="cpu",
+            clip_percentile=99.9,
+            group_size=32,
+            bit_packed=False,
+        )
+
+        k1 = torch.randn(B, H, 3, D, dtype=torch.float16)
+        v1 = torch.randn(B, H, 3, D, dtype=torch.float16)
+        cache.append(0, k1, v1)
+        cache.append(1, k1, v1)
+        self.assertEqual(cache.get_seq_len(), 3)
+
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.shape, k1.shape)
+        self.assertEqual(v_out.shape, v1.shape)
+        self.assertEqual(k_out.dtype, torch.float16)
+        self.assertEqual(v_out.dtype, torch.float16)
+        self.assertTrue(torch.isfinite(k_out).all())
+        self.assertTrue(torch.isfinite(v_out).all())
+
+    def test_unpacked_storage_dim_equals_head_dim(self):
+        """With bit_packed=False, stored head_dim should equal original head_dim."""
+        torch.manual_seed(0)
+        B, H, D = 1, 2, 128
+        cache = INT4KVCache(
+            num_layers=1,
+            device="cpu",
+            clip_percentile=100.0,
+            group_size=32,
+            bit_packed=False,
+        )
+        k = torch.randn(B, H, 4, D, dtype=torch.float16)
+        v = torch.randn(B, H, 4, D, dtype=torch.float16)
+        cache.append(0, k, v)
+
+        # With bit_packed=False, the internal int8 tensor should have head_dim=D
+        self.assertEqual(cache._k_cache[0].shape[-1], D)
+        self.assertEqual(cache._v_cache[0].shape[-1], D)
+
+    def test_unpacked_roundtrip_error_bounded(self):
+        """Roundtrip error with bit_packed=False should be bounded."""
+        torch.manual_seed(42)
+        B, H, D = 2, 4, 128
+        cache = INT4KVCache(
+            num_layers=1,
+            device="cpu",
+            clip_percentile=100.0,
+            group_size=32,
+            bit_packed=False,
+        )
+        k = torch.randn(B, H, 8, D, dtype=torch.float16)
+        v = torch.randn(B, H, 8, D, dtype=torch.float16)
+        cache.append(0, k, v)
+        k_out, v_out = cache.get_kv(0)
+
+        k_err = (k - k_out).abs().max().item()
+        v_err = (v - v_out).abs().max().item()
+        self.assertLess(k_err, 0.5, f"bit_packed=False K roundtrip error too large: {k_err}")
+        self.assertLess(v_err, 0.5, f"bit_packed=False V roundtrip error too large: {v_err}")
+
+    def test_unpacked_incremental_append(self):
+        """Incrementally append single tokens with bit_packed=False."""
+        torch.manual_seed(0)
+        B, H, D = 1, 2, 128
+        cache = INT4KVCache(
+            num_layers=1,
+            device="cpu",
+            clip_percentile=100.0,
+            group_size=32,
+            bit_packed=False,
+        )
+        for step in range(1, 6):
+            k = torch.randn(B, H, 1, D, dtype=torch.float16)
+            v = torch.randn(B, H, 1, D, dtype=torch.float16)
+            cache.append(0, k, v)
+            self.assertEqual(cache.get_seq_len(), step)
+
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.shape, (B, H, 5, D))
+        self.assertTrue(torch.isfinite(k_out).all())
+
+    def test_unpacked_odd_head_dim(self):
+        """With bit_packed=False, odd head_dim should work (no packing constraint)."""
+        torch.manual_seed(0)
+        B, H, D = 1, 2, 33  # odd head_dim
+        cache = INT4KVCache(
+            num_layers=1,
+            device="cpu",
+            clip_percentile=100.0,
+            group_size=33,
+            bit_packed=False,
+        )
+        k = torch.randn(B, H, 4, D, dtype=torch.float16)
+        v = torch.randn(B, H, 4, D, dtype=torch.float16)
+        cache.append(0, k, v)
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.shape, (B, H, 4, D))
+        self.assertTrue(torch.isfinite(k_out).all())
+
+    def test_unpacked_clear_and_reappend(self):
+        """Clear then reappend with bit_packed=False should not corrupt data."""
+        torch.manual_seed(0)
+        B, H, D = 1, 2, 128
+        cache = INT4KVCache(
+            num_layers=1,
+            device="cpu",
+            clip_percentile=100.0,
+            group_size=32,
+            bit_packed=False,
+        )
+        k1 = torch.randn(B, H, 4, D, dtype=torch.float16)
+        v1 = torch.randn(B, H, 4, D, dtype=torch.float16)
+        cache.append(0, k1, v1)
+        cache.clear()
+        self.assertEqual(cache.get_seq_len(), 0)
+
+        k2 = torch.randn(B, H, 3, D, dtype=torch.float16)
+        v2 = torch.randn(B, H, 3, D, dtype=torch.float16)
+        cache.append(0, k2, v2)
+        self.assertEqual(cache.get_seq_len(), 3)
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.shape, (B, H, 3, D))
+
+    def test_unpacked_memory_larger_than_packed(self):
+        """With bit_packed=False, memory usage should be >= packed (same data stored in full bytes)."""
+        torch.manual_seed(0)
+        B, H, D = 1, 2, 128
+        cache_packed = INT4KVCache(
+            num_layers=1, device="cpu", clip_percentile=100.0,
+            group_size=32, bit_packed=True,
+        )
+        cache_unpacked = INT4KVCache(
+            num_layers=1, device="cpu", clip_percentile=100.0,
+            group_size=32, bit_packed=False,
+        )
+        k = torch.randn(B, H, 8, D, dtype=torch.float16)
+        v = torch.randn(B, H, 8, D, dtype=torch.float16)
+        cache_packed.append(0, k, v)
+        cache_unpacked.append(0, k, v)
+
+        mem_packed = cache_packed.get_memory_mb()
+        mem_unpacked = cache_unpacked.get_memory_mb()
+        # Unpacked stores each int4 as a full byte, packed stores 2 per byte
+        self.assertGreaterEqual(
+            mem_unpacked, mem_packed,
+            f"Unpacked ({mem_unpacked:.4f} MB) should use >= memory than packed ({mem_packed:.4f} MB)"
+        )
+
+
+class TestKIVICacheGrowBoundary(unittest.TestCase):
+    """TST-065: KVC-017 grow path boundary test for KIVIStyleKVCache.
+
+    Tests that when appending would cause target_len to exceed max_seq_len,
+    the _ensure_capacity grow path raises ValueError instead of silently
+    allowing out-of-bounds writes.
+    """
+
+    def test_grow_exceeds_max_seq_len_raises(self):
+        """Appending beyond max_seq_len during grow should raise ValueError."""
+        from src.cache.kivi_style_cache import KIVIStyleKVCache
+        B, H, D = 1, 2, 16
+        max_len = 10
+        cache = KIVIStyleKVCache(
+            num_layers=1,
+            device="cpu",
+            dtype=torch.float32,
+            max_seq_len=max_len,
+            quant_bits=8,
+        )
+        # Append 8 tokens (within capacity)
+        k1 = torch.randn(B, H, 8, D)
+        v1 = torch.randn(B, H, 8, D)
+        cache.append(0, k1, v1)
+        self.assertEqual(cache.get_seq_len(), 8)
+
+        # Append 3 more tokens -> total=11 > max_seq_len=10 -> should raise
+        k2 = torch.randn(B, H, 3, D)
+        v2 = torch.randn(B, H, 3, D)
+        with self.assertRaises(ValueError) as ctx:
+            cache.append(0, k2, v2)
+        self.assertIn("exceeds", str(ctx.exception).lower())
+
+    def test_grow_exactly_at_max_seq_len_succeeds(self):
+        """Appending exactly to max_seq_len should succeed."""
+        from src.cache.kivi_style_cache import KIVIStyleKVCache
+        B, H, D = 1, 2, 16
+        max_len = 10
+        cache = KIVIStyleKVCache(
+            num_layers=1,
+            device="cpu",
+            dtype=torch.float32,
+            max_seq_len=max_len,
+            quant_bits=8,
+        )
+        k1 = torch.randn(B, H, 8, D)
+        v1 = torch.randn(B, H, 8, D)
+        cache.append(0, k1, v1)
+
+        # Append 2 more -> total=10 == max_seq_len -> should succeed
+        k2 = torch.randn(B, H, 2, D)
+        v2 = torch.randn(B, H, 2, D)
+        cache.append(0, k2, v2)
+        self.assertEqual(cache.get_seq_len(), 10)
+
+    def test_grow_one_past_max_seq_len_raises(self):
+        """Appending 1 token past max_seq_len from exactly-at-limit should raise."""
+        from src.cache.kivi_style_cache import KIVIStyleKVCache
+        B, H, D = 1, 2, 16
+        max_len = 10
+        cache = KIVIStyleKVCache(
+            num_layers=1,
+            device="cpu",
+            dtype=torch.float32,
+            max_seq_len=max_len,
+            quant_bits=8,
+        )
+        # Fill to exactly max_seq_len
+        k1 = torch.randn(B, H, max_len, D)
+        v1 = torch.randn(B, H, max_len, D)
+        cache.append(0, k1, v1)
+        self.assertEqual(cache.get_seq_len(), max_len)
+
+        # One more token should raise
+        k2 = torch.randn(B, H, 1, D)
+        v2 = torch.randn(B, H, 1, D)
+        with self.assertRaises(ValueError):
+            cache.append(0, k2, v2)
+
+    def test_initial_allocation_exceeds_max_seq_len_raises(self):
+        """First append with seq_len > max_seq_len should raise immediately."""
+        from src.cache.kivi_style_cache import KIVIStyleKVCache
+        B, H, D = 1, 2, 16
+        cache = KIVIStyleKVCache(
+            num_layers=1,
+            device="cpu",
+            dtype=torch.float32,
+            max_seq_len=5,
+            quant_bits=8,
+        )
+        k = torch.randn(B, H, 6, D)
+        v = torch.randn(B, H, 6, D)
+        with self.assertRaises(ValueError):
+            cache.append(0, k, v)
+
+    def test_int4_grow_boundary(self):
+        """INT4 variant also respects max_seq_len during grow."""
+        from src.cache.kivi_style_cache import KIVIStyleKVCache
+        B, H, D = 1, 2, 16
+        max_len = 12
+        cache = KIVIStyleKVCache(
+            num_layers=1,
+            device="cpu",
+            dtype=torch.float32,
+            max_seq_len=max_len,
+            quant_bits=4,
+        )
+        k1 = torch.randn(B, H, 10, D)
+        v1 = torch.randn(B, H, 10, D)
+        cache.append(0, k1, v1)
+
+        # 3 more -> total=13 > max_len=12 -> should raise
+        k2 = torch.randn(B, H, 3, D)
+        v2 = torch.randn(B, H, 3, D)
+        with self.assertRaises(ValueError):
+            cache.append(0, k2, v2)
+
+
 if __name__ == "__main__":
     unittest.main()
 
