@@ -92,19 +92,33 @@ def get_calibration_dataset(tokenizer, n_samples=128, seq_len=512):
     print("Loading WikiText-2 for calibration...")
     try:
         data = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
-    except Exception:
-        print("Warning: Failed to load WikiText-2. Using dummy data.")
-        return ["This is a test sentence for calibration. " * 20] * n_samples
+    except Exception as exc:
+        raise RuntimeError(
+            "Failed to load WikiText-2 calibration dataset. "
+            "Calibration requires real tokenized data; a dummy string fallback "
+            "would crash on .to(device) because strings are not tensors. "
+            f"Original error: {exc}"
+        ) from exc
 
+    min_text_len = 10  # skip very short texts that tokenize to near-empty sequences
     encodings = []
     for text in data["text"]:
-        if len(text.strip()) > 0:
+        if len(text.strip()) >= min_text_len:
             enc = tokenizer(text, return_tensors="pt")["input_ids"]
             if enc.size(1) > seq_len:
                 enc = enc[:, :seq_len]
             encodings.append(enc)
             if len(encodings) >= n_samples:
                 break
+
+    if len(encodings) < n_samples:
+        import warnings
+        warnings.warn(
+            f"Calibration dataset returned only {len(encodings)}/{n_samples} samples "
+            f"(min_text_len={min_text_len}, seq_len={seq_len}). "
+            "Calibration quality may be degraded with fewer samples.",
+            RuntimeWarning,
+        )
     return encodings
 
 
@@ -190,6 +204,12 @@ def compute_inv_tau(
     qmax: int,
     loss_function: str = "kl",
 ) -> torch.Tensor:
+    if not inv_tau_candidates:
+        raise ValueError(
+            "inv_tau_candidates is empty. At least one candidate value is required "
+            "for inv_tau search (e.g. --inv_tau_candidates '0.5,1.0,1.5')."
+        )
+
     sm_scale = 1.0 / (head_dim ** 0.5)
     inv_tau_tensor = torch.ones((len(k_scales), num_heads), dtype=torch.float32)
     inv_tau_candidates_t = torch.tensor(inv_tau_candidates, dtype=torch.float32)
@@ -230,6 +250,11 @@ def compute_inv_tau(
                     loss_accum += mse
                 else:
                     # KL divergence (default)
+                    # CAL-026: Clamping to [eps, 1] prevents log(0) but breaks
+                    # the normalization invariant (sum(p) == 1). This makes the
+                    # computed KL a known approximation, not a true KL divergence.
+                    # The bias is negligible when most probability mass is >> eps,
+                    # which holds for typical softmax attention distributions.
                     p_ref_safe = torch.clamp(p_ref, min=eps)
                     p_quant_safe = torch.clamp(p_quant, min=eps)
                     kl = (p_ref_safe * (torch.log(p_ref_safe) - torch.log(p_quant_safe))).sum(dim=-1)
@@ -250,6 +275,18 @@ def compute_inv_tau(
                     f"{nan_count}/{len(inv_tau_candidates)} candidates are NaN. "
                     "Falling back to inv_tau=1.0 for this head. "
                     "This may indicate numerical issues in the calibration data.",
+                    RuntimeWarning,
+                )
+                inv_tau_tensor[layer_idx, head_idx] = 1.0
+                continue
+
+            # CAL-027: Detect all-inf loss_accum which would cause argmin
+            # to silently return index 0 (undefined/misleading behaviour).
+            if torch.isinf(loss_accum).all():
+                import warnings
+                warnings.warn(
+                    f"All inv_tau candidates produced inf loss at layer={layer_idx}, "
+                    f"head={head_idx}. Falling back to inv_tau=1.0 for this head.",
                     RuntimeWarning,
                 )
                 inv_tau_tensor[layer_idx, head_idx] = 1.0
@@ -369,6 +406,10 @@ def evaluate_quant_candidate(
                     loss_values.append(float(mse))
                 else:
                     # KL divergence (default)
+                    # CAL-026: Clamping to [eps, 1] prevents log(0) but breaks
+                    # the normalization invariant (sum(p) == 1). This makes the
+                    # computed KL a known approximation — see comment in
+                    # compute_inv_tau for full rationale.
                     p_ref_safe = torch.clamp(p_ref, min=eps)
                     p_quant_safe = torch.clamp(p_quant, min=eps)
                     kl = (p_ref_safe * (torch.log(p_ref_safe) - torch.log(p_quant_safe))).sum().item()
@@ -379,9 +420,12 @@ def evaluate_quant_candidate(
         p95_loss = float(np.quantile(np.array(loss_values, dtype=np.float64), 0.95))
         max_loss = float(np.max(loss_values))
     else:
-        mean_loss = 0.0
-        p95_loss = 0.0
-        max_loss = 0.0
+        # CAL-025: Return inf (not 0.0) when no samples were evaluated.
+        # Returning 0.0 would fool the search into selecting this candidate
+        # as the "best" since it appears to have zero loss.
+        mean_loss = float('inf')
+        p95_loss = float('inf')
+        max_loss = float('inf')
 
     # Build result dict with appropriate key names based on loss function
     if loss_function == "mse":
@@ -696,9 +740,19 @@ def main():
     if args.config and args.run_name:
         cfg = load_config(args.config)
         resolved = resolve_run_config(cfg, args.run_name)
+        # CAL-023: Track quant_bits before config override to detect silent changes.
+        quant_bits_before = args.quant_bits
         for key, value in resolved.items():
             if value is not None:
                 setattr(args, key, value)
+        if args.quant_bits != quant_bits_before:
+            import warnings
+            warnings.warn(
+                f"Config override changed quant_bits from {quant_bits_before} to "
+                f"{args.quant_bits} (run_name={args.run_name!r}). "
+                "This overrides --int4_search / --quant_bits CLI flags.",
+                UserWarning,
+            )
 
         quant_defaults = cfg.get("runtime", {}).get("quant_defaults", {})
         run_entry = None
@@ -989,6 +1043,11 @@ def main():
     # Compute inv_tau (loss minimization)
     print(f"Computing per-head inv_tau (loss_function={args.loss_function})...")
     inv_tau_candidates = [float(x) for x in args.inv_tau_candidates.split(",") if x.strip()]
+    if not inv_tau_candidates:
+        raise ValueError(
+            "--inv_tau_candidates parsed to empty list. "
+            "Provide at least one candidate (e.g. '0.5,1.0,1.5')."
+        )
     inv_tau = compute_inv_tau(
         q_samples=q_samples,
         k_samples=k_samples,

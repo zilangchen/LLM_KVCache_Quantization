@@ -2,7 +2,7 @@
 INT4 fused decode-attention wrapper.
 
 This wrapper reuses the INT8 Triton kernel by first materializing INT4 cache
-values to signed INT8 in [-7, 7]. K/V scales remain group-wise FP16 and are
+values to signed INT8 in [-8, 7]. K/V scales remain group-wise FP16 and are
 applied in-kernel exactly as INT8 path.
 
 Notes:
@@ -30,6 +30,13 @@ def _materialize_int4_as_int8(
         if cache.shape[-1] != head_dim:
             raise ValueError(
                 f"Unpacked INT4 cache last dim mismatch: got {cache.shape[-1]}, expected {head_dim}"
+            )
+        # KRN-011: Validate dtype for unpacked path. Unpacked INT4 values
+        # are stored as int8 (range [-8, 7]); other dtypes indicate a caller bug.
+        if cache.dtype != torch.int8:
+            raise ValueError(
+                f"Unpacked INT4 cache must be int8, got {cache.dtype}. "
+                "Unpacked INT4 values should be stored as torch.int8."
             )
         return cache
 

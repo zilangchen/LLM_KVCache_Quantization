@@ -129,21 +129,7 @@ def decode_attn_int8_kernel(
     NUM_GROUPS: tl.constexpr,
     N_REP: tl.constexpr,
 ):
-    # Program ID
-    pid = tl.program_id(0)
-    # We launch grid as (Batch * N_Heads)
-    # Reconstruct batch and head indices
-    # We need n_heads to decode pid
-    # BUT, we can't pass n_heads as tensor if it's constant or we can calculate it from grid?
-    # Usually we pass strides. 
-    # Let's assume grid is 1D: batch * n_heads.
-    # We can infer valid indices if we knew n_heads. 
-    # Or simpler: The strides tell us everything if we handle pointers linearly?
-    # Actually, to get Context_Len[batch_id], we need batch_id.
-    # So we MUST pass n_heads or stride related info.
-    # Correction: pass n_heads as argument or deduce from strides?
-    # Standard practice: grid = (Batch, N_Heads). 2D grid is easier.
-    
+    # Program ID — grid is 2D: (Batch, N_Heads)
     batch_id = tl.program_id(0)
     head_id = tl.program_id(1)
     # GQA mapping: multiple query heads share one KV head.
@@ -171,6 +157,10 @@ def decode_attn_int8_kernel(
     l_i = 0.0           # Sum exp
     acc = tl.zeros([HEAD_DIM], dtype=tl.float32) # Accumulator
     
+    # KRN-014: Pre-compute loop-invariant index vectors outside the loop.
+    offs_g = tl.arange(0, NUM_GROUPS)
+    group_indices = offs_d // GROUP_SIZE  # noqa: F841 — kept for documentation
+
     # Runtime loop avoids pathological compile-time unrolling at very long context lengths.
     for start_n in range(0, ctx_len, BLOCK_SIZE):
         # Current block indices: [start_n : start_n + BLOCK_SIZE]
@@ -195,7 +185,6 @@ def decode_attn_int8_kernel(
         # Better: Load scales [BLOCK_SIZE, NUM_GROUPS] 
         # Then expand/broadcast to [BLOCK_SIZE, HEAD_DIM]
         
-        offs_g = tl.arange(0, NUM_GROUPS)
         ks_ptrs = ks_base + (offs_n[:, None] * stride_ks_s) + (offs_g[None, :] * stride_ks_g)
         k_scale = tl.load(ks_ptrs, mask=mask[:, None], other=1.0) # [BLOCK, NUM_GROUPS]
         
@@ -207,9 +196,6 @@ def decode_attn_int8_kernel(
         # k_scale_expanded = tl.broadcast_to(...) 
         # This works if HEAD_DIM = NUM_GROUPS * GROUP_SIZE is strictly blocked.
         
-        # Actually simplest way in Triton:
-        # Construct index mapping
-        group_indices = offs_d // GROUP_SIZE
         # k_scale is [BLOCK, NUM_GROUPS]
         # We want [BLOCK, HEAD_DIM]
         # Triton doesn't support advanced integer indexing nicely like numpy?
@@ -319,6 +305,13 @@ def decode_attn_int8(
         raise ValueError("decode_attn_int8 requires CUDA tensors.")
 
     batch, q_heads, head_dim = q.shape
+    # KRN-007: Triton reshape/broadcast operations require HEAD_DIM to be a
+    # power of 2 (tl.reshape, tl.arange constraints).
+    if head_dim == 0 or (head_dim & (head_dim - 1)) != 0:
+        raise ValueError(
+            f"HEAD_DIM must be a power of 2, got {head_dim}. "
+            "Triton kernel uses tl.reshape which requires power-of-2 tile dimensions."
+        )
     # q: [batch, q_heads, head_dim]
     # k_cache/v_cache: [batch, kv_heads, max_seq, head_dim]
     # k_scale/v_scale: [batch, kv_heads, max_seq, num_groups]
