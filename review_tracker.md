@@ -1,43 +1,86 @@
 # Code Review Tracker
 
-> 466 issues | 430 fixed + 25 false_positive + 8 wont_fix | 3 open (0 CRIT, 2 HIGH, 1 MED, 0 LOW)
-> Phase Gate: **CLEAR** — 0 CRITICAL open
-> Last updated: 2026-02-25
+> 487 issues | 428 fixed + 26 false_positive + 8 wont_fix | 25 open (0 CRIT, 13 HIGH, 12 MED, 0 LOW)
+> Phase Gate: **CLEAR**
+> Last updated: 2026-02-25 (R7: cache/quant/eval_ppl/smoke_test deep review)
 
 ---
 
 ## Phase Blockers (CRITICAL open)
 
-### CHK. 完整性检查 — `scripts/check_run_completeness.py`
-
-- [x] **CHK-004** `[MED]` 不验证 CSV 内容完整性 (L80) — fixed 6f23824
-- [x] **CHK-005** `[MED]` LongBench/RULER 任务级完整性无验证 (L16-23, L146-148) — fixed 6f23824
-- [x] **CHK-006** `[MED]` dev agent 仍未确认 O 节 3 CRITICAL + T 节 1 CRITICAL — Phase Gate CLEAR, 所有 CRIT 已解决 -- fixed
-- [x] **CHK-015** `[MED]` failure_type 域值枚举与 run_experiments.py _classify_failure() 不同步 (L94-108): 两处独立维护 failure_type 枚举，新增类型时易遗漏。 — D4, confidence: 84% — fixed 2f6cddb
-- [x] **CHK-018** `[MED]` _split_csv/_read_json/_read_text 与 run_experiments.py 重复定义 (L27-51): 3 个工具函数在两个脚本中独立实现，修 bug 需改两处。 — D7, confidence: 100% — fixed 6f23824
-- [x] **CHK-020** `[LOW]` 返回类型 Dict[str, Any] 无 TypedDict/dataclass 约束 (L168-181, L238-243): 字段名错误无法被静态检查捕获。 — D7, confidence: 80% — fixed 0056a3d
-- [x] **CHK-021** `[MED]` 空 manifest + 存在 CSV 被判定为 "success" (check_run_completeness.py:153-156): manifest_status="" + manifest_failure="" 时 state="success"。manifest 损坏或手动拷贝 CSV 时虚假通过，可能导致信任不可靠数据。 — D2 RUN rotation, confidence: 85% -- fixed
-- [x] **CHK-022** `[LOW]` _read_json OSError/PermissionError 无日志静默返回 None (check_run_completeness.py:54-55): 仅 JSONDecodeError 有 logger.warning，`except Exception: return None` 对 OSError（权限拒绝、IO 错误）无任何日志。manifest 读取因权限问题失败时与 manifest 不存在无法区分，导致所有任务按"无 manifest"路径分类。 — D2 full-scan, confidence: 83% — fixed 2f6cddb
-- [x] **CHK-023** `[HIGH]` _detect_failure_type() canonical 枚举注释缺少 "timeout"，与 run_experiments.py 新增 timeout 路径失同步 (check_run_completeness.py:137-165 vs run_experiments.py:1452-1487): run_experiments.py 新增 timeout 处理分支，将 failure_type="timeout" 直接写入 manifest（L1457-1468），绕过 _classify_failure()。check_run_completeness.py 的 _detect_failure_type() 注释（L149-154）声称列出了 canonical failure_type 枚举集合（oom/interrupt/traceback/runtime_error/unknown），但未包含 "timeout"。实际运行中 manifest_failure="timeout" 会经 L163-164 的 fallback 分支透传输出，功能上不报错；但注释的权威性下降，未来新增 failure_type 时维护者参考注释做 exhaustiveness 检查会遗漏 "timeout"，CHK-015 所述不同步问题因此加剧。修复建议：同步更新 _detect_failure_type() 注释枚举，增加 "timeout" 条目。 — D4, confidence: 91% -- fixed
-
-### EVL. 评测脚本 — `scripts/eval_*.py`
-
-- [x] **EVL-023** `[LOW]` eval_longbench.py logger 定义位置：logger = logging.getLogger(__name__) 在 import 块中间（介于 traceback 和 from collections impor... -- fixed
-- [x] **EVL-026** `[LOW]` eval_ruler.py summary row 聚合维度不一致 (L1008-1016): `overall_pass_rate` 基于 task-level macro average（4 tasks），而 `overall_f1` 和 `overall_contains` 基于 depth-level macro average（N depth ratios），同一 summary_row 内三个指标的聚合基底不同。主指标 `ruler_score` 不受影响（等于 task-level pass_rate） -- fixed
-- [x] **EVL-029** `[HIGH]` eval_ppl.py 缺少标准化 OOM 退出码和 task_failure JSON (eval_ppl.py:840-844): except RuntimeError 捕获 OOM 子类后 sys.exit(1) 而非 EXIT_OOM=73，不写 task_failure JSON。run_experiments.py _classify_failure() 依赖 returncode==73 识别 OOM，eval_ppl OOM 被错分为 generic failure，完整性检查统计遗漏。eval_longbench 和 eval_ruler 均已实现标准化 OOM 处理（exit 73 + failure JSON）。 — D2 R3 eval deep review, confidence: 95% — fixed fe7cc34
-- [x] **EVL-030** `[MED]` eval_longbench.py _truncate_prompt_ids 使用纯右保留截断，丢失 system prompt 和 context 开头 (eval_longbench.py:320-325): ids=ids[-max_tokens:] 截断丢失开头 system prompt + context 开头。EVL-007 已修复 eval_ruler.py 为 head+tail 截断，但 eval_longbench 仍用旧方案。HF 真实数据（gov_report/multi_news）几乎必然超长触发。与 RULER 截断策略不一致。 — D2 R3 eval deep review, confidence: 90% — fixed fe7cc34
-- [x] **EVL-031** `[MED]` eval_ppl.py ppl_ci95_low/ppl_ci95_high 填充点估计值，字段名语义欺骗 (eval_ppl.py:906-907): CSV 输出 ppl_ci95_low=ppl_ci95_high=perplexity（点估计），未做任何 CI 计算。下游直接读取单 run CSV 会得到零宽度 CI。aggregate_results.py 从多 seed 重新计算 CI 不受影响。 — D1 R3 eval deep review, confidence: 92% — fixed fe7cc34
-- [x] **EVL-032** `[MED]` eval_ruler.py CWE exact_match 仅检查 recall==1.0，与其他 RULER 子任务 exact_match 语义不一致 (eval_ruler.py:225): CWE 的 exact_match 定义为 intersection==truth_words（所有真值词出现在预测中即得 1.0），允许预测含大量额外词汇。s_niah/mk_niah/vt 要求归一化后完全匹配或全部出现。CWE 系统性偏宽松，可能拉高 ruler_pass_rate 总分。 — D1 R3 eval deep review, confidence: 88% — fixed 0a0b05a
-- [x] **EVL-033** `[MED]` eval_ppl.py int8_baseline 获得 decode_attn_impl=triton_fused 属性但实际不使用 (eval_ppl.py:298-315): int8_baseline 不在 ours 白名单中，scales=None 正确。但 cache 对象存储 decode_attn_impl="triton_fused"。当前 build_past_key_values 条件不包含 int8_baseline 故无功能影响，但配置语义不精确，未来修改可能意外启用 fused path。 — D4 R3 eval deep review, confidence: 75% — fixed fe7cc34
-- [x] **EVL-034** `[LOW]` eval_ppl.py kivi_style 经过 maybe_to_dynamic_cache 的静默转换/回退链 (eval_ppl.py:332-336,365): KIVI 返回 tuple，maybe_to_dynamic_cache 尝试 from_legacy_cache，shape 不兼容时 except 静默回退，可能产生非预期 cache 格式。 — D2 R3 eval deep review, confidence: 70% — fixed 0a0b05a
-- [x] **EVL-035** `[LOW]` export_tables_latex.py LongBench footnote 遗漏 QA 类任务的 token-F1 指标说明 (export_tables_latex.py:382-386): footnote 列举 Rouge-L/Accuracy/Edit Similarity 但遗漏 QA 任务（8/21 任务）使用的 token-F1。 — D7 R3 eval deep review, confidence: 95% — fixed fe7cc34
-- [x] **EVL-036** `[LOW]` eval_ppl.py RuntimeError 捕获过宽，非 OOM 的 RuntimeError 也无 traceback 无 failure JSON (eval_ppl.py:840-844): 所有 RuntimeError 统一 sys.exit(1)，Triton kernel 编译失败/dtype 不匹配等非 OOM 错误无调试信息输出。eval_longbench/eval_ruler 在 except 块中写 task_failure JSON 包含完整 traceback。 — D2 R3 eval deep review, confidence: 90% — fixed fe7cc34
+_(no CRITICAL open issues)_
 
 ---
 
 ## Open Issues
 
-### AGG. 聚合 — `scripts/aggregate_results.py`
+### EVL. 评测脚本 — `scripts/eval_*.py`
+- [ ] **EVL-037** `[HIGH]` eval_ppl.py load_calibration() 失败时静默退化为 baseline，CSV 仍标记 kv_mode=int8_ours (eval_ppl.py:217-228): except Exception 捕获后 warnings.warn() 并返回 baseline 默认值（无 scale/inv_tau），但调用方不检查校准是否加载成功。CSV 输出 kv_mode=int8_ours 但实际行为等价于 int8_baseline — 实验结果被 baseline 伪装污染。ENG-038 已修复 generate_loop.py 的同类问题，但 eval_ppl.py 的独立 load_calibration() 仍有此 bug。 — R7, confidence: 90%
+- [ ] **EVL-038** `[HIGH]` eval_ppl.py CSV 保存失败时已计算的 PPL 值丢失 (eval_ppl.py:958-984): save_csv I/O 异常（磁盘满/权限）传播到外层 except Exception，failure_type="exception" exit(2)。PPL 已计算完成但结果不可恢复，整个 GPU 计算时间浪费。应在 CSV 写入前暂存结果或在 except 中尝试备份写入。 — R7, confidence: 85%
+- [ ] **EVL-039** `[HIGH]` eval_ppl.py token-by-token 路径对非 fused 模式 O(N^2) 全量 dequant (eval_ppl.py:383-428): 每个 decode step 调用 build_past_key_values → get_kv(i) 对所有层全量 dequant。seq_len=1024 时 ~1023*28 次完整 dequant，总工作量 O(N^2*layers)。严重性能瓶颈但不影响正确性。 — R7, confidence: 95%
+- [ ] **EVL-040** `[MED]` eval_ppl.py task_failure JSON 文件名固定为 task_failure_eval_ppl.json (eval_ppl.py:83): 并发 eval_ppl 进程（不同 seed/kv_mode）写同一 out_dir 时后写覆盖前写的 failure 记录。应在文件名中包含 run_id 或 seed。 — R7, confidence: 82%
+
+### CAL. 校准模块 — `scripts/calibrate_behavior.py` (R4 深度审查 2026-02-24)
+- [ ] **CAL-033** `[HIGH]` CAL-019/020 修复后校准 JSON version 未递增（仍为 1），generate_loop.py 无法机器检测旧产物 (calibrate_behavior.py:1180): 修复改变了 Q 向量计算（加 layernorm + RoPE），旧产物数学上无效，但 version 字段未变，下游无法区分。建议 version 改为 2 并在 generate_loop.py 加版本检查。 — R7 CAL-019/020 review, confidence: 92%
+- [ ] **CAL-034** `[MED]` _get_rope_for_position 与 patch_model.py _get_rope_cos_sin 实现分歧 (calibrate_behavior.py:106-126 vs patch_model.py:446-515): 校准版少 1 个调用变体（keyword-only position_ids）、缺 seq_len= fallback、缺非预期异常 warning。当前三模型无影响但 transformers 版本更新时可能静默失败。 — R7, confidence: 80%
+- [ ] **CAL-035** `[MED]` _rotate_half/_apply_rope_to_q 与 patch_model.py 代码重复（DRY 违反） (calibrate_behavior.py:71-103 vs patch_model.py:203-249): 三个近似重复函数。若 patch_model.py RoPE 逻辑更新，校准版需手动同步。建议提取到 src/utils/rope.py。 — R7, confidence: 85%
+
+### CFG. 配置 — `configs/`
+- [ ] **CFG-022** `[MED]` 1.5B 吞吐量实验 b1-b16 使用 use_attn_temperature:true 而 b24-b32 使用 false，7B/8B 全部 false (exp_matrix.yaml:391-448): 同一模型 throughput 曲线混入 temperature 变量，跨模型对比也不对等。week4/week5 snapshot 同理。 — D1 TST+configs rotation, confidence: 95%
+- [ ] **CFG-026** `[HIGH]` 7B/8B 配置引用的 calib_file 在 artifacts/ 中全部缺失 (exp_matrix_qwen25_7b_v1.yaml:32,132,150,...; exp_matrix_llama31_8b_v1.yaml:35,135,153,...): 4 个文件均不存在 — `artifacts/kv_calib_kl_qwen25_7b_int8.json`、`artifacts/kv_calib_kl_qwen25_7b_int4.json`、`artifacts/kv_calib_kl_llama31_8b_int8.json`、`artifacts/kv_calib_kl_llama31_8b_int4.json`。run_experiments.py L1147-1158 在非 dry_run 时检查 calib_file_path.exists()，缺失则 print error + return 2，7B/8B 所有 int8_ours/int4_ours 运行无法执行。与 objective.md §9（扩展模型实验为已批准目标）直接冲突。 — D4 configs deep review, confidence: 99%
+- [ ] **CFG-029** `[HIGH]` LLaMA-3.1-8B 配置 model_revision: null 导致实验无法 pin-revision 复现 (exp_matrix_llama31_8b_v1.yaml:22): run_experiments.py L1287 `if model_revision:` 对 null/None 跳过 `--model_revision` 参数传递，子脚本默认加载 HF Hub main 分支最新版。1.5B 有 pinned revision `989aa7980e4cf806f80c7fef2b1adb7bc71aa306`，7B 有 `a09a35458c702b33eeacc393d103063234e8bc28`，唯独 LLaMA 为 null，与 objective.md §9"固定决策：revision pinned"直接冲突，存在跨时间/跨机器复现性风险。 — D4 configs deep review, confidence: 95%
+
+### KVC. KV Cache — `src/cache/`
+- [ ] **KVC-019** `[HIGH]` INT8KVCache 和 KIVIStyleKVCache 缺少 to_tuple()/from_tuple() 方法 (int8_cache.py, kivi_style_cache.py): generate_loop.py:787 非 fused decode 路径调用 kv_cache.to_tuple() 构建 HF past_key_values，INT8/KIVI 缺此方法将 AttributeError 崩溃。INT4KVCache 有 to_tuple() (L518)，FP16KVCache 也有，唯独这两个类缺失。 — R7 cache deep review, confidence: 88%
+- [ ] **KVC-020** `[HIGH]` INT8/INT4 _compute_dynamic_group_scale 在 fp16 下产生 subnormal scale (int8_cache.py:307, int4_cache.py:313): absmax.clamp(min=1e-5)/127.0 → ~7.87e-8 进入 fp16 subnormal 范围（min normal ~6.1e-5），仅 1-2 bit 有效精度。应在 float32 中完成除法后再 .to(tensor.dtype)。 — R7, confidence: 85%
+- [ ] **KVC-021** `[HIGH]` INT4KVCache 静态 scale 路径缺少 ENG-040 式 clip 检测 (int4_cache.py:349-367): INT8 cache (L339-351, L369-381) 检测 >5% 值在 clip boundary 时发 RuntimeWarning，INT4 cache 未实现此检测。INT4 量化范围仅 15 级（vs INT8 255 级），更易 clip 但无任何告警。 — R7, confidence: 90%
+- [ ] **KVC-022** `[MED]` INT8/INT4 append() 不验证 k/v shape 和 ndim (int8_cache.py:309-319, int4_cache.py:336-346): FP16KVCache (L167-175) 和 KIVIStyleKVCache (L270-279) 都验证 dim==4 和 k.shape==v.shape，INT8/INT4 仅检查 layer_id 范围，3D tensor 或 shape 不匹配的 k/v 会在 quantize 函数中产生难以理解的错误。 — R7, confidence: 92%
+- [ ] **KVC-023** `[MED]` INT8/INT4 get_kv()/get_int8_tensors()/get_int4_tensors() 不验证 layer_id 范围 (int8_cache.py:423-480, int4_cache.py:430-484): FP16KVCache (L209-211) 和 KIVIStyleKVCache (L388-389) 显式验证 layer_id bounds，INT8/INT4 使用越界 layer_id 会产生 IndexError 而非描述性 ValueError。 — R7, confidence: 95%
+- [ ] **KVC-024** `[MED]` get_kv() 在 seq_len==0 时行为不一致：KIVI 抛 ValueError，INT8/INT4 发 warning 返回空 tensor (kivi_style_cache.py:394 vs int8_cache.py:437-453): clear() 后调用 get_kv()，不同 cache 类型行为不同，统一接口的调用方需要区别处理。 — R7, confidence: 90%
+- [ ] **KVC-025** `[MED]` KIVI get_seq_len() 每次调用 O(N) max() 而 INT8/INT4 返回缓存的 _seq_len (kivi_style_cache.py:419-421): _seq_len 已在 append() L376 维护但 get_seq_len() 不使用。28-80 层模型每 decode step 多次调用 get_seq_len() 产生不必要开销。 — R7, confidence: 92%
+
+### QNT. 量化模块 — `src/quant/`
+- [ ] **QNT-020** `[HIGH]` _normalize_static_scale 在 int8_basic.py (L16-67) 和 int4_basic.py (L20-70) 间完整重复 (DRY): 两份代码体相同但 INT4 版 docstring 遗漏 4D shape case。若一方修 bug 另一方不同步，INT8/INT4 路径静默数值分歧。 — R7 quant deep review, confidence: 95%
+- [ ] **QNT-021** `[HIGH]` 所有 quantize 函数无 NaN/Inf 输入检查 (int8_basic.py:94, int4_basic.py:95, asymmetric_quant.py:44): NaN 输入 → abs_max=NaN → scale=NaN → round(x/NaN)=NaN → cast int8=0（平台相关），全零输出无任何报错。Inf 输入 → scale=Inf → round(x/Inf)=0，静默清零。上游 hidden state 损坏时量化层成为 NaN sink 无告警。 — R7, confidence: 90%
+- [ ] **QNT-022** `[HIGH]` quantize_asymmetric 返回 float32 scale/zero_point 而对称路径返回 input dtype — 接口契约不一致 (asymmetric_quant.py:81-116 vs int8_basic.py:151): KIVI cache 用 float32 存储规避了此问题，但 docstring (L41) 错误声称返回 "FP16 scale tensor"，公共 API 表面不一致。 — R7, confidence: 88%
+- [ ] **QNT-024** `[MED]` 静态 scale 路径 int8_basic.py:203-204 先 .to(tensor.dtype) 再 clamp(min=1e-5)：与 ENG-037 修复的动态路径（先 clamp 再 cast）模式相反。fp16 下近零 static scale cast 后变 0，clamp 救回为 1e-5 但精度已丢失。 — R7, confidence: 82%
+- [ ] **QNT-026** `[MED]` pack_int4 用 assert 校验偶数维度 (int4_basic.py:268)：python -O 下 assert 被移除，奇数维度 tensor 静默产出损坏输出。模块内所有其他校验均用 raise ValueError。 — R7, confidence: 90%
+- [ ] **QNT-027** `[MED]` pack_int4 不验证输入值在 [-8, 7] 范围内 (int4_basic.py:268-283): 值超范围时 (tensor+8).to(uint8) 的高 4 bit 溢出到相邻 nibble，silently corrupt packed output。公共 API (在 __all__ 中)。 — R7, confidence: 85%
+
+### SMK. Smoke 测试 — `scripts/smoke_test.py`
+- [ ] **SMK-006** `[HIGH]` smoke_test.py 仅验证 HF model.generate()，完全不测试项目自定义 Engine/Cache 管线 (smoke_test.py:174-182): 不导入也不调用 Engine.generate()、generate_from_ids()、任何 KVCache 类或 apply_int8_fused_patch。整个 src/engine/ + src/cache/ 可以完全损坏而 smoke test 仍通过。作为项目唯一的快速验证脚本，存在关键覆盖盲区。 — R7, confidence: 95%
+- [ ] **SMK-007** `[MED]` smoke_test.py 不验证输出确定性 (smoke_test.py:234-238): 仅检查 new_text.strip() 非空即 pass。seed=1234 + greedy 解码下输出应确定性可重复，但无参考字符串对比。模型权重损坏、量化错误等产出非空垃圾文本仍通过。 — R7, confidence: 88%
+
+---
+
+## Resolved
+
+<details>
+<summary>428 fixed + 26 false_positive + 8 wont_fix (click to expand)</summary>
+
+### AGG. 聚合
+- [x] **AGG-001** `[CRIT]` kivi_style 完全缺失显著性配对 — fixed commit 03ed4a0
+- [x] **AGG-004** `[HIGH]` longbench_official_macro 未被聚合 — fixed commit 03ed4a0
+- [x] **AGG-005** `[HIGH]` 显著性分析缺失 model_id/hardware 分组 — fixed commit 03ed4a0
+- [x] **AGG-006** `[HIGH]` RULER 深度分析缺失 model_id — fixed commit 03ed4a0
+- [x] **AGG-010** `[MED]` kv_mode 使用字母序排序而非语义顺序 (L552, L585, L648, L1322) — fixed
+- [x] **AGG-011** `[MED]` 显著性配对数据可能被 aggfunc="mean" 静默平均 (L998) — fixed
+- [x] **AGG-013** `[LOW]` LongBench 图 y 轴标签与新口径不一致 — fixed
+- [x] **AGG-016** `[MED]` 显著性 pairings 遗漏 `("int4_baseline", "int4_ours")` (L2207-2212): INT8 有 baseline-vs-ours 配对，INT4 仅有 `("int4_fused", "int4_ours")`。若 Phase5v2 不含 int4_fused 运行，则 INT4 无任何显著性比较 — fixed
+- [x] **AGG-017** `[MED]` `_export_per_model_layered_tables()` bare `except` 吞掉 CSV 读取错误 (aggregate_results.py): 空 `except:` 捕获所有异常（包括 CSV 格式损坏、权限错误），静默跳过该模型的表导出。应至少 `except Exception as e:` 并 log warning。 — D2 incremental, confidence: 90% — fixed
+- [x] **AGG-018** `[HIGH]` ~~_add_ci95_columns z=1.96 → t 分位数~~ **FIXED** — 改用 _t_critical(df) 函数（scipy + fallback lookup table），n≤1 返回 NaN（同时修复 AGG-027） — fixed f4728af
+- [x] **AGG-019** `[HIGH]` ~~sign-flip exact/MC 分支 p 值不一致~~ **FIXED** — exact 分支加 Phipson-Smyth +1 修正: p=(exceed+1)/(n_enum+1)，与 MC 分支一致 — fixed f4728af
+- [x] **AGG-020** `[HIGH]` ~~_read_csvs() bare except 静默跳过~~ **FIXED** — 改为 `except Exception as exc: logger.warning("Skipped unreadable CSV ...")` — fixed f4728af
+- [x] **AGG-021** `[HIGH]` _main_claims_32k_table 混合 outer/left merge 产生幽灵行或丢失数据 (aggregate_results.py:1467-1477): latency+memory 用 outer merge（可能产生 NaN 幽灵行），ppl/longbench/ruler 用 left merge（可能丢弃不在 latency 中的 kv_mode 数据）。无 merge 后行数 sanity check。 — D2 EXP rotation, confidence: 85% — fixed
+- [x] **AGG-022** `[HIGH]` _build_paired_metric_rows pivot_table aggfunc="mean" 静默折叠重复 seed 观测 (aggregate_results.py:1144-1153): 重复 (key, seed, kv_mode) 行被均值折叠，仅 print() 警告（非 logging）。折叠后 paired test 的独立性假设被违反，p-value 可能不可靠。 — D2 EXP rotation, confidence: 85% — fixed
+- [x] **AGG-023** `[HIGH]` ~~relative_gain pairings 缺少 kivi_style~~ **FIXED** — 添加 ("kivi_style","int8_ours") 和 ("kivi_style","int8_baseline") 到 pairings 列表 — fixed f4728af
+- [x] **AGG-024** `[HIGH]` ~~relative_gain key_cols 不含 model_id~~ **FIXED** — 所有 7 个 _relative_gain_table 调用的 key_cols 增加 "model_id" 前缀 — fixed f4728af
+- [x] **AGG-025** `[HIGH]` ~~_main_claims_32k_table merge on kv_mode 笛卡尔积~~ **FIXED** — 动态 merge_keys 包含 model_id（当存在时），所有列列表和 merge/drop_duplicates 均使用 model_id — fixed f4728af
+- [x] **AGG-026** `[HIGH]` gain_pct 与 diff 基于不同样本量计算 (aggregate_results.py:1156-1190): baseline=0 时 gain_pct=NaN，dropna(subset=...) 不含 gain_pct 列所以 NaN 行保留。但 _significance_summary 对 gain_pct 做额外 dropna，导致 gain_pct_mean 基于 n-k 样本而 diff_mean 基于 n 样本，n_pairs 不匹配。 — D1/D5 EXP rotation, confidence: 85% — fixed
+- [x] **AGG-027** `[MED]` ~~count=1 时 CI 半宽 0.0 → NaN~~ **FIXED** — AGG-018 修复中一并处理，ci_half.where(cnt > 1, np.nan) 替代原 0.0 — fixed f4728af
+- [x] **AGG-028** `[MED]` _to_numeric errors="coerce" 将非数值静默转 NaN，无 warning (aggregate_results.py:107-111): 对所有指标列使用 `pd.to_numeric(errors="coerce")`，异常字符串（"N/A"、"err"、空串）变 NaN 后被 groupby 忽略。5-seed 小样本下丢失 1 个点显著影响结论。 — D2 EXP rotation, confidence: 90% — fixed
+- [x] **AGG-030** `[MED]` _main_claims_32k_table latency 或 memory 为空即返回完全空表 (aggregate_results.py:1464-1467): 若 latency 数据缺失，即使 needle/ppl/longbench/ruler 完整，main claims 表也为空。无 warning。 — D2 EXP rotation, confidence: 90% — fixed
+- [x] **AGG-033** `[CRIT]` 两个 signflip 单元测试断言与 Phipson-Smyth +1 修正不一致 (test_aggregate_results_stats.py:28-29,44-46): test_exact_signflip_pvalue_known_case 期望 0.125 (2/16) 但实际返回 3/17=0.1765；test_exact_signflip_pvalue_mixed_signs 用旧公式 np.mean(>=) 计算期望值。pytest 将直接失败，阻塞 CI。 — D4+D6 incremental, confidence: 99% — fixed
 - [x] **AGG-002** `[HIGH]` RULER 聚合缺少子任务分拆 (aggregate_results.py) — D3 R3 验证: RULER 子任务聚合已在 aggregate_results.py L2471-2511 实现，输出 ruler_task_summary.csv 和 ruler_subtask_summary.csv -- fixed
 - [x] **AGG-003** `[HIGH]` 多模型对比缺少分层表 — D3 R3 验证: _export_per_model_layered_tables() 已在 L280-335 实现，按 model_id 拆分输出到 tables/per_model/ -- fixed
 - [x] **AGG-007** `[MED]` LongBench 聚合同时包含 3 个近义指标 (aggregate_results.py — fixed 081e3a9
@@ -65,7 +108,25 @@
 - [x] **AGG-048** `[MED]` _safe_t_crit(inf) 返回 0.0 导致 cnt=inf 时 CI 输出 0.0 而非 NaN，产生"零误差"伪像 (aggregate_results.py:227-233): `_safe_t_crit(inf)` 因 `not np.isfinite(inf)=True` 返回 0.0；`cnt.clip(lower=1)=inf`；`sem=std/sqrt(inf)=0.0`；`ci_half=0.0*0.0=0.0`；`.where(inf>1, np.nan)` 因 inf>1=True 保留 0.0。最终 ci95_half=0.0 在图表中呈现为"精确度极高"而非"数据无效"，误导读者。修复建议：在 _add_ci95_columns 开头添加 `cnt = cnt.replace([np.inf, -np.inf], np.nan)`，使 inf 经 `.where(cnt>1, np.nan)` 变为 NaN。 — D1, confidence: 82% — fixed 8f39875
 - [x] **AGG-047** `[MED]` _same_commit_prefix 将 empty/unknown 视为兼容 (aggregate_results.py:465-471): `not a or not b → True`，`a=="unknown" → True`，与 run_experiments.py 中已修复的 RUN-018 语义相反。aggregate_results.py 的 strict 模式 commit 一致性检查对 "unknown" commit 全部静默通过，不同代码版本混入同一 run 无法被检测。 — D2 full-scan, confidence: 85% -- fixed
 
-### CAL. 校准模块 — `scripts/calibrate_behavior.py` (R4 深度审查 2026-02-24)
+### CAL. 校准模块
+- [x] **CAL-001** `[CRIT]` MSE loss 维度语义错误 (L199-200) — fixed commit 20095fb
+- [x] **CAL-002** `[CRIT]` MSE loss 全局 mean 无维度 (L302) — fixed commit 20095fb
+- [x] **CAL-003** `[CRIT]` calibrate_behavior.py --calib_out None fallback — fixed
+- [x] **CAL-004** `[HIGH]` loss_accum 未除以样本数 (L177-206) — fixed commit 20095fb
+- [x] **CAL-005** `[HIGH]` MSE 无数值安全 clamp (L199) — fixed commit 20095fb
+- [x] **CAL-006** `[HIGH]` trial 排名受 loss 尺度影响 (L780-791) — fixed
+- [x] **CAL-007** `[HIGH]` 默认校准路径与 generate_loop 不匹配 (calibrate_behavior.py — fixed
+- [x] **CAL-008** `[HIGH]` 加载校准文件时无 loss_function 字段校验 (generate_loop.py — fixed
+- [x] **CAL-009** `[HIGH]` calibrate_behavior.py MSE clamping 移除导致旧校准产物不可复现 — fixed
+- [x] **CAL-010** `[MED]` 默认输出文件名硬编码为 kl.json — fixed commit 20095fb
+- [x] **CAL-011** `[MED]` select_best_trial() 无 key 存在性校验 — fixed commit 20095fb
+- [x] **CAL-012** `[MED]` MSE loss 语义未文档化 (L6, L234-239) — fixed
+- [x] **CAL-013** `[MED]` inv_tau shape 未在加载时验证 (generate_loop.py — fixed
+- [x] **CAL-014** `[MED]` MSE 与 KL loss 量级差异影响搜索行为 (calibrate_behavior.py — fixed
+- [x] **CAL-015** `[MED]` evaluate_quant_candidate 不使用 inv_tau (calibrate_behavior.py — fixed
+- [x] **CAL-016** `[MED]` calibrate_behavior.py MSE clamping 语义偏差：MSE 路径对 p_ref/p_quant 执行 clamp(min=eps) 后再计算差的平方。对 MSE 而言 clamp 不防 NaN（MSE 不含 — fixed...
+- [x] **CAL-017** `[LOW]` loss_accum NaN 无检测 (calibrate_behavior.py — fixed
+- [x] **CAL-018** `[LOW]` search_trials.csv 已按 loss_function 区分文件名 (calibrate_behavior.py — false_positive
 - [x] **CAL-019** `[HIGH]` Q 向量计算缺失 input_layernorm — 校准注意力分布与真实推理系统性偏差 (calibrate_behavior.py:793-795): `attn.q_proj(hidden_states[layer_idx])` 跳过了 `input_layernorm`，而 Qwen2DecoderLayer 在 self_attn 前先经过 layernorm。校准时的 Q 向量与模型实际推理产出的 Q 不同，导致 inv_tau 和超参数搜索基于错误的注意力分布。 — D1 R4 calibration deep review, confidence: 95% — fixed d56278d
 - [x] **CAL-020** `[HIGH]` Q 向量未施加 RoPE，与已旋转的 K 做点积 (calibrate_behavior.py:795-798): Q 仅经 q_proj 无 RoPE，而 K 来自 past_key_values 已施加 RoPE。`logits = q @ k.T` 用非旋转 Q 与旋转后 K 做点积，注意力分布峰值位置与真实推理完全不同。与 CAL-019 叠加，校准产物数学基础不正确。 — D1 R4, confidence: 93% — fixed d56278d
 - [x] **CAL-021** `[HIGH]` dummy 数据 fallback 返回字符串而非张量 — 必然 AttributeError 崩溃 (calibrate_behavior.py:95-97,778-779): WikiText-2 下载失败时 `get_calibration_dataset()` 返回字符串列表，main() 中 `input_ids.to(model.device)` 因字符串无 `.to()` 方法而崩溃。except Exception 吞噬所有异常降级到必然崩溃路径。 — D2 R4, confidence: 99% — fixed 7e70711 — raise RuntimeError on dataset download failure
@@ -79,50 +140,73 @@
 - [x] **CAL-031** `[LOW]` model.model.layers 硬编码假设 Qwen/LLaMA 架构 (calibrate_behavior.py:793): 对当前三个目标模型有效，但可扩展性差。 — D7 R4, confidence: 90% — fixed 46ca296
 - [x] **CAL-032** `[LOW]` getattr 默认值仅对 1.5B 正确 — 7B/8B config 缺字段时静默用错误参数 (calibrate_behavior.py:766-769): num_heads=12 对 1.5B 正确但 7B 为 28。 — D5 R4, confidence: 78% — fixed 46ca296
 
-### KRN. Triton Kernels — `src/kernels/` (R4 深度审查 2026-02-24)
-- [x] **KRN-001** `[HIGH]` V/K scale masked load `other=1.0` 设计脆弱 (triton_decode_attn_int8.py:200,258): 被 mask 位置 int8=0 * scale=1.0=0.0 当前安全，但若 int8 的 other 值被修改则 scale=1.0 会放大错误。更安全选择 other=0.0。 — D1 R4, confidence: 92% — false_positive: L239 tl.where(mask,qk,-inf) 在 softmax 前已将 padding 置为 -inf，scale 选择不影响输出
-- [x] **KRN-002** `[HIGH]` kernel 自身不防御 ctx_len=0（依赖 wrapper 层 L377 提前返回） (triton_decode_attn_int8.py:175): ctx_len=0 时循环不执行，acc/l_i=0.0/0.0=NaN。wrapper L446-448 用零覆盖。若绕过 wrapper 直接调用 kernel 则 NaN 泄露。 — D5 R4, confidence: 88% — fixed: L377-378 全批次零保护 + L446-448 混合批次零覆写 (ENG-016)
-- [x] **KRN-003** `[HIGH]` `q.to(tl.float32)` 在循环内重复执行，应提升到循环外 (triton_decode_attn_int8.py:234): 性能回归。32K 序列 ~500 次迭代每次对 HEAD_DIM=128 元素做 fp16→fp32 转换。Triton 编译器可能优化但不应依赖。 — D7 R4, confidence: 95% — false_positive: Triton JIT 编译器 LICM 自动提升循环不变量，q 在循环内从未修改
-- [x] **KRN-005** `[MED]` elementwise+reduce 未使用 tl.dot，错失 tensor core 加速 (triton_decode_attn_int8.py:271,235): weighted_v 和 QK score 计算可用 tl.dot 利用 tensor core。 — D7 R4, confidence: 85% — fixed (documented)
-- [x] **KRN-006** `[MED]` INT4 wrapper docstring 声称 "[-7, 7]" 但 unpack_int4 实际返回 [-8, 7] (triton_decode_attn_int4.py:5-6): 功能正确但文档不准确。 — D7 R4, confidence: 98% — fixed 7e70711 — fixed docstring [-7,7]→[-8,7]
-- [x] **KRN-007** `[MED]` 无 HEAD_DIM 是否为 2 的幂的验证 (triton_decode_attn_int8.py:156): tl.arange(0, HEAD_DIM) 要求 2 的幂，当前模型均满足但 wrapper 无校验。 — D5 R4, confidence: 80% — fixed 7e70711 — added HEAD_DIM power-of-2 validation
-- [x] **KRN-010** `[MED]` 无 @triton.autotune，BLOCK_SIZE 靠 heuristic 选择 (triton_decode_attn_int8.py:388-403): 研究项目可接受，但论文性能数字可能非最优。 — D7 R4, confidence: 92% — fixed (documented)
-- [x] **KRN-011** `[MED]` INT4 wrapper unpacked 路径不验证 dtype (triton_decode_attn_int4.py:29-34): bit_packed=False 时直接返回原 tensor 不检查 dtype，float16 输入会在 kernel 中产生错误数值。 — D5 R4, confidence: 85% — fixed 7e70711 — added dtype validation for unpacked path
-- [x] **KRN-012** `[LOW]` `pid = tl.program_id(0)` 赋值后被覆盖，dead code (triton_decode_attn_int8.py:133): 早期 1D grid 设计遗留。 — D7 R4, confidence: 100% — fixed 7e70711 — removed dead pid assignment
-- [x] **KRN-014** `[LOW]` offs_g 和 group_indices 是 loop-invariant + dead code (triton_decode_attn_int8.py:198,212): 应移到循环外或删除。 — D7 R4, confidence: 90% — fixed 7e70711 — moved loop-invariant code outside loop
-
-### UTIL. 工具模块 — `src/utils/` (R5 深度审查 2026-02-24)
-- [x] **UTIL-001** `[HIGH]` CUDATimer.stop() 在 prefill 调用点位于 try/finally 外，异常时 timer 未停止 (generate_loop.py:689 vs timing.py:82-100): prefill_timer.stop() 在 try 块外，model() 抛异常时跳过 stop()，ttft_ms 未定义。应使用 timer_context() 或移入 finally。 — R5, confidence: 90% — fixed 75d691c — prefill_timer.stop() moved into try/finally
-- [x] **UTIL-005** `[HIGH]` torch.use_deterministic_algorithms(True) 静默吞没，确定性可能未激活 (repro.py:35-39): bare `except Exception: pass` 丢弃所有错误包括 AttributeError，实验日志显示 deterministic=True 但实际未生效。论文复现性风险。 — R5, confidence: 95% — fixed 75d691c — replaced bare except with warning
-- [x] **UTIL-002** `[MED]` _cuda_available 在构造时一次性评估，不随进程 CUDA 状态变化更新 (timing.py:78-80) — R5, confidence: 70% — fixed 75d691c — documented _cuda_available design choice
-- [x] **UTIL-003** `[MED]` reset() 不重置 _cuda_available，复用 timer 语义不完整 (timing.py:109-112) — R5, confidence: 65% — fixed 75d691c — documented reset() behavior
-- [x] **UTIL-004** `[MED]` timer_context docstring sync_after 描述为 "before exiting"，措辞误导 (timing.py:116-138) — R5, confidence: 80% — fixed 75d691c — fixed timer_context docstring
-- [x] **UTIL-007** `[MED]` vars(args) 对无 __dict__ 对象抛 TypeError (repro.py:93): 函数签名 args: Any 但 unconditional vars()，dict 输入崩溃。 — R5, confidence: 85% — fixed 75d691c — type-check args before vars()
-- [x] **UTIL-008** `[MED]` write_config_snapshot 无 I/O 异常处理，长时实验末端崩溃 (repro.py:138-149): YAML 写入失败直接传播，可能丢失已完成的实验结果。 — R5, confidence: 88% — fixed 75d691c — wrapped I/O in try/except with warning
-- [x] **UTIL-009** `[MED]` resolve_quant_bits 对 kivi_style 无条件返回 8，KIVI-INT4 场景返回错误值 (repro.py:125): quant_bits_arg=None + kv_mode=kivi_style → 返回 8，CSV 元数据污染。 — R5, confidence: 90% — fixed 75d691c — documented kivi_style default
-- [x] **UTIL-006** `[LOW]` CUBLAS_WORKSPACE_CONFIG 在 torch import 后设置，cuBLAS 可能已缓存 (repro.py:33-34) — R5, confidence: 75% — fixed 75d691c — documented CUBLAS_WORKSPACE_CONFIG timing
-- [x] **UTIL-010** `[LOW]` build_config_snapshot 硬编码 decoding 参数而非读取实际运行时配置 (repro.py:82-102) — R5, confidence: 80% — fixed 75d691c — documented hardcoded greedy decode
-- [x] **UTIL-011** `[LOW]` resolve_pretrained_path 在线下载失败静默回退到 model_id 无日志 (hf.py:58-61) — R5, confidence: 85% — fixed 75d691c — added warning on silent fallback
-- [x] **UTIL-012** `[LOW]` model_id=None 时返回 None 而非 raise ValueError (hf.py:32-33) — R5, confidence: 80% — fixed 75d691c — raise ValueError for None model_id
-- [x] **UTIL-015** `[LOW]` get_gpu_memory_mb docstring "current" 与 "Peak" 矛盾 (timing.py:141-150) — R5, confidence: 90% — fixed 75d691c — fixed get_gpu_memory_mb docstring
-
-### CFG. 配置 — `configs/`
+### CFG. 配置
+- [x] **CFG-001** `[HIGH]` 1.5B 配置完全缺失 KIVI-style 条目 — fixed commit f07422d
+- [x] **CFG-002** `[HIGH]` 7B/8B 配置完全缺失吞吐量 batch scaling 条目 — fixed commit f07422d
+- [x] **CFG-003** `[HIGH]` 7B/8B 配置缺失 INT4 长上下文运行 — fixed commit f07422d
+- [x] **CFG-004** `[HIGH]` 消融 A-3 decode_attn_impl 混淆因子 — fixed commit f07422d
+- [x] **CFG-005** `[HIGH]` 消融 A 节缺少 KIVI-style — fixed commit f07422d
+- [x] **CFG-006** `[HIGH]` 7B/8B 校准产物尚未生成（Phase 2 依赖，非 bug） — false_positive
+- [x] **CFG-007** `[MED]` final_emnlp2026_v1.yaml LLaMA 本地路径硬编码 — fixed
+- [x] **CFG-010** `[MED]` 消融 A-2 (MSE) 使用 use_attn_temperature — false_positive
+- [x] **CFG-014** `[MED]` ablation_dimensions.scale_strategy 仅列 [static, adaptive]（L77）— 计划中为 "static vs adaptive vs dynamic" 三方，与消融配置 D 节同一缺失 — fixed
+- [x] **CFG-015** `[MED]` LLaMA-3.1-8B 使用本地路径而非 HF ID — fixed
+- [x] **CFG-016** `[MED]` Claims C9-C11 定义不够精确 — fixed
+- [x] **CFG-017** `[LOW]` 1.5B 配置头部注释缺少 kivi_style kv_mode 和 kivi_asymmetric calib_strategy — false_positive
+- [x] **CFG-018** `[LOW]` 消融 A-1/B-1/C-1 是完全相同的 run — false_positive
+- [x] **CFG-019** `[LOW]` benchmarks 仅列 4 个质量评测（L67-71）— 未包含 latency/memory/throughput 系统性能 benchmark，虽然这些是独立维度但在 meta-config 中应有提及 — fixed
+- [x] **CFG-020** `[LOW]` models[0].calibration_artifacts 列出了尚不存在的 MSE 产物（int8_mse/int4_mse，L38-39）— MSE 校准实现有已知 bug，这些产物暂不可用 — fixed
+- [x] **CFG-021** `[LOW]` meta-config 无执行工作流说明 — fixed
 - [x] **CFG-008** `[MED]` 7B/8B 长上下文仅 3 条 vs 1.5B 的 18 条 — false_positive: 7B/8B configs explicitly state "Core runs only (no throughput sweep, no ablation variants)" — intentional external-validity scope reduction, not a coverage gap
 - [x] **CFG-009** `[MED]` 1.5B 校准文件命名不一致 (kv_calib_kl_selected_v3_quick.json vs 7B/8B 的 kv_calib_kl_qwen25_7b_int8.json) — wont_fix: cosmetic naming inconsistency (1.5B: selected_v3_quick vs 7B/8B: model_bits). Does not affect correctness — each config points to its correct calib_file. Renaming would invalidate existing experiment references.
 - [x] **CFG-011** `[MED]` 消融 D 节缺少 dynamic scales 变体 — false_positive: Ablation D-3 (ablation_dynamic_4k, use_static_scales=false) already exists in exp_matrix_ablation_1p5b_v1.yaml:270-283
 - [x] **CFG-012** `[MED]` 所有消融仅 seq_len=4096 — false_positive: ablation config header states "All runs: INT8, seq_len=4096" — intentional variable isolation at fixed context length; main exp_matrix has full seq_len sweep
 - [x] **CFG-013** `[MED]` 消融 C 节 (group_size sweep) 使用同一个 calib_file — false_positive: group_size is a runtime inference parameter that affects scale chunking, not calibration. Using same calib_file correctly isolates the group_size variable for the ablation
-- [ ] **CFG-022** `[MED]` 1.5B 吞吐量实验 b1-b16 使用 use_attn_temperature:true 而 b24-b32 使用 false，7B/8B 全部 false (exp_matrix.yaml:391-448): 同一模型 throughput 曲线混入 temperature 变量，跨模型对比也不对等。week4/week5 snapshot 同理。 — D1 TST+configs rotation, confidence: 95%
 - [x] **CFG-023** `[LOW]` 7B/8B int4_ours curve 使用 use_attn_temperature:true 但 int8_ours curve 使用 false (exp_matrix_qwen25_7b_v1.yaml:130-180 vs 275-312): INT8 vs INT4 对比中温度策略不同，是混淆变量。 — D1 TST+configs rotation, confidence: 92% — false_positive: int8_ours 7B/8B runs use _no_temp_adaptive_fused variant (explicit in run_name), while int4_ours uses temperature — deliberate per-method config, not an unintended inconsistency
 - [x] **CFG-024** `[LOW]` runtime.quant_defaults use_attn_temperature:true 但 int8_ours curve 运行覆盖为 false (exp_matrix_qwen25_7b_v1.yaml:33): 默认值与实际不一致，新增运行可能意外使用 temperature。 — D1 TST+configs rotation, confidence: 85% — false_positive: standard YAML default/override pattern — quant_defaults.use_attn_temperature=true provides default for int4_ours runs; int8_ours runs override to false per their variant name
 - [x] **CFG-025** `[LOW]` Frozen snapshot configs header comments 含过时 conventions — frozen snapshots 有意保留历史状态，修改会破坏其作为时间快照的意义 -- wont_fix
-- [ ] **CFG-026** `[HIGH]` 7B/8B 配置引用的 calib_file 在 artifacts/ 中全部缺失 (exp_matrix_qwen25_7b_v1.yaml:32,132,150,...; exp_matrix_llama31_8b_v1.yaml:35,135,153,...): 4 个文件均不存在 — `artifacts/kv_calib_kl_qwen25_7b_int8.json`、`artifacts/kv_calib_kl_qwen25_7b_int4.json`、`artifacts/kv_calib_kl_llama31_8b_int8.json`、`artifacts/kv_calib_kl_llama31_8b_int4.json`。run_experiments.py L1147-1158 在非 dry_run 时检查 calib_file_path.exists()，缺失则 print error + return 2，7B/8B 所有 int8_ours/int4_ours 运行无法执行。与 objective.md §9（扩展模型实验为已批准目标）直接冲突。 — D4 configs deep review, confidence: 99%
 - [x] **CFG-027** `[MED]` ablation 配置头部 conventions 注释 kv_mode 枚举含 `mixed` 但 SUPPORTED_KV_MODES 为 `int4_ours_mixed` (exp_matrix_ablation_1p5b_v1.yaml:19): 注释 `# - kv_mode: fp16 | int8_baseline | int8_ours | int4_baseline | int4_fused | mixed` 中的 `mixed` 与 run_experiments.py SUPPORTED_KV_MODES 中的实际枚举值 `int4_ours_mixed` 不匹配；ablation 矩阵实际上也未使用任何 mixed 模式条目，维护者参考注释添加 mixed 运行时会因 kv_mode 无效被 SUPPORTED_KV_MODES 校验拒绝。 — D4 configs deep review, confidence: 90% — fixed db0b23a
 - [x] **CFG-028** `[MED]` ablation A-2 的 calib_strategy: mse 字段在 generate_loop.py 中无效，MSE 消融结果不反映实际 MSE 校准行为 (exp_matrix_ablation_1p5b_v1.yaml:84): generate_loop.py 的 generate_from_ids() 无 calib_strategy 参数；run_experiments.py 将 calib_strategy 透传给子脚本（L1296），但 eval_ppl.py 等子脚本的 --calib_strategy 参数不影响引擎行为，引擎仅读 calib_file 的 scales。MSE ablation 运行时实际行为由 `artifacts/kv_calib_mse_1p5b_int8.json` 的内容决定，`calib_strategy=mse` 字段被静默忽略，与 RQ1 研究设计意图（对比三种校准方法）不符；若 MSE calib_file 未被正确生成，此运行退化为无 scales 的 int8_ours。 — D4 configs deep review, confidence: 85% — false_positive: calib_strategy field is metadata passed to eval scripts argparse but unused in any logic — actual calibration is determined by calib_file path; the field serves as provenance documentation
-- [ ] **CFG-029** `[HIGH]` LLaMA-3.1-8B 配置 model_revision: null 导致实验无法 pin-revision 复现 (exp_matrix_llama31_8b_v1.yaml:22): run_experiments.py L1287 `if model_revision:` 对 null/None 跳过 `--model_revision` 参数传递，子脚本默认加载 HF Hub main 分支最新版。1.5B 有 pinned revision `989aa7980e4cf806f80c7fef2b1adb7bc71aa306`，7B 有 `a09a35458c702b33eeacc393d103063234e8bc28`，唯独 LLaMA 为 null，与 objective.md §9"固定决策：revision pinned"直接冲突，存在跨时间/跨机器复现性风险。 — D4 configs deep review, confidence: 95%
 - [x] **CFG-030** `[MED]` config_utils.py KV_MODE_ORDER 中 int4_fused 排在 int4_ours_mixed 之后，与 CLAUDE.md §9 标准顺序不一致 (scripts/config_utils.py:21-31): 实际顺序为 `[..., int4_baseline, int4_ours, int4_ours_mixed, int4_fused, kivi_style]`，而 CLAUDE.md §9 量化方法列表为 `fp16, int8_baseline, int8_ours, int4_baseline, int4_fused, int4_ours, int4_ours_mixed, kivi_style`（int4_fused 在 int4_ours 之前）。aggregate_results.py 和 export_tables_latex.py 均从 config_utils 导入 KV_MODE_ORDER 用于论文表格列排序，当前顺序将 int4_fused 置于 int4_ours_mixed 之后，与官方规范不符，可能导致表格展示顺序与论文叙述逻辑不一致。 — D4 configs deep review, confidence: 88% — fixed db0b23a
 
-### ENG. 引擎模块 — `src/engine/`
+### CHK. 完整性检查
+- [x] **CHK-001** `[CRIT]` OOM 分类被 elif 链短路 (L94-109) — fixed commit 1aa5c95 (OOM 检查已移至 if 链首位 L147-148)
+- [x] **CHK-002** `[HIGH]` manifest 无 failure_type 字段 (L85) — fixed
+- [x] **CHK-003** `[HIGH]` 不验证 kivi_style 运行完整性 — fixed
+- [x] **CHK-007** `[HIGH]` manifest_status="running" + 完整有效 CSV 被错判为 mixed_csv_non_success (L153-159): success 分支要求 manifest_status∈{success,skipped}，"running" 落入 L159 的 mixed 分支。进程在写完 CSV 后崩溃但未更新 manifest 时触发，导致不必要的重跑。 — D2, confidence: 90% — fixed
+- [x] **CHK-008** `[HIGH]` 日志 errors="ignore" 掩盖 OOM/traceback 检测 (L49): `_read_text()` 用 `errors="ignore"` 静默丢弃非 UTF-8 字节，若 OOM 关键字跨越被丢弃的字节则 re.search 漏检。应用 `errors="replace"`。 — D2+D5, confidence: 88% — fixed
+- [x] **CHK-009** `[HIGH]` JSON manifest 损坏被 except 静默返回 None (L37-42): `_read_json()` 对任何异常（含 JSONDecodeError）返回 None，调用方无法区分"文件不存在"与"文件损坏"。损坏的 manifest 被当作空处理，运行被误判为 missing。 — D2, confidence: 88% — fixed
+- [x] **CHK-010** `[HIGH]` 新增任务类型无 CSV 模式和产物验证 → 默认通过 (L17-24, L85-91): TASK_TO_CSV_PATTERN 仅 6 任务，新任务 csv_pattern="" → glob 无匹配 → has_csv=False → "missing"。但 `_has_task_level_artifacts` 对非 LB/RULER 任务返回 True，无实际验证。 — D2+D1+D7, confidence: 95% — fixed
+- [x] **CHK-011** `[MED]` CSV 三种失败模式不区分 (L62-74): `_csv_has_rows()` 对文件不存在/仅 header/读取异常均返回 False，调用方合并为 `has_valid_csv=False`，无法针对性修复。 — D2, confidence: 85% — fixed
+- [x] **CHK-012** `[MED]` 非整数 seed 参数导致未处理 ValueError (L270): `int(x)` 对 "abc" 等输入直接崩溃，无友好错误提示。 — D2+D5, confidence: 85% — fixed
+- [x] **CHK-013** `[MED]` 空 required/stress_run_names 产生虚假 complete=True (L268-269, L318): 空列表 → 空 expected → missing_run_names=[] → required_complete=True。无至少一个 run 的前置检查。 — D2+D5, confidence: 85% — fixed
+- [x] **CHK-014** `[MED]` --tasks 默认值与 run_experiments.py 不一致 (L252): check 脚本默认 "profile_latency,profile_memory"(2 任务)，run 脚本默认 4 任务。长实验检查时漏验 eval_ppl/eval_needle。 — D4, confidence: 86% — fixed
+- [x] **CHK-016** `[MED]` Traceback 检测大小写敏感 (L58): 使用精确字符串 "Traceback (most recent call last):" 匹配，小写变体漏检。OOM 检测用了 re.IGNORECASE 但 Traceback 没有。 — D7, confidence: 88% — fixed
+- [x] **CHK-017** `[MED]` 状态转移链 7 层嵌套无注释 (L147-166): 20 行 elif 链含复杂布尔表达式和多个不可达分支，无状态机文档。维护易引入逻辑错误。 — D7, confidence: 100% — fixed
+- [x] **CHK-019** `[MED]` L159 中 "skipped" 是不可达分支: has_csv=True + manifest_status="skipped" 总被 L153 先捕获（"skipped" 在 L154 的集合中）。死代码增加阅读困惑。 — D7, confidence: 95% — fixed
+- [x] **CHK-004** `[MED]` 不验证 CSV 内容完整性 (L80) — fixed 6f23824
+- [x] **CHK-005** `[MED]` LongBench/RULER 任务级完整性无验证 (L16-23, L146-148) — fixed 6f23824
+- [x] **CHK-006** `[MED]` dev agent 仍未确认 O 节 3 CRITICAL + T 节 1 CRITICAL — Phase Gate CLEAR, 所有 CRIT 已解决 -- fixed
+- [x] **CHK-015** `[MED]` failure_type 域值枚举与 run_experiments.py _classify_failure() 不同步 (L94-108): 两处独立维护 failure_type 枚举，新增类型时易遗漏。 — D4, confidence: 84% — fixed 2f6cddb
+- [x] **CHK-018** `[MED]` _split_csv/_read_json/_read_text 与 run_experiments.py 重复定义 (L27-51): 3 个工具函数在两个脚本中独立实现，修 bug 需改两处。 — D7, confidence: 100% — fixed 6f23824
+- [x] **CHK-020** `[LOW]` 返回类型 Dict[str, Any] 无 TypedDict/dataclass 约束 (L168-181, L238-243): 字段名错误无法被静态检查捕获。 — D7, confidence: 80% — fixed 0056a3d
+- [x] **CHK-021** `[MED]` 空 manifest + 存在 CSV 被判定为 "success" (check_run_completeness.py:153-156): manifest_status="" + manifest_failure="" 时 state="success"。manifest 损坏或手动拷贝 CSV 时虚假通过，可能导致信任不可靠数据。 — D2 RUN rotation, confidence: 85% -- fixed
+- [x] **CHK-022** `[LOW]` _read_json OSError/PermissionError 无日志静默返回 None (check_run_completeness.py:54-55): 仅 JSONDecodeError 有 logger.warning，`except Exception: return None` 对 OSError（权限拒绝、IO 错误）无任何日志。manifest 读取因权限问题失败时与 manifest 不存在无法区分，导致所有任务按"无 manifest"路径分类。 — D2 full-scan, confidence: 83% — fixed 2f6cddb
+- [x] **CHK-023** `[HIGH]` _detect_failure_type() canonical 枚举注释缺少 "timeout"，与 run_experiments.py 新增 timeout 路径失同步 (check_run_completeness.py:137-165 vs run_experiments.py:1452-1487): run_experiments.py 新增 timeout 处理分支，将 failure_type="timeout" 直接写入 manifest（L1457-1468），绕过 _classify_failure()。check_run_completeness.py 的 _detect_failure_type() 注释（L149-154）声称列出了 canonical failure_type 枚举集合（oom/interrupt/traceback/runtime_error/unknown），但未包含 "timeout"。实际运行中 manifest_failure="timeout" 会经 L163-164 的 fallback 分支透传输出，功能上不报错；但注释的权威性下降，未来新增 failure_type 时维护者参考注释做 exhaustiveness 检查会遗漏 "timeout"，CHK-015 所述不同步问题因此加剧。修复建议：同步更新 _detect_failure_type() 注释枚举，增加 "timeout" 条目。 — D4, confidence: 91% -- fixed
+
+### ENG. 引擎模块
+- [x] **ENG-002** `[HIGH]` generate() 函数缺少 quant_bits 参数 — fixed commit 20095fb
+- [x] **ENG-015** `[HIGH]` Triton kernel 硬编码 fp16 输出与 bf16 输入 dtype 不匹配 (triton_decode_attn_int8.py:285): kernel `tl.store` 强制转 `tl.float16`，但 wrapper 分配 `torch.empty_like(q)` 继承 q 的 dtype。若模型以 bf16 运行，位模式解释错误产生静默数值偏差。当前所有脚本用 fp16 不触发。 — D1, confidence: 92% — fixed
+- [x] **ENG-016** `[HIGH]` Triton kernel 在 context_lens=0 时 softmax 除零产生 NaN (triton_decode_attn_int8.py:281): online softmax `l_i=0.0`，无 token 时 `acc/l_i = 0/0 = NaN`；torch_ref 正确返回零向量。两实现边界行为不一致。 — D1, confidence: 95% — fixed
+- [x] **ENG-017** `[HIGH]` apply_int8_fused_patch layers=None 后仍硬访问 model.model.layers[0] (patch_model.py:720-755): try 块吞异常设 layers=None，但 L755 在 try 外再次访问同一属性，产生不可理解的 AttributeError 而非清晰的 ValueError。 — D2+D5, confidence: 95% — fixed
+- [x] **ENG-018** `[MED]` max_new_tokens=0 时仍生成 1 个 token (generate_loop.py:639,655): prefill 后无条件追加第一个 argmax token，decode loop `range(-1)` 不执行，`gen_len=1` 返回。语义违反 "生成 0 个新 token" 约定。 — D5, confidence: 95% — fixed
+- [x] **ENG-019** `[MED]` inv_tau[layer_idx] 无越界校验 (patch_model.py:559): fused decode 直接索引无边界检查，prefill 路径有检查。校准层数不匹配时报无上下文 IndexError。 — D5, confidence: 92% — fixed
+- [x] **ENG-020** `[MED]` batch_size=0 / prompt_len=0 未校验 (generate_loop.py:367-374): `input_ids.shape=[0,S]` 或 `[B,0]` 导致下游 IndexError（logits[:,-1,:] 在空维度索引）或未定义行为。 — D5, confidence: 95% — fixed
+- [x] **ENG-022** `[MED]` prefill temperature hooks 在 model 结构不标准时静默返回空列表 (generate_loop.py:172-175): 校准文件已加载但 hooks 未注册无 warning，用户以为使用 ours 方法实际无 temperature 校正。 — D2, confidence: 90% — fixed
+- [x] **ENG-024** `[MED]` _maybe_dump_fused_decode 类型签名声明 torch.Tensor 但实际可接收 None (patch_model.py:308-309,677-689): `cache_kind=int4` + dump 未启用时传入 None。dump 启用时会 crash。应改为 Optional。 — D4+D2, confidence: 92% — fixed
+- [x] **ENG-026** `[MED]` calib_group_k 使用 `or` 运算符，合法值 0 被静默替换 (generate_loop.py:476-477): JSON 中 `"group_size_k": 0` 被 Python `or` 视为 falsy 丢弃。 — D2, confidence: 82% — fixed
+- [x] **ENG-028** `[MED]` INT4 动态量化 scale 强制转 fp16 与 INT8 路径不一致 (quant/int4_basic.py:131): INT8 用 `abs_max.to(tensor.dtype)` 保留输入精度，INT4 硬转 `torch.float16`。 — D1, confidence: 88% — fixed
+- [x] **ENG-031** `[MED]` kv_mode 集合常量重复硬编码 4 次 (generate_loop.py:398,668,684,701): `["int8_fused","int8_ours","int4_fused","int4_ours","int4_ours_mixed"]` 应提取为模块级 frozenset。 — D7, confidence: 95% — fixed
 - [x] **ENG-001** `[HIGH]` patch_model.py 移除 kv_heads 默认推理 (L100-108) — D1 深度验证 2026-02-24: 问题已修复为 false_positive 降级。`apply_int8_fused_patch`（L750-791）现行为：(1) 优先读 `model.config.num_key_value_heads`（L753，`getattr(cfg, "num_key_value_heads", cfg_q_heads)`），Qwen2.5-7B/LLaMA-3.1-8B 等 GQA 模型均在 config 中提供此字段，因此 L770-771 的 `_infer_heads_from_proj` 推断分支对这些模型不会触发；(2) 即便推断失败，L772-786 不再静默降级，改为 `logger.warning` 明确警告并设 `kv_heads = q_heads`；(3) 运行时在 `_resolve_attn_shape_meta`（L509-523）有第二道防护，若 q_heads % kv_heads != 0 则抛 ValueError。对于 Qwen2.5-7B（q=28, kv=4）和 LLaMA-3.1-8B（q=32, kv=8）均能从 config 正确读取，不会触发 fallback。原始 issue 描述的"移除默认推理"已被重构为"有日志的显式 fallback + 运行时校验"，实际风险已消除。降级为 false_positive。 — D1 重新验证, confidence: 92% — false_positive: D1 verified, design-as-intended
 - [x] **ENG-003** `[HIGH]` decode 阶段 KIVI 走 dequant→re-quant 路径 (L635-678) — D1 深度验证 2026-02-24: 确认这是 KIVI 设计的固有特性，非实现 bug，降级为 false_positive。代码分析：`kivi_style_cache.py` L317-332，decode append 路径复用 prefill 时计算的 `k_scale/k_zp`（per-channel）直接重新量化新 token，公式 `q = round((k.float() - zp) / s).clamp(qmin, qmax)`，无需先 dequant 再 requant。V cache 走 per-token 量化，每个 decode token 独立计算自己的 scale/zp（L337-340），也不存在 dequant→requant 往返。generate_loop.py L728-734 中 `kivi_style` 的 decode 路径确实调用 `kv_cache.get_kv(i)` 把所有历史 KV dequant 出来传给模型，但这与 tracker 描述的 "L635-678" 无关（那是 fused 路径，KIVI 不走 fused）。真正的精度问题是 K 在 decode 阶段用 prefill scale 对越界值 clamp 而非重新计算 scale，这是 KIVI 论文的设计选择，已在 L319 注释 "ENG-007" 中明确标注。ENG-007 已 fixed。此 issue 行号引用错误且描述的问题（dequant→requant 往返）不成立。降级为 false_positive。 — D1 重新验证, confidence: 88% — false_positive: D1 verified, design-as-intended
 - [x] **ENG-004** `[HIGH]` KIVI 模式静默忽略参数 (L412-486, L563) — D1 深度验证 2026-02-24: 确认与 ENG-014 完全重复且 ENG-014 已 fixed，降级为 false_positive。generate_loop.py L342-391 现行为：当 `kv_mode='kivi_style'` 且传入 `calib_file/use_attn_temperature/use_static_scales/adaptive_static_scales/adaptive_static_margin/adaptive_static_k/adaptive_static_v/allow_missing_calib` 时，逐字段检查并将忽略的参数名收集到 `ignored_fields` 列表（L361-378），然后通过 `warnings.warn(..., UserWarning)` 明确告知调用方（L379-383）；`decode_attn_impl` 若非 'torch_ref' 也会发出 warning 并强制覆盖（L385-391）。不存在静默忽略。该 issue 描述的问题在 ENG-014 修复时已一并解决。 — D1 重新验证, confidence: 95% — false_positive: D1 verified, design-as-intended
@@ -169,7 +253,54 @@
 - [x] **ENG-056** `[LOW]` generate_loop.py L859-865: locals() cleanup 模式脆弱，kv_cache 总是已定义使 if 检查无意义 — R6 GEN-028 — fixed 264dcc3
 - [x] **ENG-057** `[LOW]` patch_model.py L21: _FUSED_DUMP_WRITTEN 模块级 set 跨 test run 持续存在，第二次 dump 被静默抑制 — R6 PAT-019 — fixed 264dcc3
 
-### EXP. 导出/报告 — `scripts/export_*.py`
+### EVL. 评测脚本
+- [x] **EVL-001** `[CRIT]` eval_longbench.py _classification_accuracy() 语义变化未文档化 (L265) — fixed commit 52f4abf (CLASSIFICATION_MATCH_POLICY 常量 + docstring + CSV audit 字段)
+- [x] **EVL-002** `[CRIT]` **RULER CWE 子任务在 1.5B *_long 配置下触发 max_position_embeddings 溢出** — fixed commit b7f4c36 (_effective_prompt_budget() 确保 prompt + gen ≤ max_model_len)
+- [x] **EVL-003** `[CRIT]` export_tables_latex.py KV_MODE_DISPLAY 缺 kivi_style — fixed commit 8bf9414
+- [x] **EVL-004** `[CRIT]` export_tables_latex.py KV_MODE_ORDER 缺 kivi_style — fixed commit 8bf9414
+- [x] **EVL-005** `[CRIT]` MK-NIAH hits_exact 计数器死代码 (L172-174) — fixed
+- [x] **EVL-006** `[CRIT]` VT 多链评分仅评价第一条链 (L216, L442) — fixed
+- [x] **EVL-007** `[CRIT]` 上下文截断从右侧保留破坏 RULER 语义 (L546-554) — fixed
+- [x] **EVL-008** `[HIGH]` **run_experiments.py 预检查遗漏 RULER CWE 的额外 max_new_tokens 开销** (L806-928) — fixed commit b7f4c36 (prelaunch 截断警告 + _effective_prompt_budget)
+- [x] **EVL-009** `[HIGH]` eval_longbench.py 引用未定义 logger — fixed commit 20095fb
+- [x] **EVL-010** `[HIGH]` generate_thesis_report.py 缺少 KIVI claims — fixed commit 8bf9414
+- [x] **EVL-011** `[HIGH]` kivi_style quant_bits 推断为 16 (L985) — fixed
+- [x] **EVL-012** `[HIGH]` 分类准确率子串匹配过于宽松 (L252) — fixed
+- [x] **EVL-013** `[MED]` eval_ruler.py 截断策略 magic numbers (L562-570) — fixed
+- [x] **EVL-014** `[MED]` **eval_ruler.py case 循环无 per-case error handling** (L872-908) — fixed
+- [x] **EVL-015** `[MED]` 所有 eval 脚本 quant_bits fallback 将 KIVI 记录为 16 (eval_ppl L878 / eval_needle L467 / eval_longbench L833 / eval_ruler L98... — fixed
+- [x] **EVL-016** `[MED]` eval_longbench.py 指标单位不一致 (L807-808) — fixed
+- [x] **EVL-017** `[MED]` eval_longbench.py 自实现 Rouge-L 可能与官方 LongBench 不一致 (L206-219) — fixed
+- [x] **EVL-018** `[MED]` aggregate_results.py kv_mode 排序无 KIVI (L552, L585, L648, L1322) — fixed
+- [x] **EVL-019** `[MED]` CWE pred_words 未过滤空字符串 (L193) — fixed
+- [x] **EVL-020** `[MED]` 指标尺度 [0,100] vs objective.md 声称 [0,1] 不一致 (L812, L867-868) — fixed
+- [x] **EVL-021** `[MED]` HF 字段提取 fallback 顺序含 "input" 作为 context 候选 (L387) — fixed
+- [x] **EVL-022** `[LOW]` eval_ruler.py 多答案评分存在死代码 (L172-174) — fixed
+- [x] **EVL-024** `[LOW]` _token_f1() 分母过度保护 (L140-141) — fixed
+- [x] **EVL-025** `[LOW]` task_off_name 取 vals[0] 假设同一任务所有样本指标名一致 (L811) — fixed
+- [x] **EVL-027** `[LOW]` eval_ruler.py `_effective_prompt_budget()` 死存储 (L~550): 函数计算 `available` 后立即被后续逻辑覆盖，中间赋值未被使用。无功能影响但增加阅读困惑。 — D1 incremental, confidence: 85% — fixed
+- [x] **EVL-028** `[MED]` eval_ruler.py error case NaN 分数传播风险: per-case 异常处理将 score 设为 NaN，但下游聚合（mean over cases）中 NaN 参与计算导致整个 task 结果为 NaN。应使用 `nanmean` 或在聚合前过滤。 — D1 incremental, confidence: 88% — fixed
+- [x] **EVL-023** `[LOW]` eval_longbench.py logger 定义位置：logger = logging.getLogger(__name__) 在 import 块中间（介于 traceback 和 from collections impor... -- fixed
+- [x] **EVL-026** `[LOW]` eval_ruler.py summary row 聚合维度不一致 (L1008-1016): `overall_pass_rate` 基于 task-level macro average（4 tasks），而 `overall_f1` 和 `overall_contains` 基于 depth-level macro average（N depth ratios），同一 summary_row 内三个指标的聚合基底不同。主指标 `ruler_score` 不受影响（等于 task-level pass_rate） -- fixed
+- [x] **EVL-029** `[HIGH]` eval_ppl.py 缺少标准化 OOM 退出码和 task_failure JSON (eval_ppl.py:840-844): except RuntimeError 捕获 OOM 子类后 sys.exit(1) 而非 EXIT_OOM=73，不写 task_failure JSON。run_experiments.py _classify_failure() 依赖 returncode==73 识别 OOM，eval_ppl OOM 被错分为 generic failure，完整性检查统计遗漏。eval_longbench 和 eval_ruler 均已实现标准化 OOM 处理（exit 73 + failure JSON）。 — D2 R3 eval deep review, confidence: 95% — fixed fe7cc34
+- [x] **EVL-030** `[MED]` eval_longbench.py _truncate_prompt_ids 使用纯右保留截断，丢失 system prompt 和 context 开头 (eval_longbench.py:320-325): ids=ids[-max_tokens:] 截断丢失开头 system prompt + context 开头。EVL-007 已修复 eval_ruler.py 为 head+tail 截断，但 eval_longbench 仍用旧方案。HF 真实数据（gov_report/multi_news）几乎必然超长触发。与 RULER 截断策略不一致。 — D2 R3 eval deep review, confidence: 90% — fixed fe7cc34
+- [x] **EVL-031** `[MED]` eval_ppl.py ppl_ci95_low/ppl_ci95_high 填充点估计值，字段名语义欺骗 (eval_ppl.py:906-907): CSV 输出 ppl_ci95_low=ppl_ci95_high=perplexity（点估计），未做任何 CI 计算。下游直接读取单 run CSV 会得到零宽度 CI。aggregate_results.py 从多 seed 重新计算 CI 不受影响。 — D1 R3 eval deep review, confidence: 92% — fixed fe7cc34
+- [x] **EVL-032** `[MED]` eval_ruler.py CWE exact_match 仅检查 recall==1.0，与其他 RULER 子任务 exact_match 语义不一致 (eval_ruler.py:225): CWE 的 exact_match 定义为 intersection==truth_words（所有真值词出现在预测中即得 1.0），允许预测含大量额外词汇。s_niah/mk_niah/vt 要求归一化后完全匹配或全部出现。CWE 系统性偏宽松，可能拉高 ruler_pass_rate 总分。 — D1 R3 eval deep review, confidence: 88% — fixed 0a0b05a
+- [x] **EVL-033** `[MED]` eval_ppl.py int8_baseline 获得 decode_attn_impl=triton_fused 属性但实际不使用 (eval_ppl.py:298-315): int8_baseline 不在 ours 白名单中，scales=None 正确。但 cache 对象存储 decode_attn_impl="triton_fused"。当前 build_past_key_values 条件不包含 int8_baseline 故无功能影响，但配置语义不精确，未来修改可能意外启用 fused path。 — D4 R3 eval deep review, confidence: 75% — fixed fe7cc34
+- [x] **EVL-034** `[LOW]` eval_ppl.py kivi_style 经过 maybe_to_dynamic_cache 的静默转换/回退链 (eval_ppl.py:332-336,365): KIVI 返回 tuple，maybe_to_dynamic_cache 尝试 from_legacy_cache，shape 不兼容时 except 静默回退，可能产生非预期 cache 格式。 — D2 R3 eval deep review, confidence: 70% — fixed 0a0b05a
+- [x] **EVL-035** `[LOW]` export_tables_latex.py LongBench footnote 遗漏 QA 类任务的 token-F1 指标说明 (export_tables_latex.py:382-386): footnote 列举 Rouge-L/Accuracy/Edit Similarity 但遗漏 QA 任务（8/21 任务）使用的 token-F1。 — D7 R3 eval deep review, confidence: 95% — fixed fe7cc34
+- [x] **EVL-036** `[LOW]` eval_ppl.py RuntimeError 捕获过宽，非 OOM 的 RuntimeError 也无 traceback 无 failure JSON (eval_ppl.py:840-844): 所有 RuntimeError 统一 sys.exit(1)，Triton kernel 编译失败/dtype 不匹配等非 OOM 错误无调试信息输出。eval_longbench/eval_ruler 在 except 块中写 task_failure JSON 包含完整 traceback。 — D2 R3 eval deep review, confidence: 90% — fixed fe7cc34
+
+### EXP. 导出/报告
+- [x] **EXP-001** `[HIGH]` C11 跨模型验证逻辑缺陷 (generate_thesis_report.py — fixed
+- [x] **EXP-009** `[MED]` generate_thesis_report.py 跨模型 claim `gains.min()` 与 `all(practical_pass)` 语义不匹配: `gains.min()` 取数值最小值，但 `practical_pass` 基于阈值判断。当 min gain 远大于阈值但某模型的 practical_pass 因其他原因（如缺数据）为 False 时，两个信号矛盾。 — D1 incremental, confidence: 85% — fixed
+- [x] **EXP-010** `[HIGH]` generate_thesis_report.py 单模型路径缺少 `target_model_id` 字段: 当 `--model_ids` 只传一个模型时，`_evaluate_claim_row()` 返回的 dict 不含 `target_model_id` key，但下游 DataFrame 构建假设该列存在，导致 KeyError。跨模型路径正常。 — D1 incremental, confidence: 92% — fixed
+- [x] **EXP-011** `[LOW]` generate_thesis_report.py NaN `gain_pct` 被判定为 FAIL 而非 INCONCLUSIVE: 当 baseline 为 0 时 `gain_pct = NaN`，当前逻辑将 NaN 视为未通过阈值 → FAIL。应归类为 INCONCLUSIVE 并在报告中标注。 — D2 incremental, confidence: 85% — fixed
+- [x] **EXP-012** `[LOW]` generate_thesis_report.py 单模型 vs 跨模型 claim schema 不一致 (27 vs 29 keys): 单模型 claim dict 缺少 `min_gain_model` 和 `max_degradation_model` 字段，跨模型有。下游若以跨模型 schema 为模板构建 DataFrame，单模型行会出 NaN 列。 — D4 incremental, confidence: 82% — fixed
+- [x] **EXP-013** `[HIGH]` export_tables_latex.py `_read_csv()` bare except 返回空 DataFrame，全部下游 export 静默跳过: L66-70 `except: return pd.DataFrame()` 吞掉所有异常（包括 schema 错误、编码错误），8 个 export 函数均依赖此函数，文件损坏或格式变更时无任何警告，产出空 LaTeX 表格。 — D2 EXP rotation, confidence: 95% — fixed
+- [x] **EXP-014** `[MED]` export_tables_latex.py `_pivot_metric()` groupby().mean() 静默平均多模型行: L91-126 当输入包含多个 model_id 的数据时，pivot 前的 groupby 会将不同模型的指标平均，产出的 LaTeX 表格数值为多模型混合平均值而非单模型值。当前无 model_id 过滤逻辑。 — D4 EXP rotation, confidence: 90% — fixed
+- [x] **EXP-015** `[MED]` export_tables_latex.py LaTeX `--label_prefix` 注入风险: `label_prefix` 参数直接拼入 `\label{}` 命令（L140 等），含特殊字符（如 `}`, `\`）时会破坏 LaTeX 编译。无输入校验或转义。 — D3 EXP rotation, confidence: 85% — fixed
+- [x] **EXP-016** `[MED]` export_tables_latex.py export_latency / export_memory 近乎重复的 DRY 违反: L159-225 两函数结构几乎相同（仅 metric_col 和标题不同），约 60 行重复代码。应提取公共 `_export_profile_table()` 函数。 — D7 EXP rotation, confidence: 88% — fixed
 - [x] **EXP-002** `[MED]` LongBench 表缺少任务指标组成说明 (export_tables_latex.py — fixed 8d7f2df
 - [x] **EXP-003** `[MED]` RULER 表仅显示整体 pass rate (export_tables_latex.py — fixed 8d7f2df
 - [x] **EXP-004** `[MED]` 多模型表格缺少 per-model 分页 — fixed 8d7f2df
@@ -178,13 +309,31 @@
 - [x] **EXP-007** `[LOW]` KIVI 在 KV_MODE_ORDER 和 KV_MODE_DISPLAY 中已完整映射 (export_tables_latex.py -- false_positive
 - [x] **EXP-008** `[LOW]` KIVI 吞吐量仅 INT8 — KIVI INT4 不在当前实验矩阵范围内（objective.md Non-goals） -- wont_fix
 
-### KVC. KV Cache — `src/cache/`
+### KVC. KV Cache
+- [x] **KVC-001** `[CRIT]` K-scale/zp 在 clear() 后状态不一致 — fixed commit 20095fb
+- [x] **KVC-003** `[HIGH]` 论文内存对比表必须注明 KIVI INT4 无 bit-packing — fixed
+- [x] **KVC-004** `[HIGH]` 论文 Methods 节须披露 K 量化策略差异 — fixed
+- [x] **KVC-005** `[MED]` kivi_style_cache.py clear() 仅重置 K scale/zp 未显式清零 V scale/zp — fixed
+- [x] **KVC-006** `[MED]` decode K 量化与 prefill K 量化 device 一致性未强制 (L220-231) — fixed
+- [x] **KVC-007** `[MED]` V buffer shape 一致性未校验 (L126-131) — fixed
+- [x] **KVC-008** `[MED]` append() 无输入 tensor shape 校验 (L187-245) — fixed
+- [x] **KVC-009** `[MED]` get_memory_mb() 注释误导 (L307) — fixed
+- [x] **KVC-010** `[MED]` INT4 量化精度 edge case 未覆盖 — fixed
+- [x] **KVC-011** `[MED]` 论文须披露 KIVI 无温度校正 — fixed
+- [x] **KVC-012** `[MED]` 论文须披露 decode kernel 差异 — fixed
+- [x] **KVC-013** `[LOW]` kivi_style_cache.py INT4 head_dim 偶数约束仅在 append 时检查 — fixed
+- [x] **KVC-014** `[LOW]` _seq_len 仅在 layer_id=0 时更新 (L244-245) — fixed
+- [x] **KVC-015** `[LOW]` 无 batch_size=0 校验 (L204) — fixed
+- [x] **KVC-017** `[LOW]` KIVI K-scale 内存恒定 vs INT8 随 seq_len 增长 — fixed
 - [x] **KVC-002** `[HIGH]` ~~KIVI INT4 未实现 bit-packing~~ **事实已变更**：bit-packing 已实现，pack_int4 offset +7→+8 已修复 (commit a60cbe6)。远端 decode 维度 bug 需远端验证。 -- fixed
 - [x] **KVC-016** `[LOW]` INT4 vs INT8 行为切换逻辑正确 -- false_positive
-- [x] **KVC-017** `[HIGH]` KIVIStyleKVCache._ensure_capacity grow 路径缺少溢出防护（kivi_style_cache.py:209-237）：grow 分支执行 `new_capacity = max(target_len, capacity*2)` 后再 `min(new_capacity, max_seq_len)` 截断，但**缺少** `if new_capacity < target_len: raise ValueError` 防护（INT8KVCache L179-182 和 INT4KVCache L232-235 均有此检查）。若 max_seq_len 小于 target_len，截断后 new_capacity < target_len，后续切片赋值 `[:, :, old_len:target_len, :]` 在 CUDA 层越界崩溃且错误信息无意义。触发条件：grow 分支（而非初始分配分支）中 max_seq_len 被超过时。 — D5, confidence: 88% -- fixed
 - [x] **KVC-018** `[MED]` INT8KVCache/INT4KVCache.get_kv() 在 clear() 后调用时静默返回零长度 tensor（int8_cache.py:394-406, int4_cache.py:437-453）：clear() 将 _layer_seq_lens 清零但保留已分配 buffer（不为 None）。此后 get_kv() 的 `_k_cache[layer_id] is not None` 检查通过，seq_len=0，返回形状 [B,H,0,D] 的空 tensor，下游注意力计算不保证能处理 S=0。批次间复用 cache 实例（clear 不 release）时可触发。 — D5, confidence: 82% -- fixed
 
-### PRF. 性能分析 — `scripts/profile_*.py`
+### PRF. 性能分析
+- [x] **PRF-001** `[HIGH]` kivi_style quant_bits CSV 记录 vs 运行时不一致 (L304/341 vs L369) — fixed
+- [x] **PRF-006** `[MED]` pynvml 初始化异常未捕获 (L104-105) — fixed
+- [x] **PRF-007** `[MED]` MemoryMonitor.stop() 线程健壮性 (L119-121) — fixed
+- [x] **PRF-008** `[MED]` NVML 回退逻辑隐性掩盖不可用 (L381) — fixed
 - [x] **PRF-002** `[MED]` quant_bits CSV 推断 fallback 为 16 (eval_ppl.py -- fixed
 - [x] **PRF-003** `[MED]` profile_latency.py run 间无显式 CUDA sync (profile_latency.py -- fixed
 - [x] **PRF-004** `[MED]` kivi_style decode_attn_impl 参数被静默忽略 (profile_latency.py -- fixed
@@ -192,7 +341,10 @@
 - [x] **PRF-009** `[LOW]` calib_file 对 kivi_style 静默无操作 (eval_ppl.py -- fixed
 - [x] **PRF-010** `[LOW]` output 属性可靠性 (L348-352) — fixed c5b763c
 
-### QNT. 量化模块 — `src/quant/`
+### QNT. 量化模块
+- [x] **QNT-001** `[CRIT]` percentile < 50 时 quantile_lo > quantile_hi — fixed commit 20095fb
+- [x] **QNT-002** `[CRIT]` 无 percentile 范围校验 — fixed commit 20095fb
+- [x] **QNT-005** `[MED]` _normalize_static_scale 3D case 实现错误 — fixed
 - [x] **QNT-003** `[MED]` 全 eval 脚本 _resolve_quant_bits() 重复定义（6 处相同代码，违反 DRY） — canonical resolve_quant_bits() 已在 src/utils/repro.py 创建，6 处标 DEPRECATED -- fixed
 - [x] **QNT-004** `[MED]` float16 输入精度损失 (L58-59) — 精度说明注释已添加 (int8_basic.py, int4_basic.py) -- fixed
 - [x] **QNT-006** `[MED]` dequantize_symmetric_int8 多路径判断脆弱 — 三路径综合 docstring + inline 路径标签已添加 -- fixed
@@ -201,7 +353,17 @@
 - [x] **QNT-009** `[LOW]` __init__.py.__all__ 不完整 — 14 exports docstring 已更新 -- fixed
 - [x] **QNT-010** `[LOW]` 核心公式验证通过 -- false_positive
 
-### RUN. 实验运行 — `scripts/run_experiments.py`
+### RUN. 实验运行
+- [x] **RUN-001** `[CRIT]` eval_ppl.py build_kv_cache() 缺失 kivi_style 分支 — fixed commit 03ed4a0
+- [x] **RUN-002** `[HIGH]` kivi_style 的 calib_strategy 默认值继承陷阱 (L880-881, L1015-1016) — fixed
+- [x] **RUN-003** `[MED]` skip_completed_success 状态不一致 (L1134 vs L1147) — fixed
+- [x] **RUN-004** `[MED]` subprocess.run 无异常捕获 (L1174-1179) — fixed
+- [x] **RUN-005** `[MED]` kv_mode 无效值静默跳过 (L850-862) — fixed
+- [x] **RUN-006** `[MED]` kivi_style decode_attn_impl 无强制验证 (L882-884, L1033-1034) — fixed
+- [x] **RUN-007** `[MED]` 无条件传递 quant 参数给所有 kv_mode (L987-998) — fixed
+- [x] **RUN-008** `[MED]` skip 时重复标记成功 (L1130-1138) — fixed
+- [x] **RUN-015** `[MED]` repair_phase5v2_ruler_light.py JSON parse 异常静默跳过: `json.load()` 失败时 `continue` 跳过该文件无 warning，可能丢失需修复的数据。应 log 文件名和错误原因。 — D2 incremental, confidence: 88% — fixed
+- [x] **RUN-016** `[MED]` repair_phase5v2_ruler_light.py `--execute` 模式首次失败即中止: 执行修复命令序列时，任一命令失败立即退出，剩余修复命令丢失。应收集所有失败后统一报告。 — D2 incremental, confidence: 85% — fixed
 - [x] **RUN-009** `[MED]` 消融实验仅跑 PPL+Needle，缺少 LongBench — 消融设计决策：1.5B 仅 PPL+Needle 为主指标，已在 objective.md 确认 -- wont_fix
 - [x] **RUN-010** `[LOW]` YAML 配置无 matrix 非空校验 (L725-794) — fixed 2f6cddb
 - [x] **RUN-011** `[LOW]` append 模式 manifest 元数据被覆盖 (L252-265) — fixed 2f6cddb
@@ -250,14 +412,34 @@
 - [x] **RUN-055** `[LOW]` L1041-1048: 缺失 run_name 的 entries 被跳过不计入 summary — R6, confidence: 72% — fixed a61f428
 - [x] **RUN-061** `[LOW]` L867: logging.basicConfig 在 main() 中，模块级 warning 格式不一致 — R6, confidence: 65% — fixed a61f428
 
-### SMK. Smoke 测试 — `scripts/smoke_test.py`
-- [x] **SMK-001** `[HIGH]` CUDA 不可用时 exit(0) → CI smoke test 假通过 (smoke_test.py:130-135): sys.exit(0) 在 CUDA 不可用时被调用，自动化管线检查 exit code 会认为 smoke test 通过。应 exit 非零或使用特殊 exit code 区分 "跳过" 与 "通过"。 — D2 RUN rotation, confidence: 95% -- fixed
-- [x] **SMK-002** `[MED]` get_hardware_info bare except 返回 N/A 无 warning (smoke_test.py:53-61): torch.cuda.is_available()=True 后 get_device_name 失败时静默返回 N/A，设备异常被隐藏。 — D2 RUN rotation, confidence: 78% -- fixed
-- [x] **SMK-003** `[MED]` 生成文本提取用 prompt 字符串长度偏移而非 token 偏移 (smoke_test.py:188-190): tokenizer decode 可能因规范化改变文本，len(prompt) 截断不精确。应用 token ID 切片后 decode。 — D1+D2+D5+D7 RUN rotation, confidence: 80% -- fixed
-- [x] **SMK-004** `[MED]` 输出 JSON 无 encoding="utf-8"，C/POSIX locale 下非 ASCII 写入失败 (smoke_test.py:245-247): ensure_ascii=False 配合默认 locale 编码，Docker 容器默认 C locale 时中文生成结果触发 UnicodeEncodeError。 — D5 RUN rotation, confidence: 82% -- fixed
-- [x] **SMK-005** `[MED]` --cpu-ok 新增参数改变 smoke_test.py CUDA 不可用时的 exit 语义，现有无参数调用方在 CPU-only 环境将从 exit(0) 变为 exit(1) (smoke_test.py:111-119, L145-155): 修复 SMK-001 的方式是引入 --cpu-ok flag：无此 flag 时 CUDA 不可用 exit(1)，有此 flag 时 exit(0)。这是接口行为 breaking change：所有现有 CI 脚本若无参数调用 `python scripts/smoke_test.py` 且运行于 CPU-only 环境，将从静默通过（旧 exit 0）变为失败（exit 1），直至显式加 --cpu-ok。smoke_test.py docstring（L13-14）仅列 --prompt/--max_new_tokens，未展示 --cpu-ok；AGENTS.md、start_agents.sh 等调用入口均未更新。向后兼容性影响：全部 CPU-only CI/CD 对该脚本的无参数调用。 — D4, confidence: 85% -- fixed
+### RVW. 审查工具与配置
+- [x] **RVW-001** `[HIGH]` review_tool.py phase-gate 仅检查 CRIT，遗漏 HIGH (L120): `cmd_phase_gate()` 仅过滤 `severity == "CRIT"`，按 CLAUDE.md §4.5 闸门规则，HIGH 也应阻塞（至少提示）。可能导致存在 HIGH 阻塞项时误判为 CLEAR — fixed
+- [x] **RVW-002** `[HIGH]` review_tool.py cmd_add() 文件写入非原子性 (L230-231): `open(path, "w")` 直接覆写，若进程中途崩溃会导致 review_tracker.md 被截断或损坏。应使用 tmpfile + rename 原子写入 — fixed
+- [x] **RVW-003** `[MED]` review_tool.py 解析不匹配行静默跳过 (L42-87): 任何不符合 ISSUE_RE 格式的 issue 行会被完全忽略，无警告日志。正则已从 `\w+` 改为 `[A-Z]+` 部分改善，但核心静默跳过问题仍存在 — fixed
+- [x] **RVW-004** `[MED]` review_tool.py _update_summary() 格式假设过强 + 双写竞争 (L268-287): `summary_replaced` 标志仅在 "Last updated:" 行后触发，若 header 行顺序变化或新增行则部分 summary 不更新。另外 `cmd_add` 先 write content 再调 `_update_summary`（二次 open+write），后者可能只更新部分摘要行却无返回值通知调用方 — fixed
+- [x] **RVW-005** `[MED]` reviewer.md L5 描述引用 "iteration.md TODO Backlog" 应为 "review_tracker.md" (.claude/agents/reviewer.md L5) — fixed
+- [x] **RVW-006** `[MED]` reviewer.md YAML 权限与 body 指令矛盾 (.claude/agents/reviewer.md L8 vs L11,L16) — fixed: body 改为"严禁修改源代码（src/、scripts/、tests/、configs/）"，写入权限标注"仅限 review_tracker.md + iteration.md"
+- [x] **RVW-007** `[MED]` start_agents.sh L32 developer 启动 prompt 引用 "TODO Backlog" 而非 review_tracker.md (scripts/start_agents.sh L32): 与 developer.md L22 "读取 review_tracker.md" 冲突，可能导致 developer agent 优先遵循启动 prompt 到 iteration.md 而非 review_tracker.md 查找任务 — fixed (prompt 改为 "读 review_tracker.md + iteration.md → 按优先级矩阵领取任务")
+- [x] **RVW-008** `[MED]` start_agents.sh L33 reviewer 启动 prompt 未提及 review_tracker.md (scripts/start_agents.sh L33): reviewer.md L21 要求先读 review_tracker.md，但启动 prompt 仅说"读 iteration.md" — fixed commit 3ba38e3 (prompt 已更新为 "读 review_tracker.md → 进入持续监控循环")
+- [x] **RVW-009** `[LOW]` settings.json Stop hook "BLOCKED" 字符串匹配过宽 (.claude/settings.json L21): iteration.md 历史条目中若包含 "BLOCKED" 一词（如引用 Phase Gate 状态），会误触发退出许可，应匹配更精确的标记如 "auto-iterate-blocked" — fixed
+- [x] **RVW-010** `[LOW]` start_agents.sh 硬编码绝对路径 (scripts/start_agents.sh L5): `PROJECT_DIR="/Users/chenzilang/..."` 不可移植，建议使用 `$(cd "$(dirname "$0")/.." && pwd)` — fixed commit 3ba38e3
+- [x] **RVW-011** `[HIGH]` Phase Blocker CHK-001 已修复但未标记 — 独立审查确认 `_check_task_state()` OOM 检查已移至 if 链首位 (check_run_completeness.py L147)，匹配 Codex PR 修复 (merge 1aa5c95)。Phase Gate 状态过期，建议 developer 验证并标记 fixed 以解除 blocker — fixed (supervisor 已验证并标记 CHK-001)
+- [x] **RVW-012** `[MED]` 多处 kv_mode 列表遗漏 int4_fused: developer.md L91 和 CLAUDE.md §9 固定决策均缺少 `int4_fused`（仅列 6 项），而 review-numerical.md L122 和代码 generate_loop.py 均包含 `int4_fused`（7 项）。权威文件与实际代码不一致 — fixed
+- [x] **RVW-014** `[HIGH]` cmd_add() 在 `## Open Issues` 节缺失时静默无操作 (scripts/review_tool.py L219-235): 当 `re.search(r'^## Open Issues', content)` 返回 None 时，整个写入分支被跳过，函数仍输出 "Added: ..." 并返回 0，issue 实际未写入 — confidence: 97% — fixed
+- [x] **RVW-015** `[HIGH]` start_agents.sh L28 `--agent reviewer` 引用已删除的 agent (scripts/start_agents.sh L16,L28): reviewer.md 已被 review-coord.md + 7 专项 Agent 替代，执行该脚本会以不存在的 reviewer agent 启动第三个 pane，审查子系统完全无法工作 — fixed commit 3ba38e3
+- [x] **RVW-016** `[MED]` cmd_add() 无重复 ID 检查 (scripts/review_tool.py L192-236): 重复执行相同 `--id` 会产生重复条目，cmd_stats 计数虚高 — confidence: 100% — fixed
+- [x] **RVW-017** `[MED]` parse_tracker rest.replace(" — fixed", "") 全局替换可损坏 title (scripts/review_tool.py L63): 若 issue title 本身包含 " — fixed" 子串（如 "partially — fixed workaround"），该子串也会被静默删除 — confidence: 80% — fixed
+- [x] **RVW-018** `[MED]` 无效 --sev 参数静默返回空结果 (scripts/review_tool.py L137-139): 传入未知 severity（如 `--sev foo`）时 fallback 为 `"FOO"`，过滤结果为空列表，exit code 仍为 0，用户无法区分"真无结果"与"参数拼写错误" — confidence: 88% — fixed
+- [x] **RVW-019** `[MED]` supervisor.md 迭代上限与 auto-iterate SKILL.md 不一致 (supervisor.md L66,L104 vs SKILL.md L85,L95): supervisor.md 声明默认 5 轮，SKILL.md L85 写 8 轮、L95 写 5 轮，SKILL.md 内部亦矛盾 — confidence: 95% — false_positive
+- [x] **RVW-020** `[MED]` CLAUDE.md §12 遗漏 review-coord 中间层 (CLAUDE.md L251): 描述为"由 Supervisor 并行调度"7 个审查 Agent，但实际架构是 Supervisor → review-coord → 7 Agent，遗漏了 coordinator 层 — confidence: 90% — fixed
+- [x] **RVW-021** `[MED]` cmd_add 无并发写保护，多 Agent 并行添加 issue 可能丢失写入 (review_tool.py:199-231): read→modify→write 无文件锁，两个 review agent 同时执行 add 时，后写者覆盖前者。Agent Teams 场景下可触发。 — D3+D5 RUN rotation, confidence: 75% — fixed
+- [x] **RVW-022** `[MED]` _update_summary 遗漏 wont_fix 计数致 summary 算术不一致 (review_tool.py:257-261): res_parts 仅含 fixed+false_positive，wont_fix>0 时 total != fixed+fp+open。cmd_stats 正确计数但 _update_summary 未传播。 — D1 RUN rotation, confidence: 90% — fixed
+- [x] **RVW-023** `[MED]` _update_summary 依赖 summary 行顺序，格式变更时静默失效 (review_tool.py:273-283): 仅当 "Last updated:" 行出现后才停止替换，若 header 行顺序变化则部分 summary 不更新，无 warning。 — D1+D7 RUN rotation, confidence: 70% — fixed
+- [x] **RVW-013** `[LOW]` Resolved KVC-003 前提失效: KVC-003 前提已变更，bit-packing 已实现且 pack offset 已修复 (commit a60cbe6)。论文描述无需注明"无 bit-packing" -- fixed
 
-### TST. 测试覆盖 — `tests/`
+### TST. 测试覆盖
+- [x] **TST-001** `[HIGH]` KIVI cache zero-point decode 传播测试缺失 — fixed
+- [x] **TST-002** `[HIGH]` asymmetric_quant zero-point 公式直接验证缺失 — fixed
 - [x] **TST-003** `[HIGH]` calibrate_behavior.py 完全无单元测试 — fixed 4e3ac2b — test_calibrate_behavior.py (37 tests)
 - [x] **TST-004** `[HIGH]` KIVI + asymmetric_quant 端到端集成测试缺失 — fixed 4e3ac2b — test_kivi_cache.py KIVI integration e2e (12 tests)
 - [x] **TST-005** `[MED]` B1 修复验证不完整 — R3 降级: issue 描述过于模糊，未指明具体验证目标，部分相关量化测试已存在 — fixed 4e3ac2b — test_int8_cache.py batch>1 (7 tests)
@@ -322,245 +504,56 @@
 - [x] **TST-064** `[MED]` INT4KVCache bit_packed=False 模式完全无测试 (tests/test_int4_cache.py): 当前所有 INT4 测试均使用 bit_packed=True，bit_packed=False 路径（不进行 nibble 压缩，直接以 int8 存储 INT4 值）零测试。若该路径 get_kv() 解码逻辑有 bug，测试集完全无法检测。需要：bit_packed=False 的 roundtrip 误差测试、append+get_kv 形状测试、clear→re-append 无污染测试。 — gap_score: 6/10, confidence: 82% — fixed 27bdc6d
 - [x] **TST-065** `[LOW]` KVC-017 grow 路径越界防护无专用回归测试 (tests/test_kivi_cache.py): KVC-017 修复在 kivi_style_cache.py grow 分支新增 `if new_capacity < target_len: raise ValueError`。现有 test_max_seq_len_enforced 只测直接超限（首次 append 11 tokens, max_seq_len=10），未测 grow 路径中的越界：先 append 少量 token 触发 capacity grow，再 append 使总长超 max_seq_len 且 grow 截断后 new_capacity < target_len 的复合场景。若 fix 回滚则 CUDA 层越界崩溃但 CI 无感知。 — gap_score: 4/10, confidence: 82% — fixed 27bdc6d
 
-### RVW. 审查工具与配置 — `scripts/review_tool.py`, `.claude/agents/review-*.md`
-- [x] **RVW-013** `[LOW]` Resolved KVC-003 前提失效: KVC-003 前提已变更，bit-packing 已实现且 pack offset 已修复 (commit a60cbe6)。论文描述无需注明"无 bit-packing" -- fixed
+### KRN. Triton Kernels — `src/kernels/` (R4 深度审查 2026-02-24)
+- [x] **KRN-001** `[HIGH]` V/K scale masked load `other=1.0` 设计脆弱 (triton_decode_attn_int8.py:200,258): 被 mask 位置 int8=0 * scale=1.0=0.0 当前安全，但若 int8 的 other 值被修改则 scale=1.0 会放大错误。更安全选择 other=0.0。 — D1 R4, confidence: 92% — false_positive: L239 tl.where(mask,qk,-inf) 在 softmax 前已将 padding 置为 -inf，scale 选择不影响输出
+- [x] **KRN-002** `[HIGH]` kernel 自身不防御 ctx_len=0（依赖 wrapper 层 L377 提前返回） (triton_decode_attn_int8.py:175): ctx_len=0 时循环不执行，acc/l_i=0.0/0.0=NaN。wrapper L446-448 用零覆盖。若绕过 wrapper 直接调用 kernel 则 NaN 泄露。 — D5 R4, confidence: 88% — fixed: L377-378 全批次零保护 + L446-448 混合批次零覆写 (ENG-016)
+- [x] **KRN-003** `[HIGH]` `q.to(tl.float32)` 在循环内重复执行，应提升到循环外 (triton_decode_attn_int8.py:234): 性能回归。32K 序列 ~500 次迭代每次对 HEAD_DIM=128 元素做 fp16→fp32 转换。Triton 编译器可能优化但不应依赖。 — D7 R4, confidence: 95% — false_positive: Triton JIT 编译器 LICM 自动提升循环不变量，q 在循环内从未修改
+- [x] **KRN-005** `[MED]` elementwise+reduce 未使用 tl.dot，错失 tensor core 加速 (triton_decode_attn_int8.py:271,235): weighted_v 和 QK score 计算可用 tl.dot 利用 tensor core。 — D7 R4, confidence: 85% — fixed (documented)
+- [x] **KRN-006** `[MED]` INT4 wrapper docstring 声称 "[-7, 7]" 但 unpack_int4 实际返回 [-8, 7] (triton_decode_attn_int4.py:5-6): 功能正确但文档不准确。 — D7 R4, confidence: 98% — fixed 7e70711 — fixed docstring [-7,7]→[-8,7]
+- [x] **KRN-007** `[MED]` 无 HEAD_DIM 是否为 2 的幂的验证 (triton_decode_attn_int8.py:156): tl.arange(0, HEAD_DIM) 要求 2 的幂，当前模型均满足但 wrapper 无校验。 — D5 R4, confidence: 80% — fixed 7e70711 — added HEAD_DIM power-of-2 validation
+- [x] **KRN-010** `[MED]` 无 @triton.autotune，BLOCK_SIZE 靠 heuristic 选择 (triton_decode_attn_int8.py:388-403): 研究项目可接受，但论文性能数字可能非最优。 — D7 R4, confidence: 92% — fixed (documented)
+- [x] **KRN-011** `[MED]` INT4 wrapper unpacked 路径不验证 dtype (triton_decode_attn_int4.py:29-34): bit_packed=False 时直接返回原 tensor 不检查 dtype，float16 输入会在 kernel 中产生错误数值。 — D5 R4, confidence: 85% — fixed 7e70711 — added dtype validation for unpacked path
+- [x] **KRN-012** `[LOW]` `pid = tl.program_id(0)` 赋值后被覆盖，dead code (triton_decode_attn_int8.py:133): 早期 1D grid 设计遗留。 — D7 R4, confidence: 100% — fixed 7e70711 — removed dead pid assignment
+- [x] **KRN-014** `[LOW]` offs_g 和 group_indices 是 loop-invariant + dead code (triton_decode_attn_int8.py:198,212): 应移到循环外或删除。 — D7 R4, confidence: 90% — fixed 7e70711 — moved loop-invariant code outside loop
+
+### UTIL. 工具模块 — `src/utils/` (R5 深度审查 2026-02-24)
+- [x] **UTIL-001** `[HIGH]` CUDATimer.stop() 在 prefill 调用点位于 try/finally 外，异常时 timer 未停止 (generate_loop.py:689 vs timing.py:82-100): prefill_timer.stop() 在 try 块外，model() 抛异常时跳过 stop()，ttft_ms 未定义。应使用 timer_context() 或移入 finally。 — R5, confidence: 90% — fixed 75d691c — prefill_timer.stop() moved into try/finally
+- [x] **UTIL-005** `[HIGH]` torch.use_deterministic_algorithms(True) 静默吞没，确定性可能未激活 (repro.py:35-39): bare `except Exception: pass` 丢弃所有错误包括 AttributeError，实验日志显示 deterministic=True 但实际未生效。论文复现性风险。 — R5, confidence: 95% — fixed 75d691c — replaced bare except with warning
+- [x] **UTIL-002** `[MED]` _cuda_available 在构造时一次性评估，不随进程 CUDA 状态变化更新 (timing.py:78-80) — R5, confidence: 70% — fixed 75d691c — documented _cuda_available design choice
+- [x] **UTIL-003** `[MED]` reset() 不重置 _cuda_available，复用 timer 语义不完整 (timing.py:109-112) — R5, confidence: 65% — fixed 75d691c — documented reset() behavior
+- [x] **UTIL-004** `[MED]` timer_context docstring sync_after 描述为 "before exiting"，措辞误导 (timing.py:116-138) — R5, confidence: 80% — fixed 75d691c — fixed timer_context docstring
+- [x] **UTIL-007** `[MED]` vars(args) 对无 __dict__ 对象抛 TypeError (repro.py:93): 函数签名 args: Any 但 unconditional vars()，dict 输入崩溃。 — R5, confidence: 85% — fixed 75d691c — type-check args before vars()
+- [x] **UTIL-008** `[MED]` write_config_snapshot 无 I/O 异常处理，长时实验末端崩溃 (repro.py:138-149): YAML 写入失败直接传播，可能丢失已完成的实验结果。 — R5, confidence: 88% — fixed 75d691c — wrapped I/O in try/except with warning
+- [x] **UTIL-009** `[MED]` resolve_quant_bits 对 kivi_style 无条件返回 8，KIVI-INT4 场景返回错误值 (repro.py:125): quant_bits_arg=None + kv_mode=kivi_style → 返回 8，CSV 元数据污染。 — R5, confidence: 90% — fixed 75d691c — documented kivi_style default
+- [x] **UTIL-006** `[LOW]` CUBLAS_WORKSPACE_CONFIG 在 torch import 后设置，cuBLAS 可能已缓存 (repro.py:33-34) — R5, confidence: 75% — fixed 75d691c — documented CUBLAS_WORKSPACE_CONFIG timing
+- [x] **UTIL-010** `[LOW]` build_config_snapshot 硬编码 decoding 参数而非读取实际运行时配置 (repro.py:82-102) — R5, confidence: 80% — fixed 75d691c — documented hardcoded greedy decode
+- [x] **UTIL-011** `[LOW]` resolve_pretrained_path 在线下载失败静默回退到 model_id 无日志 (hf.py:58-61) — R5, confidence: 85% — fixed 75d691c — added warning on silent fallback
+- [x] **UTIL-012** `[LOW]` model_id=None 时返回 None 而非 raise ValueError (hf.py:32-33) — R5, confidence: 80% — fixed 75d691c — raise ValueError for None model_id
+- [x] **UTIL-015** `[LOW]` get_gpu_memory_mb docstring "current" 与 "Peak" 矛盾 (timing.py:141-150) — R5, confidence: 90% — fixed 75d691c — fixed get_gpu_memory_mb docstring
+
+### SMK. Smoke 测试 — `scripts/smoke_test.py`
+- [x] **SMK-001** `[HIGH]` CUDA 不可用时 exit(0) → CI smoke test 假通过 (smoke_test.py:130-135): sys.exit(0) 在 CUDA 不可用时被调用，自动化管线检查 exit code 会认为 smoke test 通过。应 exit 非零或使用特殊 exit code 区分 "跳过" 与 "通过"。 — D2 RUN rotation, confidence: 95% -- fixed
+- [x] **SMK-002** `[MED]` get_hardware_info bare except 返回 N/A 无 warning (smoke_test.py:53-61): torch.cuda.is_available()=True 后 get_device_name 失败时静默返回 N/A，设备异常被隐藏。 — D2 RUN rotation, confidence: 78% -- fixed
+- [x] **SMK-003** `[MED]` 生成文本提取用 prompt 字符串长度偏移而非 token 偏移 (smoke_test.py:188-190): tokenizer decode 可能因规范化改变文本，len(prompt) 截断不精确。应用 token ID 切片后 decode。 — D1+D2+D5+D7 RUN rotation, confidence: 80% -- fixed
+- [x] **SMK-004** `[MED]` 输出 JSON 无 encoding="utf-8"，C/POSIX locale 下非 ASCII 写入失败 (smoke_test.py:245-247): ensure_ascii=False 配合默认 locale 编码，Docker 容器默认 C locale 时中文生成结果触发 UnicodeEncodeError。 — D5 RUN rotation, confidence: 82% -- fixed
+- [x] **SMK-005** `[MED]` --cpu-ok 新增参数改变 smoke_test.py CUDA 不可用时的 exit 语义，现有无参数调用方在 CPU-only 环境将从 exit(0) 变为 exit(1) (smoke_test.py:111-119, L145-155): 修复 SMK-001 的方式是引入 --cpu-ok flag：无此 flag 时 CUDA 不可用 exit(1)，有此 flag 时 exit(0)。这是接口行为 breaking change：所有现有 CI 脚本若无参数调用 `python scripts/smoke_test.py` 且运行于 CPU-only 环境，将从静默通过（旧 exit 0）变为失败（exit 1），直至显式加 --cpu-ok。smoke_test.py docstring（L13-14）仅列 --prompt/--max_new_tokens，未展示 --cpu-ok；AGENTS.md、start_agents.sh 等调用入口均未更新。向后兼容性影响：全部 CPU-only CI/CD 对该脚本的无参数调用。 — D4, confidence: 85% -- fixed
 
 ### QUA. 代码质量增量 — D7 全项目审查 2026-02-24
-
 - [x] **QUA-001** `[HIGH]` `get_git_commit()` 在 9 个脚本中重复定义，无规范化入口 (scripts/eval_ruler.py:607, profile_memory.py:45, profile_latency.py:40, eval_ppl.py:67, smoke_test.py:38, eval_needle.py:39, eval_longbench.py:69, profile_baseline.py:37, collect_env.py:20): 与已规范化的 `get_hardware_info()` (`src/utils/repro.py:42`) 形成对比——后者有标准实现，前者 9 份几乎相同副本。任何修改（增加 `cwd` 参数、修改截断长度）需要改 9 处。建议将 `get_git_commit()` 加入 `src/utils/repro.py` 并替换各脚本的本地副本。 — D7 全项目, confidence: 98% -- fixed
-
 - [x] **QUA-002** `[HIGH]` `run_experiments.py` 完全缺少 `import logging`，全部诊断输出用裸 `print()` (scripts/run_experiments.py:1-20, L92, L103, L121, L125, L176-179): `aggregate_results.py` 在 AGG-034 修复后已使用 `logging.basicConfig` + `logger.warning/info`；`check_run_completeness.py`、`export_tables_latex.py` 均有 `logger`；但 `run_experiments.py` 作为核心编排脚本从未 `import logging`，所有 "Warning:"/"Error:" 均为 `print()`。后果：(1) 无法通过日志级别过滤；(2) 无时间戳；(3) Warning 输出到 stdout（重定向到文件则警告消失）；(4) 与同目录其他脚本日志策略不一致。 — D7 全项目, confidence: 95% -- fixed
-
 - [x] **QUA-003** `[MED]` `_safe_t_crit` 内联函数定义在 `_add_ci95_columns` 循环体内，每列均重建函数对象 (scripts/aggregate_results.py:227-230): `def _safe_t_crit(n: float) -> float:` 定义在 `for col in list(out.columns):` 循环体内，每次迭代都创建新函数对象。该函数不依赖任何循环变量，应提取为模块级私有函数，避免循环内函数定义的反模式。 — D7 全项目, confidence: 90% -- fixed
-
 - [x] **QUA-004** `[MED]` `INT8CacheWrapper` 类含开发时遗留悬挂注释，参数缺少 type hints (src/engine/patch_model.py:64-91): `__init__` 参数 `cache_engine`, `layer_idx` 无类型注释；`update()` 方法注释包含 `"But we handle updates in generate_loop usually?"` 等疑问句开发笔记，在生产代码中不应存留；该类缺少 class-level docstring，仅 `INT8CacheWrapperContainer` 有说明。 — D7 全项目, confidence: 85% -- fixed
-
 - [x] **QUA-005** `[MED]` `KV_MODE_ORDER` 在两处独立定义，两脚本之间无共享源 (scripts/aggregate_results.py:87-97, scripts/export_tables_latex.py:55-65): 当前两处顺序恰好一致，但两处独立维护——若一处新增 kv_mode，另一处不会自动更新，导致排序或显示名不一致。建议提取到 `src/utils/constants.py` 统一管理（`generate_loop.py:316-326` 的 kv_mode 合法值列表也应同步）。 — D7 全项目, confidence: 88% — fixed 8f39875
-
 - [x] **QUA-006** `[MED]` `eval_ppl.py` 文件顶部保留大段开发决策笔记作为行内注释 (scripts/eval_ppl.py:23-43): L23-43 共 21 行注释描述"为何用 HF 滑动窗口而非自定义引擎"，写作风格为开发过程思考（"LIMITATION:", "DECISION:", "Wait, PPL is ..."），不适合留在生产源码顶部，应移入 `docs/` 或作为 ADR 记录。 — D7 全项目, confidence: 82% — fixed 2f6cddb
-
 - [x] **QUA-007** `[MED]` `run_experiments.py` 中 `_timeout` 局部变量以下划线前缀命名，违反 Python 惯例 (scripts/run_experiments.py:1437): `_timeout = int(args.subprocess_timeout) if int(args.subprocess_timeout) > 0 else None`——下划线前缀惯例用于模块级/类级私有名，局部变量无需此前缀。与同函数其他局部变量（`returncode`, `failure_type`, `log_mode`）风格不一致。建议命名为 `timeout_sec`。 — D7 全项目, confidence: 82% -- fixed
-
 - [x] **QUA-008** `[LOW]` `_safe_t_crit` 中 `return 0.0`（n<=1 分支）被后续 `.where(cnt > 1, np.nan)` 覆盖，存在语义冗余 (scripts/aggregate_results.py:227-233): `_safe_t_crit` 在 `n <= 1` 时返回 `0.0`（使 `t_crit * sem = 0`），但紧接着 `ci_half = ci_half.where(cnt > 1, np.nan)` 将 `cnt <= 1` 处强制置 `NaN`，使该返回值永远不进入最终输出。应在注释中说明双重保护的分工，或简化逻辑。 — D7 全项目, confidence: 80% — fixed 2f6cddb
-
 - [x] **QUA-009** `[LOW]` `aggregate_results.py` import 块违反 PEP 8 顺序，标准库 `logging` 插入第三方库块中间 (scripts/aggregate_results.py:14-26): `import logging`（L25）出现在 `matplotlib`（L23）和 `numpy`（L24）第三方库之间，PEP 8 要求标准库导入集中在第三方库之前。应将 `import logging` 上移至标准库导入组（L14-21）。 — D7 全项目, confidence: 90% -- fixed
-
 - [x] **QUA-010** `[LOW]` `profile_latency.py` / `profile_memory.py` 的 `_resolve_quant_bits` DEPRECATED 副本未加 `warnings.warn` (scripts/profile_latency.py:54-66, scripts/profile_memory.py:59-71): `eval_ppl.py:83` 的副本在 PRF-002 修复时加了 `warnings.warn`，但 `profile_latency.py` 和 `profile_memory.py` 的副本仅有注释 `# DEPRECATED`，调用方不会收到运行时提示，与 `eval_ppl.py` 的处理不一致。 — D7 全项目, confidence: 85% -- fixed
 
 ### SEC. 安全漏洞 — 全项目 (D3 审查 2026-02-24)
-
 - [x] **SEC-001** `[HIGH]` 服务器地址与 SSH 信息已入 git 历史 (.agents/skills/remote-server/SKILL.md:15-18, iteration.md:319): `.agents/skills/remote-server/SKILL.md` 被 git 追踪（commit a0a32ff），文件明文包含 SSH_HOST/PORT/USER 及完整 rsync/ssh 命令串；`iteration.md` L319 含主机+端口监控命令。`docs/autodl_server.md` 含明文密码 `YLt4oozwKWNg` 但被 `.gitignore` 正确排除（未入库）。利用路径：任何能读仓库者可获服务器连接信息；若密码通过其他渠道泄露（如文件误分享）即可登录 root@GPU 服务器。修复：① 立即更改 AutoDL 密码；② 从 SKILL.md 移除具体 IP/端口，改为引用 `docs/autodl_server.md` 的注释；③ 视暴露范围决定是否用 `git filter-repo` 清理历史中的服务器信息。 — D3, confidence: 95% — fixed 1976051 (current files sanitized; git history needs filter-repo + password rotation)
-
 - [x] **SEC-002** `[MED]` trust_remote_code=True 搭配用户可控 --model_id 构成 RCE 风险（降级：研究 CLI 威胁面低，用户即攻击者） (scripts/smoke_test.py:164,173; eval_ppl.py:701,708; eval_needle.py:339,346; eval_longbench.py:745,752; eval_ruler.py:823,830; profile_latency.py:270,277; profile_memory.py:301,308; calibrate_behavior.py:754,761): 全项目 8 个脚本在模型加载时均设 `trust_remote_code=True`，且 `--model_id` 由命令行接受无白名单校验。该标志会无条件执行模型仓库中的任意 Python 代码（modeling_*.py 等）。利用路径：若 model_id 被攻击者控制（如恶意 YAML 配置或 CI 参数注入），可在 GPU 服务器上执行任意代码获得 root 权限。当前项目固定使用已知安全模型（CLAUDE.md §9），实际风险依赖 model_id 是否被严格管控。修复：在 `run_experiments.py` 中对 model_id 增加白名单校验（参考 `SUPPORTED_KV_MODES` 模式）；或仅对本地已验证路径设 `trust_remote_code=True`。 — D3, confidence: 85% — fixed ccd2cda
-
 - [x] **SEC-003** `[MED]` requirements.txt 无版本 pin 且含未使用 web 框架依赖 (requirements.txt:21-22): 所有依赖均为裸包名，`fastapi` 和 `uvicorn` 在项目代码库中无任何实际使用（无路由定义、无服务启动代码），是冗余攻击面扩大依赖。若被意外加载或在 AutoDL 环境触发，会暴露 HTTP 端口。修复：① 移除 `fastapi` 和 `uvicorn`；② 使用 `env/requirements_freeze.txt` 中的锁定版本替换 `requirements.txt`。 — D3, confidence: 82% — fixed c5b763c
-
 - [x] **SEC-004** `[MED]` 异常信息暴露服务器内部文件系统路径 (scripts/smoke_test.py:179; eval_ppl.py, eval_ruler.py, eval_longbench.py, eval_needle.py 等 except 块): `print(f"  ✗ Model loading failed: {e}")` 中异常对象含完整本地路径（如 `/root/autodl-tmp/hf_cache/...`）。`logs/` 目录已在 `.gitignore` 中，直接风险有限，但属纵深防御缺口。当 CI 输出被截图或分享时服务器路径结构被暴露。修复：在 except 块中对外部输出进行路径脱敏，仅打印异常类型和简短消息，详细信息写入本地日志。 — D3, confidence: 80% — fixed c5b763c
-
----
-
-## Resolved
-
-<details>
-<summary>254 fixed + 10 false_positive + 4 wont_fix (click to expand)</summary>
-
-### AGG. 聚合
-- [x] **AGG-001** `[CRIT]` kivi_style 完全缺失显著性配对 — fixed commit 03ed4a0
-- [x] **AGG-004** `[HIGH]` longbench_official_macro 未被聚合 — fixed commit 03ed4a0
-- [x] **AGG-005** `[HIGH]` 显著性分析缺失 model_id/hardware 分组 — fixed commit 03ed4a0
-- [x] **AGG-006** `[HIGH]` RULER 深度分析缺失 model_id — fixed commit 03ed4a0
-- [x] **AGG-010** `[MED]` kv_mode 使用字母序排序而非语义顺序 (L552, L585, L648, L1322) — fixed
-- [x] **AGG-011** `[MED]` 显著性配对数据可能被 aggfunc="mean" 静默平均 (L998) — fixed
-- [x] **AGG-013** `[LOW]` LongBench 图 y 轴标签与新口径不一致 — fixed
-- [x] **AGG-016** `[MED]` 显著性 pairings 遗漏 `("int4_baseline", "int4_ours")` (L2207-2212): INT8 有 baseline-vs-ours 配对，INT4 仅有 `("int4_fused", "int4_ours")`。若 Phase5v2 不含 int4_fused 运行，则 INT4 无任何显著性比较 — fixed
-- [x] **AGG-017** `[MED]` `_export_per_model_layered_tables()` bare `except` 吞掉 CSV 读取错误 (aggregate_results.py): 空 `except:` 捕获所有异常（包括 CSV 格式损坏、权限错误），静默跳过该模型的表导出。应至少 `except Exception as e:` 并 log warning。 — D2 incremental, confidence: 90% — fixed
-- [x] **AGG-018** `[HIGH]` ~~_add_ci95_columns z=1.96 → t 分位数~~ **FIXED** — 改用 _t_critical(df) 函数（scipy + fallback lookup table），n≤1 返回 NaN（同时修复 AGG-027） — fixed f4728af
-- [x] **AGG-019** `[HIGH]` ~~sign-flip exact/MC 分支 p 值不一致~~ **FIXED** — exact 分支加 Phipson-Smyth +1 修正: p=(exceed+1)/(n_enum+1)，与 MC 分支一致 — fixed f4728af
-- [x] **AGG-020** `[HIGH]` ~~_read_csvs() bare except 静默跳过~~ **FIXED** — 改为 `except Exception as exc: logger.warning("Skipped unreadable CSV ...")` — fixed f4728af
-- [x] **AGG-021** `[HIGH]` _main_claims_32k_table 混合 outer/left merge 产生幽灵行或丢失数据 (aggregate_results.py:1467-1477): latency+memory 用 outer merge（可能产生 NaN 幽灵行），ppl/longbench/ruler 用 left merge（可能丢弃不在 latency 中的 kv_mode 数据）。无 merge 后行数 sanity check。 — D2 EXP rotation, confidence: 85% — fixed
-- [x] **AGG-022** `[HIGH]` _build_paired_metric_rows pivot_table aggfunc="mean" 静默折叠重复 seed 观测 (aggregate_results.py:1144-1153): 重复 (key, seed, kv_mode) 行被均值折叠，仅 print() 警告（非 logging）。折叠后 paired test 的独立性假设被违反，p-value 可能不可靠。 — D2 EXP rotation, confidence: 85% — fixed
-- [x] **AGG-023** `[HIGH]` ~~relative_gain pairings 缺少 kivi_style~~ **FIXED** — 添加 ("kivi_style","int8_ours") 和 ("kivi_style","int8_baseline") 到 pairings 列表 — fixed f4728af
-- [x] **AGG-024** `[HIGH]` ~~relative_gain key_cols 不含 model_id~~ **FIXED** — 所有 7 个 _relative_gain_table 调用的 key_cols 增加 "model_id" 前缀 — fixed f4728af
-- [x] **AGG-025** `[HIGH]` ~~_main_claims_32k_table merge on kv_mode 笛卡尔积~~ **FIXED** — 动态 merge_keys 包含 model_id（当存在时），所有列列表和 merge/drop_duplicates 均使用 model_id — fixed f4728af
-- [x] **AGG-026** `[HIGH]` gain_pct 与 diff 基于不同样本量计算 (aggregate_results.py:1156-1190): baseline=0 时 gain_pct=NaN，dropna(subset=...) 不含 gain_pct 列所以 NaN 行保留。但 _significance_summary 对 gain_pct 做额外 dropna，导致 gain_pct_mean 基于 n-k 样本而 diff_mean 基于 n 样本，n_pairs 不匹配。 — D1/D5 EXP rotation, confidence: 85% — fixed
-- [x] **AGG-027** `[MED]` ~~count=1 时 CI 半宽 0.0 → NaN~~ **FIXED** — AGG-018 修复中一并处理，ci_half.where(cnt > 1, np.nan) 替代原 0.0 — fixed f4728af
-- [x] **AGG-028** `[MED]` _to_numeric errors="coerce" 将非数值静默转 NaN，无 warning (aggregate_results.py:107-111): 对所有指标列使用 `pd.to_numeric(errors="coerce")`，异常字符串（"N/A"、"err"、空串）变 NaN 后被 groupby 忽略。5-seed 小样本下丢失 1 个点显著影响结论。 — D2 EXP rotation, confidence: 90% — fixed
-- [x] **AGG-030** `[MED]` _main_claims_32k_table latency 或 memory 为空即返回完全空表 (aggregate_results.py:1464-1467): 若 latency 数据缺失，即使 needle/ppl/longbench/ruler 完整，main claims 表也为空。无 warning。 — D2 EXP rotation, confidence: 90% — fixed
-- [x] **AGG-033** `[CRIT]` 两个 signflip 单元测试断言与 Phipson-Smyth +1 修正不一致 (test_aggregate_results_stats.py:28-29,44-46): test_exact_signflip_pvalue_known_case 期望 0.125 (2/16) 但实际返回 3/17=0.1765；test_exact_signflip_pvalue_mixed_signs 用旧公式 np.mean(>=) 计算期望值。pytest 将直接失败，阻塞 CI。 — D4+D6 incremental, confidence: 99% — fixed
-
-### CAL. 校准模块
-- [x] **CAL-001** `[CRIT]` MSE loss 维度语义错误 (L199-200) — fixed commit 20095fb
-- [x] **CAL-002** `[CRIT]` MSE loss 全局 mean 无维度 (L302) — fixed commit 20095fb
-- [x] **CAL-003** `[CRIT]` calibrate_behavior.py --calib_out None fallback — fixed
-- [x] **CAL-004** `[HIGH]` loss_accum 未除以样本数 (L177-206) — fixed commit 20095fb
-- [x] **CAL-005** `[HIGH]` MSE 无数值安全 clamp (L199) — fixed commit 20095fb
-- [x] **CAL-006** `[HIGH]` trial 排名受 loss 尺度影响 (L780-791) — fixed
-- [x] **CAL-007** `[HIGH]` 默认校准路径与 generate_loop 不匹配 (calibrate_behavior.py — fixed
-- [x] **CAL-008** `[HIGH]` 加载校准文件时无 loss_function 字段校验 (generate_loop.py — fixed
-- [x] **CAL-009** `[HIGH]` calibrate_behavior.py MSE clamping 移除导致旧校准产物不可复现 — fixed
-- [x] **CAL-010** `[MED]` 默认输出文件名硬编码为 kl.json — fixed commit 20095fb
-- [x] **CAL-011** `[MED]` select_best_trial() 无 key 存在性校验 — fixed commit 20095fb
-- [x] **CAL-012** `[MED]` MSE loss 语义未文档化 (L6, L234-239) — fixed
-- [x] **CAL-013** `[MED]` inv_tau shape 未在加载时验证 (generate_loop.py — fixed
-- [x] **CAL-014** `[MED]` MSE 与 KL loss 量级差异影响搜索行为 (calibrate_behavior.py — fixed
-- [x] **CAL-015** `[MED]` evaluate_quant_candidate 不使用 inv_tau (calibrate_behavior.py — fixed
-- [x] **CAL-016** `[MED]` calibrate_behavior.py MSE clamping 语义偏差：MSE 路径对 p_ref/p_quant 执行 clamp(min=eps) 后再计算差的平方。对 MSE 而言 clamp 不防 NaN（MSE 不含 — fixed...
-- [x] **CAL-017** `[LOW]` loss_accum NaN 无检测 (calibrate_behavior.py — fixed
-- [x] **CAL-018** `[LOW]` search_trials.csv 已按 loss_function 区分文件名 (calibrate_behavior.py — false_positive
-
-### CFG. 配置
-- [x] **CFG-001** `[HIGH]` 1.5B 配置完全缺失 KIVI-style 条目 — fixed commit f07422d
-- [x] **CFG-002** `[HIGH]` 7B/8B 配置完全缺失吞吐量 batch scaling 条目 — fixed commit f07422d
-- [x] **CFG-003** `[HIGH]` 7B/8B 配置缺失 INT4 长上下文运行 — fixed commit f07422d
-- [x] **CFG-004** `[HIGH]` 消融 A-3 decode_attn_impl 混淆因子 — fixed commit f07422d
-- [x] **CFG-005** `[HIGH]` 消融 A 节缺少 KIVI-style — fixed commit f07422d
-- [x] **CFG-006** `[HIGH]` 7B/8B 校准产物尚未生成（Phase 2 依赖，非 bug） — false_positive
-- [x] **CFG-007** `[MED]` final_emnlp2026_v1.yaml LLaMA 本地路径硬编码 — fixed
-- [x] **CFG-010** `[MED]` 消融 A-2 (MSE) 使用 use_attn_temperature — false_positive
-- [x] **CFG-014** `[MED]` ablation_dimensions.scale_strategy 仅列 [static, adaptive]（L77）— 计划中为 "static vs adaptive vs dynamic" 三方，与消融配置 D 节同一缺失 — fixed
-- [x] **CFG-015** `[MED]` LLaMA-3.1-8B 使用本地路径而非 HF ID — fixed
-- [x] **CFG-016** `[MED]` Claims C9-C11 定义不够精确 — fixed
-- [x] **CFG-017** `[LOW]` 1.5B 配置头部注释缺少 kivi_style kv_mode 和 kivi_asymmetric calib_strategy — false_positive
-- [x] **CFG-018** `[LOW]` 消融 A-1/B-1/C-1 是完全相同的 run — false_positive
-- [x] **CFG-019** `[LOW]` benchmarks 仅列 4 个质量评测（L67-71）— 未包含 latency/memory/throughput 系统性能 benchmark，虽然这些是独立维度但在 meta-config 中应有提及 — fixed
-- [x] **CFG-020** `[LOW]` models[0].calibration_artifacts 列出了尚不存在的 MSE 产物（int8_mse/int4_mse，L38-39）— MSE 校准实现有已知 bug，这些产物暂不可用 — fixed
-- [x] **CFG-021** `[LOW]` meta-config 无执行工作流说明 — fixed
-
-### CHK. 完整性检查
-- [x] **CHK-001** `[CRIT]` OOM 分类被 elif 链短路 (L94-109) — fixed commit 1aa5c95 (OOM 检查已移至 if 链首位 L147-148)
-- [x] **CHK-002** `[HIGH]` manifest 无 failure_type 字段 (L85) — fixed
-- [x] **CHK-003** `[HIGH]` 不验证 kivi_style 运行完整性 — fixed
-- [x] **CHK-007** `[HIGH]` manifest_status="running" + 完整有效 CSV 被错判为 mixed_csv_non_success (L153-159): success 分支要求 manifest_status∈{success,skipped}，"running" 落入 L159 的 mixed 分支。进程在写完 CSV 后崩溃但未更新 manifest 时触发，导致不必要的重跑。 — D2, confidence: 90% — fixed
-- [x] **CHK-008** `[HIGH]` 日志 errors="ignore" 掩盖 OOM/traceback 检测 (L49): `_read_text()` 用 `errors="ignore"` 静默丢弃非 UTF-8 字节，若 OOM 关键字跨越被丢弃的字节则 re.search 漏检。应用 `errors="replace"`。 — D2+D5, confidence: 88% — fixed
-- [x] **CHK-009** `[HIGH]` JSON manifest 损坏被 except 静默返回 None (L37-42): `_read_json()` 对任何异常（含 JSONDecodeError）返回 None，调用方无法区分"文件不存在"与"文件损坏"。损坏的 manifest 被当作空处理，运行被误判为 missing。 — D2, confidence: 88% — fixed
-- [x] **CHK-010** `[HIGH]` 新增任务类型无 CSV 模式和产物验证 → 默认通过 (L17-24, L85-91): TASK_TO_CSV_PATTERN 仅 6 任务，新任务 csv_pattern="" → glob 无匹配 → has_csv=False → "missing"。但 `_has_task_level_artifacts` 对非 LB/RULER 任务返回 True，无实际验证。 — D2+D1+D7, confidence: 95% — fixed
-- [x] **CHK-011** `[MED]` CSV 三种失败模式不区分 (L62-74): `_csv_has_rows()` 对文件不存在/仅 header/读取异常均返回 False，调用方合并为 `has_valid_csv=False`，无法针对性修复。 — D2, confidence: 85% — fixed
-- [x] **CHK-012** `[MED]` 非整数 seed 参数导致未处理 ValueError (L270): `int(x)` 对 "abc" 等输入直接崩溃，无友好错误提示。 — D2+D5, confidence: 85% — fixed
-- [x] **CHK-013** `[MED]` 空 required/stress_run_names 产生虚假 complete=True (L268-269, L318): 空列表 → 空 expected → missing_run_names=[] → required_complete=True。无至少一个 run 的前置检查。 — D2+D5, confidence: 85% — fixed
-- [x] **CHK-014** `[MED]` --tasks 默认值与 run_experiments.py 不一致 (L252): check 脚本默认 "profile_latency,profile_memory"(2 任务)，run 脚本默认 4 任务。长实验检查时漏验 eval_ppl/eval_needle。 — D4, confidence: 86% — fixed
-- [x] **CHK-016** `[MED]` Traceback 检测大小写敏感 (L58): 使用精确字符串 "Traceback (most recent call last):" 匹配，小写变体漏检。OOM 检测用了 re.IGNORECASE 但 Traceback 没有。 — D7, confidence: 88% — fixed
-- [x] **CHK-017** `[MED]` 状态转移链 7 层嵌套无注释 (L147-166): 20 行 elif 链含复杂布尔表达式和多个不可达分支，无状态机文档。维护易引入逻辑错误。 — D7, confidence: 100% — fixed
-- [x] **CHK-019** `[MED]` L159 中 "skipped" 是不可达分支: has_csv=True + manifest_status="skipped" 总被 L153 先捕获（"skipped" 在 L154 的集合中）。死代码增加阅读困惑。 — D7, confidence: 95% — fixed
-
-### ENG. 引擎模块
-- [x] **ENG-002** `[HIGH]` generate() 函数缺少 quant_bits 参数 — fixed commit 20095fb
-- [x] **ENG-015** `[HIGH]` Triton kernel 硬编码 fp16 输出与 bf16 输入 dtype 不匹配 (triton_decode_attn_int8.py:285): kernel `tl.store` 强制转 `tl.float16`，但 wrapper 分配 `torch.empty_like(q)` 继承 q 的 dtype。若模型以 bf16 运行，位模式解释错误产生静默数值偏差。当前所有脚本用 fp16 不触发。 — D1, confidence: 92% — fixed
-- [x] **ENG-016** `[HIGH]` Triton kernel 在 context_lens=0 时 softmax 除零产生 NaN (triton_decode_attn_int8.py:281): online softmax `l_i=0.0`，无 token 时 `acc/l_i = 0/0 = NaN`；torch_ref 正确返回零向量。两实现边界行为不一致。 — D1, confidence: 95% — fixed
-- [x] **ENG-017** `[HIGH]` apply_int8_fused_patch layers=None 后仍硬访问 model.model.layers[0] (patch_model.py:720-755): try 块吞异常设 layers=None，但 L755 在 try 外再次访问同一属性，产生不可理解的 AttributeError 而非清晰的 ValueError。 — D2+D5, confidence: 95% — fixed
-- [x] **ENG-018** `[MED]` max_new_tokens=0 时仍生成 1 个 token (generate_loop.py:639,655): prefill 后无条件追加第一个 argmax token，decode loop `range(-1)` 不执行，`gen_len=1` 返回。语义违反 "生成 0 个新 token" 约定。 — D5, confidence: 95% — fixed
-- [x] **ENG-019** `[MED]` inv_tau[layer_idx] 无越界校验 (patch_model.py:559): fused decode 直接索引无边界检查，prefill 路径有检查。校准层数不匹配时报无上下文 IndexError。 — D5, confidence: 92% — fixed
-- [x] **ENG-020** `[MED]` batch_size=0 / prompt_len=0 未校验 (generate_loop.py:367-374): `input_ids.shape=[0,S]` 或 `[B,0]` 导致下游 IndexError（logits[:,-1,:] 在空维度索引）或未定义行为。 — D5, confidence: 95% — fixed
-- [x] **ENG-022** `[MED]` prefill temperature hooks 在 model 结构不标准时静默返回空列表 (generate_loop.py:172-175): 校准文件已加载但 hooks 未注册无 warning，用户以为使用 ours 方法实际无 temperature 校正。 — D2, confidence: 90% — fixed
-- [x] **ENG-024** `[MED]` _maybe_dump_fused_decode 类型签名声明 torch.Tensor 但实际可接收 None (patch_model.py:308-309,677-689): `cache_kind=int4` + dump 未启用时传入 None。dump 启用时会 crash。应改为 Optional。 — D4+D2, confidence: 92% — fixed
-- [x] **ENG-026** `[MED]` calib_group_k 使用 `or` 运算符，合法值 0 被静默替换 (generate_loop.py:476-477): JSON 中 `"group_size_k": 0` 被 Python `or` 视为 falsy 丢弃。 — D2, confidence: 82% — fixed
-- [x] **ENG-028** `[MED]` INT4 动态量化 scale 强制转 fp16 与 INT8 路径不一致 (quant/int4_basic.py:131): INT8 用 `abs_max.to(tensor.dtype)` 保留输入精度，INT4 硬转 `torch.float16`。 — D1, confidence: 88% — fixed
-- [x] **ENG-031** `[MED]` kv_mode 集合常量重复硬编码 4 次 (generate_loop.py:398,668,684,701): `["int8_fused","int8_ours","int4_fused","int4_ours","int4_ours_mixed"]` 应提取为模块级 frozenset。 — D7, confidence: 95% — fixed
-
-### EVL. 评测脚本
-- [x] **EVL-001** `[CRIT]` eval_longbench.py _classification_accuracy() 语义变化未文档化 (L265) — fixed commit 52f4abf (CLASSIFICATION_MATCH_POLICY 常量 + docstring + CSV audit 字段)
-- [x] **EVL-002** `[CRIT]` **RULER CWE 子任务在 1.5B *_long 配置下触发 max_position_embeddings 溢出** — fixed commit b7f4c36 (_effective_prompt_budget() 确保 prompt + gen ≤ max_model_len)
-- [x] **EVL-003** `[CRIT]` export_tables_latex.py KV_MODE_DISPLAY 缺 kivi_style — fixed commit 8bf9414
-- [x] **EVL-004** `[CRIT]` export_tables_latex.py KV_MODE_ORDER 缺 kivi_style — fixed commit 8bf9414
-- [x] **EVL-005** `[CRIT]` MK-NIAH hits_exact 计数器死代码 (L172-174) — fixed
-- [x] **EVL-006** `[CRIT]` VT 多链评分仅评价第一条链 (L216, L442) — fixed
-- [x] **EVL-007** `[CRIT]` 上下文截断从右侧保留破坏 RULER 语义 (L546-554) — fixed
-- [x] **EVL-008** `[HIGH]` **run_experiments.py 预检查遗漏 RULER CWE 的额外 max_new_tokens 开销** (L806-928) — fixed commit b7f4c36 (prelaunch 截断警告 + _effective_prompt_budget)
-- [x] **EVL-009** `[HIGH]` eval_longbench.py 引用未定义 logger — fixed commit 20095fb
-- [x] **EVL-010** `[HIGH]` generate_thesis_report.py 缺少 KIVI claims — fixed commit 8bf9414
-- [x] **EVL-011** `[HIGH]` kivi_style quant_bits 推断为 16 (L985) — fixed
-- [x] **EVL-012** `[HIGH]` 分类准确率子串匹配过于宽松 (L252) — fixed
-- [x] **EVL-013** `[MED]` eval_ruler.py 截断策略 magic numbers (L562-570) — fixed
-- [x] **EVL-014** `[MED]` **eval_ruler.py case 循环无 per-case error handling** (L872-908) — fixed
-- [x] **EVL-015** `[MED]` 所有 eval 脚本 quant_bits fallback 将 KIVI 记录为 16 (eval_ppl L878 / eval_needle L467 / eval_longbench L833 / eval_ruler L98... — fixed
-- [x] **EVL-016** `[MED]` eval_longbench.py 指标单位不一致 (L807-808) — fixed
-- [x] **EVL-017** `[MED]` eval_longbench.py 自实现 Rouge-L 可能与官方 LongBench 不一致 (L206-219) — fixed
-- [x] **EVL-018** `[MED]` aggregate_results.py kv_mode 排序无 KIVI (L552, L585, L648, L1322) — fixed
-- [x] **EVL-019** `[MED]` CWE pred_words 未过滤空字符串 (L193) — fixed
-- [x] **EVL-020** `[MED]` 指标尺度 [0,100] vs objective.md 声称 [0,1] 不一致 (L812, L867-868) — fixed
-- [x] **EVL-021** `[MED]` HF 字段提取 fallback 顺序含 "input" 作为 context 候选 (L387) — fixed
-- [x] **EVL-022** `[LOW]` eval_ruler.py 多答案评分存在死代码 (L172-174) — fixed
-- [x] **EVL-024** `[LOW]` _token_f1() 分母过度保护 (L140-141) — fixed
-- [x] **EVL-025** `[LOW]` task_off_name 取 vals[0] 假设同一任务所有样本指标名一致 (L811) — fixed
-- [x] **EVL-027** `[LOW]` eval_ruler.py `_effective_prompt_budget()` 死存储 (L~550): 函数计算 `available` 后立即被后续逻辑覆盖，中间赋值未被使用。无功能影响但增加阅读困惑。 — D1 incremental, confidence: 85% — fixed
-- [x] **EVL-028** `[MED]` eval_ruler.py error case NaN 分数传播风险: per-case 异常处理将 score 设为 NaN，但下游聚合（mean over cases）中 NaN 参与计算导致整个 task 结果为 NaN。应使用 `nanmean` 或在聚合前过滤。 — D1 incremental, confidence: 88% — fixed
-
-### EXP. 导出/报告
-- [x] **EXP-001** `[HIGH]` C11 跨模型验证逻辑缺陷 (generate_thesis_report.py — fixed
-- [x] **EXP-009** `[MED]` generate_thesis_report.py 跨模型 claim `gains.min()` 与 `all(practical_pass)` 语义不匹配: `gains.min()` 取数值最小值，但 `practical_pass` 基于阈值判断。当 min gain 远大于阈值但某模型的 practical_pass 因其他原因（如缺数据）为 False 时，两个信号矛盾。 — D1 incremental, confidence: 85% — fixed
-- [x] **EXP-010** `[HIGH]` generate_thesis_report.py 单模型路径缺少 `target_model_id` 字段: 当 `--model_ids` 只传一个模型时，`_evaluate_claim_row()` 返回的 dict 不含 `target_model_id` key，但下游 DataFrame 构建假设该列存在，导致 KeyError。跨模型路径正常。 — D1 incremental, confidence: 92% — fixed
-- [x] **EXP-011** `[LOW]` generate_thesis_report.py NaN `gain_pct` 被判定为 FAIL 而非 INCONCLUSIVE: 当 baseline 为 0 时 `gain_pct = NaN`，当前逻辑将 NaN 视为未通过阈值 → FAIL。应归类为 INCONCLUSIVE 并在报告中标注。 — D2 incremental, confidence: 85% — fixed
-- [x] **EXP-012** `[LOW]` generate_thesis_report.py 单模型 vs 跨模型 claim schema 不一致 (27 vs 29 keys): 单模型 claim dict 缺少 `min_gain_model` 和 `max_degradation_model` 字段，跨模型有。下游若以跨模型 schema 为模板构建 DataFrame，单模型行会出 NaN 列。 — D4 incremental, confidence: 82% — fixed
-- [x] **EXP-013** `[HIGH]` export_tables_latex.py `_read_csv()` bare except 返回空 DataFrame，全部下游 export 静默跳过: L66-70 `except: return pd.DataFrame()` 吞掉所有异常（包括 schema 错误、编码错误），8 个 export 函数均依赖此函数，文件损坏或格式变更时无任何警告，产出空 LaTeX 表格。 — D2 EXP rotation, confidence: 95% — fixed
-- [x] **EXP-014** `[MED]` export_tables_latex.py `_pivot_metric()` groupby().mean() 静默平均多模型行: L91-126 当输入包含多个 model_id 的数据时，pivot 前的 groupby 会将不同模型的指标平均，产出的 LaTeX 表格数值为多模型混合平均值而非单模型值。当前无 model_id 过滤逻辑。 — D4 EXP rotation, confidence: 90% — fixed
-- [x] **EXP-015** `[MED]` export_tables_latex.py LaTeX `--label_prefix` 注入风险: `label_prefix` 参数直接拼入 `\label{}` 命令（L140 等），含特殊字符（如 `}`, `\`）时会破坏 LaTeX 编译。无输入校验或转义。 — D3 EXP rotation, confidence: 85% — fixed
-- [x] **EXP-016** `[MED]` export_tables_latex.py export_latency / export_memory 近乎重复的 DRY 违反: L159-225 两函数结构几乎相同（仅 metric_col 和标题不同），约 60 行重复代码。应提取公共 `_export_profile_table()` 函数。 — D7 EXP rotation, confidence: 88% — fixed
-
-### KVC. KV Cache
-- [x] **KVC-001** `[CRIT]` K-scale/zp 在 clear() 后状态不一致 — fixed commit 20095fb
-- [x] **KVC-003** `[HIGH]` 论文内存对比表必须注明 KIVI INT4 无 bit-packing — fixed
-- [x] **KVC-004** `[HIGH]` 论文 Methods 节须披露 K 量化策略差异 — fixed
-- [x] **KVC-005** `[MED]` kivi_style_cache.py clear() 仅重置 K scale/zp 未显式清零 V scale/zp — fixed
-- [x] **KVC-006** `[MED]` decode K 量化与 prefill K 量化 device 一致性未强制 (L220-231) — fixed
-- [x] **KVC-007** `[MED]` V buffer shape 一致性未校验 (L126-131) — fixed
-- [x] **KVC-008** `[MED]` append() 无输入 tensor shape 校验 (L187-245) — fixed
-- [x] **KVC-009** `[MED]` get_memory_mb() 注释误导 (L307) — fixed
-- [x] **KVC-010** `[MED]` INT4 量化精度 edge case 未覆盖 — fixed
-- [x] **KVC-011** `[MED]` 论文须披露 KIVI 无温度校正 — fixed
-- [x] **KVC-012** `[MED]` 论文须披露 decode kernel 差异 — fixed
-- [x] **KVC-013** `[LOW]` kivi_style_cache.py INT4 head_dim 偶数约束仅在 append 时检查 — fixed
-- [x] **KVC-014** `[LOW]` _seq_len 仅在 layer_id=0 时更新 (L244-245) — fixed
-- [x] **KVC-015** `[LOW]` 无 batch_size=0 校验 (L204) — fixed
-- [x] **KVC-017** `[LOW]` KIVI K-scale 内存恒定 vs INT8 随 seq_len 增长 — fixed
-
-### PRF. 性能分析
-- [x] **PRF-001** `[HIGH]` kivi_style quant_bits CSV 记录 vs 运行时不一致 (L304/341 vs L369) — fixed
-- [x] **PRF-006** `[MED]` pynvml 初始化异常未捕获 (L104-105) — fixed
-- [x] **PRF-007** `[MED]` MemoryMonitor.stop() 线程健壮性 (L119-121) — fixed
-- [x] **PRF-008** `[MED]` NVML 回退逻辑隐性掩盖不可用 (L381) — fixed
-
-### QNT. 量化模块
-- [x] **QNT-001** `[CRIT]` percentile < 50 时 quantile_lo > quantile_hi — fixed commit 20095fb
-- [x] **QNT-002** `[CRIT]` 无 percentile 范围校验 — fixed commit 20095fb
-- [x] **QNT-005** `[MED]` _normalize_static_scale 3D case 实现错误 — fixed
-
-### RUN. 实验运行
-- [x] **RUN-001** `[CRIT]` eval_ppl.py build_kv_cache() 缺失 kivi_style 分支 — fixed commit 03ed4a0
-- [x] **RUN-002** `[HIGH]` kivi_style 的 calib_strategy 默认值继承陷阱 (L880-881, L1015-1016) — fixed
-- [x] **RUN-003** `[MED]` skip_completed_success 状态不一致 (L1134 vs L1147) — fixed
-- [x] **RUN-004** `[MED]` subprocess.run 无异常捕获 (L1174-1179) — fixed
-- [x] **RUN-005** `[MED]` kv_mode 无效值静默跳过 (L850-862) — fixed
-- [x] **RUN-006** `[MED]` kivi_style decode_attn_impl 无强制验证 (L882-884, L1033-1034) — fixed
-- [x] **RUN-007** `[MED]` 无条件传递 quant 参数给所有 kv_mode (L987-998) — fixed
-- [x] **RUN-008** `[MED]` skip 时重复标记成功 (L1130-1138) — fixed
-- [x] **RUN-015** `[MED]` repair_phase5v2_ruler_light.py JSON parse 异常静默跳过: `json.load()` 失败时 `continue` 跳过该文件无 warning，可能丢失需修复的数据。应 log 文件名和错误原因。 — D2 incremental, confidence: 88% — fixed
-- [x] **RUN-016** `[MED]` repair_phase5v2_ruler_light.py `--execute` 模式首次失败即中止: 执行修复命令序列时，任一命令失败立即退出，剩余修复命令丢失。应收集所有失败后统一报告。 — D2 incremental, confidence: 85% — fixed
-
-### RVW. 审查工具与配置
-- [x] **RVW-001** `[HIGH]` review_tool.py phase-gate 仅检查 CRIT，遗漏 HIGH (L120): `cmd_phase_gate()` 仅过滤 `severity == "CRIT"`，按 CLAUDE.md §4.5 闸门规则，HIGH 也应阻塞（至少提示）。可能导致存在 HIGH 阻塞项时误判为 CLEAR — fixed
-- [x] **RVW-002** `[HIGH]` review_tool.py cmd_add() 文件写入非原子性 (L230-231): `open(path, "w")` 直接覆写，若进程中途崩溃会导致 review_tracker.md 被截断或损坏。应使用 tmpfile + rename 原子写入 — fixed
-- [x] **RVW-003** `[MED]` review_tool.py 解析不匹配行静默跳过 (L42-87): 任何不符合 ISSUE_RE 格式的 issue 行会被完全忽略，无警告日志。正则已从 `\w+` 改为 `[A-Z]+` 部分改善，但核心静默跳过问题仍存在 — fixed
-- [x] **RVW-004** `[MED]` review_tool.py _update_summary() 格式假设过强 + 双写竞争 (L268-287): `summary_replaced` 标志仅在 "Last updated:" 行后触发，若 header 行顺序变化或新增行则部分 summary 不更新。另外 `cmd_add` 先 write content 再调 `_update_summary`（二次 open+write），后者可能只更新部分摘要行却无返回值通知调用方 — fixed
-- [x] **RVW-005** `[MED]` reviewer.md L5 描述引用 "iteration.md TODO Backlog" 应为 "review_tracker.md" (.claude/agents/reviewer.md L5) — fixed
-- [x] **RVW-006** `[MED]` reviewer.md YAML 权限与 body 指令矛盾 (.claude/agents/reviewer.md L8 vs L11,L16) — fixed: body 改为"严禁修改源代码（src/、scripts/、tests/、configs/）"，写入权限标注"仅限 review_tracker.md + iteration.md"
-- [x] **RVW-007** `[MED]` start_agents.sh L32 developer 启动 prompt 引用 "TODO Backlog" 而非 review_tracker.md (scripts/start_agents.sh L32): 与 developer.md L22 "读取 review_tracker.md" 冲突，可能导致 developer agent 优先遵循启动 prompt 到 iteration.md 而非 review_tracker.md 查找任务 — fixed (prompt 改为 "读 review_tracker.md + iteration.md → 按优先级矩阵领取任务")
-- [x] **RVW-008** `[MED]` start_agents.sh L33 reviewer 启动 prompt 未提及 review_tracker.md (scripts/start_agents.sh L33): reviewer.md L21 要求先读 review_tracker.md，但启动 prompt 仅说"读 iteration.md" — fixed commit 3ba38e3 (prompt 已更新为 "读 review_tracker.md → 进入持续监控循环")
-- [x] **RVW-009** `[LOW]` settings.json Stop hook "BLOCKED" 字符串匹配过宽 (.claude/settings.json L21): iteration.md 历史条目中若包含 "BLOCKED" 一词（如引用 Phase Gate 状态），会误触发退出许可，应匹配更精确的标记如 "auto-iterate-blocked" — fixed
-- [x] **RVW-010** `[LOW]` start_agents.sh 硬编码绝对路径 (scripts/start_agents.sh L5): `PROJECT_DIR="/Users/chenzilang/..."` 不可移植，建议使用 `$(cd "$(dirname "$0")/.." && pwd)` — fixed commit 3ba38e3
-- [x] **RVW-011** `[HIGH]` Phase Blocker CHK-001 已修复但未标记 — 独立审查确认 `_check_task_state()` OOM 检查已移至 if 链首位 (check_run_completeness.py L147)，匹配 Codex PR 修复 (merge 1aa5c95)。Phase Gate 状态过期，建议 developer 验证并标记 fixed 以解除 blocker — fixed (supervisor 已验证并标记 CHK-001)
-- [x] **RVW-012** `[MED]` 多处 kv_mode 列表遗漏 int4_fused: developer.md L91 和 CLAUDE.md §9 固定决策均缺少 `int4_fused`（仅列 6 项），而 review-numerical.md L122 和代码 generate_loop.py 均包含 `int4_fused`（7 项）。权威文件与实际代码不一致 — fixed
-- [x] **RVW-014** `[HIGH]` cmd_add() 在 `## Open Issues` 节缺失时静默无操作 (scripts/review_tool.py L219-235): 当 `re.search(r'^## Open Issues', content)` 返回 None 时，整个写入分支被跳过，函数仍输出 "Added: ..." 并返回 0，issue 实际未写入 — confidence: 97% — fixed
-- [x] **RVW-015** `[HIGH]` start_agents.sh L28 `--agent reviewer` 引用已删除的 agent (scripts/start_agents.sh L16,L28): reviewer.md 已被 review-coord.md + 7 专项 Agent 替代，执行该脚本会以不存在的 reviewer agent 启动第三个 pane，审查子系统完全无法工作 — fixed commit 3ba38e3
-- [x] **RVW-016** `[MED]` cmd_add() 无重复 ID 检查 (scripts/review_tool.py L192-236): 重复执行相同 `--id` 会产生重复条目，cmd_stats 计数虚高 — confidence: 100% — fixed
-- [x] **RVW-017** `[MED]` parse_tracker rest.replace(" — fixed", "") 全局替换可损坏 title (scripts/review_tool.py L63): 若 issue title 本身包含 " — fixed" 子串（如 "partially — fixed workaround"），该子串也会被静默删除 — confidence: 80% — fixed
-- [x] **RVW-018** `[MED]` 无效 --sev 参数静默返回空结果 (scripts/review_tool.py L137-139): 传入未知 severity（如 `--sev foo`）时 fallback 为 `"FOO"`，过滤结果为空列表，exit code 仍为 0，用户无法区分"真无结果"与"参数拼写错误" — confidence: 88% — fixed
-- [x] **RVW-019** `[MED]` supervisor.md 迭代上限与 auto-iterate SKILL.md 不一致 (supervisor.md L66,L104 vs SKILL.md L85,L95): supervisor.md 声明默认 5 轮，SKILL.md L85 写 8 轮、L95 写 5 轮，SKILL.md 内部亦矛盾 — confidence: 95% — false_positive
-- [x] **RVW-020** `[MED]` CLAUDE.md §12 遗漏 review-coord 中间层 (CLAUDE.md L251): 描述为"由 Supervisor 并行调度"7 个审查 Agent，但实际架构是 Supervisor → review-coord → 7 Agent，遗漏了 coordinator 层 — confidence: 90% — fixed
-- [x] **RVW-021** `[MED]` cmd_add 无并发写保护，多 Agent 并行添加 issue 可能丢失写入 (review_tool.py:199-231): read→modify→write 无文件锁，两个 review agent 同时执行 add 时，后写者覆盖前者。Agent Teams 场景下可触发。 — D3+D5 RUN rotation, confidence: 75% — fixed
-- [x] **RVW-022** `[MED]` _update_summary 遗漏 wont_fix 计数致 summary 算术不一致 (review_tool.py:257-261): res_parts 仅含 fixed+false_positive，wont_fix>0 时 total != fixed+fp+open。cmd_stats 正确计数但 _update_summary 未传播。 — D1 RUN rotation, confidence: 90% — fixed
-- [x] **RVW-023** `[MED]` _update_summary 依赖 summary 行顺序，格式变更时静默失效 (review_tool.py:273-283): 仅当 "Last updated:" 行出现后才停止替换，若 header 行顺序变化则部分 summary 不更新，无 warning。 — D1+D7 RUN rotation, confidence: 70% — fixed
-
-### TST. 测试覆盖
-- [x] **TST-001** `[HIGH]` KIVI cache zero-point decode 传播测试缺失 — fixed
-- [x] **TST-002** `[HIGH]` asymmetric_quant zero-point 公式直接验证缺失 — fixed
 
 </details>
