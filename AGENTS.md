@@ -16,8 +16,18 @@
 ## Agent roles
 
 - **Supervisor** (`.claude/agents/supervisor.md`): 目标驱动持续运行，无固定轮次上限。支持 Execute/Wait/Monitor 三模式自动切换，智能熔断（仅 Execute 模式下无进展才触发）。
-- **Developer** (`.claude/agents/developer.md`): 编码/测试/修复执行者，自主 debug+commit+hygiene 流程。
-- **Review-Coord** (`.claude/agents/review-coord.md`): 审查协调员，并行调度 7 个专项审查 Agent（D1-D7），结果汇聚到 `review_tracker.md`。
+- **Developer** (`.claude/agents/developer.md`): 编码/测试/修复执行者，支持指令模式（sonnet，被 Supervisor spawn）和自主模式（opus，独立运行），自主 debug+commit+hygiene 流程。
+- **Review-Coord** (`.claude/agents/review-coord.md`): 持续守护式审查协调员，事件循环 + 10 模块全覆盖 + 智能休眠，并行调度 7 个专项审查 Agent（D1-D7），结果汇聚到 `review_tracker.md`，审查摘要同步写入 `iteration.md`。
+
+## Model configuration
+
+| Agent | Model | 理由 |
+|-------|-------|------|
+| Supervisor | opus | 策略决策、目标拆解需要最强推理 |
+| Developer（自主模式） | opus | 独立运行需完整推理能力 |
+| Developer（指令模式） | sonnet | Supervisor spawn 时指定，执行具体任务足够 |
+| Review-Coord | opus | 协调 7 个 Agent + 状态管理需要强推理 |
+| D1-D7 | sonnet | 单维度审查任务，sonnet 胜任 |
 
 ## Commands
 

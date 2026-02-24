@@ -5,6 +5,11 @@
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SESSION="agents"
 
+# Preflight checks
+command -v claude >/dev/null 2>&1 || { echo "错误: claude 命令未找到"; exit 1; }
+[[ -f "$PROJECT_DIR/review_tracker.md" ]] || { echo "错误: review_tracker.md 不存在"; exit 1; }
+[[ -f "$PROJECT_DIR/iteration.md" ]] || { echo "错误: iteration.md 不存在"; exit 1; }
+
 if tmux has-session -t "$SESSION" 2>/dev/null; then
     echo "Session '$SESSION' already exists. Attaching..."
     tmux attach -t "$SESSION"
@@ -31,6 +36,13 @@ sleep 5
 tmux send-keys -t "$SESSION:0.0" "我是主管 Agent。按启动流程开始：获取真实时间 → 读 iteration.md + objective.md → 评估状态 → 制定迭代计划 → 开始执行。" Enter
 tmux send-keys -t "$SESSION:0.1" "我是开发 Agent。按启动流程开始：获取真实时间 → 读 review_tracker.md + iteration.md → 按优先级矩阵领取任务 → 开始修复。" Enter
 tmux send-keys -t "$SESSION:0.2" "持续审查模式启动。按启动流程开始：获取时间 → 读 review_tracker.md → 进入持续监控循环。" Enter
+
+# Pane titles for easy identification
+tmux select-pane -t "$SESSION:0.0" -T "supervisor"
+tmux select-pane -t "$SESSION:0.1" -T "developer"
+tmux select-pane -t "$SESSION:0.2" -T "review-coord"
+tmux set -t "$SESSION" pane-border-format "#{pane_title}"
+tmux set -t "$SESSION" pane-border-status top
 
 tmux select-pane -t "$SESSION:0.0"
 tmux attach -t "$SESSION"

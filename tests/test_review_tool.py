@@ -628,5 +628,96 @@ class TestSeverityConstants(unittest.TestCase):
         self.assertEqual(rt.SEV_ORDER["LOW"], 3)
 
 
+# ---------------------------------------------------------------------------
+# Test: cmd_add() — including boundary cases (RVW-014, TST-019)
+# ---------------------------------------------------------------------------
+
+class TestCmdAdd(unittest.TestCase):
+    """Test cmd_add() insertion logic and error paths."""
+
+    def test_add_to_existing_section(self):
+        path = _write_tracker(SAMPLE_TRACKER)
+        try:
+            rc = rt.cmd_add(path, "AA-9", "HIGH", "AA. Core Module", "New high issue")
+            self.assertEqual(rc, 0)
+            content = path.read_text(encoding="utf-8")
+            self.assertIn("**AA-9**", content)
+            self.assertIn("`[HIGH]`", content)
+        finally:
+            os.unlink(path)
+
+    def test_add_creates_new_section(self):
+        path = _write_tracker(SAMPLE_TRACKER)
+        try:
+            rc = rt.cmd_add(path, "ZZ-1", "MED", "ZZ. Brand New", "A brand new section issue")
+            self.assertEqual(rc, 0)
+            content = path.read_text(encoding="utf-8")
+            self.assertIn("### ZZ. Brand New", content)
+            self.assertIn("**ZZ-1**", content)
+        finally:
+            os.unlink(path)
+
+    def test_add_duplicate_id_returns_error(self):
+        path = _write_tracker(SAMPLE_TRACKER)
+        try:
+            rc = rt.cmd_add(path, "AA-1", "HIGH", "AA. Core Module", "Duplicate")
+            self.assertEqual(rc, 1)
+        finally:
+            os.unlink(path)
+
+    def test_add_missing_open_issues_section_returns_error(self):
+        """cmd_add returns error when '## Open Issues' is missing."""
+        content = textwrap.dedent("""\
+            # Review Tracker
+
+            > 0 issues | | 0 open ()
+            > Phase Gate: **CLEAR** — none
+            > Last updated: 2026-02-24
+
+            ### AA. Core Module
+
+            ---
+        """)
+        path = _write_tracker(content)
+        try:
+            rc = rt.cmd_add(path, "AA-1", "HIGH", "AA. Core Module", "Test issue")
+            self.assertEqual(rc, 1, "Should fail when '## Open Issues' is missing")
+        finally:
+            os.unlink(path)
+
+    def test_add_no_separator_returns_error(self):
+        """RVW-014: cmd_add returns error when no '---' separator after Open Issues."""
+        content = textwrap.dedent("""\
+            # Review Tracker
+
+            > 0 issues | | 0 open ()
+            > Phase Gate: **CLEAR** — none
+            > Last updated: 2026-02-24
+
+            ## Open Issues
+
+            ### AA. Core Module
+
+        """)
+        path = _write_tracker(content)
+        try:
+            # Adding to existing section should work (appends at end of file)
+            # But adding a NEW section with no --- separator should fail
+            rc = rt.cmd_add(path, "ZZ-1", "MED", "ZZ. New Section", "Issue without separator")
+            self.assertEqual(rc, 1, "Should fail when no '---' separator for new section")
+        finally:
+            os.unlink(path)
+
+    def test_add_accepts_full_severity_names(self):
+        path = _write_tracker(SAMPLE_TRACKER)
+        try:
+            rc = rt.cmd_add(path, "AA-8", "CRITICAL", "AA. Core Module", "Full sev name")
+            self.assertEqual(rc, 0)
+            content = path.read_text(encoding="utf-8")
+            self.assertIn("`[CRIT]`", content)
+        finally:
+            os.unlink(path)
+
+
 if __name__ == "__main__":
     unittest.main()

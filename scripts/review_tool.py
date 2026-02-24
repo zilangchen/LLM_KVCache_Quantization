@@ -300,6 +300,15 @@ def cmd_add(path: Path, issue_id: str, sev: str, section_header: str, title: str
                 insert_pos = oi_match.end() + sep.start()
                 new_section = f"\n\n### {section_header}\n{new_line}\n"
                 content = content[:insert_pos] + new_section + content[insert_pos:]
+            else:
+                # RVW-014: Fail explicitly instead of silently dropping the issue
+                print(
+                    f"ERROR: no '---' separator found after '## Open Issues' "
+                    f"in {path}. Cannot determine insertion point for new "
+                    f"section '{section_header}'.",
+                    file=sys.stderr,
+                )
+                return 1
 
         # RVW-002: Atomic write
         _atomic_write(path, content)
