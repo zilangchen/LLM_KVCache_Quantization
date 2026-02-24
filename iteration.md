@@ -355,7 +355,7 @@ Canonical agent workflow directory is `.agents/`.
   - KIVI INT4 bit-pack decode 路径有维度不匹配 bug，可能影响 kivi_style_int4 系列实验结果
   - autodl-tmp 仅 2.4GB，不要在该分区写新数据
   - 质量评测预计 80-100h 墙钟；完成后启动吞吐串行
-  - **监控命令**: `ssh -p 31867 root@region-42.seetacloud.com 'tmux ls; ls results/phase5v2/runs/ | wc -l; nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader'`
+  - **监控命令**: `ssh -p $SSH_PORT $SSH_USER@$SSH_HOST 'tmux ls; ls results/phase5v2/runs/ | wc -l; nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader'` (SEC-001: server details moved to docs/autodl_server.md)
 
 ### 2026-02-23 16:11 | PR-4 配置与文档收口：I/W/X 全量关闭
 - **Goal**: 收口 final config / objective / SOP / preflight 文档口径，关闭 I/W/X backlog

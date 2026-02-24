@@ -10,13 +10,20 @@ description: 远程服务器操作 - SSH/tmux/代码同步/资源监控
 
 ## 🔗 服务器信息
 
+**SEC-001: 服务器连接信息已移至 `docs/autodl_server.md`（被 .gitignore 保护）。**
+
+使用前请先从该文件读取连接参数：
+
 ```bash
-# AutoDL 服务器（从 docs/autodl_server.md 读取）
-SSH_HOST="region-42.seetacloud.com"
-SSH_PORT="31867"
-SSH_USER="root"
+# 从 docs/autodl_server.md 读取（该文件不入 git）
+# SSH_HOST=<see docs/autodl_server.md>
+# SSH_PORT=<see docs/autodl_server.md>
+# SSH_USER=<see docs/autodl_server.md>
 REMOTE_DIR="/root/LLM_KVCache_Quantization"
 ```
+
+以下命令中 `$SSH_HOST`、`$SSH_PORT`、`$SSH_USER` 均为占位符，
+实际值请从 `docs/autodl_server.md` 获取后替换。
 
 ---
 
@@ -27,7 +34,7 @@ REMOTE_DIR="/root/LLM_KVCache_Quantization"
 // turbo
 ```bash
 # 测试连接
-ssh -p 31867 root@region-42.seetacloud.com "echo 'SSH OK' && nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv"
+ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "echo 'SSH OK' && nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv"
 ```
 
 ### 2. GPU 资源监控
@@ -35,10 +42,10 @@ ssh -p 31867 root@region-42.seetacloud.com "echo 'SSH OK' && nvidia-smi --query-
 // turbo
 ```bash
 # 查看 GPU 状态
-ssh -p 31867 root@region-42.seetacloud.com "nvidia-smi"
+ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "nvidia-smi"
 
 # 持续监控（每 5 秒）
-ssh -p 31867 root@region-42.seetacloud.com "watch -n 5 nvidia-smi"
+ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "watch -n 5 nvidia-smi"
 ```
 
 ### 3. 进程监控
@@ -46,10 +53,10 @@ ssh -p 31867 root@region-42.seetacloud.com "watch -n 5 nvidia-smi"
 // turbo
 ```bash
 # 查看 Python 进程
-ssh -p 31867 root@region-42.seetacloud.com "ps aux | grep python"
+ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "ps aux | grep python"
 
 # 查看进程运行时间
-ssh -p 31867 root@region-42.seetacloud.com "ps -o pid,etime,cmd -p <PID>"
+ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "ps -o pid,etime,cmd -p <PID>"
 ```
 
 ---
@@ -61,7 +68,7 @@ ssh -p 31867 root@region-42.seetacloud.com "ps -o pid,etime,cmd -p <PID>"
 // turbo
 ```bash
 # 创建后台会话运行任务
-ssh -p 31867 root@region-42.seetacloud.com "bash -lc 'tmux new -s <session_name> -d \"cd $REMOTE_DIR && python scripts/<script>.py\"'"
+ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "bash -lc 'tmux new -s <session_name> -d \"cd $REMOTE_DIR && python scripts/<script>.py\"'"
 ```
 
 ### 查看会话
@@ -69,13 +76,13 @@ ssh -p 31867 root@region-42.seetacloud.com "bash -lc 'tmux new -s <session_name>
 // turbo
 ```bash
 # 列出所有会话
-ssh -p 31867 root@region-42.seetacloud.com "tmux ls"
+ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "tmux ls"
 
 # 查看会话输出
-ssh -p 31867 root@region-42.seetacloud.com "tmux capture-pane -t <session_name> -p"
+ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "tmux capture-pane -t <session_name> -p"
 
 # 查看最近 50 行
-ssh -p 31867 root@region-42.seetacloud.com "tmux capture-pane -t <session_name> -p -S -50"
+ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "tmux capture-pane -t <session_name> -p -S -50"
 ```
 
 ### 管理会话
@@ -83,10 +90,10 @@ ssh -p 31867 root@region-42.seetacloud.com "tmux capture-pane -t <session_name> 
 // turbo
 ```bash
 # 终止会话（需用户确认）
-ssh -p 31867 root@region-42.seetacloud.com "tmux kill-session -t <session_name>"
+ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "tmux kill-session -t <session_name>"
 
 # 附加到会话（交互式）
-ssh -t -p 31867 root@region-42.seetacloud.com "tmux attach -t <session_name>"
+ssh -t -p $SSH_PORT $SSH_USER@$SSH_HOST "tmux attach -t <session_name>"
 ```
 
 ---
@@ -98,6 +105,7 @@ ssh -t -p 31867 root@region-42.seetacloud.com "tmux attach -t <session_name>"
 // turbo
 ```bash
 # 同步项目代码（排除大文件和缓存）
+# LOCAL_PROJECT_DIR: 你的本地项目路径
 rsync -avz --progress \
   --exclude='.git' \
   --exclude='__pycache__' \
@@ -105,9 +113,9 @@ rsync -avz --progress \
   --exclude='.venv' \
   --exclude='results/' \
   --exclude='artifacts/' \
-  -e "ssh -p 31867" \
-  /Users/chenzilang/Desktop/LLM_KVCache_Quantization/ \
-  root@region-42.seetacloud.com:/root/LLM_KVCache_Quantization/
+  -e "ssh -p $SSH_PORT" \
+  $LOCAL_PROJECT_DIR/ \
+  $SSH_USER@$SSH_HOST:$REMOTE_DIR/
 ```
 
 ### 远程 → 本地（结果）
@@ -116,9 +124,9 @@ rsync -avz --progress \
 ```bash
 # 同步实验结果
 rsync -avz --progress \
-  -e "ssh -p 31867" \
-  root@region-42.seetacloud.com:/root/LLM_KVCache_Quantization/results/ \
-  /Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/
+  -e "ssh -p $SSH_PORT" \
+  $SSH_USER@$SSH_HOST:$REMOTE_DIR/results/ \
+  $LOCAL_PROJECT_DIR/results/
 ```
 
 ---
@@ -128,10 +136,10 @@ rsync -avz --progress \
 // turbo
 ```bash
 # 获取最新日志
-ssh -p 31867 root@region-42.seetacloud.com "tail -100 $REMOTE_DIR/logs/<logfile>.log"
+ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "tail -100 $REMOTE_DIR/logs/<logfile>.log"
 
 # 实时跟踪日志
-ssh -p 31867 root@region-42.seetacloud.com "tail -f $REMOTE_DIR/logs/<logfile>.log"
+ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "tail -f $REMOTE_DIR/logs/<logfile>.log"
 ```
 
 ---
@@ -141,7 +149,7 @@ ssh -p 31867 root@region-42.seetacloud.com "tail -f $REMOTE_DIR/logs/<logfile>.l
 ### SSH 连接超时
 ```bash
 # 添加 keep-alive
-ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -p 31867 ...
+ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -p $SSH_PORT ...
 ```
 
 ### 网络加速（AutoDL）
@@ -153,17 +161,18 @@ source /etc/network_turbo
 ### 磁盘空间不足
 ```bash
 # 检查磁盘使用
-ssh -p 31867 root@region-42.seetacloud.com "df -h"
+ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "df -h"
 
 # 清理缓存
-ssh -p 31867 root@region-42.seetacloud.com "rm -rf ~/.cache/huggingface/hub/models--*/.no_exist"
+ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "rm -rf ~/.cache/huggingface/hub/models--*/.no_exist"
 ```
 
 ---
 
 ## 🚀 快速启动
 
-1. 验证 SSH 连接：`ssh -p 31867 root@region-42.seetacloud.com "echo OK"`
-2. 同步代码：使用上述 rsync 命令
-3. 创建 tmux 会话运行任务
-4. 监控进度和资源使用
+1. 从 `docs/autodl_server.md` 获取 SSH_HOST/PORT/USER
+2. 验证 SSH 连接：`ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "echo OK"`
+3. 同步代码：使用上述 rsync 命令
+4. 创建 tmux 会话运行任务
+5. 监控进度和资源使用
