@@ -70,6 +70,7 @@ def _write_task_failure(
     message: str,
     exception: Exception | None = None,
 ) -> None:
+    # SEC-004: Traceback/paths in failure JSON are intentional (research CLI tool).
     out_dir = _resolve_out_dir(args.out_dir)
     payload = {
         "script": Path(__file__).name,
@@ -348,6 +349,9 @@ def main():
 
         quant_bits = _resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
 
+        # PRF-010: `out` is a GenerationBatchOutput dataclass — all accessed
+        # attributes (ttft_ms, tpot_ms, prompt_len, etc.) are guaranteed fields.
+        # kv_cache_mem_mb / kv_cache_seq_len use getattr() for backward compat.
         prefill_tok_per_s = 0.0
         if out.ttft_ms > 0:
             prefill_tok_per_s = (int(args.batch) * int(out.prompt_len) / out.ttft_ms) * 1000.0

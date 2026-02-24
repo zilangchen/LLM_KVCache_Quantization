@@ -81,6 +81,7 @@ def _write_task_failure(
     message: str,
     exception: Exception | None = None,
 ) -> None:
+    # SEC-004: Traceback/paths in failure JSON are intentional (research CLI tool).
     out_dir = _resolve_out_dir(args.out_dir)
     payload = {
         "script": Path(__file__).name,

@@ -254,5 +254,6 @@ def main():
     return 0 if result["status"] == "success" else 1
 
 
+# SEC-004: Error messages may contain local paths — expected for research CLI tools.
 if __name__ == "__main__":
     sys.exit(main())

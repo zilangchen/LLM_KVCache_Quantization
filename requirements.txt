@@ -1,8 +1,10 @@
 # Minimal dependencies for the research path.
 #
 # NOTE:
-# - We intentionally do NOT pin versions yet. After the first successful run,
-#   generate `env/requirements_freeze.txt` via `pip freeze`.
+# - We intentionally do NOT pin versions yet. For production or strict
+#   reproducibility, pin versions in `env/requirements_freeze.txt` via
+#   `pip freeze`. Reference environment: Python 3.12, PyTorch 2.8.0 (CUDA 12.8).
+# - After the first successful run, generate `env/requirements_freeze.txt`.
 
 torch
 transformers
@@ -17,8 +19,5 @@ datasets
 
 pyyaml
 pynvml
-
-fastapi
-uvicorn
 
 pytest
