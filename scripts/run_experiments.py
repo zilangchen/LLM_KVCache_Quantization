@@ -7,15 +7,18 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gc
 import hashlib
 import json
 import logging
 import os
 import platform
 import re
+import signal
 import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
@@ -119,7 +122,9 @@ def _read_json(path: Path) -> Dict[str, Any] | None:
 
 def _write_json(path: Path, data: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    # RUN-045: use PID + uuid to generate unique tmp filename to prevent concurrent --append overwrites.
+    unique_tag = f"{os.getpid()}_{uuid.uuid4().hex[:8]}"
+    tmp_path = path.with_suffix(path.suffix + f".{unique_tag}.tmp")
     try:
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, sort_keys=True, ensure_ascii=True)
@@ -153,8 +158,8 @@ def _existing_result_git_commits(run_dir: Path) -> List[str]:
                         commit = str(row.get("git_commit", "")).strip()
                         if commit:
                             commits.add(commit)
-            except json.JSONDecodeError as exc:
-                # RUN-033: log JSON/CSV parse errors explicitly.
+            except csv.Error as exc:
+                # RUN-033/RUN-048: log CSV parse errors with correct exception type.
                 logger.warning("Failed to parse CSV %s: %s", path, exc)
                 continue
             except OSError as exc:
@@ -226,11 +231,20 @@ def _is_nonempty_dir(path: Path) -> bool:
         return True
 
 
-def _task_has_csv(run_dir: Path, task: str) -> bool:
+def _task_has_csv(run_dir: Path, task: str, run_start_time: float | None = None) -> bool:
+    # RUN-054: optionally verify CSV mtime is after run start to avoid matching legacy artifacts.
     pattern = TASK_TO_CSV_PATTERNS.get(task)
     if not pattern:
         return False
-    return any(run_dir.glob(pattern))
+    for p in run_dir.glob(pattern):
+        if run_start_time is None:
+            return True
+        try:
+            if p.stat().st_mtime >= run_start_time:
+                return True
+        except OSError:
+            return True
+    return False
 
 
 def _resolve_ruler_tasks_for_gate(ruler_tasks_arg: str | None) -> List[str]:
@@ -290,12 +304,30 @@ def _read_text_best_effort(path: Path) -> str:
     return read_text(path)
 
 
+_CLASSIFY_FAILURE_TAIL_KB = 256  # RUN-041: only read last N KB to avoid unbounded memory usage.
+_RUN_SEPARATOR = "--- RUN ATTEMPT SEPARATOR ---"  # RUN-038: sentinel written before each retry.
+
+
 def _classify_failure(*, log_path: Path, returncode: int | None) -> str:
     if returncode is not None and int(returncode) == 73:
         return "oom"
     if returncode is not None and int(returncode) == 130:
         return "interrupt"
-    content = _read_text_best_effort(log_path).lower()
+    # RUN-041: read only the last N KB to avoid loading arbitrarily large logs into memory.
+    try:
+        with open(log_path, "rb") as _fbin:
+            _fbin.seek(0, 2)
+            _size = _fbin.tell()
+            _tail_bytes = _CLASSIFY_FAILURE_TAIL_KB * 1024
+            _fbin.seek(max(0, _size - _tail_bytes), 0)
+            raw_tail = _fbin.read().decode("utf-8", errors="replace")
+    except OSError:
+        raw_tail = ""
+    # RUN-038: only scan content after the last run-separator so old OOM traces
+    # from earlier retry attempts do not pollute failure classification.
+    sep_idx = raw_tail.rfind(_RUN_SEPARATOR)
+    content = raw_tail[sep_idx + len(_RUN_SEPARATOR):] if sep_idx >= 0 else raw_tail
+    content = content.lower()
     # RUN-025: use word-boundary regex to avoid false positives like "room", "bloom".
     if (
         re.search(r"\boom\b", content)
@@ -463,20 +495,15 @@ def _task_is_completed_successfully(
     run_dir: Path,
     task: str,
 ) -> bool:
+    # RUN-053: only check the CURRENT status, not historical successes that may be overridden
+    # by a subsequent failure. A task with history=[success, failed] should NOT be considered
+    # completed successfully since the latest status is failed.
     task_info = manifest.get("tasks", {}).get(task, {})
     if not isinstance(task_info, dict):
         return False
     status = str(task_info.get("status", "")).strip().lower()
     if status not in {"success", "skipped"}:
-        history = task_info.get("history")
-        has_success_history = False
-        if isinstance(history, list):
-            for item in history:
-                if isinstance(item, dict) and str(item.get("status", "")).strip().lower() == "success":
-                    has_success_history = True
-                    break
-        if not has_success_history:
-            return False
+        return False
     return _task_has_csv(run_dir, task)
 
 
@@ -864,7 +891,18 @@ def main() -> int:
     )
     args = parser.parse_args()
     # QUA-002: configure logging infrastructure so logger.warning calls emit output.
+    # RUN-061: intentionally placed in main() so that library imports do not trigger
+    # basicConfig before the caller has a chance to configure logging themselves.
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
+    # RUN-036: install SIGINT handler to mark interrupted tasks and avoid leaving manifest in "running" state.
+    _interrupted = [False]
+
+    def _sigint_handler(signum: int, frame: object) -> None:
+        _interrupted[0] = True
+        print("\n[SIGINT] Interrupt received; finishing current task then exiting cleanly.")
+
+    signal.signal(signal.SIGINT, _sigint_handler)
     if int(args.max_retries) < 0:
         print("Error: --max_retries must be >= 0.")
         return 2
@@ -932,11 +970,22 @@ def main() -> int:
         try:
             from transformers import AutoConfig
 
-            model_cfg = AutoConfig.from_pretrained(
-                model_id,
-                revision=model_revision,
-                trust_remote_code=True,
-            )
+            # RUN-051: trust_remote_code=True is used solely to read max_position_embeddings
+            # from models that require it (e.g. custom architectures). The model_id has already
+            # been validated against ALLOWED_MODEL_IDS (SEC-002). Try without trust_remote_code
+            # first to minimise attack surface; fall back only if needed.
+            try:
+                model_cfg = AutoConfig.from_pretrained(
+                    model_id,
+                    revision=model_revision,
+                    trust_remote_code=False,
+                )
+            except Exception:
+                model_cfg = AutoConfig.from_pretrained(
+                    model_id,
+                    revision=model_revision,
+                    trust_remote_code=True,
+                )
             max_position_embeddings = getattr(model_cfg, "max_position_embeddings", None)
         except ModuleNotFoundError as exc:
             if getattr(exc, "name", None) in {"transformers", "torch"}:
@@ -974,6 +1023,9 @@ def main() -> int:
             return 2
         run_name = entry.get("run_name")
         kv_mode = entry.get("kv_mode", "fp16")
+        # RUN-049: when run_name_filter is active, entries that don't match the filter are
+        # skipped. Invalid kv_mode on a non-matching entry is a warning (not an error) because
+        # that entry will never run. Invalid kv_mode on a matching entry is still an error.
         if kv_mode not in SUPPORTED_KV_MODES:
             label = run_name or f"index={idx}"
             if run_name_filter and run_name not in run_name_filter:
@@ -981,8 +1033,8 @@ def main() -> int:
                     f"Warning: skipped entry {label} has unsupported kv_mode={kv_mode!r} "
                     f"(not in SUPPORTED_KV_MODES). Ignored because it does not match --run_names filter."
                 )
-                continue
-            invalid_kv_modes.append(f"{label}:{kv_mode}")
+            else:
+                invalid_kv_modes.append(f"{label}:{kv_mode}")
             continue
         if run_name_filter and run_name not in run_name_filter:
             continue
@@ -1041,9 +1093,24 @@ def main() -> int:
     for run_entry in matrix:
         run_name = run_entry.get("run_name")
         if not run_name:
-            # RUN-029: warn when run_name is empty or missing instead of silently skipping.
+            # RUN-029/RUN-055: warn when run_name is empty or missing, and record in summary so
+            # it is not silently omitted from totals tracking.
             print(
                 f"Warning: matrix entry missing or empty 'run_name' field: {run_entry!r}. Skipping."
+            )
+            execution_rows.append(
+                {
+                    "timestamp": _now_iso(),
+                    "run_id": "",
+                    "run_name": "",
+                    "seed": None,
+                    "replica_id": None,
+                    "task": "",
+                    "status": "skipped",
+                    "failure_type": "missing_run_name",
+                    "returncode": None,
+                    "log_path": "",
+                }
             )
             continue
         if run_name_filter and run_name not in run_name_filter:
@@ -1072,16 +1139,16 @@ def main() -> int:
         batch = int(run_entry.get("batch", 1) or 1)
         if max_position_embeddings is not None and seq_len + gen_len > int(max_position_embeddings):
             suggested_seq_len = max(int(max_position_embeddings) - int(gen_len), 1)
+            # RUN-052: changed from hard error to warning + skip to be consistent with the
+            # RULER-specific length check below (which also warns). Both checks now warn and
+            # continue so that the remainder of the matrix is not blocked by one oversized entry.
             print(
-                "Error: run exceeds model max_position_embeddings. "
-                f"run_name={run_name} seq_len={seq_len} gen_len={gen_len} "
-                f"max_position_embeddings={max_position_embeddings}."
+                f"Warning: run_name={run_name} exceeds model max_position_embeddings "
+                f"(seq_len={seq_len} + gen_len={gen_len} > {max_position_embeddings}). "
+                f"Suggested fix: set seq_len <= {suggested_seq_len} (or reduce gen_len). "
+                "Skipping this run entry."
             )
-            print(
-                "Suggested fix: set "
-                f"seq_len <= {suggested_seq_len} (or reduce gen_len)."
-            )
-            return 2
+            continue
         if max_position_embeddings is not None and "eval_ruler" in task_list:
             requested_ruler_context = (
                 int(args.ruler_context_len)
@@ -1147,10 +1214,13 @@ def main() -> int:
             if not calib_file_path.is_absolute():
                 calib_file_path = project_root / calib_file_path
 
-        if not args.dry_run and kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed"]:
+        # RUN-050: include kivi_style in calib_file pre-validation so misconfigured
+        # calib_file for kivi_style is caught early rather than silently ignored.
+        if not args.dry_run and kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "kivi_style"]:
             needs_calib = (
                 calib_params.get("calib_strategy") == "kl_attn"
                 or calib_params.get("use_attn_temperature") is True
+                or (kv_mode == "kivi_style" and calib_file is not None)
             )
             if needs_calib and (calib_file_path is None or not calib_file_path.exists()):
                 print(
@@ -1430,9 +1500,41 @@ def main() -> int:
                     )
                     continue
 
+                # RUN-057: release GPU memory between tasks to avoid accumulation.
+                try:
+                    import torch as _torch  # type: ignore
+                    if _torch.cuda.is_available():
+                        _torch.cuda.empty_cache()
+                except Exception:
+                    pass
+                gc.collect()
+
                 print(f"Running {task} for {label}")
                 total_attempts = max(int(args.max_retries), 0) + 1
                 for attempt_idx in range(1, total_attempts + 1):
+                    # RUN-036: check for SIGINT before starting a new attempt.
+                    if _interrupted[0]:
+                        print(
+                            f"[SIGINT] Interrupted before attempt {attempt_idx} of "
+                            f"{task} for {label}. Marking as interrupted."
+                        )
+                        _mark_task_status(
+                            manifest_path,
+                            manifest,
+                            task=task,
+                            status="failed",
+                            cmd=cmd,
+                            log_path=log_path,
+                            returncode=130,
+                            error="Interrupted by SIGINT",
+                            failure_type="interrupt",
+                            attempt_idx=attempt_idx,
+                        )
+                        _flush_summary(130)
+                        return 130
+                    # RUN-046: ensure log directory exists BEFORE calling _mark_task_status,
+                    # which writes the manifest that references log_path.
+                    log_path.parent.mkdir(parents=True, exist_ok=True)
                     _mark_task_status(
                         manifest_path,
                         manifest,
@@ -1442,7 +1544,6 @@ def main() -> int:
                         log_path=log_path,
                         attempt_idx=attempt_idx,
                     )
-                    log_path.parent.mkdir(parents=True, exist_ok=True)
                     # RUN-030: Note — append mode ("a") means previous attempt OOM traces
                     # remain in the same log file and may influence _classify_failure on
                     # subsequent retries. For clean per-attempt classification, separate log
@@ -1452,57 +1553,87 @@ def main() -> int:
                     # RUN-022: use a configurable timeout to avoid infinite subprocess hangs.
                     # QUA-007: renamed from _timeout to timeout_sec for clarity.
                     timeout_sec = int(args.subprocess_timeout) if int(args.subprocess_timeout) > 0 else None
+                    # RUN-047: rotate log file if it exceeds 50 MB to prevent unbounded growth.
+                    _log_size_limit_bytes = 50 * 1024 * 1024
+                    if log_path.exists() and log_path.stat().st_size > _log_size_limit_bytes:
+                        _rotated = log_path.with_suffix(f".{int(time.time())}.log")
+                        try:
+                            log_path.rename(_rotated)
+                            print(
+                                f"Warning: log file {log_path} exceeded {_log_size_limit_bytes // (1024*1024)} MB; "
+                                f"rotated to {_rotated}."
+                            )
+                        except OSError as _e:
+                            print(f"Warning: failed to rotate log file {log_path}: {_e}")
                     with open(log_path, log_mode, encoding="utf-8") as f:
                         if attempt_idx > 1:
+                            # RUN-038: write separator before each retry so _classify_failure
+                            # can identify where the latest run attempt begins.
                             f.write(
-                                f"\n[RETRY] attempt={attempt_idx}/{total_attempts} at {_now_iso()}\n"
+                                f"\n{_RUN_SEPARATOR}\n"
+                                f"[RETRY] attempt={attempt_idx}/{total_attempts} at {_now_iso()}\n"
                             )
+                        # RUN-060: use Popen with line-buffering for subprocess so that OOM
+                        # crash output is flushed to the log file before the process dies.
+                        _proc = None
                         try:
-                            result = subprocess.run(
+                            _proc = subprocess.Popen(
                                 cmd,
                                 stdout=f,
                                 stderr=subprocess.STDOUT,
                                 text=True,
-                                timeout=timeout_sec,
+                                bufsize=1,  # line-buffered
+                                cwd=project_root,  # RUN-037: explicit cwd=project_root
                             )
-                            returncode = int(result.returncode)
-                        except subprocess.TimeoutExpired as exc:
-                            f.write(
-                                f"\n[ERROR] Subprocess timed out after {timeout_sec}s: {exc}\n"
-                            )
-                            returncode = 124
-                            failure_type = "timeout"
-                            err_msg = f"Task timed out after {timeout_sec}s: {' '.join(cmd)}"
-                            _mark_task_status(
-                                manifest_path,
-                                manifest,
-                                task=task,
-                                status="failed",
-                                cmd=cmd,
-                                log_path=log_path,
-                                returncode=returncode,
-                                error=err_msg,
-                                failure_type=failure_type,
-                                attempt_idx=attempt_idx,
-                            )
-                            execution_rows.append(
-                                {
-                                    "timestamp": _now_iso(),
-                                    "run_id": run_id,
-                                    "run_name": run_name,
-                                    "seed": int(seed),
-                                    "replica_id": int(replica_id),
-                                    "task": task,
-                                    "status": "failed",
-                                    "failure_type": failure_type,
-                                    "returncode": int(returncode),
-                                    "attempt": int(attempt_idx),
-                                    "log_path": str(log_path),
-                                }
-                            )
-                            _flush_summary(1)
-                            return 1
+                            try:
+                                _proc.wait(timeout=timeout_sec)
+                            except subprocess.TimeoutExpired as exc:
+                                # RUN-035: kill orphaned child process after timeout to free GPU VRAM.
+                                _proc.kill()
+                                _proc.wait()
+                                f.write(
+                                    f"\n[ERROR] Subprocess timed out after {timeout_sec}s and was killed: {exc}\n"
+                                )
+                                returncode = 124
+                                failure_type = "timeout"
+                                err_msg = f"Task timed out after {timeout_sec}s: {' '.join(cmd)}"
+                                _mark_task_status(
+                                    manifest_path,
+                                    manifest,
+                                    task=task,
+                                    status="failed",
+                                    cmd=cmd,
+                                    log_path=log_path,
+                                    returncode=returncode,
+                                    error=err_msg,
+                                    failure_type=failure_type,
+                                    attempt_idx=attempt_idx,
+                                )
+                                execution_rows.append(
+                                    {
+                                        "timestamp": _now_iso(),
+                                        "run_id": run_id,
+                                        "run_name": run_name,
+                                        "seed": int(seed),
+                                        "replica_id": int(replica_id),
+                                        "task": task,
+                                        "status": "failed",
+                                        "failure_type": failure_type,
+                                        "returncode": int(returncode),
+                                        "attempt": int(attempt_idx),
+                                        "log_path": str(log_path),
+                                    }
+                                )
+                                _flush_summary(1)
+                                return 1
+                            returncode = int(_proc.returncode)
                         except (OSError, subprocess.SubprocessError, ValueError) as exc:
+                            if _proc is not None:
+                                try:
+                                    _proc.kill()
+                                    _proc.wait()
+                                except Exception:
+                                    pass
                             f.write(f"\n[ERROR] Failed to launch subprocess: {exc}\n")
                             returncode = 127
                             failure_type = "spawn_error"
@@ -1536,7 +1667,48 @@ def main() -> int:
                             )
                             _flush_summary(1)
                             return 1
+                    # RUN-039: interrupt signal (returncode=130) must not be retried.
+                    if returncode == 130 or _interrupted[0]:
+                        print(
+                            f"Task interrupted (returncode={returncode}): "
+                            f"run_id={run_id} task={task} — not retrying."
+                        )
+                        _mark_task_status(
+                            manifest_path,
+                            manifest,
+                            task=task,
+                            status="failed",
+                            cmd=cmd,
+                            log_path=log_path,
+                            returncode=returncode,
+                            error="Interrupted by SIGINT",
+                            failure_type="interrupt",
+                            attempt_idx=attempt_idx,
+                        )
+                        execution_rows.append(
+                            {
+                                "timestamp": _now_iso(),
+                                "run_id": run_id,
+                                "run_name": run_name,
+                                "seed": int(seed),
+                                "replica_id": int(replica_id),
+                                "task": task,
+                                "status": "failed",
+                                "failure_type": "interrupt",
+                                "returncode": int(returncode),
+                                "attempt": int(attempt_idx),
+                                "log_path": str(log_path),
+                            }
+                        )
+                        _flush_summary(130)
+                        return 130
                     if returncode == 0:
+                        # RUN-040: warn if expected CSV artifact is missing after success.
+                        if not _task_has_csv(run_dir, task):
+                            print(
+                                f"Warning: task {task} for {label} returned exit code 0 "
+                                f"but no CSV artifact was found in {run_dir}."
+                            )
                         _mark_task_status(
                             manifest_path,
                             manifest,
@@ -1579,14 +1751,25 @@ def main() -> int:
                         attempt_idx=attempt_idx,
                     )
                     if attempt_idx <= int(args.max_retries):
-                        print(
-                            "Task failed (will retry): "
-                            f"run_id={run_id} task={task} attempt={attempt_idx}/{total_attempts} "
-                            f"failure_type={failure_type} returncode={returncode}"
-                        )
-                        if float(args.retry_backoff_sec) > 0:
-                            time.sleep(float(args.retry_backoff_sec))
-                        continue
+                        # RUN-042: OOM failures must not be retried without config adjustment;
+                        # retrying an OOM with identical config will just OOM again and waste GPU time.
+                        if failure_type == "oom":
+                            print(
+                                f"Warning: task {task} for {label} failed with OOM on attempt "
+                                f"{attempt_idx}/{total_attempts}. OOM failures are not retried "
+                                "(retrying with identical config will reproduce OOM). Treating as final failure."
+                            )
+                        else:
+                            print(
+                                "Task failed (will retry): "
+                                f"run_id={run_id} task={task} attempt={attempt_idx}/{total_attempts} "
+                                f"failure_type={failure_type} returncode={returncode}"
+                            )
+                            # RUN-043: exponential backoff instead of fixed sleep.
+                            _backoff = float(args.retry_backoff_sec) * (2 ** (attempt_idx - 1))
+                            if _backoff > 0:
+                                time.sleep(_backoff)
+                            continue
 
                     execution_rows.append(
                         {
