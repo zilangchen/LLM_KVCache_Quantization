@@ -5,14 +5,14 @@ import math
 import sys
 import os
 
-# Add project root to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Add project root to path (insert at front to avoid shadowing by same-named modules)
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 try:
     from src.kernels import decode_attn_int4, decode_attn_int8
     from src.quant.int4_basic import pack_int4, unpack_int4
     HAS_TRITON = True
-except ImportError:
+except Exception:  # Catch all failures (ImportError, RuntimeError from Triton JIT, etc.)
     HAS_TRITON = False
     print("Triton not available or kernel import failed.")
 

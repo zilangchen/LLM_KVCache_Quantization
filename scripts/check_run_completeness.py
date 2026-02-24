@@ -13,9 +13,40 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, TypedDict
 
 logger = logging.getLogger(__name__)
+
+
+# CHK-020: TypedDict definitions for structured return types so static
+# checkers can catch field-name typos.
+
+class TaskStateResult(TypedDict):
+    """Return type of _check_task_state()."""
+    task: str
+    state: str
+    manifest_status: str
+    manifest_failure_type: str
+    failure_type: str
+    has_csv: bool
+    has_valid_csv: bool
+    has_task_artifacts: bool
+    csv_paths: List[str]
+    has_log: bool
+    log_path: str
+    # Fields added by _check_group() after _check_task_state() returns:
+    # run_name, run_id, group — these are appended dynamically and are
+    # not part of the core _check_task_state return contract.
+
+
+class GroupCheckResult(TypedDict):
+    """Return type of _check_group()."""
+    group: str
+    rows: List[Dict[str, Any]]
+    missing_run_names: List[str]
+    oom_registry: List[Dict[str, Any]]
+    unexpected_failures: List[Dict[str, Any]]
+
 
 # CSV glob patterns for each task.
 # NOTE: kivi_style runs produce CSV files with the same naming convention as
@@ -208,7 +239,7 @@ def _check_task_state(
     run_id: str,
     task: str,
     task_info: Dict[str, Any],
-) -> Dict[str, Any]:
+) -> TaskStateResult:
     csv_pattern = TASK_TO_CSV_PATTERN.get(task, "")
 
     # CHK-010: warn when a task has no known CSV pattern — the check will
@@ -324,7 +355,7 @@ def _check_group(
     runs_dir: Path,
     logs_dir: Path | None,
     allow_oom_completion: bool,
-) -> Dict[str, Any]:
+) -> GroupCheckResult:
     expected = _expected_run_ids(run_names=run_names, run_tag=run_tag, seeds=seeds)
     rows: List[Dict[str, Any]] = []
     missing_run_names: List[str] = []
