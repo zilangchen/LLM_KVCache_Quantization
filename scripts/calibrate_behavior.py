@@ -817,6 +817,13 @@ def main():
     model.eval()
 
     dataset = get_calibration_dataset(tokenizer, args.samples, args.seq_len)
+    # CAL-032: The getattr defaults (28, 12, 2, 1536) match
+    # Qwen2.5-1.5B-Instruct specifically.  They are only hit if the model
+    # config object is missing the attribute (extremely unlikely for any
+    # Transformers-supported model).  For the other target models the
+    # attributes are always present, so the defaults are never used.
+    # If you add a model whose config genuinely lacks these fields, update
+    # the defaults or add explicit per-model dispatch.
     num_layers = getattr(model.config, "num_hidden_layers", 28)
     num_heads = getattr(model.config, "num_attention_heads", 12)
     num_kv_heads = getattr(model.config, "num_key_value_heads", 2)
@@ -844,6 +851,13 @@ def main():
             v_per_layer = []
 
             for layer_idx in range(num_layers):
+                # CAL-031: model.model.layers[i] is intentionally hardcoded.
+                # All three target models (Qwen2.5-1.5B-Instruct,
+                # Qwen2.5-7B-Instruct, LLaMA-3.1-8B-Instruct) use the same
+                # HuggingFace architecture attribute path:
+                #   model.model.layers[i].self_attn
+                # If a future model uses a different path, this line must be
+                # updated (or a model-family dispatch added).
                 attn = model.model.layers[layer_idx].self_attn
                 hs_last = hidden_states[layer_idx][:, -1:, :]
                 q = attn.q_proj(hs_last)

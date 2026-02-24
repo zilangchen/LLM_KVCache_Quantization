@@ -91,6 +91,23 @@ def quantize_asymmetric(
     # Compute scale and zero_point.
     # clamp(min=1e-5) prevents division by zero for constant-value tensors.
     scale = (t_max - t_min).clamp(min=1e-5) / (qmax - qmin)
+    # ENG-047: zero_point is stored as a *float offset* (in the original value
+    # domain), NOT as an integer code.  Convention:
+    #   zero_point = t_min - qmin * scale
+    # so that dequantization is simply: x_hat = q * scale + zero_point.
+    #
+    # This differs from:
+    #   (a) the KIVI paper, which defines zp as an integer zero-point code, and
+    #   (b) PyTorch's quantization API (torch.quantize_per_tensor), which also
+    #       uses an integer zero-point.
+    #
+    # We deliberately use a float offset because:
+    #   1. It avoids an extra round(zp) step and keeps the forward path simpler.
+    #   2. scale and zero_point share the same dtype (FP16), simplifying storage
+    #      in KVCacheQuantizedINT8/INT4 (one Tensor each, no mixed int/float).
+    #   3. Dequantization reduces to a single FMA: q * scale + zp.
+    # The numerical difference vs. integer zp is at most 0.5 * scale per element,
+    # which is well within the quantization noise floor.
     zero_point = t_min - qmin * scale
 
     # Quantize
