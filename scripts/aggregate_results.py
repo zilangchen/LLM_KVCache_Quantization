@@ -2275,6 +2275,11 @@ def main() -> int:
         ]
         if c in longbench.columns
     ]
+    # AGG-007: LongBench reports 3 sub-metrics (f1_macro, em_macro, contains_macro)
+    # alongside the official_macro composite.  These are NOT synonymous: different
+    # LongBench tasks use different scoring (F1, exact-match, or contains-match).
+    # Keeping all 3 enables per-metric-type diagnostics; official_macro is the
+    # primary comparison metric used in claims and plots.
     longbench_summary = _agg_mean_std(
         longbench,
         longbench_keys,
