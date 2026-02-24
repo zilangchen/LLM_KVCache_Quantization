@@ -90,6 +90,18 @@ def _resolve_quant_bits(kv_mode: str, quant_bits_arg: int | None) -> int:
         return 4
     if "int8" in mode:
         return 8
+    # PRF-002: no specific quant_bits rule matched; falling back to 16 (fp16).
+    # This is correct for kv_mode="fp16" but unexpected for any unrecognised
+    # mode string.  Warn so the caller can catch accidental mismatches.
+    import warnings as _warnings
+    if mode not in {"fp16"}:
+        _warnings.warn(
+            f"_resolve_quant_bits: unrecognised kv_mode={mode!r}; "
+            "falling back to quant_bits=16.  Pass --quant_bits explicitly "
+            "to suppress this warning.",
+            UserWarning,
+            stacklevel=2,
+        )
     return 16
 
 

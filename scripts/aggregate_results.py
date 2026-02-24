@@ -27,20 +27,39 @@ import pandas as pd
 
 try:
     from scipy.stats import t as _t_dist
+    _HAS_SCIPY = True
+
     def _t_critical(df: int, alpha: float = 0.05) -> float:
         """Return two-tailed t critical value for given df and alpha."""
+        # AGG-039: guard against df <= 0, which causes scipy to return NaN
+        if df <= 0:
+            return float("nan")
         return float(_t_dist.ppf(1.0 - alpha / 2.0, df))
+
 except ImportError:
+    _HAS_SCIPY = False
     # Fallback lookup table for t_{0.975, df} (two-tailed 95% CI).
+    # Values from standard t-distribution table, two-tailed alpha=0.05
+    # Source: Abramowitz & Stegun (1964), Table 26.7; confirmed against scipy.stats.t.
     _T_TABLE = {
         1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
         6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
         15: 2.131, 20: 2.086, 25: 2.060, 30: 2.042, 40: 2.021,
         60: 2.000, 120: 1.980,
     }
+
     def _t_critical(df: int, alpha: float = 0.05) -> float:
+        # AGG-039: guard against df <= 0; return NaN consistently with scipy path
+        if df <= 0:
+            return float("nan")
         if alpha != 0.05:
-            return 1.96  # fallback for non-standard alpha
+            # AGG-038: warn instead of silently returning z=1.96 for non-standard alpha
+            logger.warning(
+                "_t_critical fallback table only covers alpha=0.05; "
+                "requested alpha=%.4f — returning z=1.96 approximation.",
+                alpha,
+            )
+            return 1.96
         if df in _T_TABLE:
             return _T_TABLE[df]
         # Interpolate between nearest known df values
@@ -57,6 +76,13 @@ except ImportError:
         return 1.96
 
 logger = logging.getLogger(__name__)
+
+# AGG-042: log once at import time if scipy is unavailable so degradation is visible
+if not _HAS_SCIPY:
+    logger.warning(
+        "scipy not found; _t_critical will use a fallback lookup table "
+        "(two-tailed alpha=0.05 only). Install scipy for full t-distribution support."
+    )
 
 KV_MODE_ORDER: List[str] = [
     "fp16",
@@ -130,7 +156,14 @@ def _read_csvs(runs_dir: Path, patterns: Iterable[str]) -> pd.DataFrame:
                 continue
             try:
                 df["source_file"] = str(path.relative_to(runs_dir))
-            except Exception:
+            except Exception as rel_exc:
+                # AGG-044: log when relative_to fails so path resolution issues are visible
+                logger.warning(
+                    "_read_csvs: could not make path relative to runs_dir (%s); "
+                    "using absolute path instead. Error: %s",
+                    runs_dir,
+                    rel_exc,
+                )
                 df["source_file"] = str(path)
             frames.append(df)
     if not frames:
@@ -190,7 +223,12 @@ def _add_ci95_columns(df: pd.DataFrame) -> pd.DataFrame:
         sem = std / np.sqrt(cnt.clip(lower=1))
         # Use t-distribution critical value instead of fixed z=1.96.
         # For small n (e.g. n=5, df=4), t_{0.975}=2.776 vs z=1.96.
-        t_crit = cnt.apply(lambda n: _t_critical(max(1, int(n) - 1)) if n > 1 else 0.0)
+        # AGG-036: guard against cnt containing inf, which would cause int(inf) OverflowError.
+        def _safe_t_crit(n: float) -> float:
+            if not np.isfinite(n) or n <= 1:
+                return 0.0
+            return _t_critical(max(1, int(n) - 1))
+        t_crit = cnt.apply(_safe_t_crit)
         ci_half = t_crit * sem
         ci_half = ci_half.where(cnt > 1, np.nan)
         out[f"{prefix}_ci95_half"] = ci_half
@@ -853,6 +891,10 @@ def _plot_batch_with_capacity(
     for label, sub in _iter_grouped(measured, hue):
         sub = sub.sort_values(x)
         if yerr and yerr in sub.columns:
+            # AGG-040: matplotlib plt.errorbar silently skips individual error bars
+            # when the corresponding yerr values are NaN (no visual gap or marker is
+            # shown for the missing bar). This is matplotlib's built-in behavior and
+            # is acceptable here — NaN CI means insufficient replicates for that point.
             cont = plt.errorbar(
                 sub[x],
                 sub[y],
@@ -962,6 +1004,10 @@ def _plot_lines(
     for label, sub in _iter_grouped(df, hue):
         sub = sub.sort_values(x)
         if yerr and yerr in sub.columns:
+            # AGG-040: matplotlib plt.errorbar silently skips individual error bars
+            # when the corresponding yerr values are NaN (no visual gap or marker is
+            # shown for the missing bar). This is matplotlib's built-in behavior and
+            # is acceptable here — NaN CI means insufficient replicates for that point.
             plt.errorbar(
                 sub[x],
                 sub[y],
@@ -1539,25 +1585,61 @@ def _main_claims_32k_table(
         )
         return pd.DataFrame()
 
-    _mk = [c for c in merge_keys if c in lat.columns and c in mem.columns]
-    if not _mk:
-        _mk = ["kv_mode"]
+    # AGG-041: renamed merge key variables from cryptic _mk/_nk/_pk/_lk/_rk to
+    # descriptive names so intent is clear at each merge site.
+    memory_merge_keys = [c for c in merge_keys if c in lat.columns and c in mem.columns]
+    if not memory_merge_keys:
+        # AGG-035: warn when falling back to ["kv_mode"] to surface potential Cartesian products
+        logger.warning(
+            "_main_claims_32k_table: latency-memory merge key fallback to ['kv_mode'] "
+            "(merge_keys=%s not found in both DataFrames); Cartesian product possible.",
+            merge_keys,
+        )
+        memory_merge_keys = ["kv_mode"]
     out = lat[lat_cols].copy()
     _pre_merge_rows = len(out)
     if mem_cols:
-        out = out.merge(mem[mem_cols], on=_mk, how="outer")
+        out = out.merge(mem[mem_cols], on=memory_merge_keys, how="outer")
     if ned_cols:
-        _nk = [c for c in merge_keys if c in out.columns and c in ned[ned_cols].columns]
-        out = out.merge(ned[ned_cols], on=_nk or ["kv_mode"], how="outer")
+        needle_merge_keys = [c for c in merge_keys if c in out.columns and c in ned[ned_cols].columns]
+        if not needle_merge_keys:
+            logger.warning(
+                "_main_claims_32k_table: needle merge key fallback to ['kv_mode'] "
+                "(merge_keys=%s not found); Cartesian product possible.",
+                merge_keys,
+            )
+            needle_merge_keys = ["kv_mode"]
+        out = out.merge(ned[ned_cols], on=needle_merge_keys, how="outer")
     if ppl_cols:
-        _pk = [c for c in merge_keys if c in out.columns and c in ppl[ppl_cols].columns]
-        out = out.merge(ppl[ppl_cols], on=_pk or ["kv_mode"], how="left")
+        ppl_merge_keys = [c for c in merge_keys if c in out.columns and c in ppl[ppl_cols].columns]
+        if not ppl_merge_keys:
+            logger.warning(
+                "_main_claims_32k_table: ppl merge key fallback to ['kv_mode'] "
+                "(merge_keys=%s not found); Cartesian product possible.",
+                merge_keys,
+            )
+            ppl_merge_keys = ["kv_mode"]
+        out = out.merge(ppl[ppl_cols], on=ppl_merge_keys, how="left")
     if lb_cols:
-        _lk = [c for c in merge_keys if c in out.columns and c in lb[lb_cols].columns]
-        out = out.merge(lb[lb_cols], on=_lk or ["kv_mode"], how="left")
+        longbench_merge_keys = [c for c in merge_keys if c in out.columns and c in lb[lb_cols].columns]
+        if not longbench_merge_keys:
+            logger.warning(
+                "_main_claims_32k_table: longbench merge key fallback to ['kv_mode'] "
+                "(merge_keys=%s not found); Cartesian product possible.",
+                merge_keys,
+            )
+            longbench_merge_keys = ["kv_mode"]
+        out = out.merge(lb[lb_cols], on=longbench_merge_keys, how="left")
     if rul_cols:
-        _rk = [c for c in merge_keys if c in out.columns and c in rul[rul_cols].columns]
-        out = out.merge(rul[rul_cols], on=_rk or ["kv_mode"], how="left")
+        ruler_merge_keys = [c for c in merge_keys if c in out.columns and c in rul[rul_cols].columns]
+        if not ruler_merge_keys:
+            logger.warning(
+                "_main_claims_32k_table: ruler merge key fallback to ['kv_mode'] "
+                "(merge_keys=%s not found); Cartesian product possible.",
+                merge_keys,
+            )
+            ruler_merge_keys = ["kv_mode"]
+        out = out.merge(rul[rul_cols], on=ruler_merge_keys, how="left")
 
     _post_merge_rows = len(out)
     if _post_merge_rows > _pre_merge_rows * 2:
@@ -1695,6 +1777,9 @@ def main() -> int:
         help="Base RNG seed for deterministic bootstrap/permutation statistics.",
     )
     args = parser.parse_args()
+
+    # AGG-034: configure logging so all logger.warning/info calls produce output
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     runs_dir = Path(args.runs_dir)
     tables_dir = Path(args.tables_dir)

@@ -87,7 +87,9 @@ def _collect_env_info() -> Dict[str, Any]:
         info["torch_version"] = getattr(torch, "__version__", "unknown")
         info["cuda_version"] = getattr(getattr(torch, "version", None), "cuda", None)
         info["cuda_available"] = bool(torch.cuda.is_available())
-    except Exception:
+    except Exception as _exc:
+        # RUN-019: log a warning instead of silently swallowing import errors.
+        print(f"Warning: failed to import torch for env info collection: {_exc}")
         info["torch_version"] = "unavailable"
         info["cuda_version"] = None
         info["cuda_available"] = False
@@ -96,7 +98,9 @@ def _collect_env_info() -> Dict[str, Any]:
         import transformers  # type: ignore
 
         info["transformers_version"] = getattr(transformers, "__version__", "unknown")
-    except Exception:
+    except Exception as _exc:
+        # RUN-019: log a warning instead of silently swallowing import errors.
+        print(f"Warning: failed to import transformers for env info collection: {_exc}")
         info["transformers_version"] = "unavailable"
 
     payload = json.dumps(info, sort_keys=True, ensure_ascii=True)
@@ -112,7 +116,13 @@ def _read_json(path: Path) -> Dict[str, Any] | None:
             data = json.load(f)
         if isinstance(data, dict):
             return data
-    except Exception:
+    except json.JSONDecodeError as exc:
+        # RUN-026: log JSON corruption explicitly instead of swallowing silently.
+        print(f"Warning: JSON decode error reading {path}: {exc}")
+        return None
+    except OSError as exc:
+        # RUN-026: log permission/IO errors explicitly.
+        print(f"Warning: OS error reading {path}: {exc}")
         return None
     return None
 
@@ -120,9 +130,18 @@ def _read_json(path: Path) -> Dict[str, Any] | None:
 def _write_json(path: Path, data: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_suffix(path.suffix + ".tmp")
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, sort_keys=True, ensure_ascii=True)
-    tmp_path.replace(path)
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, sort_keys=True, ensure_ascii=True)
+        tmp_path.replace(path)
+    except Exception:
+        # RUN-028: clean up orphan .tmp file if replace() or write fails.
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except OSError:
+            pass
+        raise
 
 
 def _existing_result_git_commits(run_dir: Path) -> List[str]:
@@ -150,12 +169,15 @@ def _existing_result_git_commits(run_dir: Path) -> List[str]:
 
 
 def _same_commit_prefix(a: str, b: str) -> bool:
+    # RUN-018: warn when either commit is empty/unknown; do NOT treat as compatible.
     a = str(a).strip()
     b = str(b).strip()
-    if not a or not b:
-        return True
-    if a == "unknown" or b == "unknown":
-        return True
+    if not a or a == "unknown" or not b or b == "unknown":
+        print(
+            f"Warning: git commit comparison involves empty/unknown value "
+            f"(a={a!r}, b={b!r}). Treating as incompatible to prevent silent cross-commit append."
+        )
+        return False
     return a[:8] == b[:8]
 
 
@@ -248,7 +270,8 @@ def _compute_ruler_truncation_warning(
         int(seq_len) + int(gen_len),
         int(max_position_embeddings),
     )
-    safe_prompt_budget = min(int(ruler_context_len), int(base_total_budget) - int(peak_gen))
+    # RUN-031: guard against negative safe_prompt_budget when peak_gen >= base_total_budget.
+    safe_prompt_budget = min(int(ruler_context_len), max(0, int(base_total_budget) - int(peak_gen)))
     if safe_prompt_budget >= int(ruler_context_len):
         return None
     tasks = ",".join(_resolve_ruler_tasks_for_gate(ruler_tasks_arg))
@@ -276,7 +299,13 @@ def _classify_failure(*, log_path: Path, returncode: int | None) -> str:
     if returncode is not None and int(returncode) == 130:
         return "interrupt"
     content = _read_text_best_effort(log_path).lower()
-    if "oom" in content or "out of memory" in content or "cuda out of memory" in content:
+    # RUN-025: use word-boundary regex to avoid false positives like "room", "bloom".
+    if (
+        re.search(r"\boom\b", content)
+        or "out of memory" in content
+        or "cuda out of memory" in content
+        or "outofmemoryerror" in content
+    ):
         return "oom"
     if "traceback (most recent call last):" in content:
         return "traceback"
@@ -474,6 +503,27 @@ def resolve_quant_params(run_entry: Dict, quant_defaults: Dict) -> Dict[str, flo
         "group_size_v",
         run_entry.get("group_size", quant_defaults.get("group_size_v", 128)),
     )
+    # RUN-032: validate numeric types and ranges for quant parameters.
+    for _field, _val in (("clip_percentile_k", clip_percentile_k), ("clip_percentile_v", clip_percentile_v)):
+        if not isinstance(_val, (int, float)) or isinstance(_val, bool):
+            raise ValueError(
+                f"resolve_quant_params: {_field}={_val!r} must be a numeric value, "
+                f"got {type(_val).__name__}."
+            )
+        if not (0.0 < float(_val) <= 100.0):
+            raise ValueError(
+                f"resolve_quant_params: {_field}={_val!r} must be in the range (0, 100]."
+            )
+    for _field, _val in (("group_size_k", group_size_k), ("group_size_v", group_size_v)):
+        if not isinstance(_val, int) or isinstance(_val, bool):
+            raise ValueError(
+                f"resolve_quant_params: {_field}={_val!r} must be an integer, "
+                f"got {type(_val).__name__}."
+            )
+        if _val <= 0:
+            raise ValueError(
+                f"resolve_quant_params: {_field}={_val!r} must be a positive integer."
+            )
     return {
         "clip_percentile": clip_percentile_k,
         "group_size": group_size_k,
@@ -799,6 +849,16 @@ def main() -> int:
         default=None,
         help="Pass through to profile_latency.py --warmup (useful for long-context runs).",
     )
+    parser.add_argument(
+        "--subprocess_timeout",
+        type=int,
+        default=3600,
+        help=(
+            # RUN-022: configurable per-task subprocess timeout to avoid infinite blocks.
+            "Timeout in seconds for each subprocess task call (default: 3600 = 1 hour). "
+            "Set to 0 to disable the timeout."
+        ),
+    )
     args = parser.parse_args()
     if int(args.max_retries) < 0:
         print("Error: --max_retries must be >= 0.")
@@ -967,6 +1027,10 @@ def main() -> int:
     for run_entry in matrix:
         run_name = run_entry.get("run_name")
         if not run_name:
+            # RUN-029: warn when run_name is empty or missing instead of silently skipping.
+            print(
+                f"Warning: matrix entry missing or empty 'run_name' field: {run_entry!r}. Skipping."
+            )
             continue
         if run_name_filter and run_name not in run_name_filter:
             continue
@@ -978,6 +1042,19 @@ def main() -> int:
 
         seq_len = run_entry.get("seq_len", 1024)
         gen_len = run_entry.get("gen_len", 128)
+        # RUN-021: validate seq_len and gen_len are positive integers.
+        for _field, _val in (("seq_len", seq_len), ("gen_len", gen_len)):
+            if not isinstance(_val, int) or isinstance(_val, bool):
+                print(
+                    f"Error: run_name={run_name} {_field}={_val!r} must be an integer, "
+                    f"got {type(_val).__name__}."
+                )
+                return 2
+            if _val <= 0:
+                print(
+                    f"Error: run_name={run_name} {_field}={_val!r} must be a positive integer."
+                )
+                return 2
         batch = int(run_entry.get("batch", 1) or 1)
         if max_position_embeddings is not None and seq_len + gen_len > int(max_position_embeddings):
             suggested_seq_len = max(int(max_position_embeddings) - int(gen_len), 1)
@@ -1138,7 +1215,11 @@ def main() -> int:
             for task in task_list:
                 script = TASK_TO_SCRIPT.get(task)
                 if not script:
-                    print(f"Unknown task: {task}")
+                    # RUN-027: warn explicitly when an unknown task name is encountered.
+                    print(
+                        f"Warning: unknown task name {task!r} for run_name={run_name}; "
+                        f"supported tasks are: {sorted(TASK_TO_SCRIPT.keys())}. Skipping."
+                    )
                     continue
 
                 cmd = [
@@ -1197,9 +1278,14 @@ def main() -> int:
                         cmd.extend(["--calib_file", str(calib_file_path)])
                     if calib_params.get("calib_strategy"):
                         cmd.extend(["--calib_strategy", str(calib_params["calib_strategy"])])
-                    if calib_params.get("use_attn_temperature") is False:
+                    # RUN-023: always send boolean flags explicitly to avoid implicit coupling.
+                    if calib_params.get("use_attn_temperature"):
+                        cmd.append("--use_attn_temperature")
+                    else:
                         cmd.append("--no_use_attn_temperature")
-                    if calib_params.get("use_static_scales") is False:
+                    if calib_params.get("use_static_scales"):
+                        cmd.append("--use_static_scales")
+                    else:
                         cmd.append("--no_use_static_scales")
                     if calib_params.get("adaptive_static_scales") is True:
                         cmd.append("--adaptive_static_scales")
@@ -1341,7 +1427,14 @@ def main() -> int:
                         attempt_idx=attempt_idx,
                     )
                     log_path.parent.mkdir(parents=True, exist_ok=True)
+                    # RUN-030: Note — append mode ("a") means previous attempt OOM traces
+                    # remain in the same log file and may influence _classify_failure on
+                    # subsequent retries. For clean per-attempt classification, separate log
+                    # files per attempt would be needed. This is a known limitation; the
+                    # current approach prioritises log continuity over isolation.
                     log_mode = "a" if (args.append or attempt_idx > 1) else "w"
+                    # RUN-022: use a configurable timeout to avoid infinite subprocess hangs.
+                    _timeout = int(args.subprocess_timeout) if int(args.subprocess_timeout) > 0 else None
                     with open(log_path, log_mode, encoding="utf-8") as f:
                         if attempt_idx > 1:
                             f.write(
@@ -1353,8 +1446,45 @@ def main() -> int:
                                 stdout=f,
                                 stderr=subprocess.STDOUT,
                                 text=True,
+                                timeout=_timeout,
                             )
                             returncode = int(result.returncode)
+                        except subprocess.TimeoutExpired as exc:
+                            f.write(
+                                f"\n[ERROR] Subprocess timed out after {_timeout}s: {exc}\n"
+                            )
+                            returncode = 124
+                            failure_type = "timeout"
+                            err_msg = f"Task timed out after {_timeout}s: {' '.join(cmd)}"
+                            _mark_task_status(
+                                manifest_path,
+                                manifest,
+                                task=task,
+                                status="failed",
+                                cmd=cmd,
+                                log_path=log_path,
+                                returncode=returncode,
+                                error=err_msg,
+                                failure_type=failure_type,
+                                attempt_idx=attempt_idx,
+                            )
+                            execution_rows.append(
+                                {
+                                    "timestamp": _now_iso(),
+                                    "run_id": run_id,
+                                    "run_name": run_name,
+                                    "seed": int(seed),
+                                    "replica_id": int(replica_id),
+                                    "task": task,
+                                    "status": "failed",
+                                    "failure_type": failure_type,
+                                    "returncode": int(returncode),
+                                    "attempt": int(attempt_idx),
+                                    "log_path": str(log_path),
+                                }
+                            )
+                            _flush_summary(1)
+                            return 1
                         except (OSError, subprocess.SubprocessError, ValueError) as exc:
                             f.write(f"\n[ERROR] Failed to launch subprocess: {exc}\n")
                             returncode = 127

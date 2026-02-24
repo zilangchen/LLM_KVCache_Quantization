@@ -251,6 +251,19 @@ def main():
         else getattr(args, "quant_bits", None)
     )
 
+    # PRF-004: KIVIStyleKVCache does not use a decode_attn_impl kernel; any
+    # value passed via --decode_attn_impl is silently ignored for kivi_style
+    # runs.  Warn so the caller is aware the parameter has no effect.
+    if args.kv_mode == "kivi_style" and args.decode_attn_impl is not None:
+        import warnings as _warnings
+        _warnings.warn(
+            f"profile_latency: decode_attn_impl={args.decode_attn_impl!r} is "
+            "ignored for kv_mode='kivi_style'.  KIVIStyleKVCache does not "
+            "use a fused decode-attention kernel.",
+            UserWarning,
+            stacklevel=1,
+        )
+
     print(f"Loading {args.model_id}...")
     model_path = resolve_pretrained_path(args.model_id, revision=args.model_revision)
     tokenizer = AutoTokenizer.from_pretrained(
@@ -308,6 +321,13 @@ def main():
     hardware = get_hardware_info()
 
     for i in range(args.runs):
+        # PRF-003: explicitly synchronize the CUDA device before each profiling
+        # run to ensure all pending GPU operations from the previous iteration
+        # have completed.  Without this, TTFT/TPOT measurements can bleed
+        # across runs because the CPU timer starts before the GPU is actually
+        # idle, understating the true latency of the next run.
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
         gc.collect()
         torch.cuda.empty_cache()
         reset_gpu_memory_stats()

@@ -141,7 +141,20 @@ def _detect_failure_type(
 ) -> str:
     """Infer the failure_type for the returned manifest dict.  (CHK-002)
 
-    Returns one of: "oom", "traceback", "unknown_error", or "" (no failure detected).
+    Returns one of the canonical failure_type values (CHK-015).  These values
+    MUST stay in sync with the strings produced by
+    ``scripts/run_experiments.py::_classify_failure()``.  Canonical set as of
+    the current version of run_experiments.py:
+
+        "oom"           – CUDA / system out-of-memory (exit code 73 or log keyword)
+        "interrupt"     – process killed by SIGINT (exit code 130)
+        "traceback"     – Python traceback detected in log but not OOM
+        "runtime_error" – non-zero exit code without a more specific pattern
+        "unknown"       – non-zero exit code but no classifiable pattern
+
+    If the manifest was written by an older version of run_experiments.py it
+    may contain values not in this list (e.g. "exception"); those are passed
+    through unchanged by the ``manifest_failure`` fallback branch below.
     """
     if manifest_failure == "oom" or _is_oom_from_log(log_content):
         return "oom"
@@ -235,6 +248,15 @@ def _check_task_state(
         # Fully successful: valid CSV + artifacts + manifest confirms success
         # (or manifest is empty/absent, implying an older run without manifest tracking).
         state = "success"
+        # CHK-021: when success is inferred purely from CSV/artifact presence
+        # (manifest is absent or empty rather than explicitly "success"), warn the
+        # caller so they know the determination is less authoritative.
+        if manifest_status == "" and manifest_failure == "" and not has_success_history:
+            logger.warning(
+                "run_id=%s task=%s: success inferred from CSV/artifacts alone "
+                "(no manifest confirmation); run_manifest.json may be absent or empty.",
+                run_id, task,
+            )
     elif has_csv and has_valid_csv and has_task_artifacts and manifest_status == "running":
         # CHK-007: Valid CSV and artifacts exist but manifest still says "running".
         # This likely means the process was interrupted after producing valid output

@@ -408,6 +408,27 @@ def main():
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / f"profile_memory_{args.kv_mode}_{timestamp.replace(':','-')}.csv"
         
+        # PRF-005: GPU peak memory source selection logic.
+        #
+        # Two measurement backends are available:
+        #   1. NVML (pynvml) – samples the physical GPU memory via the NVIDIA
+        #      Management Library on a background thread (MemoryMonitor).
+        #      Preferred because it captures the true system-level peak including
+        #      CUDA context overhead, driver allocations, and memory not tracked
+        #      by PyTorch's allocator.
+        #   2. torch.cuda.max_memory_allocated() – tracks only tensors allocated
+        #      through PyTorch's caching allocator.  It under-reports peak usage
+        #      (misses driver/context overhead) but is always available.
+        #
+        # Selection rule:
+        #   - Use NVML peak when: pynvml initialised successfully
+        #     (monitor.source == "nvml") AND no error occurred during sampling
+        #     (not monitor.init_error).
+        #   - Fall back to torch peak when pynvml is unavailable (not installed),
+        #     the device handle could not be obtained, or NVML sampling raised
+        #     an exception mid-run.
+        #
+        # The chosen source is recorded in gpu_mem_peak_source for auditability.
         use_nvml = monitor.source == "nvml" and not monitor.init_error
         if use_nvml:
             gpu_peak = float(nvml_peak)

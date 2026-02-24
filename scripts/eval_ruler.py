@@ -1121,6 +1121,28 @@ def main() -> None:
     # ---- Summary row (backward compatible schema) ----
     quant_bits = _resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
 
+    # EVL-026: Aggregation dimension note — overall_pass_rate uses a task-level
+    # MACRO average (mean of per-task pass rates), not a case-level MICRO
+    # average (mean over all individual cases).
+    #
+    # Design rationale:
+    #   - MACRO average gives each RULER subtask (s_niah, mk_niah, vt, cwe)
+    #     equal weight in the summary score regardless of how many cases were
+    #     generated per task.  This matches the RULER paper's reporting
+    #     convention where task categories are balanced contributors.
+    #   - MICRO average would give implicit extra weight to tasks that have more
+    #     cases (e.g. if task sizes differ due to filtering or case errors).
+    #
+    # Consequence: when tasks have unequal sample counts (e.g. after case
+    # errors that drop some tasks), overall_pass_rate reflects task-balance
+    # rather than raw case-count balance.  Downstream consumers that require
+    # micro-averaged accuracy should compute it from ruler_details_*.csv
+    # (case_status=="success" rows) directly.
+    #
+    # overall_f1 and overall_contains use depth-level macro average
+    # (mean over depth buckets) for backward compatibility with the original
+    # depth-summary schema; this is a different aggregation axis than
+    # overall_pass_rate.
     overall_pass_rate = round(
         float(np.mean(task_exact_rates)) if task_exact_rates else 0.0, 4
     )

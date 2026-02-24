@@ -14,7 +14,19 @@ import yaml
 def load_config(config_path: str) -> Dict[str, Any]:
     """Load YAML config file."""
     with open(config_path, "r") as f:
-        return yaml.safe_load(f)
+        data = yaml.safe_load(f)
+    # RUN-020: yaml.safe_load returns None for empty files; raise early with clear message.
+    if data is None:
+        raise ValueError(
+            f"Config file is empty or contains only comments: {config_path!r}. "
+            "Expected a non-empty YAML mapping."
+        )
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"Config file does not contain a YAML mapping at the top level: {config_path!r}. "
+            f"Got {type(data).__name__}."
+        )
+    return data
 
 
 def find_run_entry(config: Dict[str, Any], run_name: str) -> Dict[str, Any]:
