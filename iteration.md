@@ -97,6 +97,31 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-02-24 13:54 | 全仓库代码审查修复 Wave 2 — 43 issues 批量修复
+
+- **Goal**: 继续修复 review_tracker.md 中的 open issues（Wave 1 之后的第二轮）
+- **Changed files**: 23 files (+931/-181 lines)
+  - src/: engine/generate_loop.py, engine/patch_model.py, cache/kivi_style_cache.py, cache/int4_cache.py, cache/int8_cache.py, quant/int4_basic.py, quant/int8_basic.py
+  - scripts/: run_experiments.py, aggregate_results.py, smoke_test.py, check_run_completeness.py, config_utils.py, eval_ppl.py, eval_ruler.py, profile_latency.py, profile_memory.py
+  - tests/: test_aggregate_results_stats.py, test_triton_kernel.py, test_asymmetric_quant.py, test_int4_cache.py, test_int8_cache.py, test_kivi_cache.py
+  - review_tracker.md
+- **Method**: 6 并行 dev agents + main thread direct fixes
+- **Results**: 43 issues marked fixed, total 228/366 resolved
+  - RUN: 13 fixes (018-032) — commit validation, subprocess timeout, param validation
+  - AGG: 9 fixes (034-044) — logging, inf guard, readable names, scipy flag
+  - ENG: 12 fixes (005-035) — padding check, KIVI validation, dtype contracts
+  - SMK: 2 fixes (001, 003) — exit code semantics, token-based slicing
+  - TST: 7 fixes (041-050) — t_critical tests, CI95 tests, Phipson-Smyth tests, INT4/INT8 bounds
+  - CHK/PRF/EVL/QNT/KVC: 6 fixes
+- **Validation**: All 23 files pass `python -m py_compile`
+- **Commits**:
+  - `3c6deed` fix: Wave 2 src/ fixes — ENG(12), KVC(1), QNT(1)
+  - `40cbad0` fix: Wave 2 scripts/ fixes — RUN(13), AGG(9), SMK(2), CHK(1), PRF(4), EVL(1)
+  - `fc06073` test: Wave 2 test fixes — TST(7)
+  - `9d2fcda` docs: update review_tracker — Wave 2 marks 43 issues fixed
+- **Remaining**: 124 open (0 CRIT, 33 HIGH, 63 MED, 28 LOW)
+- **Risks / follow-ups**: SMK-005/RUN-034 are breaking change notes for new params introduced by fixes; TST-053~058 are test coverage gaps for Wave 2 code changes
+
 ### 2026-02-24 06:35 | RULER-long Repair 完成（int4_baseline_long + int4_fused_long）
 
 - **Goal**: 修复 seed 1234 的 2 个 RULER 32K eval_ruler 失败（CWE 子任务 prompt 溢出）
