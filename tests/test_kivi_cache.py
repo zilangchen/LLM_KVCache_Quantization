@@ -69,6 +69,9 @@ class TestKIVICacheBasic(unittest.TestCase):
         k_out, v_out = cache.get_kv(0)
         k_err = (k - k_out).abs().mean() / k.abs().mean()
         v_err = (v - v_out).abs().mean() / v.abs().mean()
+        # TST-050: INT8 asymmetric KIVI relative error bound.  Theoretical per-channel
+        # NRMAE ≈ 1/(2*127) ≈ 0.004 for unit-variance randn.  Tolerance 0.05 is ~12×
+        # to account for per-channel/per-token quantization granularity variation.
         self.assertLess(k_err.item(), 0.05, "K round-trip error too large")
         self.assertLess(v_err.item(), 0.05, "V round-trip error too large")
 
@@ -84,6 +87,9 @@ class TestKIVICacheBasic(unittest.TestCase):
         k_out, v_out = cache.get_kv(0)
         k_err = (k - k_out).abs().mean() / k.abs().mean()
         v_err = (v - v_out).abs().mean() / v.abs().mean()
+        # TST-050: INT4 asymmetric KIVI relative error bound.  Theoretical per-channel
+        # NRMAE ≈ 1/(2*7) ≈ 0.071 for unit-variance randn.  Tolerance 0.25 is ~3.5×
+        # to account for small tensor sizes and asymmetric quantization overhead.
         self.assertLess(k_err.item(), 0.25, "INT4 K error too large")
         self.assertLess(v_err.item(), 0.25, "INT4 V error too large")
 

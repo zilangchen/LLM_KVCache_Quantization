@@ -14,7 +14,8 @@ from src.quant.int4_basic import (
 class TestInt4Basic(unittest.TestCase):
     def test_pack_unpack_roundtrip(self):
         torch.manual_seed(0)
-        x = torch.randint(-7, 8, (2, 3, 4, 128), dtype=torch.int8)
+        # Full signed INT4 range [-8, 7] (torch.randint upper bound is exclusive)
+        x = torch.randint(-8, 8, (2, 3, 4, 128), dtype=torch.int8)
         packed = pack_int4(x)
         unpacked = unpack_int4(packed)
         self.assertTrue(torch.equal(x, unpacked))
@@ -34,6 +35,12 @@ class TestInt4Basic(unittest.TestCase):
         self.assertEqual(y.shape, x.shape)
         self.assertEqual(y.dtype, torch.float16)
         self.assertTrue(torch.isfinite(y).all().item())
+
+        # TST-047: Quantization error upper bound assertion.
+        # INT4 symmetric theoretical max error ≈ absmax/14 ≈ 0.21 for unit-variance
+        # randn.  Tolerance 0.5 is ~2.4× theoretical to tolerate rare outliers.
+        err = (x - y).abs().max().item()
+        self.assertLess(err, 0.5, f"INT4 quant roundtrip max error too large: {err}")
 
 
 class TestInt4KVCache(unittest.TestCase):

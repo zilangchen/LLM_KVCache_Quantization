@@ -84,9 +84,10 @@ class TestTritonDecodeAttn(unittest.TestCase):
         # 1. Prepare Inputs
         q = torch.randn((self.B, self.H, self.D), dtype=torch.float16, device=self.device)
         
-        # Random integers for K/V in [-127, 127]
-        k_int8 = torch.randint(-127, 127, (self.B, self.H, self.S, self.D), dtype=torch.int8, device=self.device)
-        v_int8 = torch.randint(-127, 127, (self.B, self.H, self.S, self.D), dtype=torch.int8, device=self.device)
+        # Random integers for K/V in [-128, 127] (full int8 range).
+        # TST-045: upper bound must be 128 (exclusive) so that 127 can be generated.
+        k_int8 = torch.randint(-128, 128, (self.B, self.H, self.S, self.D), dtype=torch.int8, device=self.device)
+        v_int8 = torch.randint(-128, 128, (self.B, self.H, self.S, self.D), dtype=torch.int8, device=self.device)
         
         # Positive scales
         k_scale = torch.rand((self.B, self.H, self.S, self.num_groups), dtype=torch.float16, device=self.device) * 0.1
@@ -120,8 +121,9 @@ class TestTritonDecodeAttn(unittest.TestCase):
         assert n_rep > 1
 
         q = torch.randn((self.B, q_heads, self.D), dtype=torch.float16, device=self.device)
-        k_int8 = torch.randint(-127, 127, (self.B, kv_heads, self.S, self.D), dtype=torch.int8, device=self.device)
-        v_int8 = torch.randint(-127, 127, (self.B, kv_heads, self.S, self.D), dtype=torch.int8, device=self.device)
+        # TST-045: upper bound 128 (exclusive) so value 127 can be generated.
+        k_int8 = torch.randint(-128, 128, (self.B, kv_heads, self.S, self.D), dtype=torch.int8, device=self.device)
+        v_int8 = torch.randint(-128, 128, (self.B, kv_heads, self.S, self.D), dtype=torch.int8, device=self.device)
         k_scale = torch.rand((self.B, kv_heads, self.S, self.num_groups), dtype=torch.float16, device=self.device) * 0.1
         v_scale = torch.rand((self.B, kv_heads, self.S, self.num_groups), dtype=torch.float16, device=self.device) * 0.1
         context_lens = torch.tensor([self.S - 5, self.S - 29], dtype=torch.int32, device=self.device)
@@ -184,16 +186,17 @@ class TestTritonDecodeAttn(unittest.TestCase):
         n_rep = q_heads // kv_heads
 
         q = torch.randn((batch, q_heads, head_dim), dtype=torch.float16, device=self.device)
+        # TST-045: upper bound 128 (exclusive) so value 127 can be generated.
         k_int8 = torch.randint(
-            -127,
-            127,
+            -128,
+            128,
             (batch, kv_heads, seq_len, head_dim),
             dtype=torch.int8,
             device=self.device,
         )
         v_int8 = torch.randint(
-            -127,
-            127,
+            -128,
+            128,
             (batch, kv_heads, seq_len, head_dim),
             dtype=torch.int8,
             device=self.device,
@@ -266,8 +269,9 @@ class TestTritonDecodeAttn(unittest.TestCase):
         q_raw = torch.randn((self.B, self.H, self.D), dtype=torch.float16, device=self.device)
         q_scaled = q_raw * inv_tau.view(1, -1, 1)
 
-        k_int8 = torch.randint(-127, 127, (self.B, self.H, self.S, self.D), dtype=torch.int8, device=self.device)
-        v_int8 = torch.randint(-127, 127, (self.B, self.H, self.S, self.D), dtype=torch.int8, device=self.device)
+        # TST-045: upper bound 128 (exclusive) so value 127 can be generated.
+        k_int8 = torch.randint(-128, 128, (self.B, self.H, self.S, self.D), dtype=torch.int8, device=self.device)
+        v_int8 = torch.randint(-128, 128, (self.B, self.H, self.S, self.D), dtype=torch.int8, device=self.device)
         k_scale = torch.rand((self.B, self.H, self.S, self.num_groups), dtype=torch.float16, device=self.device) * 0.1
         v_scale = torch.rand((self.B, self.H, self.S, self.num_groups), dtype=torch.float16, device=self.device) * 0.1
         context_lens = torch.tensor([self.S - 10, self.S - 20], dtype=torch.int32, device=self.device)

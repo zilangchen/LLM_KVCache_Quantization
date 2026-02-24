@@ -35,7 +35,9 @@ class TestAsymmetricQuantBasic(unittest.TestCase):
         x = torch.randn(1, 2, 8, 16, dtype=torch.float32) * 0.5
         q, scale, zp = quantize_asymmetric(x, axis=-1, quant_bits=8)
         x_hat = dequantize_asymmetric(q, scale, zp, axis=-1)
-        # Relative error should be small
+        # Asymmetric INT8 relative max error: theoretical ≈ range/(2*255*absmax).
+        # For unit-variance randn with scale 0.5, rel_err ≈ 0.004.  Tolerance 0.05
+        # is ~12× to account for small tensor sizes and percentile clipping.
         rel_err = (x - x_hat).abs().max() / x.abs().max()
         self.assertLess(rel_err.item(), 0.05, "INT8 round-trip error too large")
 
@@ -45,6 +47,9 @@ class TestAsymmetricQuantBasic(unittest.TestCase):
         x = torch.randn(1, 2, 8, 16, dtype=torch.float32)
         q, scale, zp = quantize_asymmetric(x, axis=-1, quant_bits=4)
         x_hat = dequantize_asymmetric(q, scale, zp, axis=-1)
+        # Asymmetric INT4 relative max error: theoretical ≈ range/(2*15*absmax).
+        # For unit-variance randn, rel_err ≈ 0.067.  Tolerance 0.25 is ~3.7× to
+        # account for small tensor sizes and asymmetric quantization overhead.
         rel_err = (x - x_hat).abs().max() / x.abs().max()
         self.assertLess(rel_err.item(), 0.25, "INT4 round-trip error too large")
 

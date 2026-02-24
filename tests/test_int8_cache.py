@@ -136,6 +136,9 @@ class TestINT8KVCacheQuantAccuracy(unittest.TestCase):
 
         k_err = (k - k_out).abs().max().item()
         v_err = (v - v_out).abs().max().item()
+        # TST-048: Theoretical INT8 symmetric max error ≈ absmax/254 ≈ 0.012 for
+        # unit-variance randn.  Tolerance 0.1 is deliberately loose (~8× theoretical)
+        # to avoid flaky failures from rare outlier values in random inputs.
         self.assertLess(k_err, 0.1, f"K roundtrip max error too large: {k_err}")
         self.assertLess(v_err, 0.1, f"V roundtrip max error too large: {v_err}")
 
