@@ -1,6 +1,6 @@
 # Code Review Tracker
 
-> 367 issues | 266 fixed + 10 false_positive + 4 wont_fix | 83 open (0 CRIT, 27 HIGH, 46 MED, 10 LOW)
+> 367 issues | 275 fixed + 10 false_positive + 4 wont_fix | 74 open (0 CRIT, 27 HIGH, 42 MED, 5 LOW)
 > Phase Gate: **CLEAR** — 0 CRITICAL open
 > Last updated: 2026-02-24
 
@@ -15,7 +15,7 @@
 - [x] **CHK-006** `[MED]` dev agent 仍未确认 O 节 3 CRITICAL + T 节 1 CRITICAL — Phase Gate CLEAR, 所有 CRIT 已解决 -- fixed
 - [x] **CHK-015** `[MED]` failure_type 域值枚举与 run_experiments.py _classify_failure() 不同步 (L94-108): 两处独立维护 failure_type 枚举，新增类型时易遗漏。 — D4, confidence: 84% — fixed 2f6cddb
 - [ ] **CHK-018** `[MED]` _split_csv/_read_json/_read_text 与 run_experiments.py 重复定义 (L27-51): 3 个工具函数在两个脚本中独立实现，修 bug 需改两处。 — D7, confidence: 100%
-- [ ] **CHK-020** `[LOW]` 返回类型 Dict[str, Any] 无 TypedDict/dataclass 约束 (L168-181, L238-243): 字段名错误无法被静态检查捕获。 — D7, confidence: 80%
+- [x] **CHK-020** `[LOW]` 返回类型 Dict[str, Any] 无 TypedDict/dataclass 约束 (L168-181, L238-243): 字段名错误无法被静态检查捕获。 — D7, confidence: 80% — fixed 0056a3d
 - [x] **CHK-021** `[MED]` 空 manifest + 存在 CSV 被判定为 "success" (check_run_completeness.py:153-156): manifest_status="" + manifest_failure="" 时 state="success"。manifest 损坏或手动拷贝 CSV 时虚假通过，可能导致信任不可靠数据。 — D2 RUN rotation, confidence: 85% -- fixed
 - [x] **CHK-022** `[LOW]` _read_json OSError/PermissionError 无日志静默返回 None (check_run_completeness.py:54-55): 仅 JSONDecodeError 有 logger.warning，`except Exception: return None` 对 OSError（权限拒绝、IO 错误）无任何日志。manifest 读取因权限问题失败时与 manifest 不存在无法区分，导致所有任务按"无 manifest"路径分类。 — D2 full-scan, confidence: 83% — fixed 2f6cddb
 - [x] **CHK-023** `[HIGH]` _detect_failure_type() canonical 枚举注释缺少 "timeout"，与 run_experiments.py 新增 timeout 路径失同步 (check_run_completeness.py:137-165 vs run_experiments.py:1452-1487): run_experiments.py 新增 timeout 处理分支，将 failure_type="timeout" 直接写入 manifest（L1457-1468），绕过 _classify_failure()。check_run_completeness.py 的 _detect_failure_type() 注释（L149-154）声称列出了 canonical failure_type 枚举集合（oom/interrupt/traceback/runtime_error/unknown），但未包含 "timeout"。实际运行中 manifest_failure="timeout" 会经 L163-164 的 fallback 分支透传输出，功能上不报错；但注释的权威性下降，未来新增 failure_type 时维护者参考注释做 exhaustiveness 检查会遗漏 "timeout"，CHK-015 所述不同步问题因此加剧。修复建议：同步更新 _detect_failure_type() 注释枚举，增加 "timeout" 条目。 — D4, confidence: 91% -- fixed
@@ -37,7 +37,7 @@
 - [ ] **AGG-009** `[MED]` kv_mode 显示顺序依赖默认排序 (aggregate_results.py
 - [x] **AGG-012** `[LOW]` Bootstrap seed 基于 SHA256 hash 的独立性 — fixed 2f6cddb
 - [x] **AGG-014** `[LOW]` Bootstrap CI 单样本情况返回 (value, value) 无警告 (L1059-1060) -- fixed
-- [ ] **AGG-015** `[LOW]` 精确枚举阈值 n=16 硬编码 (L1092-1107)
+- [x] **AGG-015** `[LOW]` 精确枚举阈值 n=16 硬编码 (L1092-1107) — fixed 8f39875
 - [x] **AGG-029** `[MED]` gain_pct_mean（跨 seed 配对差均值）vs gain_pct（聚合均值上的单点增益）定义不同 (generate_thesis_report.py:586 vs 356): significance_summary 用 gain_pct_mean，claim_validation 用 gain_pct。Jensen's inequality 下两者不等。同一 claim 在两个表中可能给出矛盾的 practical_pass。 — D4 EXP rotation, confidence: 88% -- fixed
 - [ ] **AGG-031** `[MED]` sign-flip 双尾检验 + 方向一致性检查 = 事实上 2 倍保守的单尾检验 (aggregate_results.py:1089): sign-flip p 值基于 |mean|（双尾），但 claim 验证要求 significant_q AND favors_challenger（单侧判据）。真正的单尾 p 应为 p_two/2。n=5 下可能导致本应显著的 claim 被误判。 — D1 EXP rotation, confidence: 80%
 - [ ] **AGG-032** `[MED]` main() 函数 955 行含 7 次相同 read→numeric→seed→strict→agg→ci→save 模式 (aggregate_results.py:1539-2493): 无法单独测试、修改任一 benchmark 聚合逻辑需在巨大函数中导航。建议按 benchmark 拆分为独立函数。 — D7 EXP rotation, confidence: 98%
@@ -54,7 +54,7 @@
 - [x] **AGG-044** `[LOW]` _read_csvs relative_to bare except 无日志 (aggregate_results.py:131-134): AGG-020 修复了 CSV 读取 except 但 relative_to 仍 bare except 静默回退。与 AGG-020 修复精神不一致。 — D2 incremental, confidence: 68% -- fixed
 - [x] **AGG-045** `[LOW]` fallback t-table 缺少来源和精度注释 (aggregate_results.py:34-40): 硬编码查表值无来源标注（scipy/R/Stata?），无精度说明，影响可审计性和复现性。 — D7 incremental, confidence: 75% -- fixed
 - [x] **AGG-046** `[MED]` _read_json bare except 静默吞掉 JSON 损坏与 IO 错误 (aggregate_results.py:460-461): `except Exception: return {}` 对 JSONDecodeError、PermissionError、OSError 均静默返回空 dict，manifest 读取失败与 manifest 不存在无法区分。run_experiments.py 中对应函数 (RUN-026) 已修复分类 except + 日志，但 aggregate_results.py 仍是 bare except。影响 _strict_manifest_and_artifact_checks、_collect_execution_coverage 的准确性。 — D2 full-scan, confidence: 90% -- fixed
-- [ ] **AGG-048** `[MED]` _safe_t_crit(inf) 返回 0.0 导致 cnt=inf 时 CI 输出 0.0 而非 NaN，产生"零误差"伪像 (aggregate_results.py:227-233): `_safe_t_crit(inf)` 因 `not np.isfinite(inf)=True` 返回 0.0；`cnt.clip(lower=1)=inf`；`sem=std/sqrt(inf)=0.0`；`ci_half=0.0*0.0=0.0`；`.where(inf>1, np.nan)` 因 inf>1=True 保留 0.0。最终 ci95_half=0.0 在图表中呈现为"精确度极高"而非"数据无效"，误导读者。修复建议：在 _add_ci95_columns 开头添加 `cnt = cnt.replace([np.inf, -np.inf], np.nan)`，使 inf 经 `.where(cnt>1, np.nan)` 变为 NaN。 — D1, confidence: 82%
+- [x] **AGG-048** `[MED]` _safe_t_crit(inf) 返回 0.0 导致 cnt=inf 时 CI 输出 0.0 而非 NaN，产生"零误差"伪像 (aggregate_results.py:227-233): `_safe_t_crit(inf)` 因 `not np.isfinite(inf)=True` 返回 0.0；`cnt.clip(lower=1)=inf`；`sem=std/sqrt(inf)=0.0`；`ci_half=0.0*0.0=0.0`；`.where(inf>1, np.nan)` 因 inf>1=True 保留 0.0。最终 ci95_half=0.0 在图表中呈现为"精确度极高"而非"数据无效"，误导读者。修复建议：在 _add_ci95_columns 开头添加 `cnt = cnt.replace([np.inf, -np.inf], np.nan)`，使 inf 经 `.where(cnt>1, np.nan)` 变为 NaN。 — D1, confidence: 82% — fixed 8f39875
 - [x] **AGG-047** `[MED]` _same_commit_prefix 将 empty/unknown 视为兼容 (aggregate_results.py:465-471): `not a or not b → True`，`a=="unknown" → True`，与 run_experiments.py 中已修复的 RUN-018 语义相反。aggregate_results.py 的 strict 模式 commit 一致性检查对 "unknown" commit 全部静默通过，不同代码版本混入同一 run 无法被检测。 — D2 full-scan, confidence: 85% -- fixed
 
 ### CFG. 配置 — `configs/`
@@ -115,7 +115,7 @@
 - [x] **PRF-004** `[MED]` kivi_style decode_attn_impl 参数被静默忽略 (profile_latency.py -- fixed
 - [x] **PRF-005** `[MED]` profile_memory.py GPU 峰值来源判断逻辑 (L383-385) -- fixed
 - [x] **PRF-009** `[LOW]` calib_file 对 kivi_style 静默无操作 (eval_ppl.py -- fixed
-- [ ] **PRF-010** `[LOW]` output 属性可靠性 (L348-352)
+- [x] **PRF-010** `[LOW]` output 属性可靠性 (L348-352) — fixed c5b763c
 
 ### QNT. 量化模块 — `src/quant/`
 - [x] **QNT-003** `[MED]` 全 eval 脚本 _resolve_quant_bits() 重复定义（6 处相同代码，违反 DRY） — canonical resolve_quant_bits() 已在 src/utils/repro.py 创建，6 处标 DEPRECATED -- fixed
@@ -208,8 +208,8 @@
 - [x] **TST-048** `[LOW]` INT8 容差 0.1 添加理论上界注释（≈absmax/254≈0.012，0.1 为 ~8× 防抖） -- fixed
 - [x] **TST-049** `[LOW]` probability_of_superiority >= 0.99 断言对 n=3 样本过拟合 — 已修改为 >= 0.66（majority criterion），commit c67038c -- fixed
 - [x] **TST-050** `[LOW]` 测试 magic numbers 添加理论上界来源注释 (test_int8_cache.py, test_kivi_cache.py) -- fixed
-- [ ] **TST-051** `[LOW]` test_triton_kernel.py 使用 sys.path.append 而非 insert(0) (L9): 不一致 — D4 TST+configs rotation, confidence: 75%
-- [ ] **TST-052** `[LOW]` test_triton_kernel.py except ImportError 而其他文件用 except Exception (L11-16): 模式不统一 — D4 TST+configs rotation, confidence: 70%
+- [x] **TST-051** `[LOW]` test_triton_kernel.py 使用 sys.path.append 而非 insert(0) (L9): 不一致 — D4 TST+configs rotation, confidence: 75% — fixed 0056a3d
+- [x] **TST-052** `[LOW]` test_triton_kernel.py except ImportError 而其他文件用 except Exception (L11-16): 模式不统一 — D4 TST+configs rotation, confidence: 70% — fixed 0056a3d
 - [ ] **TST-053** `[HIGH]` config_utils.load_config 新增异常路径无测试 (scripts/config_utils.py:17-28): 未提交变更新增空文件→ValueError 和非 dict 顶层→ValueError 两个防御分支，无对应测试。load_config 是所有 run_experiments/eval/profile 脚本的共享入口，此分支保护实验管线不在 model.get() 崩溃。需要：test_load_config_empty_file_raises、test_load_config_non_dict_raises、test_load_config_valid_returns_dict。 — gap_score: 8/10, confidence: 95%
 - [ ] **TST-054** `[HIGH]` run_experiments.py _same_commit_prefix 语义反转无回归测试 (scripts/run_experiments.py:169-183): 未提交变更将 empty/unknown 从返回 True（兼容）改为返回 False（不兼容）。这是 RUN-018 修复，行为完全反转。test_run_experiments_resilience.py 中无任何 _same_commit_prefix 测试。若回滚则跨 commit append 校验静默失效。需要：test_same_commit_prefix_empty_is_incompatible、test_same_commit_prefix_unknown_is_incompatible、test_same_commit_prefix_matching_8chars。 — gap_score: 8/10, confidence: 93%
 - [ ] **TST-055** `[HIGH]` run_experiments.py resolve_quant_params 新增数值校验无测试 (scripts/run_experiments.py:506-527): 未提交变更新增 clip_percentile 范围 (0,100] 和 group_size 正整数校验，共 4 个 ValueError 路径，均无测试。TST-039 记录了该函数整体无测试，此次修复增加了高优先级校验逻辑但仍无回归防护。需要：clip_percentile 字符串输入、负值、0 值、group_size 浮点/负数/零 各路径。 — gap_score: 8/10, confidence: 95%
@@ -230,7 +230,7 @@
 
 - [x] **QUA-004** `[MED]` `INT8CacheWrapper` 类含开发时遗留悬挂注释，参数缺少 type hints (src/engine/patch_model.py:64-91): `__init__` 参数 `cache_engine`, `layer_idx` 无类型注释；`update()` 方法注释包含 `"But we handle updates in generate_loop usually?"` 等疑问句开发笔记，在生产代码中不应存留；该类缺少 class-level docstring，仅 `INT8CacheWrapperContainer` 有说明。 — D7 全项目, confidence: 85% -- fixed
 
-- [ ] **QUA-005** `[MED]` `KV_MODE_ORDER` 在两处独立定义，两脚本之间无共享源 (scripts/aggregate_results.py:87-97, scripts/export_tables_latex.py:55-65): 当前两处顺序恰好一致，但两处独立维护——若一处新增 kv_mode，另一处不会自动更新，导致排序或显示名不一致。建议提取到 `src/utils/constants.py` 统一管理（`generate_loop.py:316-326` 的 kv_mode 合法值列表也应同步）。 — D7 全项目, confidence: 88%
+- [x] **QUA-005** `[MED]` `KV_MODE_ORDER` 在两处独立定义，两脚本之间无共享源 (scripts/aggregate_results.py:87-97, scripts/export_tables_latex.py:55-65): 当前两处顺序恰好一致，但两处独立维护——若一处新增 kv_mode，另一处不会自动更新，导致排序或显示名不一致。建议提取到 `src/utils/constants.py` 统一管理（`generate_loop.py:316-326` 的 kv_mode 合法值列表也应同步）。 — D7 全项目, confidence: 88% — fixed 8f39875
 
 - [x] **QUA-006** `[MED]` `eval_ppl.py` 文件顶部保留大段开发决策笔记作为行内注释 (scripts/eval_ppl.py:23-43): L23-43 共 21 行注释描述"为何用 HF 滑动窗口而非自定义引擎"，写作风格为开发过程思考（"LIMITATION:", "DECISION:", "Wait, PPL is ..."），不适合留在生产源码顶部，应移入 `docs/` 或作为 ADR 记录。 — D7 全项目, confidence: 82% — fixed 2f6cddb
 
@@ -248,9 +248,9 @@
 
 - [ ] **SEC-002** `[HIGH]` trust_remote_code=True 搭配用户可控 --model_id 构成 RCE 风险 (scripts/smoke_test.py:164,173; eval_ppl.py:701,708; eval_needle.py:339,346; eval_longbench.py:745,752; eval_ruler.py:823,830; profile_latency.py:270,277; profile_memory.py:301,308; calibrate_behavior.py:754,761): 全项目 8 个脚本在模型加载时均设 `trust_remote_code=True`，且 `--model_id` 由命令行接受无白名单校验。该标志会无条件执行模型仓库中的任意 Python 代码（modeling_*.py 等）。利用路径：若 model_id 被攻击者控制（如恶意 YAML 配置或 CI 参数注入），可在 GPU 服务器上执行任意代码获得 root 权限。当前项目固定使用已知安全模型（CLAUDE.md §9），实际风险依赖 model_id 是否被严格管控。修复：在 `run_experiments.py` 中对 model_id 增加白名单校验（参考 `SUPPORTED_KV_MODES` 模式）；或仅对本地已验证路径设 `trust_remote_code=True`。 — D3, confidence: 85%
 
-- [ ] **SEC-003** `[MED]` requirements.txt 无版本 pin 且含未使用 web 框架依赖 (requirements.txt:21-22): 所有依赖均为裸包名，`fastapi` 和 `uvicorn` 在项目代码库中无任何实际使用（无路由定义、无服务启动代码），是冗余攻击面扩大依赖。若被意外加载或在 AutoDL 环境触发，会暴露 HTTP 端口。修复：① 移除 `fastapi` 和 `uvicorn`；② 使用 `env/requirements_freeze.txt` 中的锁定版本替换 `requirements.txt`。 — D3, confidence: 82%
+- [x] **SEC-003** `[MED]` requirements.txt 无版本 pin 且含未使用 web 框架依赖 (requirements.txt:21-22): 所有依赖均为裸包名，`fastapi` 和 `uvicorn` 在项目代码库中无任何实际使用（无路由定义、无服务启动代码），是冗余攻击面扩大依赖。若被意外加载或在 AutoDL 环境触发，会暴露 HTTP 端口。修复：① 移除 `fastapi` 和 `uvicorn`；② 使用 `env/requirements_freeze.txt` 中的锁定版本替换 `requirements.txt`。 — D3, confidence: 82% — fixed c5b763c
 
-- [ ] **SEC-004** `[MED]` 异常信息暴露服务器内部文件系统路径 (scripts/smoke_test.py:179; eval_ppl.py, eval_ruler.py, eval_longbench.py, eval_needle.py 等 except 块): `print(f"  ✗ Model loading failed: {e}")` 中异常对象含完整本地路径（如 `/root/autodl-tmp/hf_cache/...`）。`logs/` 目录已在 `.gitignore` 中，直接风险有限，但属纵深防御缺口。当 CI 输出被截图或分享时服务器路径结构被暴露。修复：在 except 块中对外部输出进行路径脱敏，仅打印异常类型和简短消息，详细信息写入本地日志。 — D3, confidence: 80%
+- [x] **SEC-004** `[MED]` 异常信息暴露服务器内部文件系统路径 (scripts/smoke_test.py:179; eval_ppl.py, eval_ruler.py, eval_longbench.py, eval_needle.py 等 except 块): `print(f"  ✗ Model loading failed: {e}")` 中异常对象含完整本地路径（如 `/root/autodl-tmp/hf_cache/...`）。`logs/` 目录已在 `.gitignore` 中，直接风险有限，但属纵深防御缺口。当 CI 输出被截图或分享时服务器路径结构被暴露。修复：在 except 块中对外部输出进行路径脱敏，仅打印异常类型和简短消息，详细信息写入本地日志。 — D3, confidence: 80% — fixed c5b763c
 
 ---
 
