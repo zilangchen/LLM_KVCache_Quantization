@@ -381,8 +381,8 @@ def export_longbench(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> L
 
     longbench_footnote = (
         "LongBench score is the macro-average of task-level official metrics "
-        "(Rouge-L for summarization, Accuracy for classification, "
-        "Edit Similarity for code completion)."
+        "(Rouge-L for summarization, token-F1 for question answering, "
+        "Accuracy for classification, Edit Similarity for code completion)."
     )
 
     for model_suffix, model_label, model_df in _split_by_model(df):

@@ -318,10 +318,20 @@ def _score_prediction(prediction: str, answers: Sequence[str]) -> Dict[str, floa
 
 
 def _truncate_prompt_ids(tokenizer, prompt: str, max_tokens: int) -> torch.Tensor:
+    """Truncate prompt token IDs to fit within *max_tokens*.
+
+    EVL-030: Uses head+tail truncation (matching eval_ruler.py) to preserve
+    both the system prompt / context prefix and the question / instruction
+    at the end.  The tail is capped at min(128, budget/8) tokens.
+    """
     ids = tokenizer(prompt, add_special_tokens=False).input_ids
     if max_tokens > 0 and len(ids) > max_tokens:
-        # Keep tail so the question/instruction remains visible.
-        ids = ids[-max_tokens:]
+        tail_keep = min(128, int(max_tokens // 8))
+        head_keep = max_tokens - tail_keep
+        if head_keep <= 0:
+            ids = ids[:max_tokens]
+        else:
+            ids = ids[:head_keep] + ids[-tail_keep:]
     return torch.tensor([ids], dtype=torch.long)
 
 

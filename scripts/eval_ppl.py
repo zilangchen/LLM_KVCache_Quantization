@@ -9,6 +9,7 @@ import csv
 import json
 import os
 import sys
+import traceback
 import torch
 from tqdm import tqdm
 from datetime import datetime
@@ -45,6 +46,42 @@ from src.utils.repro import (
     write_config_snapshot,
 )
 from scripts.config_utils import load_config, normalize_kv_params, resolve_run_config
+
+# EVL-029: Standard exit codes aligned with eval_longbench/eval_ruler.
+EXIT_OOM = 73
+EXIT_EXCEPTION = 2
+
+_LAST_ARGS: argparse.Namespace | None = None
+
+
+def _write_task_failure(
+    *,
+    args: argparse.Namespace,
+    failure_type: str,
+    message: str,
+    exception: Exception | None = None,
+) -> None:
+    """Write a structured failure JSON for run_experiments.py to consume."""
+    out_dir = Path(args.out_dir) if getattr(args, "out_dir", None) else Path(".")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "script": Path(__file__).name,
+        "timestamp": datetime.now().isoformat(),
+        "failure_type": str(failure_type),
+        "message": str(message),
+        "kv_mode": str(getattr(args, "kv_mode", "")),
+        "run_name": str(getattr(args, "run_name", "")),
+        "seed": int(getattr(args, "seed", 0)),
+        "replica_id": int(getattr(args, "replica_id", 0)),
+        "seq_len": int(getattr(args, "seq_len", 0) or 0),
+    }
+    if exception is not None:
+        payload["exception_type"] = type(exception).__name__
+        payload["exception_repr"] = repr(exception)
+        payload["traceback"] = traceback.format_exc()
+    path = out_dir / f"task_failure_{Path(__file__).stem}.json"
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=True), encoding="utf-8")
+
 
 # DEPRECATED: local copy kept for standalone execution.  Canonical version
 # lives in ``src.utils.repro.resolve_quant_bits``; update there first.
@@ -298,12 +335,18 @@ def build_kv_cache(
     if kv_mode in ["int8_fused", "int8_ours"]:
         apply_int8_fused_patch(model)
 
+    # EVL-033: int8_baseline doesn't use fused attention, so default to
+    # torch_ref rather than triton_fused to keep config semantics precise.
+    effective_attn_impl = decode_attn_impl or (
+        "torch_ref" if kv_mode == "int8_baseline" else "triton_fused"
+    )
+
     return INT8KVCache(
         num_layers=num_layers,
         device=model.device.type,
         clip_percentile=clip_percentile,
         group_size=group_size,
-        decode_attn_impl=decode_attn_impl or "triton_fused",
+        decode_attn_impl=effective_attn_impl,
         static_k_scale=static_k_scale,
         static_v_scale=static_v_scale,
         inv_tau=inv_tau,
@@ -648,6 +691,8 @@ def main():
     )
 
     args = parser.parse_args()
+    global _LAST_ARGS  # noqa: PLW0603
+    _LAST_ARGS = args
 
     if args.config and args.run_name:
         cfg = load_config(args.config)
@@ -838,10 +883,18 @@ def main():
                 prev_end_loc = end_loc
                 pbar.update(1)
     except RuntimeError as e:
+        is_oom = "out of memory" in str(e).lower()
         print(f"PPL evaluation failed: {e}")
-        if "out of memory" in str(e).lower():
+        if is_oom:
             print("Tip: reduce --max_length or --max_samples.")
-        sys.exit(1)
+        # EVL-029/036: Write structured failure JSON and use standard exit codes.
+        _write_task_failure(
+            args=args,
+            failure_type="oom" if is_oom else "exception",
+            message=f"RuntimeError during eval_ppl: {e}",
+            exception=e,
+        )
+        sys.exit(EXIT_OOM if is_oom else EXIT_EXCEPTION)
     finally:
         for h in hook_handles:
             try:
@@ -903,6 +956,9 @@ def main():
             "replica_id": int(args.replica_id),
             # Extra
             "perplexity": round(ppl.item(), 4),
+            # EVL-031: Per-run CSV uses point estimate for CI fields (no
+            # bootstrap within a single run).  Actual CI is computed across
+            # seeds by aggregate_results.py.
             "ppl_ci95_low": round(ppl.item(), 4),
             "ppl_ci95_high": round(ppl.item(), 4),
             "ppl_mode": ppl_mode,
@@ -948,4 +1004,25 @@ def main():
         write_config_snapshot(str(run_snapshot_dir), snapshot)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except torch.cuda.OutOfMemoryError as exc:
+        print("OOM")
+        if _LAST_ARGS is not None:
+            _write_task_failure(
+                args=_LAST_ARGS,
+                failure_type="oom",
+                message="CUDA out of memory during eval_ppl execution.",
+                exception=exc,
+            )
+        sys.exit(EXIT_OOM)
+    except Exception as exc:  # noqa: BLE001
+        print(f"ERROR: {type(exc).__name__}: {exc}")
+        if _LAST_ARGS is not None:
+            _write_task_failure(
+                args=_LAST_ARGS,
+                failure_type="exception",
+                message="Unhandled exception during eval_ppl execution.",
+                exception=exc,
+            )
+        sys.exit(EXIT_EXCEPTION)
