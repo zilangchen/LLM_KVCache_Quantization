@@ -16,6 +16,15 @@ import yaml
 _logger = logging.getLogger(__name__)
 
 
+# SEC-002: Allowed model IDs — whitelist for trust_remote_code=True usage.
+# Only models listed here are permitted; unknown model_ids are rejected early
+# in run_experiments.py rather than loading arbitrary remote code on a GPU server.
+ALLOWED_MODEL_IDS: frozenset[str] = frozenset({
+    "Qwen/Qwen2.5-1.5B-Instruct",
+    "Qwen/Qwen2.5-7B-Instruct",
+    "meta-llama/Llama-3.1-8B-Instruct",
+})
+
 # QUA-005: Canonical KV mode ordering, shared across aggregate_results.py
 # and export_tables_latex.py. Defined here as the single source of truth.
 KV_MODE_ORDER: List[str] = [

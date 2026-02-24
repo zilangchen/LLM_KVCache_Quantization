@@ -27,7 +27,7 @@ script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from scripts.config_utils import load_config, read_json, read_text
+from scripts.config_utils import ALLOWED_MODEL_IDS, load_config, read_json, read_text
 
 
 TASK_TO_SCRIPT = {
@@ -903,6 +903,14 @@ def main() -> int:
     kernel_defaults = runtime.get("kernel_defaults", {})
 
     model_id = project.get("model_id", "Qwen/Qwen2.5-1.5B-Instruct")
+    # SEC-002: Reject unknown model IDs to prevent trust_remote_code RCE.
+    if model_id not in ALLOWED_MODEL_IDS:
+        print(
+            f"Error: model_id={model_id!r} is not in the allowed model whitelist "
+            f"(ALLOWED_MODEL_IDS). Add the model to scripts/config_utils.py if it "
+            f"has been verified as safe."
+        )
+        return 2
     model_revision = project.get("model_revision")
     git_commit_full = _get_git_commit()
     env_info = _collect_env_info()

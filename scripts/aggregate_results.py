@@ -1388,6 +1388,12 @@ def _paired_signflip_pvalue(
     if n < 2:
         return np.nan, "insufficient_pairs", 0
 
+    # AGG-031: This is a two-tailed test (using |mean|).  When combined with the
+    # downstream `favors_challenger` direction check, the effective significance
+    # threshold is 2× conservative compared to a one-tailed test (p_one = p_two/2).
+    # This is an intentional design choice: being conservative is preferred in a
+    # research paper context.  If a true one-tailed test is needed later, halve
+    # the returned p-value at the call site rather than changing this function.
     observed = abs(float(np.mean(arr)))
     if observed == 0.0:
         return 1.0, "zero_effect", 0
