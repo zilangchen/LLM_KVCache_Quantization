@@ -7,10 +7,13 @@ By default it uses 4-bit packing (2x INT4 values per byte) to achieve real
 memory savings. Dequantization unpacks back to FP16 for attention.
 """
 
+import logging
 from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor
+
+logger = logging.getLogger(__name__)
 
 from src.quant.int4_basic import (
     dequantize_symmetric_int4,
@@ -438,6 +441,14 @@ class INT4KVCache:
             raise ValueError(f"Cache for layer {layer_id} is empty")
 
         seq_len = self._layer_seq_lens[layer_id]
+        # KVC-018: warn on zero-length get_kv after clear()
+        if seq_len == 0 and self._k_cache[layer_id] is not None:
+            logger.warning(
+                "get_kv(layer_id=%d) returning zero-length tensors; "
+                "buffers are still allocated (likely after clear()). "
+                "Call release() to free memory.",
+                layer_id,
+            )
         q_k = self._k_cache[layer_id][:, :, :seq_len, :]
         scale_k = self._k_scale[layer_id][:, :, :seq_len, :]
         q_v = self._v_cache[layer_id][:, :, :seq_len, :]

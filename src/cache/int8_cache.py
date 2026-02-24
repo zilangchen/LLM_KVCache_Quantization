@@ -6,10 +6,13 @@ This module provides an INT8 quantized KV cache that reduces memory usage
 by storing K/V tensors in int8 format with associated scales.
 """
 
+import logging
 from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor
+
+logger = logging.getLogger(__name__)
 
 from src.quant.int8_basic import (
     dequantize_symmetric_int8,
@@ -395,6 +398,14 @@ class INT8KVCache:
             raise ValueError(f"Cache for layer {layer_id} is empty")
 
         seq_len = self._layer_seq_lens[layer_id]
+        # KVC-018: warn on zero-length get_kv after clear()
+        if seq_len == 0 and self._k_cache[layer_id] is not None:
+            logger.warning(
+                "get_kv(layer_id=%d) returning zero-length tensors; "
+                "buffers are still allocated (likely after clear()). "
+                "Call release() to free memory.",
+                layer_id,
+            )
         q_k = self._k_cache[layer_id][:, :, :seq_len, :]
         scale_k = self._k_scale[layer_id][:, :, :seq_len, :]
         q_v = self._v_cache[layer_id][:, :, :seq_len, :]
