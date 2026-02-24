@@ -1,6 +1,6 @@
 # Code Review Tracker
 
-> 367 issues | 293 fixed + 10 false_positive + 4 wont_fix | 56 open (0 CRIT, 27 HIGH, 27 MED, 2 LOW)
+> 367 issues | 301 fixed + 10 false_positive + 4 wont_fix | 48 open (0 CRIT, 21 HIGH, 25 MED, 2 LOW)
 > Phase Gate: **CLEAR** — 0 CRITICAL open
 > Last updated: 2026-02-24
 
@@ -176,7 +176,7 @@
 - [x] **TST-016** `[LOW]` INT4 vs INT8 误差比例测试缺失 — fixed 9bc6414
 - [x] **TST-017** `[LOW]` 缺少单 token、batch=0、head_dim=1 等极端边界测试 — fixed 9bc6414
 - [x] **TST-018** `[LOW]` 缺少多轮 clear→append 循环测试（生产中常见的 batch 间重用 cache 场景） — fixed 9bc6414
-- [ ] **TST-019** `[HIGH]` review_tool.py 零测试覆盖 — 无 `tests/test_review_tool.py` (scripts/review_tool.py): 5 个子命令、2 个正则、文件写入逻辑均无自动化测试，任何重构无安全网 — gap_score: 9/10, confidence: 100%
+- [x] **TST-019** `[HIGH]` review_tool.py 零测试覆盖 — 无 `tests/test_review_tool.py` (scripts/review_tool.py): 5 个子命令、2 个正则、文件写入逻辑均无自动化测试，任何重构无安全网 — gap_score: 9/10, confidence: 100% — fixed d045f08
 - [ ] **TST-020** `[HIGH]` _decode_attn_int8_torch_ref 无独立单元测试 (patch_model.py:215-300): 300 行核心参考实现（含 GQA repeat_interleave、group-wise dequant、fp32 softmax），tests/ 中无直接测试。test_triton_kernel.py 有独立实现但从未对比 patch_model 版本。 — D6, confidence: 95%
 - [ ] **TST-021** `[HIGH]` _apply_rope / _rotate_half 无单元测试 (patch_model.py:166-212): RoPE 是 fused decode 关键组件，支持 partial rotary 和多种 cos/sin 形状归一化。错误的 RoPE 导致 decode 注意力完全错误。 — D6, confidence: 95%
 - [ ] **TST-022** `[HIGH]` INT8CacheWrapperContainer / INT8CacheWrapper 无测试 (patch_model.py:65-164): HF Cache 适配层含 get_seq_length、get_mask_sizes、update 等，直接影响 attention mask 尺寸计算。off-by-one 错误无法检测。 — D6, confidence: 95%
@@ -189,15 +189,15 @@
 - [ ] **TST-029** `[MED]` _materialize_int4_cache_as_int8 无测试 (patch_model.py:42-62): bit_packed vs unpacked 两条路径、形状 mismatch 校验无独立测试。 — D6, confidence: 85%
 - [ ] **TST-030** `[HIGH]` check_run_completeness.py 关键状态路径未测试: _check_task_state() 返回 8 种状态中 task_artifacts_missing、running、mixed_csv_non_success、missing 4 种无直接测试用例。当前仅覆盖 success、oom、csv_invalid、traceback 路径。 — D6 CHK rotation, confidence: 95%
 - [ ] **TST-031** `[HIGH]` eval_longbench/eval_ruler 工件检测完全无测试 (check_run_completeness.py:85-90): `_has_task_level_artifacts()` 中 longbench 检查 task_summary CSV、ruler 需同时检查 task_summary + depth_summary，两条分支零测试。 — D6 CHK rotation, confidence: 100%
-- [ ] **TST-032** `[MED]` check_run_completeness.py 8 个工具函数无独立单元测试: _split_csv, _read_json, _read_text, _is_oom_from_log, _is_traceback_from_log, _csv_has_rows, _has_task_level_artifacts, _expected_run_ids 均无单元测试，仅通过集成测试间接覆盖。 — D6 CHK rotation, confidence: 90%
+- [x] **TST-032** `[MED]` check_run_completeness.py 8 个工具函数无独立单元测试: _split_csv, _read_json, _read_text, _is_oom_from_log, _is_traceback_from_log, _csv_has_rows, _has_task_level_artifacts, _expected_run_ids 均无单元测试，仅通过集成测试间接覆盖。 — D6 CHK rotation, confidence: 90% — fixed d045f08
 - [ ] **TST-033** `[MED]` check_run_completeness.py 参数组合和错误路径测试不足: allow_oom_completion=False 影响、runs_dir 不存在 exit(2)、logs_dir=None 完整路径、allow_stress_unexpected_failures 标志均无测试。 — D6 CHK rotation, confidence: 88%
 - [ ] **TST-034** `[HIGH]` export_tables_latex.py 零测试覆盖: 510 行代码、8 个 export 函数、2 个 helper 函数，tests/ 下无任何对应测试文件。_read_csv bare except、_pivot_metric 多模型平均、LaTeX 特殊字符转义等问题均无回归防护。 — D6 EXP rotation, confidence: 98%
 - [ ] **TST-035** `[HIGH]` aggregate_results.py 统计函数测试覆盖不足: `_stable_random_seed`、`_cohens_dz`、`_relative_gain_table`、`_build_paired_metric_rows`、`_paired_signflip_pvalue` 等核心统计函数缺少针对性单元测试。现有 test_aggregate_results_stats.py 仅覆盖部分路径。 — D6 EXP rotation, confidence: 92%
 - [ ] **TST-036** `[HIGH]` aggregate_results.py main() 管线无端到端测试: main() 函数 955 行，串联 7+ 子流程（read→CI→paired→claims→latex），无任何 e2e 测试验证从 CSV 输入到最终 tables/plots 产出的完整路径。配置变更可能静默破坏输出。 — D6 EXP rotation, confidence: 95%
 - [ ] **TST-037** `[HIGH]` smoke_test.py 零测试覆盖: 254 行代码含 get_git_commit、get_hardware_info、main() 生成逻辑、结果保存等关键路径，tests/ 下无对应测试文件。CUDA 不可用 exit(0) 路径特别需要回归测试。 — D6 RUN rotation, confidence: 98%
-- [ ] **TST-038** `[HIGH]` review_tool.py 零测试覆盖: 331 行代码含 parse_tracker（核心正则解析器）、cmd_add（文件写入）、cmd_phase_gate（CI gate 判定）、_update_summary 等 8 个函数，全无测试。正则匹配和字符串插入逻辑属高风险易错代码。 — D6 RUN rotation, confidence: 98%
+- [x] **TST-038** `[HIGH]` review_tool.py 零测试覆盖: 331 行代码含 parse_tracker（核心正则解析器）、cmd_add（文件写入）、cmd_phase_gate（CI gate 判定）、_update_summary 等 8 个函数，全无测试。正则匹配和字符串插入逻辑属高风险易错代码。 — D6 RUN rotation, confidence: 98% — fixed d045f08
 - [ ] **TST-039** `[HIGH]` run_experiments.py resolve_quant/calib_params + _validate_append_commit 无测试: 量化参数三级 fallback 解析逻辑和 append 模式 git commit/env_hash 一致性校验均为实验正确性核心守卫，当前 test_run_experiments_resilience.py 16 个用例未覆盖。 — D6 RUN rotation, confidence: 92%
-- [ ] **TST-040** `[MED]` run_experiments.py _classify_failure 仅测试 2/5 分类路径: 已测试 returncode=73→oom 和 log 含 Traceback→traceback。未测试 returncode=130→interrupt、log 含 "cuda out of memory"→oom、以及 runtime_error/unknown 兜底路径。 — D6 RUN rotation, confidence: 93%
+- [x] **TST-040** `[MED]` run_experiments.py _classify_failure 仅测试 2/5 分类路径: 已测试 returncode=73→oom 和 log 含 Traceback→traceback。未测试 returncode=130→interrupt、log 含 "cuda out of memory"→oom、以及 runtime_error/unknown 兜底路径。 — D6 RUN rotation, confidence: 93% — fixed d045f08
 - [x] **TST-041** `[HIGH]` _t_critical() 函数无单元测试 — TestTCritical class 已在 test_aggregate_results_stats.py 中添加（8 个测试用例覆盖 df=0/负数/1/120/1000、插值、有限性、alpha 默认值） -- fixed
 - [x] **TST-042** `[HIGH]` _add_ci95_columns n<=1→NaN 行为变更无回归测试 — TestAddCI95Columns class 已在 test_aggregate_results_stats.py 中添加（6 个测试用例覆盖 count=0/1/2/5、缺列、空 DataFrame） -- fixed
 - [x] **TST-043** `[HIGH]` Phipson-Smyth +1 修正无专门验证测试 — TestPhipsonSmythCorrection class 已在 test_aggregate_results_stats.py 中添加（3 个测试：corrected vs uncorrected 对比、lower bound >0、MC 路径），并更新了 test_exact_signflip_pvalue_known_case/mixed_signs 期望值使用修正公式 -- fixed
@@ -210,11 +210,11 @@
 - [x] **TST-050** `[LOW]` 测试 magic numbers 添加理论上界来源注释 (test_int8_cache.py, test_kivi_cache.py) -- fixed
 - [x] **TST-051** `[LOW]` test_triton_kernel.py 使用 sys.path.append 而非 insert(0) (L9): 不一致 — D4 TST+configs rotation, confidence: 75% — fixed 0056a3d
 - [x] **TST-052** `[LOW]` test_triton_kernel.py except ImportError 而其他文件用 except Exception (L11-16): 模式不统一 — D4 TST+configs rotation, confidence: 70% — fixed 0056a3d
-- [ ] **TST-053** `[HIGH]` config_utils.load_config 新增异常路径无测试 (scripts/config_utils.py:17-28): 未提交变更新增空文件→ValueError 和非 dict 顶层→ValueError 两个防御分支，无对应测试。load_config 是所有 run_experiments/eval/profile 脚本的共享入口，此分支保护实验管线不在 model.get() 崩溃。需要：test_load_config_empty_file_raises、test_load_config_non_dict_raises、test_load_config_valid_returns_dict。 — gap_score: 8/10, confidence: 95%
-- [ ] **TST-054** `[HIGH]` run_experiments.py _same_commit_prefix 语义反转无回归测试 (scripts/run_experiments.py:169-183): 未提交变更将 empty/unknown 从返回 True（兼容）改为返回 False（不兼容）。这是 RUN-018 修复，行为完全反转。test_run_experiments_resilience.py 中无任何 _same_commit_prefix 测试。若回滚则跨 commit append 校验静默失效。需要：test_same_commit_prefix_empty_is_incompatible、test_same_commit_prefix_unknown_is_incompatible、test_same_commit_prefix_matching_8chars。 — gap_score: 8/10, confidence: 93%
-- [ ] **TST-055** `[HIGH]` run_experiments.py resolve_quant_params 新增数值校验无测试 (scripts/run_experiments.py:506-527): 未提交变更新增 clip_percentile 范围 (0,100] 和 group_size 正整数校验，共 4 个 ValueError 路径，均无测试。TST-039 记录了该函数整体无测试，此次修复增加了高优先级校验逻辑但仍无回归防护。需要：clip_percentile 字符串输入、负值、0 值、group_size 浮点/负数/零 各路径。 — gap_score: 8/10, confidence: 95%
+- [x] **TST-053** `[HIGH]` config_utils.load_config 新增异常路径无测试 (scripts/config_utils.py:17-28): 未提交变更新增空文件→ValueError 和非 dict 顶层→ValueError 两个防御分支，无对应测试。load_config 是所有 run_experiments/eval/profile 脚本的共享入口，此分支保护实验管线不在 model.get() 崩溃。需要：test_load_config_empty_file_raises、test_load_config_non_dict_raises、test_load_config_valid_returns_dict。 — gap_score: 8/10, confidence: 95% — fixed d045f08
+- [x] **TST-054** `[HIGH]` run_experiments.py _same_commit_prefix 语义反转无回归测试 (scripts/run_experiments.py:169-183): 未提交变更将 empty/unknown 从返回 True（兼容）改为返回 False（不兼容）。这是 RUN-018 修复，行为完全反转。test_run_experiments_resilience.py 中无任何 _same_commit_prefix 测试。若回滚则跨 commit append 校验静默失效。需要：test_same_commit_prefix_empty_is_incompatible、test_same_commit_prefix_unknown_is_incompatible、test_same_commit_prefix_matching_8chars。 — gap_score: 8/10, confidence: 93% — fixed d045f08
+- [x] **TST-055** `[HIGH]` run_experiments.py resolve_quant_params 新增数值校验无测试 (scripts/run_experiments.py:506-527): 未提交变更新增 clip_percentile 范围 (0,100] 和 group_size 正整数校验，共 4 个 ValueError 路径，均无测试。TST-039 记录了该函数整体无测试，此次修复增加了高优先级校验逻辑但仍无回归防护。需要：clip_percentile 字符串输入、负值、0 值、group_size 浮点/负数/零 各路径。 — gap_score: 8/10, confidence: 95% — fixed d045f08
 - [ ] **TST-056** `[MED]` run_experiments.py seq_len/gen_len 校验逻辑无测试 (scripts/run_experiments.py:1042-1056): 未提交变更新增 seq_len/gen_len 类型和正值校验（非 int 返回 2，<=0 返回 2），校验代码在 main() 内部，当前测试文件仅通过 subprocess 测试集成路径，无法直接单元测试。但 _compute_ruler_truncation_warning 的测试已直接传 seq_len/gen_len，表明可提取可测试 helper。影响：非法配置的 YAML 值将在早期拦截而非 GPU 加载后崩溃。 — gap_score: 6/10, confidence: 85%
-- [ ] **TST-057** `[MED]` aggregate_results.py _safe_t_crit inf 防护无测试 (scripts/aggregate_results.py:227-230): 未提交变更将 lambda 替换为命名的 _safe_t_crit 函数，新增 not np.isfinite(n) 检查防止 int(inf) OverflowError（AGG-036 修复）。现有 TestAddCI95Columns 仅测试 count=0/1/2/5 正常值，未测试 count=inf 和 count=NaN 的 safe guard 路径。若守护逻辑被回滚，AGG-036 重现。 — gap_score: 6/10, confidence: 88%
+- [x] **TST-057** `[MED]` aggregate_results.py _safe_t_crit inf 防护无测试 (scripts/aggregate_results.py:227-230): 未提交变更将 lambda 替换为命名的 _safe_t_crit 函数，新增 not np.isfinite(n) 检查防止 int(inf) OverflowError（AGG-036 修复）。现有 TestAddCI95Columns 仅测试 count=0/1/2/5 正常值，未测试 count=inf 和 count=NaN 的 safe guard 路径。若守护逻辑被回滚，AGG-036 重现。 — gap_score: 6/10, confidence: 88% — fixed d045f08
 - [ ] **TST-058** `[MED]` run_experiments.py _write_json 原子写入 tmp 清理逻辑无测试 (scripts/run_experiments.py:130-146): 未提交变更新增 try/except 在 replace() 失败时删除孤立 .tmp 文件（RUN-028 修复）。写入失败场景（磁盘满、跨文件系统）无法在普通测试中复现，但 tmp_path 存在且 replace 抛异常时 unlink 被调用的逻辑路径可用 mock 验证。当前零测试。 — gap_score: 5/10, confidence: 82%
 
 ### RVW. 审查工具与配置 — `scripts/review_tool.py`, `.claude/agents/review-*.md`
