@@ -1,6 +1,6 @@
 # Code Review Tracker
 
-> 367 issues | 275 fixed + 10 false_positive + 4 wont_fix | 74 open (0 CRIT, 27 HIGH, 42 MED, 5 LOW)
+> 367 issues | 282 fixed + 10 false_positive + 4 wont_fix | 67 open (0 CRIT, 27 HIGH, 35 MED, 5 LOW)
 > Phase Gate: **CLEAR** — 0 CRITICAL open
 > Last updated: 2026-02-24
 
@@ -10,11 +10,11 @@
 
 ### CHK. 完整性检查 — `scripts/check_run_completeness.py`
 
-- [ ] **CHK-004** `[MED]` 不验证 CSV 内容完整性 (L80)
-- [ ] **CHK-005** `[MED]` LongBench/RULER 任务级完整性无验证 (L16-23, L146-148)
+- [x] **CHK-004** `[MED]` 不验证 CSV 内容完整性 (L80) — fixed 6f23824
+- [x] **CHK-005** `[MED]` LongBench/RULER 任务级完整性无验证 (L16-23, L146-148) — fixed 6f23824
 - [x] **CHK-006** `[MED]` dev agent 仍未确认 O 节 3 CRITICAL + T 节 1 CRITICAL — Phase Gate CLEAR, 所有 CRIT 已解决 -- fixed
 - [x] **CHK-015** `[MED]` failure_type 域值枚举与 run_experiments.py _classify_failure() 不同步 (L94-108): 两处独立维护 failure_type 枚举，新增类型时易遗漏。 — D4, confidence: 84% — fixed 2f6cddb
-- [ ] **CHK-018** `[MED]` _split_csv/_read_json/_read_text 与 run_experiments.py 重复定义 (L27-51): 3 个工具函数在两个脚本中独立实现，修 bug 需改两处。 — D7, confidence: 100%
+- [x] **CHK-018** `[MED]` _split_csv/_read_json/_read_text 与 run_experiments.py 重复定义 (L27-51): 3 个工具函数在两个脚本中独立实现，修 bug 需改两处。 — D7, confidence: 100% — fixed 6f23824
 - [x] **CHK-020** `[LOW]` 返回类型 Dict[str, Any] 无 TypedDict/dataclass 约束 (L168-181, L238-243): 字段名错误无法被静态检查捕获。 — D7, confidence: 80% — fixed 0056a3d
 - [x] **CHK-021** `[MED]` 空 manifest + 存在 CSV 被判定为 "success" (check_run_completeness.py:153-156): manifest_status="" + manifest_failure="" 时 state="success"。manifest 损坏或手动拷贝 CSV 时虚假通过，可能导致信任不可靠数据。 — D2 RUN rotation, confidence: 85% -- fixed
 - [x] **CHK-022** `[LOW]` _read_json OSError/PermissionError 无日志静默返回 None (check_run_completeness.py:54-55): 仅 JSONDecodeError 有 logger.warning，`except Exception: return None` 对 OSError（权限拒绝、IO 错误）无任何日志。manifest 读取因权限问题失败时与 manifest 不存在无法区分，导致所有任务按"无 manifest"路径分类。 — D2 full-scan, confidence: 83% — fixed 2f6cddb
@@ -34,7 +34,7 @@
 - [ ] **AGG-003** `[HIGH]` 多模型对比缺少分层表
 - [ ] **AGG-007** `[MED]` LongBench 聚合同时包含 3 个近义指标 (aggregate_results.py
 - [x] **AGG-008** `[MED]` KIVI quant_bits 在 pairings 中未区分 INT8/INT4 (aggregate_results.py — fixed 2f6cddb
-- [ ] **AGG-009** `[MED]` kv_mode 显示顺序依赖默认排序 (aggregate_results.py
+- [x] **AGG-009** `[MED]` kv_mode 显示顺序依赖默认排序 (aggregate_results.py — fixed 016b460
 - [x] **AGG-012** `[LOW]` Bootstrap seed 基于 SHA256 hash 的独立性 — fixed 2f6cddb
 - [x] **AGG-014** `[LOW]` Bootstrap CI 单样本情况返回 (value, value) 无警告 (L1059-1060) -- fixed
 - [x] **AGG-015** `[LOW]` 精确枚举阈值 n=16 硬编码 (L1092-1107) — fixed 8f39875
@@ -95,9 +95,9 @@
 - [x] **ENG-036** `[MED]` patch_model.py _fused_forward_impl 改用 inspect.signature 检测 kernel 可选参数，但每次 decode step 均重新调用 inspect.signature()，无缓存 (patch_model.py:629-630): `_int8_sig_params = set(inspect.signature(decode_attn_int8).parameters)` 和 `_int4_sig_params = set(inspect.signature(decode_attn_int4).parameters)` 在 _fused_forward_impl 函数体内（每次 decode 调用），而非模块级缓存。kernel 签名在运行时不会改变，每 step 两次 inspect.signature() 调用产生不必要的开销（尤其 512+ token 生成时累计数千次调用）。这是从 try/except TypeError 改为 inspect.signature 时引入的性能回归，虽行为正确但接口探测应在 patch 时（apply_int8_fused_patch 初始化阶段）一次性缓存。 — D4, confidence: 88% -- fixed
 
 ### EXP. 导出/报告 — `scripts/export_*.py`
-- [ ] **EXP-002** `[MED]` LongBench 表缺少任务指标组成说明 (export_tables_latex.py
-- [ ] **EXP-003** `[MED]` RULER 表仅显示整体 pass rate (export_tables_latex.py
-- [ ] **EXP-004** `[MED]` 多模型表格缺少 per-model 分页
+- [x] **EXP-002** `[MED]` LongBench 表缺少任务指标组成说明 (export_tables_latex.py — fixed 8d7f2df
+- [x] **EXP-003** `[MED]` RULER 表仅显示整体 pass rate (export_tables_latex.py — fixed 8d7f2df
+- [x] **EXP-004** `[MED]` 多模型表格缺少 per-model 分页 — fixed 8d7f2df
 - [x] **EXP-005** `[MED]` C9 对指标名正确 (generate_thesis_report.py — metric="longbench_score" 已验证正确 -- false_positive
 - [x] **EXP-006** `[MED]` generate_thesis_report.py C11 已有 target_model_ids=[7B, 8B] 过滤 (L196-199) -- fixed
 - [x] **EXP-007** `[LOW]` KIVI 在 KV_MODE_ORDER 和 KV_MODE_DISPLAY 中已完整映射 (export_tables_latex.py -- false_positive

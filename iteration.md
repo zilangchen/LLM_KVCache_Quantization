@@ -474,4 +474,28 @@ Canonical agent workflow directory is `.agents/`.
 - **Commit**: 2f6cddb (code), pending (tracker)
 - **Running total**: 367 issues, 266 fixed + 10 fp + 4 wf = 280 resolved, 83 open (0 CRIT)
 
+### 2026-02-24 14:37 | Review Tracker Fix — Wave 7+8 (code fixes + DRY + features)
+- **Goal**: Fix 16 issues across Wave 7 (9) and Wave 8 (7)
+- **Wave 7** (9 issues):
+  - AGG-048: `_safe_t_crit(inf)` → return NaN instead of 0.0
+  - QUA-005: Centralize `KV_MODE_ORDER` into `config_utils.py`
+  - AGG-015: Named constant `_EXACT_ENUM_THRESHOLD = 16`
+  - SEC-003: Remove unused `fastapi`/`uvicorn` from requirements.txt
+  - SEC-004: Document intentional path exposure in research CLI tools
+  - TST-051: `sys.path.insert(0, ...)` instead of `append`
+  - TST-052: `except Exception` pattern consistency
+  - PRF-010: Document `GenerationBatchOutput` attribute safety
+  - CHK-020: Add `TypedDict` for `TaskStateResult` and `GroupCheckResult`
+  - Commits: 8f39875, c5b763c, 0056a3d, 73968c4 (tracker)
+- **Wave 8** (7 issues):
+  - CHK-004: CSV content validation (columns + rows)
+  - CHK-005: LongBench/RULER task-level artifact checks
+  - CHK-018: DRY — centralize `split_csv/read_json/read_text` into `config_utils.py`
+  - AGG-009: Explicit `kv_mode` sort order for all summary tables
+  - EXP-002: LongBench table footnote with metric composition
+  - EXP-003: RULER per-subtask tables from `ruler_subtask_summary.csv`
+  - EXP-004: Multi-model pagination for all 8 export functions
+  - Commits: 6f23824, 016b460, 8d7f2df
+- **Running total**: 367 issues, 282 fixed + 10 fp + 4 wf = 296 resolved, 67 open (0 CRIT, 27 HIGH, 35 MED, 5 LOW)
+
 > 更早的条目见 `development_history/iteration_archive_202602.md`
