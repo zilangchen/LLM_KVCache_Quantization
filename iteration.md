@@ -83,6 +83,26 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-02-24 16:00 | Supervisor Session — Wave 16/17 完成，466→13 open
+
+- **Goal**: 自主修复 review_tracker.md 全部可修复 issues
+- **Session scope**: Wave 16 收尾 + Wave 17 + 最终清理
+- **Wave 16** (8 items): ENG-037~041 (HIGH: clamp-before-cast, narrow exceptions, clipping warnings) + ENG-047/CAL-031/032 (docs)
+  - Commits: `4e1a182`, `46ca296`
+- **Infra**: resolve_quant_bits 去重 (`9a694d5`), review_tool RVW-014 fix, agent config updates (`067921e`)
+- **Wave 17A** (22 items): run_experiments.py — 7 HIGH (kill orphans, retry log separation, OOM skip, unique tmp, kv_mode validation, kivi precheck, status logic) + 11 MED (SIGINT, interrupt no-retry, CSV check, exp backoff, log rotation, etc.) + 4 LOW
+  - Commit: `a61f428`
+- **Wave 17B** (15 items): patch_model.py (9: kernel exception, unpatch API, shape validation, docs) + generate_loop.py (5: group_size_v warning, multi-token, DynamicCache doc, scale asymmetry) + int8_cache.py (1: clear/release warning)
+  - Commit: `264dcc3`
+- **Final cleanup** (6 items): ENG-054/KRN-005/KRN-010 documented (`d2decc6`), AGG-032/ENG-030/RUN-024 wont_fix (deferred)
+- **Result**: 466 total → 453 resolved (431 fixed + 15 fp + 7 wf), **13 open** (all need user decisions)
+- **Remaining 13 open items**:
+  - HIGH: CAL-019/020 (Q vector missing layernorm/RoPE — fundamental calibration correctness)
+  - HIGH: CFG-026 (7B/8B calib files missing), CFG-029 (LLaMA revision null)
+  - MED: CFG-008/009/011/012/013/022/028 (experiment design choices)
+  - LOW: CFG-023/024 (temperature inconsistency)
+- **Validation**: All modified files pass `py_compile`; local pytest broken (numpy/scipy dlopen issue — not our code)
+
 ### 2026-02-24 14:14 | 代码审查修复 Wave 3-5 — 30 additional issues fixed
 
 - **Goal**: 继续修复 review_tracker.md 中的 open issues（Wave 2 之后）
