@@ -462,4 +462,16 @@ Canonical agent workflow directory is `.agents/`.
   - Primary endpoints capped at 5: LongBench F1-macro, RULER macro-accuracy, Needle pass rate, PPL, TPOT
 - **Validation**: All modified scripts pass `python3 -m py_compile`
 
+### 2026-02-24 14:22 | Review Tracker Fix — Wave 6 (comment/docs batch)
+- **Goal**: Fix 12 comment/documentation issues (CHK-015, CHK-022, AGG-008, AGG-012, ENG-033, ENG-034, RUN-010~013, QUA-006, QUA-008)
+- **Changed files**:
+  - `scripts/check_run_completeness.py` — CHK-015 enum sync cross-reference, CHK-022 classified _read_json exceptions
+  - `scripts/aggregate_results.py` — AGG-008 KIVI pairing note, AGG-012 seed SHA256 docs, QUA-008 defense-in-depth comment
+  - `scripts/run_experiments.py` — RUN-010/011/012/013 design decision comments
+  - `scripts/eval_ppl.py` — QUA-006 condensed 21-line dev notes to 2-line design comment
+  - `src/engine/generate_loop.py` — ENG-033 wrapper reconstruction comment, ENG-034 mask growth comment
+  - `review_tracker.md` — 12 issues marked fixed, summary: 266 fixed / 83 open
+- **Commit**: 2f6cddb (code), pending (tracker)
+- **Running total**: 367 issues, 266 fixed + 10 fp + 4 wf = 280 resolved, 83 open (0 CRIT)
+
 > 更早的条目见 `development_history/iteration_archive_202602.md`

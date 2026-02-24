@@ -1,6 +1,6 @@
 # Code Review Tracker
 
-> 367 issues | 254 fixed + 10 false_positive + 4 wont_fix | 95 open (0 CRIT, 27 HIGH, 49 MED, 19 LOW)
+> 367 issues | 266 fixed + 10 false_positive + 4 wont_fix | 83 open (0 CRIT, 27 HIGH, 46 MED, 10 LOW)
 > Phase Gate: **CLEAR** — 0 CRITICAL open
 > Last updated: 2026-02-24
 
@@ -13,11 +13,11 @@
 - [ ] **CHK-004** `[MED]` 不验证 CSV 内容完整性 (L80)
 - [ ] **CHK-005** `[MED]` LongBench/RULER 任务级完整性无验证 (L16-23, L146-148)
 - [x] **CHK-006** `[MED]` dev agent 仍未确认 O 节 3 CRITICAL + T 节 1 CRITICAL — Phase Gate CLEAR, 所有 CRIT 已解决 -- fixed
-- [ ] **CHK-015** `[MED]` failure_type 域值枚举与 run_experiments.py _classify_failure() 不同步 (L94-108): 两处独立维护 failure_type 枚举，新增类型时易遗漏。 — D4, confidence: 84%
+- [x] **CHK-015** `[MED]` failure_type 域值枚举与 run_experiments.py _classify_failure() 不同步 (L94-108): 两处独立维护 failure_type 枚举，新增类型时易遗漏。 — D4, confidence: 84% — fixed 2f6cddb
 - [ ] **CHK-018** `[MED]` _split_csv/_read_json/_read_text 与 run_experiments.py 重复定义 (L27-51): 3 个工具函数在两个脚本中独立实现，修 bug 需改两处。 — D7, confidence: 100%
 - [ ] **CHK-020** `[LOW]` 返回类型 Dict[str, Any] 无 TypedDict/dataclass 约束 (L168-181, L238-243): 字段名错误无法被静态检查捕获。 — D7, confidence: 80%
 - [x] **CHK-021** `[MED]` 空 manifest + 存在 CSV 被判定为 "success" (check_run_completeness.py:153-156): manifest_status="" + manifest_failure="" 时 state="success"。manifest 损坏或手动拷贝 CSV 时虚假通过，可能导致信任不可靠数据。 — D2 RUN rotation, confidence: 85% -- fixed
-- [ ] **CHK-022** `[LOW]` _read_json OSError/PermissionError 无日志静默返回 None (check_run_completeness.py:54-55): 仅 JSONDecodeError 有 logger.warning，`except Exception: return None` 对 OSError（权限拒绝、IO 错误）无任何日志。manifest 读取因权限问题失败时与 manifest 不存在无法区分，导致所有任务按"无 manifest"路径分类。 — D2 full-scan, confidence: 83%
+- [x] **CHK-022** `[LOW]` _read_json OSError/PermissionError 无日志静默返回 None (check_run_completeness.py:54-55): 仅 JSONDecodeError 有 logger.warning，`except Exception: return None` 对 OSError（权限拒绝、IO 错误）无任何日志。manifest 读取因权限问题失败时与 manifest 不存在无法区分，导致所有任务按"无 manifest"路径分类。 — D2 full-scan, confidence: 83% — fixed 2f6cddb
 - [x] **CHK-023** `[HIGH]` _detect_failure_type() canonical 枚举注释缺少 "timeout"，与 run_experiments.py 新增 timeout 路径失同步 (check_run_completeness.py:137-165 vs run_experiments.py:1452-1487): run_experiments.py 新增 timeout 处理分支，将 failure_type="timeout" 直接写入 manifest（L1457-1468），绕过 _classify_failure()。check_run_completeness.py 的 _detect_failure_type() 注释（L149-154）声称列出了 canonical failure_type 枚举集合（oom/interrupt/traceback/runtime_error/unknown），但未包含 "timeout"。实际运行中 manifest_failure="timeout" 会经 L163-164 的 fallback 分支透传输出，功能上不报错；但注释的权威性下降，未来新增 failure_type 时维护者参考注释做 exhaustiveness 检查会遗漏 "timeout"，CHK-015 所述不同步问题因此加剧。修复建议：同步更新 _detect_failure_type() 注释枚举，增加 "timeout" 条目。 — D4, confidence: 91% -- fixed
 
 ### EVL. 评测脚本 — `scripts/eval_*.py`
@@ -33,9 +33,9 @@
 - [ ] **AGG-002** `[HIGH]` RULER 聚合缺少子任务分拆 (aggregate_results.py
 - [ ] **AGG-003** `[HIGH]` 多模型对比缺少分层表
 - [ ] **AGG-007** `[MED]` LongBench 聚合同时包含 3 个近义指标 (aggregate_results.py
-- [ ] **AGG-008** `[MED]` KIVI quant_bits 在 pairings 中未区分 INT8/INT4 (aggregate_results.py
+- [x] **AGG-008** `[MED]` KIVI quant_bits 在 pairings 中未区分 INT8/INT4 (aggregate_results.py — fixed 2f6cddb
 - [ ] **AGG-009** `[MED]` kv_mode 显示顺序依赖默认排序 (aggregate_results.py
-- [ ] **AGG-012** `[LOW]` Bootstrap seed 基于 SHA256 hash 的独立性
+- [x] **AGG-012** `[LOW]` Bootstrap seed 基于 SHA256 hash 的独立性 — fixed 2f6cddb
 - [x] **AGG-014** `[LOW]` Bootstrap CI 单样本情况返回 (value, value) 无警告 (L1059-1060) -- fixed
 - [ ] **AGG-015** `[LOW]` 精确枚举阈值 n=16 硬编码 (L1092-1107)
 - [x] **AGG-029** `[MED]` gain_pct_mean（跨 seed 配对差均值）vs gain_pct（聚合均值上的单点增益）定义不同 (generate_thesis_report.py:586 vs 356): significance_summary 用 gain_pct_mean，claim_validation 用 gain_pct。Jensen's inequality 下两者不等。同一 claim 在两个表中可能给出矛盾的 practical_pass。 — D4 EXP rotation, confidence: 88% -- fixed
@@ -89,8 +89,8 @@
 - [x] **ENG-029** `[MED]` torch_ref dequant 在 fp16 vs Triton 在 fp32，dump 对比精度差异 (patch_model.py:278-285): 两路径 ~1e-3 差异影响 max_abs_diff 诊断准确性。 — D1, confidence: 82% -- fixed
 - [ ] **ENG-030** `[MED]` generate_from_ids 函数过长 535 行 (generate_loop.py:258-793): 8+ 职责耦合在一个函数中，难以单独测试和维护。 — D7, confidence: 95%
 - [x] **ENG-032** `[LOW]` _seq_len 仅在 layer_id==0 时更新 — 设计决策注释已添加到 int8_cache.py 和 int4_cache.py -- fixed
-- [ ] **ENG-033** `[LOW]` INT8CacheWrapperContainer 每 decode step 重新构造 (generate_loop.py:668-671): 每步创建 num_layers 个 INT8CacheWrapper 对象，28-80 层模型生成 512 token 累计 14k-40k 临时对象。 — D4, confidence: 95%
-- [ ] **ENG-034** `[LOW]` attention_mask decode 阶段 O(N^2) 内存分配 (generate_loop.py:724-732): fused path `del attention_mask` 但 generate_loop 仍每步分配增长。长序列累计 ~400MB 无用分配。 — D5, confidence: 88%
+- [x] **ENG-033** `[LOW]` INT8CacheWrapperContainer 每 decode step 重新构造 (generate_loop.py:668-671): 每步创建 num_layers 个 INT8CacheWrapper 对象，28-80 层模型生成 512 token 累计 14k-40k 临时对象。 — D4, confidence: 95% — fixed 2f6cddb
+- [x] **ENG-034** `[LOW]` attention_mask decode 阶段 O(N^2) 内存分配 (generate_loop.py:724-732): fused path `del attention_mask` 但 generate_loop 仍每步分配增长。长序列累计 ~400MB 无用分配。 — D5, confidence: 88% — fixed 2f6cddb
 - [x] **ENG-035** `[LOW]` except TypeError 过于宽泛可能吞掉内核内部错误 (patch_model.py:621-631,647-659): Triton kernel 内部 dtype/shape TypeError 被静默回退到无 debug_stats 调用。 — D7, confidence: 82% -- fixed
 - [x] **ENG-036** `[MED]` patch_model.py _fused_forward_impl 改用 inspect.signature 检测 kernel 可选参数，但每次 decode step 均重新调用 inspect.signature()，无缓存 (patch_model.py:629-630): `_int8_sig_params = set(inspect.signature(decode_attn_int8).parameters)` 和 `_int4_sig_params = set(inspect.signature(decode_attn_int4).parameters)` 在 _fused_forward_impl 函数体内（每次 decode 调用），而非模块级缓存。kernel 签名在运行时不会改变，每 step 两次 inspect.signature() 调用产生不必要的开销（尤其 512+ token 生成时累计数千次调用）。这是从 try/except TypeError 改为 inspect.signature 时引入的性能回归，虽行为正确但接口探测应在 patch 时（apply_int8_fused_patch 初始化阶段）一次性缓存。 — D4, confidence: 88% -- fixed
 
@@ -128,10 +128,10 @@
 
 ### RUN. 实验运行 — `scripts/run_experiments.py`
 - [x] **RUN-009** `[MED]` 消融实验仅跑 PPL+Needle，缺少 LongBench — 消融设计决策：1.5B 仅 PPL+Needle 为主指标，已在 objective.md 确认 -- wont_fix
-- [ ] **RUN-010** `[LOW]` YAML 配置无 matrix 非空校验 (L725-794)
-- [ ] **RUN-011** `[LOW]` append 模式 manifest 元数据被覆盖 (L252-265)
-- [ ] **RUN-012** `[LOW]` append_history 未记录 kv_mode/quant_bits 变化 (L272-278)
-- [ ] **RUN-013** `[LOW]` manifest history 仅保留最近 20 条 (L334)
+- [x] **RUN-010** `[LOW]` YAML 配置无 matrix 非空校验 (L725-794) — fixed 2f6cddb
+- [x] **RUN-011** `[LOW]` append 模式 manifest 元数据被覆盖 (L252-265) — fixed 2f6cddb
+- [x] **RUN-012** `[LOW]` append_history 未记录 kv_mode/quant_bits 变化 (L272-278) — fixed 2f6cddb
+- [x] **RUN-013** `[LOW]` manifest history 仅保留最近 20 条 (L334) — fixed 2f6cddb
 - [x] **RUN-014** `[LOW]` 消融 output dir 命名含双重 seed — run_name 含 seed 是设计意图（消融每 seed 独立 run），不影响功能 -- wont_fix
 - [x] **RUN-017** `[LOW]` run_experiments.py RULER 截断 warning 仅 print 未写入 manifest: `_compute_ruler_truncation_warning()` 结果只打印到 stdout，不记录到 `run_manifest.json`。批量实验中 warning 混入大量日志难以追溯。 — D2 incremental, confidence: 82% -- fixed
 - [x] **RUN-018** `[HIGH]` _same_commit_prefix 将 empty/unknown 视为兼容，允许跨 commit append 静默通过 (run_experiments.py:152-159): 空字符串和 "unknown" 均返回 True。非 git 环境或 git 损坏时 _get_git_commit 返回 "unknown"，append 校验全部通过，不同代码版本结果可混入同一 run_dir。 — D2+D5 RUN rotation, confidence: 88% -- fixed
@@ -232,11 +232,11 @@
 
 - [ ] **QUA-005** `[MED]` `KV_MODE_ORDER` 在两处独立定义，两脚本之间无共享源 (scripts/aggregate_results.py:87-97, scripts/export_tables_latex.py:55-65): 当前两处顺序恰好一致，但两处独立维护——若一处新增 kv_mode，另一处不会自动更新，导致排序或显示名不一致。建议提取到 `src/utils/constants.py` 统一管理（`generate_loop.py:316-326` 的 kv_mode 合法值列表也应同步）。 — D7 全项目, confidence: 88%
 
-- [ ] **QUA-006** `[MED]` `eval_ppl.py` 文件顶部保留大段开发决策笔记作为行内注释 (scripts/eval_ppl.py:23-43): L23-43 共 21 行注释描述"为何用 HF 滑动窗口而非自定义引擎"，写作风格为开发过程思考（"LIMITATION:", "DECISION:", "Wait, PPL is ..."），不适合留在生产源码顶部，应移入 `docs/` 或作为 ADR 记录。 — D7 全项目, confidence: 82%
+- [x] **QUA-006** `[MED]` `eval_ppl.py` 文件顶部保留大段开发决策笔记作为行内注释 (scripts/eval_ppl.py:23-43): L23-43 共 21 行注释描述"为何用 HF 滑动窗口而非自定义引擎"，写作风格为开发过程思考（"LIMITATION:", "DECISION:", "Wait, PPL is ..."），不适合留在生产源码顶部，应移入 `docs/` 或作为 ADR 记录。 — D7 全项目, confidence: 82% — fixed 2f6cddb
 
 - [x] **QUA-007** `[MED]` `run_experiments.py` 中 `_timeout` 局部变量以下划线前缀命名，违反 Python 惯例 (scripts/run_experiments.py:1437): `_timeout = int(args.subprocess_timeout) if int(args.subprocess_timeout) > 0 else None`——下划线前缀惯例用于模块级/类级私有名，局部变量无需此前缀。与同函数其他局部变量（`returncode`, `failure_type`, `log_mode`）风格不一致。建议命名为 `timeout_sec`。 — D7 全项目, confidence: 82% -- fixed
 
-- [ ] **QUA-008** `[LOW]` `_safe_t_crit` 中 `return 0.0`（n<=1 分支）被后续 `.where(cnt > 1, np.nan)` 覆盖，存在语义冗余 (scripts/aggregate_results.py:227-233): `_safe_t_crit` 在 `n <= 1` 时返回 `0.0`（使 `t_crit * sem = 0`），但紧接着 `ci_half = ci_half.where(cnt > 1, np.nan)` 将 `cnt <= 1` 处强制置 `NaN`，使该返回值永远不进入最终输出。应在注释中说明双重保护的分工，或简化逻辑。 — D7 全项目, confidence: 80%
+- [x] **QUA-008** `[LOW]` `_safe_t_crit` 中 `return 0.0`（n<=1 分支）被后续 `.where(cnt > 1, np.nan)` 覆盖，存在语义冗余 (scripts/aggregate_results.py:227-233): `_safe_t_crit` 在 `n <= 1` 时返回 `0.0`（使 `t_crit * sem = 0`），但紧接着 `ci_half = ci_half.where(cnt > 1, np.nan)` 将 `cnt <= 1` 处强制置 `NaN`，使该返回值永远不进入最终输出。应在注释中说明双重保护的分工，或简化逻辑。 — D7 全项目, confidence: 80% — fixed 2f6cddb
 
 - [x] **QUA-009** `[LOW]` `aggregate_results.py` import 块违反 PEP 8 顺序，标准库 `logging` 插入第三方库块中间 (scripts/aggregate_results.py:14-26): `import logging`（L25）出现在 `matplotlib`（L23）和 `numpy`（L24）第三方库之间，PEP 8 要求标准库导入集中在第三方库之前。应将 `import logging` 上移至标准库导入组（L14-21）。 — D7 全项目, confidence: 90% -- fixed
 
