@@ -97,6 +97,20 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-02-24 14:14 | 代码审查修复 Wave 3-5 — 30 additional issues fixed
+
+- **Goal**: 继续修复 review_tracker.md 中的 open issues（Wave 2 之后）
+- **Wave 3** (10 issues): KVC-017 overflow guard, CHK-023 timeout enum, RUN-020 config validation, QUA-002 logging infra, SMK-002/004, AGG-046/047 bare except+commit semantics, ENG-036 signature cache, RUN-033 classified exceptions
+- **Wave 4** (9 issues): QUA-001 centralize get_git_commit (9 scripts → src/utils/repro.py, net -44 lines), KVC-018 zero-length get_kv warning, RUN-034/SMK-005 breaking change docs, AGG-029/037/043/045 statistical fixes, QUA-003 loop extraction
+- **Wave 5** (11 issues): ENG-007/008/012/013 docs, QUA-004/007/009/010 code quality, RUN-017/AGG-014/PRF-009 comments
+- **Validation**: All modified files pass `python -m py_compile`
+- **Commits**:
+  - Wave 3: `7e72174`, `f25408f`, `a581bed`
+  - Wave 4: `3e6cf12`, `5be2de7`, `242c3e8`, `589356e`
+  - Wave 5: `bcc6b98`, `153805c`, `7f58455`
+- **Cumulative**: 254 fixed + 10 false_positive + 4 wont_fix = 268 resolved / 367 total (73%)
+- **Remaining**: 95 open (0 CRIT, 27 HIGH, 49 MED, 19 LOW) — mostly TST test coverage (48), SEC security decisions (4), CFG config design (8), refactoring (3), architecture decisions (4)
+
 ### 2026-02-24 13:54 | 全仓库代码审查修复 Wave 2 — 43 issues 批量修复
 
 - **Goal**: 继续修复 review_tracker.md 中的 open issues（Wave 1 之后的第二轮）
