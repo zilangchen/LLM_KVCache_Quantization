@@ -9,6 +9,7 @@ import argparse
 import csv
 import hashlib
 import json
+import logging
 import os
 import platform
 import re
@@ -18,6 +19,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
+
+# QUA-002: module-level logger so that logger.warning calls work properly.
+logger = logging.getLogger(__name__)
 
 script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
@@ -163,7 +167,17 @@ def _existing_result_git_commits(run_dir: Path) -> List[str]:
                         commit = str(row.get("git_commit", "")).strip()
                         if commit:
                             commits.add(commit)
-            except Exception:
+            except json.JSONDecodeError as exc:
+                # RUN-033: log JSON/CSV parse errors explicitly.
+                logger.warning("Failed to parse CSV %s: %s", path, exc)
+                continue
+            except OSError as exc:
+                # RUN-033: log IO/permission errors explicitly.
+                logger.warning("OS error reading CSV %s: %s", path, exc)
+                continue
+            except Exception as exc:
+                # RUN-033: log unexpected errors with classification.
+                logger.warning("Unexpected error reading CSV %s: %s", path, exc)
                 continue
     return sorted(commits)
 
@@ -860,6 +874,8 @@ def main() -> int:
         ),
     )
     args = parser.parse_args()
+    # QUA-002: configure logging infrastructure so logger.warning calls emit output.
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     if int(args.max_retries) < 0:
         print("Error: --max_retries must be >= 0.")
         return 2

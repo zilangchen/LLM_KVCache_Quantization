@@ -147,6 +147,7 @@ def _detect_failure_type(
     the current version of run_experiments.py:
 
         "oom"           – CUDA / system out-of-memory (exit code 73 or log keyword)
+        "timeout"       – subprocess timed out (CHK-023)
         "interrupt"     – process killed by SIGINT (exit code 130)
         "traceback"     – Python traceback detected in log but not OOM
         "runtime_error" – non-zero exit code without a more specific pattern

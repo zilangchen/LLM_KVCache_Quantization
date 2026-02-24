@@ -450,6 +450,11 @@ def _print_strict_issues(issues: List[str]) -> None:
 
 
 def _read_json(path: Path) -> dict:
+    """Read a JSON file, returning {} if missing or not a dict.
+
+    AGG-046: uses classified exception handling with logging instead of
+    bare ``except Exception: return {}``.
+    """
     if not path.exists():
         return {}
     try:
@@ -457,18 +462,32 @@ def _read_json(path: Path) -> dict:
             data = json.load(f)
         if isinstance(data, dict):
             return data
-    except Exception:
-        return {}
+        logger.warning("_read_json: %s did not contain a dict (got %s), returning {}", path, type(data).__name__)
+    except json.JSONDecodeError as exc:
+        # AGG-046: log JSON corruption explicitly.
+        logger.warning("_read_json: JSON decode error reading %s: %s", path, exc)
+    except OSError as exc:
+        # AGG-046: log IO/permission errors explicitly.
+        logger.warning("_read_json: OS error reading %s: %s", path, exc)
+    except Exception as exc:
+        # AGG-046: log unexpected errors with classification.
+        logger.warning("_read_json: unexpected error reading %s: %s", path, exc)
     return {}
 
 
 def _same_commit_prefix(a: str, b: str) -> bool:
+    # AGG-047: aligned with run_experiments.py semantics — empty/unknown commits
+    # are treated as incompatible (returns False) with a warning, to prevent
+    # silent cross-commit data aggregation.
     a = str(a).strip()
     b = str(b).strip()
-    if not a or not b:
-        return True
-    if a == "unknown" or b == "unknown":
-        return True
+    if not a or a == "unknown" or not b or b == "unknown":
+        logger.warning(
+            "AGG-047: git commit comparison involves empty/unknown value "
+            "(a=%r, b=%r). Treating as incompatible.",
+            a, b,
+        )
+        return False
     return a[:8] == b[:8]
 
 
