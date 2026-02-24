@@ -25,6 +25,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from config_utils import KV_MODE_ORDER
+
 try:
     from scipy.stats import t as _t_dist
     _HAS_SCIPY = True
@@ -87,17 +89,12 @@ if not _HAS_SCIPY:
         "(two-tailed alpha=0.05 only). Install scipy for full t-distribution support."
     )
 
-KV_MODE_ORDER: List[str] = [
-    "fp16",
-    "int8_baseline",
-    "int8_ours",
-    "int8_fused",
-    "int4_baseline",
-    "int4_ours",
-    "int4_ours_mixed",
-    "int4_fused",
-    "kivi_style",
-]
+# AGG-015: Maximum sample size for exact sign-flip enumeration (2^n perms).
+# At n=16, 2^16=65536 permutations — comfortably fast on any CPU.
+# Beyond 16, the exponential cost becomes impractical and we switch to
+# Monte Carlo approximation.
+_EXACT_ENUM_THRESHOLD = 16
+
 _KV_MODE_RANK = {mode: idx for idx, mode in enumerate(KV_MODE_ORDER)}
 
 
@@ -207,13 +204,19 @@ def _agg_mean_std(df: pd.DataFrame, keys: List[str], values: List[str]) -> pd.Da
 
 def _safe_t_crit(n: float) -> float:
     """QUA-003: module-level helper (moved out of _add_ci95_columns loop).
-    Return t critical value for sample size *n*; returns 0.0 for non-finite
-    or n <= 1 so that CI half-width becomes 0 (later masked to NaN).
+    Return t critical value for sample size *n*.
 
-    # QUA-008: _safe_t_crit returns 0.0 for n<=1 as a first guard; _add_ci95_columns then applies .where(cnt>1, NaN) as a second guard. Both layers are intentional defense-in-depth.
+    # AGG-048: Non-finite n (inf, NaN) returns NaN — not 0.0 — because
+    # a zero CI half-width creates a false "zero error" appearance in
+    # downstream tables, whereas NaN correctly propagates as missing data.
+    # n <= 1 also returns 0.0 as a first guard; _add_ci95_columns then
+    # applies .where(cnt>1, NaN) as a second guard (QUA-008 defense-in-depth).
     """
-    # AGG-036: guard against cnt containing inf, which would cause int(inf) OverflowError.
-    if not np.isfinite(n) or n <= 1:
+    # AGG-048: non-finite n (inf, NaN) must yield NaN, not 0.0.
+    if not np.isfinite(n):
+        return float("nan")
+    # AGG-036 / QUA-008: n <= 1 returns 0.0 (masked to NaN by caller).
+    if n <= 1:
         return 0.0
     return _t_critical(max(1, int(n) - 1))
 
@@ -1390,7 +1393,7 @@ def _paired_signflip_pvalue(
         return 1.0, "zero_effect", 0
 
     # Exact paired sign-flip test for small n; MC approximation for larger n.
-    if n <= 16:
+    if n <= _EXACT_ENUM_THRESHOLD:
         n_enum = 1 << n
         idx = np.arange(n_enum, dtype=np.uint32)[:, None]
         bits = ((idx >> np.arange(n, dtype=np.uint32)) & 1).astype(np.int8)
@@ -1813,7 +1816,7 @@ def main() -> int:
         "--significance_permutations",
         type=int,
         default=20000,
-        help="Number of sign-flip permutations for Monte Carlo tests when n>16.",
+        help=f"Number of sign-flip permutations for Monte Carlo tests when n>{_EXACT_ENUM_THRESHOLD}.",
     )
     parser.add_argument(
         "--significance_seed",

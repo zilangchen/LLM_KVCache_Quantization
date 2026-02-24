@@ -40,6 +40,8 @@ from typing import Dict, Iterable, List, Optional
 
 import pandas as pd
 
+from config_utils import KV_MODE_ORDER
+
 logger = logging.getLogger(__name__)
 
 
@@ -50,19 +52,6 @@ def _sanitize_label(text: str) -> str:
     # Collapse whitespace to underscores
     text = re.sub(r'\s+', '_', text.strip())
     return text
-
-
-KV_MODE_ORDER: List[str] = [
-    "fp16",
-    "int8_baseline",
-    "int8_ours",
-    "int8_fused",
-    "int4_baseline",
-    "int4_ours",
-    "int4_ours_mixed",
-    "int4_fused",
-    "kivi_style",
-]
 
 KV_MODE_DISPLAY: Dict[str, str] = {
     "fp16": "FP16",

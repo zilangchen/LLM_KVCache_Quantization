@@ -5,10 +5,25 @@ Config utilities for experiment matrix loading.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 import warnings
 
 import yaml
+
+
+# QUA-005: Canonical KV mode ordering, shared across aggregate_results.py
+# and export_tables_latex.py. Defined here as the single source of truth.
+KV_MODE_ORDER: List[str] = [
+    "fp16",
+    "int8_baseline",
+    "int8_ours",
+    "int8_fused",
+    "int4_baseline",
+    "int4_ours",
+    "int4_ours_mixed",
+    "int4_fused",
+    "kivi_style",
+]
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
