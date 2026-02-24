@@ -13,6 +13,11 @@ from src.kernels import decode_attn_int4, decode_attn_int8
 from src.quant.int4_basic import unpack_int4
 
 logger = logging.getLogger(__name__)
+
+# ENG-036: cache inspect.signature results at module level to avoid calling
+# inspect.signature on every decode step inside _fused_forward_impl.
+_INT8_SIG_PARAMS = set(inspect.signature(decode_attn_int8).parameters)
+_INT4_SIG_PARAMS = set(inspect.signature(decode_attn_int4).parameters)
 _FUSED_DUMP_WRITTEN = set()
 
 
@@ -625,14 +630,14 @@ def _fused_forward_impl(
         # `except TypeError` which would also swallow TypeErrors raised *inside* the
         # kernel (e.g. wrong tensor dtype, shape mismatch). This makes signature
         # probing explicit and keeps real kernel errors visible.
+        # ENG-036: signature results are cached at module level (_INT8_SIG_PARAMS,
+        # _INT4_SIG_PARAMS) to avoid per-decode-step inspect.signature overhead.
         stats = getattr(cache_wrapper.engine, "decode_stats", None)
-        _int8_sig_params = set(inspect.signature(decode_attn_int8).parameters)
-        _int4_sig_params = set(inspect.signature(decode_attn_int4).parameters)
         if cache_kind == "int8":
             _int8_extra = {}
-            if "debug_stats" in _int8_sig_params:
+            if "debug_stats" in _INT8_SIG_PARAMS:
                 _int8_extra["debug_stats"] = stats
-            if "layer_idx" in _int8_sig_params:
+            if "layer_idx" in _INT8_SIG_PARAMS:
                 _int8_extra["layer_idx"] = layer_idx
             attn_output_val = decode_attn_int8(
                 q_kernel,
@@ -646,9 +651,9 @@ def _fused_forward_impl(
             )
         else:
             _int4_extra = {}
-            if "debug_stats" in _int4_sig_params:
+            if "debug_stats" in _INT4_SIG_PARAMS:
                 _int4_extra["debug_stats"] = stats
-            if "layer_idx" in _int4_sig_params:
+            if "layer_idx" in _INT4_SIG_PARAMS:
                 _int4_extra["layer_idx"] = layer_idx
             attn_output_val = decode_attn_int4(
                 q_kernel,

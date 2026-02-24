@@ -181,6 +181,11 @@ class KIVIStyleKVCache:
             new_capacity = max(target_len, self._min_capacity)
             if self.max_seq_len is not None:
                 new_capacity = min(new_capacity, self.max_seq_len)
+                # KVC-017: overflow guard (first allocation path).
+                if new_capacity < target_len:
+                    raise ValueError(
+                        f"target_len {target_len} exceeds capped capacity {new_capacity} for layer {layer_id}"
+                    )
             # ENG-009: Assert scale dtype contract before allocation to catch any
             # accidental reassignment of self._scale_dtype elsewhere in the class.
             assert self._scale_dtype == torch.float32, (
@@ -209,6 +214,13 @@ class KIVIStyleKVCache:
         new_capacity = max(target_len, capacity * 2)
         if self.max_seq_len is not None:
             new_capacity = min(new_capacity, self.max_seq_len)
+            # KVC-017: overflow guard — if max_seq_len caps new_capacity below
+            # target_len, raise a clear error instead of proceeding to an
+            # out-of-bounds slice assignment (which causes a CUDA-level crash).
+            if new_capacity < target_len:
+                raise ValueError(
+                    f"target_len {target_len} exceeds capped capacity {new_capacity} for layer {layer_id}"
+                )
         old_len = self._layer_seq_lens[layer_id]
 
         new_k = torch.empty(
