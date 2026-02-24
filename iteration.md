@@ -1022,3 +1022,23 @@ Canonical agent workflow directory is `.agents/`.
 ### 2026-02-25 00:56 | Phase5v2 v8 收口提交记录
 - Commit:
   - `b0b877a` fix: close v8 aggregation and completeness gaps
+
+### 2026-02-25 00:56 | 远端隔离目录验证（不污染运行中实验目录）
+- Goal: 在远端 conda 环境验证本地阻塞项（pandas 相关测试）并确认 v8 修改链条可运行。
+- Remote workspace:
+  - `root@region-42.seetacloud.com:/root/LLM_KVCache_Quantization_codex_check`
+- Commands:
+  - `rsync -az --delete ... /Users/chenzilang/.codex/worktrees/af44/LLM_KVCache_Quantization/ -> /root/LLM_KVCache_Quantization_codex_check/`
+  - `/root/miniconda3/bin/python -m unittest tests/test_aggregate_results_stats.py -v`
+  - `/root/miniconda3/bin/python -m unittest tests/test_generate_thesis_report.py -v`
+  - `/root/miniconda3/bin/python -m unittest tests/test_check_run_completeness.py -v`
+  - `/root/miniconda3/bin/python -m unittest tests/test_run_experiments_resilience.py -v`
+  - `/root/miniconda3/bin/python -m compileall -f src scripts tests`
+- Validation:
+  - PASS: `test_aggregate_results_stats.py` (10/10)
+  - PASS: `test_generate_thesis_report.py` (6/6)
+  - PASS: `test_check_run_completeness.py` (6/6)
+  - PASS: `test_run_experiments_resilience.py` (13/13)
+  - PASS: `compileall` for `src/scripts/tests`
+- Risks / follow-ups:
+  - 远端主目录 `/root/LLM_KVCache_Quantization` 当前为脏工作区，后续生产运行建议继续使用隔离目录或先清理后再 pull。
