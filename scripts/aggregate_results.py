@@ -1918,6 +1918,8 @@ def main() -> int:
     )
     if not latency_summary.empty:
         latency_summary = _add_ci95_columns(latency_summary)
+        # AGG-009: ensure canonical kv_mode ordering in output table.
+        latency_summary = _sort_by_kv_mode(latency_summary, extra_cols=["seq_len", "gen_len", "batch"])
         _save_table(latency_summary, tables_dir / "latency_summary.csv")
         lat_seq = _maybe_filter_batch_gen_len(latency_summary, batch=1, gen_len=64)
         if "seq_len" in lat_seq.columns and "tpot_ms_mean" in lat_seq.columns:
@@ -2056,6 +2058,8 @@ def main() -> int:
     )
     if not memory_summary.empty:
         memory_summary = _add_ci95_columns(memory_summary)
+        # AGG-009: ensure canonical kv_mode ordering in output table.
+        memory_summary = _sort_by_kv_mode(memory_summary, extra_cols=["seq_len", "gen_len", "batch"])
         _save_table(memory_summary, tables_dir / "memory_summary.csv")
         mem_seq = _maybe_filter_batch_gen_len(memory_summary, batch=1, gen_len=64)
         if "seq_len" in mem_seq.columns and "gpu_mem_peak_mb_mean" in mem_seq.columns:
@@ -2154,6 +2158,8 @@ def main() -> int:
     ppl_summary = _agg_mean_std(ppl, ppl_keys, ["perplexity", "tokens_evaluated"])
     if not ppl_summary.empty:
         ppl_summary = _add_ci95_columns(ppl_summary)
+        # AGG-009: ensure canonical kv_mode ordering in output table.
+        ppl_summary = _sort_by_kv_mode(ppl_summary, extra_cols=["seq_len"])
         _save_table(ppl_summary, tables_dir / "ppl_summary.csv")
         if "seq_len" in ppl_summary.columns and "perplexity_mean" in ppl_summary.columns:
             _plot_lines(
@@ -2190,6 +2196,8 @@ def main() -> int:
     )
     if not needle_summary.empty:
         needle_summary = _add_ci95_columns(needle_summary)
+        # AGG-009: ensure canonical kv_mode ordering in output table.
+        needle_summary = _sort_by_kv_mode(needle_summary, extra_cols=["seq_len"])
         _save_table(needle_summary, tables_dir / "needle_summary.csv")
         if "seq_len" in needle_summary.columns and "needle_pass_rate_mean" in needle_summary.columns:
             _plot_lines(
@@ -2279,6 +2287,8 @@ def main() -> int:
     )
     if not longbench_summary.empty:
         longbench_summary = _add_ci95_columns(longbench_summary)
+        # AGG-009: ensure canonical kv_mode ordering in output table.
+        longbench_summary = _sort_by_kv_mode(longbench_summary, extra_cols=["seq_len"])
         _save_table(longbench_summary, tables_dir / "longbench_summary.csv")
         if (
             "seq_len" in longbench_summary.columns
@@ -2330,6 +2340,8 @@ def main() -> int:
     )
     if not longbench_task_summary.empty:
         longbench_task_summary = _add_ci95_columns(longbench_task_summary)
+        # AGG-009: ensure canonical kv_mode ordering in output table.
+        longbench_task_summary = _sort_by_kv_mode(longbench_task_summary, extra_cols=["task_name", "seq_len"])
         _save_table(longbench_task_summary, tables_dir / "longbench_task_summary.csv")
 
     # RULER (summary)
@@ -2392,6 +2404,8 @@ def main() -> int:
     )
     if not ruler_summary.empty:
         ruler_summary = _add_ci95_columns(ruler_summary)
+        # AGG-009: ensure canonical kv_mode ordering in output table.
+        ruler_summary = _sort_by_kv_mode(ruler_summary, extra_cols=["seq_len"])
         _save_table(ruler_summary, tables_dir / "ruler_summary.csv")
         if "seq_len" in ruler_summary.columns and "ruler_pass_rate_mean" in ruler_summary.columns:
             _plot_lines(
@@ -2439,6 +2453,8 @@ def main() -> int:
     )
     if not ruler_depth_summary.empty:
         ruler_depth_summary = _add_ci95_columns(ruler_depth_summary)
+        # AGG-009: ensure canonical kv_mode ordering in output table.
+        ruler_depth_summary = _sort_by_kv_mode(ruler_depth_summary, extra_cols=["seq_len", "depth_ratio"])
         _save_table(ruler_depth_summary, tables_dir / "ruler_depth_summary.csv")
 
     # RULER task summary (per-subtask metrics)
@@ -2478,6 +2494,8 @@ def main() -> int:
     )
     if not ruler_task_summary.empty:
         ruler_task_summary = _add_ci95_columns(ruler_task_summary)
+        # AGG-009: ensure canonical kv_mode ordering in output table.
+        ruler_task_summary = _sort_by_kv_mode(ruler_task_summary, extra_cols=["ruler_task", "seq_len"])
         _save_table(ruler_task_summary, tables_dir / "ruler_task_summary.csv")
         _save_table(ruler_task_summary, tables_dir / "ruler_subtask_summary.csv")
 
@@ -2491,6 +2509,8 @@ def main() -> int:
             .reset_index()
             .rename(columns={"passed": "pass_rate"})
         )
+        # AGG-009: ensure canonical kv_mode ordering in output table.
+        curve = _sort_by_kv_mode(curve, extra_cols=["context_len", "depth"])
         _save_table(curve, tables_dir / "needle_curve_by_depth.csv")
         for context_len, sub_ctx in sorted(curve.groupby("context_len")):
             out_path = plots_dir / f"needle_curve_depth_ctx{int(context_len)}.png"
