@@ -12,6 +12,7 @@ _classify_failure paths that were previously uncovered:
   - No returncode (None) with clean log -> "unknown"
 """
 
+import csv
 import os
 import sys
 import tempfile
@@ -396,6 +397,348 @@ class TestResolveQuantParams(unittest.TestCase):
         for key in ("clip_percentile_k", "clip_percentile_v",
                      "group_size_k", "group_size_v"):
             self.assertIn(key, result)
+
+
+# ---------------------------------------------------------------------------
+# TST-039: _validate_append_commit
+# ---------------------------------------------------------------------------
+
+class TestValidateAppendCommit(unittest.TestCase):
+    """Test _validate_append_commit() for all validation paths.
+
+    TST-039: This function checks that appending to an existing run_dir is
+    safe by comparing git commits and env hashes from the manifest and
+    existing CSV files against the current session.
+    """
+
+    def test_no_manifest_no_csvs_returns_ok(self):
+        """Empty run_dir with no manifest or CSVs => append is allowed."""
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td) / "run_dir"
+            run_dir.mkdir()
+            manifest_path = run_dir / "run_manifest.json"
+            ok, reason = rex._validate_append_commit(
+                run_dir=run_dir,
+                manifest_path=manifest_path,
+                current_git_commit="abcdef12",
+                current_env_hash="hash1234",
+            )
+            self.assertTrue(ok)
+            self.assertEqual(reason, "")
+
+    def test_manifest_same_commit_returns_ok(self):
+        """Manifest with same git_commit prefix => append allowed."""
+        import json as _json
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td) / "run_dir"
+            run_dir.mkdir()
+            manifest_path = run_dir / "run_manifest.json"
+            manifest = {"git_commit": "abcdef12", "env_hash": "hash1234"}
+            manifest_path.write_text(_json.dumps(manifest), encoding="utf-8")
+            ok, reason = rex._validate_append_commit(
+                run_dir=run_dir,
+                manifest_path=manifest_path,
+                current_git_commit="abcdef12_extra",
+                current_env_hash="hash1234",
+            )
+            self.assertTrue(ok)
+            self.assertEqual(reason, "")
+
+    def test_manifest_different_commit_returns_blocked(self):
+        """Manifest with different git_commit => append blocked."""
+        import json as _json
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td) / "run_dir"
+            run_dir.mkdir()
+            manifest_path = run_dir / "run_manifest.json"
+            manifest = {"git_commit": "abcdef12", "env_hash": "hash1234"}
+            manifest_path.write_text(_json.dumps(manifest), encoding="utf-8")
+            ok, reason = rex._validate_append_commit(
+                run_dir=run_dir,
+                manifest_path=manifest_path,
+                current_git_commit="99999999",
+                current_env_hash="hash1234",
+            )
+            self.assertFalse(ok)
+            self.assertIn("append blocked", reason)
+            self.assertIn("git_commit", reason)
+
+    def test_manifest_different_env_hash_returns_blocked(self):
+        """Manifest with different env_hash => append blocked."""
+        import json as _json
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td) / "run_dir"
+            run_dir.mkdir()
+            manifest_path = run_dir / "run_manifest.json"
+            manifest = {"git_commit": "abcdef12", "env_hash": "hash_old"}
+            manifest_path.write_text(_json.dumps(manifest), encoding="utf-8")
+            ok, reason = rex._validate_append_commit(
+                run_dir=run_dir,
+                manifest_path=manifest_path,
+                current_git_commit="abcdef12_extra",
+                current_env_hash="hash_new",
+            )
+            self.assertFalse(ok)
+            self.assertIn("append blocked", reason)
+            self.assertIn("env_hash", reason)
+
+    def test_csv_with_same_commit_returns_ok(self):
+        """CSV files with matching git_commit => append allowed."""
+        import json as _json
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td) / "run_dir"
+            run_dir.mkdir()
+            manifest_path = run_dir / "run_manifest.json"
+            # No manifest
+            # Create a CSV with git_commit column
+            csv_path = run_dir / "profile_latency_test.csv"
+            with open(csv_path, "w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=["kv_mode", "seq_len", "git_commit"])
+                writer.writeheader()
+                writer.writerow({"kv_mode": "fp16", "seq_len": "1024", "git_commit": "abcdef12"})
+            ok, reason = rex._validate_append_commit(
+                run_dir=run_dir,
+                manifest_path=manifest_path,
+                current_git_commit="abcdef12_extra",
+                current_env_hash="hash1234",
+            )
+            self.assertTrue(ok)
+            self.assertEqual(reason, "")
+
+    def test_csv_with_different_commit_returns_blocked(self):
+        """CSV files with different git_commit => append blocked."""
+        import json as _json
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td) / "run_dir"
+            run_dir.mkdir()
+            manifest_path = run_dir / "run_manifest.json"
+            csv_path = run_dir / "profile_latency_test.csv"
+            with open(csv_path, "w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=["kv_mode", "seq_len", "git_commit"])
+                writer.writeheader()
+                writer.writerow({"kv_mode": "fp16", "seq_len": "1024", "git_commit": "11111111"})
+            ok, reason = rex._validate_append_commit(
+                run_dir=run_dir,
+                manifest_path=manifest_path,
+                current_git_commit="99999999",
+                current_env_hash="hash1234",
+            )
+            self.assertFalse(ok)
+            self.assertIn("append blocked", reason)
+            self.assertIn("CSV git_commit", reason)
+
+    def test_manifest_no_commit_field_skips_commit_check(self):
+        """Manifest without git_commit field => commit check skipped, env_hash checked."""
+        import json as _json
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td) / "run_dir"
+            run_dir.mkdir()
+            manifest_path = run_dir / "run_manifest.json"
+            manifest = {"env_hash": "hash1234"}  # no git_commit
+            manifest_path.write_text(_json.dumps(manifest), encoding="utf-8")
+            ok, reason = rex._validate_append_commit(
+                run_dir=run_dir,
+                manifest_path=manifest_path,
+                current_git_commit="abcdef12",
+                current_env_hash="hash1234",
+            )
+            self.assertTrue(ok)
+
+    def test_manifest_empty_commit_skips_commit_check(self):
+        """Manifest with empty git_commit => commit check skipped."""
+        import json as _json
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td) / "run_dir"
+            run_dir.mkdir()
+            manifest_path = run_dir / "run_manifest.json"
+            manifest = {"git_commit": "", "env_hash": "hash1234"}
+            manifest_path.write_text(_json.dumps(manifest), encoding="utf-8")
+            ok, reason = rex._validate_append_commit(
+                run_dir=run_dir,
+                manifest_path=manifest_path,
+                current_git_commit="abcdef12",
+                current_env_hash="hash1234",
+            )
+            self.assertTrue(ok)
+
+    def test_manifest_empty_env_hash_skips_env_check(self):
+        """Manifest with empty env_hash => env_hash check skipped."""
+        import json as _json
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td) / "run_dir"
+            run_dir.mkdir()
+            manifest_path = run_dir / "run_manifest.json"
+            manifest = {"git_commit": "abcdef12", "env_hash": ""}
+            manifest_path.write_text(_json.dumps(manifest), encoding="utf-8")
+            ok, reason = rex._validate_append_commit(
+                run_dir=run_dir,
+                manifest_path=manifest_path,
+                current_git_commit="abcdef12_extra",
+                current_env_hash="whatever",
+            )
+            self.assertTrue(ok)
+
+    def test_multiple_csv_patterns_checked(self):
+        """CSV files across multiple patterns should all be checked."""
+        import json as _json
+        with tempfile.TemporaryDirectory() as td:
+            run_dir = Path(td) / "run_dir"
+            run_dir.mkdir()
+            manifest_path = run_dir / "run_manifest.json"
+            # First CSV matches commit
+            csv1 = run_dir / "profile_latency_test.csv"
+            with open(csv1, "w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=["git_commit"])
+                writer.writeheader()
+                writer.writerow({"git_commit": "abcdef12"})
+            # Second CSV has different commit
+            csv2 = run_dir / "profile_memory_test.csv"
+            with open(csv2, "w", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=["git_commit"])
+                writer.writeheader()
+                writer.writerow({"git_commit": "99999999"})
+            ok, reason = rex._validate_append_commit(
+                run_dir=run_dir,
+                manifest_path=manifest_path,
+                current_git_commit="abcdef12_extra",
+                current_env_hash="hash1234",
+            )
+            self.assertFalse(ok)
+            self.assertIn("CSV git_commit", reason)
+
+
+# ---------------------------------------------------------------------------
+# TST-039: resolve_calib_params
+# ---------------------------------------------------------------------------
+
+class TestResolveCalibParams(unittest.TestCase):
+    """Test resolve_calib_params() parameter resolution.
+
+    TST-039: This function had zero tests. Tests cover:
+    - Default value resolution from quant_defaults
+    - Run entry overrides
+    - kivi_style default calib_strategy
+    - Non-kivi mode calib_strategy resolution
+    - All fields present in return dict
+    """
+
+    def test_defaults_from_quant_defaults(self):
+        """When run_entry is empty, all values should come from quant_defaults."""
+        defaults = {
+            "calib_file": "path/to/calib.json",
+            "use_attn_temperature": True,
+            "use_static_scales": False,
+            "adaptive_static_scales": True,
+            "adaptive_static_margin": 1.5,
+            "adaptive_static_k": False,
+            "adaptive_static_v": False,
+            "calib_strategy": "percentile",
+        }
+        result = rex.resolve_calib_params({}, defaults, kv_mode="int8_ours")
+        self.assertEqual(result["calib_file"], "path/to/calib.json")
+        self.assertTrue(result["use_attn_temperature"])
+        self.assertFalse(result["use_static_scales"])
+        self.assertTrue(result["adaptive_static_scales"])
+        self.assertEqual(result["adaptive_static_margin"], 1.5)
+        self.assertFalse(result["adaptive_static_k"])
+        self.assertFalse(result["adaptive_static_v"])
+        self.assertEqual(result["calib_strategy"], "percentile")
+
+    def test_run_entry_overrides_defaults(self):
+        """run_entry values should override quant_defaults."""
+        defaults = {
+            "calib_file": "default.json",
+            "use_attn_temperature": False,
+            "use_static_scales": True,
+            "calib_strategy": "percentile",
+        }
+        run_entry = {
+            "calib_file": "custom.json",
+            "use_attn_temperature": True,
+            "use_static_scales": False,
+            "calib_strategy": "kl_attn",
+        }
+        result = rex.resolve_calib_params(run_entry, defaults, kv_mode="int8_ours")
+        self.assertEqual(result["calib_file"], "custom.json")
+        self.assertTrue(result["use_attn_temperature"])
+        self.assertFalse(result["use_static_scales"])
+        self.assertEqual(result["calib_strategy"], "kl_attn")
+
+    def test_kivi_style_default_calib_strategy(self):
+        """For kivi_style, default calib_strategy should be 'kivi_asymmetric'."""
+        defaults = {"calib_strategy": "percentile"}
+        result = rex.resolve_calib_params({}, defaults, kv_mode="kivi_style")
+        self.assertEqual(result["calib_strategy"], "kivi_asymmetric")
+
+    def test_kivi_style_run_entry_overrides_calib_strategy(self):
+        """Even for kivi_style, run_entry calib_strategy should override default."""
+        defaults = {"calib_strategy": "percentile"}
+        run_entry = {"calib_strategy": "custom_strategy"}
+        result = rex.resolve_calib_params(run_entry, defaults, kv_mode="kivi_style")
+        self.assertEqual(result["calib_strategy"], "custom_strategy")
+
+    def test_non_kivi_mode_uses_quant_defaults_strategy(self):
+        """For non-kivi mode, calib_strategy comes from quant_defaults if not in run_entry."""
+        defaults = {"calib_strategy": "percentile"}
+        result = rex.resolve_calib_params({}, defaults, kv_mode="int8_ours")
+        self.assertEqual(result["calib_strategy"], "percentile")
+
+    def test_empty_defaults_returns_none_and_defaults(self):
+        """With empty defaults and run_entry, booleans should have Python defaults."""
+        result = rex.resolve_calib_params({}, {}, kv_mode="fp16")
+        self.assertIsNone(result["calib_file"])
+        self.assertFalse(result["use_attn_temperature"])
+        self.assertTrue(result["use_static_scales"])
+        self.assertFalse(result["adaptive_static_scales"])
+        self.assertEqual(result["adaptive_static_margin"], 1.0)
+        self.assertTrue(result["adaptive_static_k"])
+        self.assertTrue(result["adaptive_static_v"])
+        self.assertIsNone(result["calib_strategy"])
+
+    def test_all_expected_keys_present(self):
+        """Return dict should contain all expected calib parameter keys."""
+        result = rex.resolve_calib_params({}, {}, kv_mode="fp16")
+        expected_keys = {
+            "calib_file",
+            "use_attn_temperature",
+            "use_static_scales",
+            "adaptive_static_scales",
+            "adaptive_static_margin",
+            "adaptive_static_k",
+            "adaptive_static_v",
+            "calib_strategy",
+        }
+        self.assertEqual(set(result.keys()), expected_keys)
+
+    def test_adaptive_static_margin_from_run_entry(self):
+        """adaptive_static_margin should be overrideable from run_entry."""
+        result = rex.resolve_calib_params(
+            {"adaptive_static_margin": 2.5},
+            {"adaptive_static_margin": 1.0},
+            kv_mode="int8_ours",
+        )
+        self.assertEqual(result["adaptive_static_margin"], 2.5)
+
+    def test_adaptive_static_k_v_from_run_entry(self):
+        """adaptive_static_k and adaptive_static_v overrides from run_entry."""
+        result = rex.resolve_calib_params(
+            {"adaptive_static_k": False, "adaptive_static_v": False},
+            {"adaptive_static_k": True, "adaptive_static_v": True},
+            kv_mode="int8_ours",
+        )
+        self.assertFalse(result["adaptive_static_k"])
+        self.assertFalse(result["adaptive_static_v"])
+
+    def test_kivi_style_no_defaults_calib_strategy_fallback(self):
+        """For kivi_style, if quant_defaults has no calib_strategy,
+        the default should still be kivi_asymmetric."""
+        result = rex.resolve_calib_params({}, {}, kv_mode="kivi_style")
+        self.assertEqual(result["calib_strategy"], "kivi_asymmetric")
+
+    def test_calib_file_none_when_not_specified(self):
+        """calib_file should be None when not in run_entry or defaults."""
+        result = rex.resolve_calib_params({}, {}, kv_mode="int4_ours")
+        self.assertIsNone(result["calib_file"])
 
 
 if __name__ == "__main__":
