@@ -40,6 +40,9 @@ _LAST_ARGS: argparse.Namespace | None = None
 # DEPRECATED: local copy kept for standalone execution.  Canonical version
 # lives in ``src.utils.repro.resolve_quant_bits``; update there first.
 def _resolve_quant_bits(kv_mode: str, quant_bits_arg: int | None) -> int:
+    # QUA-010: warn callers that this copy is deprecated.
+    import warnings
+    warnings.warn("Use resolve_quant_bits from src.utils.repro", DeprecationWarning)
     if quant_bits_arg is not None:
         return int(quant_bits_arg)
     mode = str(kv_mode)

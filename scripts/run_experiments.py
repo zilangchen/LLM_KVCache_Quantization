@@ -1104,6 +1104,8 @@ def main() -> int:
                 ruler_tasks_arg=args.ruler_tasks,
             )
             if warning:
+                # RUN-017: truncation warning goes to stdout only, not manifest.
+                # Acceptable for now since manifest already records seq_len.
                 print(warning)
 
         quant_params = resolve_quant_params(run_entry, quant_defaults)
@@ -1454,7 +1456,8 @@ def main() -> int:
                     # current approach prioritises log continuity over isolation.
                     log_mode = "a" if (args.append or attempt_idx > 1) else "w"
                     # RUN-022: use a configurable timeout to avoid infinite subprocess hangs.
-                    _timeout = int(args.subprocess_timeout) if int(args.subprocess_timeout) > 0 else None
+                    # QUA-007: renamed from _timeout to timeout_sec for clarity.
+                    timeout_sec = int(args.subprocess_timeout) if int(args.subprocess_timeout) > 0 else None
                     with open(log_path, log_mode, encoding="utf-8") as f:
                         if attempt_idx > 1:
                             f.write(
@@ -1466,16 +1469,16 @@ def main() -> int:
                                 stdout=f,
                                 stderr=subprocess.STDOUT,
                                 text=True,
-                                timeout=_timeout,
+                                timeout=timeout_sec,
                             )
                             returncode = int(result.returncode)
                         except subprocess.TimeoutExpired as exc:
                             f.write(
-                                f"\n[ERROR] Subprocess timed out after {_timeout}s: {exc}\n"
+                                f"\n[ERROR] Subprocess timed out after {timeout_sec}s: {exc}\n"
                             )
                             returncode = 124
                             failure_type = "timeout"
-                            err_msg = f"Task timed out after {_timeout}s: {' '.join(cmd)}"
+                            err_msg = f"Task timed out after {timeout_sec}s: {' '.join(cmd)}"
                             _mark_task_status(
                                 manifest_path,
                                 manifest,

@@ -163,6 +163,8 @@ def load_calibration(
     mixed_rescue = False
 
     if kv_mode not in ["int8_ours", "int4_ours", "int4_ours_mixed"]:
+        # PRF-009: calib_file is intentionally a no-op for kivi_style mode --
+        # KIVI uses its own internal calibration.
         return (
             static_k_scale,
             static_v_scale,

@@ -16,13 +16,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
-import logging
 import pandas as pd
 
 try:
@@ -1352,6 +1352,8 @@ def _bootstrap_ci_mean(
     if n <= 0:
         return np.nan, np.nan
     if n == 1:
+        # AGG-014: single-sample CI returns identical bounds -- caller
+        # (_add_ci95_columns) already handles n<=1 by setting NaN.
         return float(arr[0]), float(arr[0])
 
     ci = float(ci_level)
