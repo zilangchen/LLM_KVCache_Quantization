@@ -68,6 +68,64 @@ from src.utils.hf import resolve_pretrained_path
 from scripts.config_utils import load_config, resolve_run_config
 
 
+def _rotate_half(x: torch.Tensor) -> torch.Tensor:
+    """Rotate half the hidden dims of the input (RoPE helper)."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def _apply_rope_to_q(
+    q: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+) -> torch.Tensor:
+    """Apply rotary position embedding to query states only.
+
+    Args:
+        q: [B, H, S, D] query states.
+        cos, sin: from rotary_emb(), typically [B, S, rotary_dim] or broadcastable.
+    Returns:
+        Rotated query states, same shape as q.
+    """
+    cos = cos.to(device=q.device, dtype=q.dtype)
+    sin = sin.to(device=q.device, dtype=q.dtype)
+    # Normalize to [B, 1, S, rotary_dim] for broadcast across heads.
+    if cos.ndim == 3:
+        cos = cos.unsqueeze(1)
+        sin = sin.unsqueeze(1)
+    rotary_dim = cos.shape[-1]
+    q_rot = q[..., :rotary_dim]
+    q_pass = q[..., rotary_dim:]
+    q_embed = (q_rot * cos) + (_rotate_half(q_rot) * sin)
+    if q_pass.numel() == 0:
+        return q_embed
+    return torch.cat([q_embed, q_pass], dim=-1)
+
+
+def _get_rope_for_position(attn_module, dummy_states, position_ids):
+    """Get RoPE cos/sin for given position_ids, compatible with Qwen2/LLaMA APIs.
+
+    Returns (cos, sin) or (None, None) if rotary embedding is unavailable.
+    """
+    rotary = getattr(attn_module, "rotary_emb", None)
+    if rotary is None:
+        return None, None
+    _EXPECTED = (AttributeError, KeyError, TypeError)
+    for call in (
+        lambda: rotary(dummy_states, position_ids),
+        lambda: rotary(dummy_states, position_ids=position_ids),
+        lambda: rotary(position_ids),
+    ):
+        try:
+            out = call()
+        except _EXPECTED:
+            continue
+        if isinstance(out, (tuple, list)) and len(out) == 2:
+            return out[0], out[1]
+    return None, None
+
+
 def resolve_kv_params(run_entry: dict, quant_defaults: dict) -> Tuple[float, float, int, int]:
     clip_k = run_entry.get(
         "clip_percentile_k",
@@ -858,11 +916,46 @@ def main():
                 #   model.model.layers[i].self_attn
                 # If a future model uses a different path, this line must be
                 # updated (or a model-family dispatch added).
-                attn = model.model.layers[layer_idx].self_attn
+                layer = model.model.layers[layer_idx]
+                attn = layer.self_attn
                 hs_last = hidden_states[layer_idx][:, -1:, :]
-                q = attn.q_proj(hs_last)
+
+                # CAL-019: Apply input_layernorm before q_proj to match the
+                # real forward pass.  DecoderLayer does:
+                #   normed = input_layernorm(hidden_states)
+                #   q, k, v = self_attn(normed, ...)
+                # Without layernorm, Q is computed from un-normalized hidden
+                # states, producing a distorted attention distribution.
+                normed_hs = layer.input_layernorm(hs_last)
+                q = attn.q_proj(normed_hs)
                 bsz = q.shape[0]
                 q = q.view(bsz, 1, num_heads, head_dim).transpose(1, 2)
+
+                # Optional q_norm (model-dependent, e.g. Gemma).
+                q_norm_fn = getattr(attn, "q_norm", None)
+                if q_norm_fn is not None:
+                    q = q_norm_fn(q)
+
+                # CAL-020: Apply RoPE to Q.  K in past_key_values already has
+                # RoPE applied by the model's forward pass.  Without RoPE on Q,
+                # the Q·K^T dot product lacks proper positional encoding and the
+                # calibrated inv_tau optimises for a wrong attention distribution.
+                seq_len_val = hidden_states[layer_idx].shape[1]
+                pos_ids = torch.tensor(
+                    [[seq_len_val - 1]], device=q.device, dtype=torch.long
+                )
+                rope_cos, rope_sin = _get_rope_for_position(attn, q, pos_ids)
+                if rope_cos is not None and rope_sin is not None:
+                    q = _apply_rope_to_q(q, rope_cos, rope_sin)
+                elif layer_idx == 0:
+                    import warnings
+                    warnings.warn(
+                        "Could not obtain RoPE cos/sin for calibration Q vectors. "
+                        "Calibration quality may be degraded because Q lacks "
+                        "positional encoding while K already has it.",
+                        RuntimeWarning,
+                    )
+
                 q_last = q.squeeze(2).squeeze(0).cpu()  # [num_heads, head_dim]
 
                 k = past_key_values[layer_idx][0].squeeze(0).cpu()  # [kv_heads, seq, head_dim]
