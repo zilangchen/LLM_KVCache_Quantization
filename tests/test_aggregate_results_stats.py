@@ -791,5 +791,86 @@ class TestSignflipMixedSignScenarios(unittest.TestCase):
                            f"Nearly balanced diffs should give large p-value, got {p_value}")
 
 
+class TestSafeTCrit(unittest.TestCase):
+    """TST-057: Tests for _safe_t_crit inf/NaN protection (AGG-048)."""
+
+    def test_inf_returns_nan(self):
+        """_safe_t_crit(float('inf')) must return NaN, not 0.0 or a finite value."""
+        result = agg._safe_t_crit(float("inf"))  # pylint: disable=protected-access
+        self.assertTrue(
+            np.isnan(result),
+            f"_safe_t_crit(inf) should return NaN, got {result}",
+        )
+
+    def test_negative_inf_returns_nan(self):
+        """_safe_t_crit(-inf) must return NaN."""
+        result = agg._safe_t_crit(float("-inf"))  # pylint: disable=protected-access
+        self.assertTrue(
+            np.isnan(result),
+            f"_safe_t_crit(-inf) should return NaN, got {result}",
+        )
+
+    def test_nan_returns_nan(self):
+        """_safe_t_crit(NaN) must return NaN."""
+        result = agg._safe_t_crit(float("nan"))  # pylint: disable=protected-access
+        self.assertTrue(
+            np.isnan(result),
+            f"_safe_t_crit(nan) should return NaN, got {result}",
+        )
+
+    def test_n_one_returns_zero(self):
+        """_safe_t_crit(1) must return 0.0 (n<=1 defense, AGG-036/QUA-008)."""
+        result = agg._safe_t_crit(1)  # pylint: disable=protected-access
+        self.assertEqual(
+            result,
+            0.0,
+            f"_safe_t_crit(1) should return 0.0, got {result}",
+        )
+
+    def test_n_zero_returns_zero(self):
+        """_safe_t_crit(0) must return 0.0 (n<=1 defense)."""
+        result = agg._safe_t_crit(0)  # pylint: disable=protected-access
+        self.assertEqual(
+            result,
+            0.0,
+            f"_safe_t_crit(0) should return 0.0, got {result}",
+        )
+
+    def test_n_negative_returns_zero(self):
+        """_safe_t_crit(-5) must return 0.0 (n<=1 defense)."""
+        result = agg._safe_t_crit(-5)  # pylint: disable=protected-access
+        self.assertEqual(
+            result,
+            0.0,
+            f"_safe_t_crit(-5) should return 0.0, got {result}",
+        )
+
+    def test_n_three_returns_reasonable_t_value(self):
+        """_safe_t_crit(3) should return a reasonable t-value for df=2.
+        t_{0.975, 2} = 4.303 (lookup table value)."""
+        result = agg._safe_t_crit(3)  # pylint: disable=protected-access
+        self.assertTrue(
+            np.isfinite(result),
+            f"_safe_t_crit(3) should be finite, got {result}",
+        )
+        # For df=2 (n-1=2), t_{0.975,2} = 4.303
+        self.assertAlmostEqual(result, 4.303, places=1)
+
+    def test_n_five_returns_finite(self):
+        """_safe_t_crit(5) should return a finite positive value for df=4."""
+        result = agg._safe_t_crit(5)  # pylint: disable=protected-access
+        self.assertTrue(np.isfinite(result))
+        self.assertGreater(result, 1.96, "t-critical for df=4 should exceed z=1.96")
+        # t_{0.975, 4} = 2.776
+        self.assertAlmostEqual(result, 2.776, places=1)
+
+    def test_n_large_approaches_z(self):
+        """_safe_t_crit(1000) should return a value close to z=1.96."""
+        result = agg._safe_t_crit(1000)  # pylint: disable=protected-access
+        self.assertTrue(np.isfinite(result))
+        self.assertGreaterEqual(result, 1.95)
+        self.assertLessEqual(result, 2.00)
+
+
 if __name__ == "__main__":
     unittest.main()
