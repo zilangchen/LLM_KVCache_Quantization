@@ -68,17 +68,24 @@ def _materialize_int4_cache_as_int8(
 
 # Wrapper to pass INT8KVCache + LayerIdx + Sequence Length info to the model forward
 class INT8CacheWrapper:
+    """QUA-004: Per-layer wrapper around an INT8/INT4 fused cache engine.
+
+    Presents a HuggingFace-compatible cache interface for a single layer so
+    that the patched attention forward can access quantized KV tensors via
+    ``self.engine``.  The primary usage path is the fused decode in
+    ``_fused_forward_impl``; the ``update`` method is a fallback invoked
+    when the original (non-fused) forward is executed instead.
+    """
+
     def __init__(self, cache_engine, layer_idx):
         self.engine = cache_engine
         self.layer_idx = layer_idx
-        
+
     def update(self, key_states, value_states, layer_idx, cache_kwargs=None):
-        # This is called by original forward if we fallback. 
-        # But we handle updates in generate_loop usually? 
-        # HF Style: cache.update(k, v, layer_idx)
-        # We delegate to engine
+        # Fallback path: called by the original HF forward when the fused
+        # decode path is not active.  Delegates to the cache engine.
         self.engine.append(layer_idx, key_states, value_states)
-        return self.engine.get_kv(layer_idx) # Return dequantized for fallback if needed
+        return self.engine.get_kv(layer_idx)  # Return dequantized for fallback if needed
 
     def get_seq_length(self, layer_idx=0):
         return self.engine.get_seq_len()

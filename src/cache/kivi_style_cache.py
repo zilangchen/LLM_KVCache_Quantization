@@ -316,6 +316,7 @@ class KIVIStyleKVCache:
             self._k_scale_initialized[layer_id] = True
         else:
             # Decode: reuse prefill scale and zero-point.
+            # ENG-007: KIVI decode path dequant->requant accumulates precision loss; this is inherent to the KIVI design.
             k_scale = self._k_scale[layer_id]  # [B, H, D]
             k_zp = self._k_zp[layer_id]  # [B, H, D]
             if k_scale is None or k_zp is None:

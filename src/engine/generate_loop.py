@@ -312,6 +312,8 @@ def generate_from_ids(
     - kv_mode="kivi_style" supports quant_bits {4, 8} only and always runs
       torch_ref decode attention (non-fused path).
     """
+    # ENG-008: batch constraint validation is intentionally checked here even if partially
+    # redundant with earlier checks, as a defense-in-depth measure.
     # Validate inputs
     if kv_mode not in [
         "fp16",
@@ -616,6 +618,8 @@ def generate_from_ids(
             mixed_rescue=mixed_rescue,
         )
     elif kv_mode == "kivi_style":
+        # ENG-013: KIVI mode — uses asymmetric per-channel K / per-token V quantization
+        # from the KIVI paper (Liu et al., 2024). Always runs torch_ref decode attention.
         from src.cache import KIVIStyleKVCache
 
         kv_cache = KIVIStyleKVCache(
@@ -897,7 +901,8 @@ def generate(
         tokenizer: HuggingFace tokenizer
         prompt: Input text prompt
         max_new_tokens: Maximum number of tokens to generate
-        kv_mode: KV cache mode (fp16/int8/int4 variants, plus kivi_style)
+        kv_mode: KV cache mode (fp16/int8/int4 variants, plus kivi_style).
+            kivi_style mode uses KIVI's asymmetric quantization approach.
         group_size: Group size for quantization
         clip_percentile: Percentile for quantization clipping
         seed: Random seed for reproducibility
