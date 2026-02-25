@@ -37,6 +37,204 @@ Canonical agent workflow directory is `.agents/`.
   - [x] 修复 `export_tables_latex.py`：KV_MODE_ORDER/DISPLAY 缺 kivi_style — ✅ commit 8bf9414
   - [x] 扩展 `generate_thesis_report.py`：claims C7-C11 — ✅ commit 8bf9414
 
+### Plan: Phase 5v2 数据修复（Data Repair）— 污染数据清除 + 失败补跑 + 验证
+- **批准日期**：2026-02-25
+- **前置条件**：远端 `warnings` 作用域 bug 已修复（06:45 CST）；本地 commit b10cfa7（INT4 safety + repair tool）
+- **状态**：待执行（等 seed 1234 long configs 完成后启动）
+- **触发条件**：3 模型 seed 1234 的 long configs 全部完成（当前 8B 仍有 long config running）
+
+#### 背景
+
+两个独立 bug 导致实验数据受损：
+1. **INT4 量化 bug**（旧代码 commit fa6ab125）：kivi_style_int4 的 pack/unpack 使用 int8 算术产生溢出，导致 PPL 严重偏高（557-610 vs 正常 7-30）
+2. **`warnings` 作用域 bug**（Codex 热切换引入）：`generate_loop.py` 在 kivi_style 分支内 `import warnings` 导致非 kivi_style 模式的 eval_ruler/eval_needle/eval_longbench 全部 `UnboundLocalError` 崩溃
+
+#### 受影响数据清单（共 7 个 run）
+
+**A. INT4 污染数据（6 runs）— 全部任务数据无效，需完全重跑**
+
+| # | Run ID | 模型 | PPL（实际/预期） | 根因 |
+|---|--------|------|------------------|------|
+| 1 | `kivi_style_int4_curve_4k_s1234_phase5v2_7b_s1234` | 7B | 557.7 / ~7-10 | INT4 bug |
+| 2 | `kivi_style_int4_curve_8k_s1234_phase5v2_7b_s1234` | 7B | 557.7 / ~7-10 | INT4 bug |
+| 3 | `kivi_style_int4_curve_16k_s1234_phase5v2_7b_s1234` | 7B | 557.7 / ~7-10 | INT4 bug |
+| 4 | `kivi_style_int4_curve_4k_s1234_phase5v2_8b_s1234` | 8B | 610.9 / ~7-10 | INT4 bug |
+| 5 | `kivi_style_int4_curve_8k_s1234_phase5v2_8b_s1234` | 8B | 610.9 / ~7-10 | INT4 bug |
+| 6 | `kivi_style_int4_curve_16k_s1234_phase5v2_8b_s1234` | 8B | 610.9 / ~7-10 | INT4 bug |
+
+> 注：`kivi_style_int4_long_s1234_phase5v2_7b_s1234` 已验证 CLEAN（PPL=7.06，热切换后执行）。
+> 注：1.5B 无 kivi_style_int4 quality configs（YAML 中有但尚未执行到，执行时已用修复代码）。
+> 注：8B `kivi_style_int4_long` 尚未开始，将用修复代码执行，无需干预。
+
+**B. RULER/Needle/LongBench 失败（1 run）— 仅 3 个任务需补跑**
+
+| # | Run ID | 模型 | 失败任务 | 正常任务 | 根因 |
+|---|--------|------|----------|----------|------|
+| 7 | `int8_ours_long_no_static_no_temp_fused_s1234_phase5v2_1p5b_s1234` | 1.5B | eval_ruler, eval_needle, eval_longbench | eval_ppl (8.95) | warnings bug |
+
+#### 执行步骤
+
+**Step 1: 前置代码同步（~5 min）**
+```bash
+# 同步本地修复到远端（仅核心源码，不推 config YAML）
+rsync -avz --include='*.py' --exclude='configs/' \
+  src/quant/int4_basic.py src/cache/kivi_style_cache.py \
+  root@region-42.seetacloud.com:/root/LLM_KVCache_Quantization/src/ -e 'ssh -p 31867'
+```
+验证：远端 `md5sum src/quant/int4_basic.py src/cache/kivi_style_cache.py` 与本地一致。
+
+**Step 2: 处理 6 个 INT4 污染 run（~20 min）**
+```bash
+# 2a. 用 repair tool 将污染 run 移到 legacy 目录
+python scripts/repair_phase5v2_delta.py \
+  --runs_dir results/phase5v2/runs \
+  --logs_dir results/phase5v2/logs \
+  --selector "run_name~=kivi_style_int4_curve" \
+  --tasks eval_ppl,eval_needle,eval_longbench,eval_ruler \
+  --execute
+
+# 2b. 验证 legacy 隔离成功
+ls results/phase5v2_legacy_kivi_int4_bug/runs/ | grep kivi_style_int4
+```
+
+**Step 3: 重跑 6 个 INT4 污染 run（~2-3h）**
+```bash
+# 7B 的 3 个 curve configs
+python scripts/run_experiments.py \
+  --config configs/snapshots/exp_matrix_qwen25_7b_v1.yaml \
+  --seeds 1234 --tasks eval_ppl,eval_needle,eval_longbench,eval_ruler \
+  --run_names kivi_style_int4_curve_4k,kivi_style_int4_curve_8k,kivi_style_int4_curve_16k \
+  --run_tag phase5v2r2_7b_s1234 \
+  --skip_completed_success --failure_policy continue_all
+
+# 8B 的 3 个 curve configs
+python scripts/run_experiments.py \
+  --config configs/snapshots/exp_matrix_llama31_8b_v1.yaml \
+  --seeds 1234 --tasks eval_ppl,eval_needle,eval_longbench,eval_ruler \
+  --run_names kivi_style_int4_curve_4k,kivi_style_int4_curve_8k,kivi_style_int4_curve_16k \
+  --run_tag phase5v2r2_8b_s1234 \
+  --skip_completed_success --failure_policy continue_all
+```
+
+**Step 4: 补跑 1 个 RULER 失败 run（~30 min）**
+```bash
+python scripts/run_experiments.py \
+  --config configs/exp_matrix.yaml \
+  --seeds 1234 --tasks eval_ruler,eval_needle,eval_longbench \
+  --run_names int8_ours_long_no_static_no_temp_fused \
+  --run_tag phase5v2_1p5b_s1234 \
+  --skip_completed_success --failure_policy continue_all
+```
+> `--skip_completed_success` 会自动跳过已成功的 eval_ppl，只重跑 3 个失败任务。
+
+**Step 5: 数据验证（强制，不可跳过）**
+
+对每个修复后的 run 执行以下验证：
+
+| 检查项 | 验收标准 | 验证命令 |
+|--------|---------|---------|
+| PPL 范围 | kivi_int4: 7-30; int8_ours: 7-15 | 读 profile_ppl CSV |
+| PPL 对比 | 与同模型 kivi_int8 基线偏差 <3x | 对比 kivi_int8 PPL |
+| RULER 完整性 | 3 个 CSV 文件，非空 | `ls ruler_*.csv` |
+| Needle 完整性 | 1 个 CSV 文件，非空 | `ls needle_*.csv` |
+| LongBench 完整性 | 2 个 CSV 文件，非空 | `ls longbench_*.csv` |
+| Manifest 状态 | 全部 task status=success | 读 run_manifest.json |
+| 零 NaN/Inf | 所有 CSV 中无 NaN/Inf | `grep -r "nan\|inf" *.csv` |
+
+验证脚本：
+```python
+# 自动化验证（远端执行）
+python -c "
+import json, glob, os, csv
+REPAIR_RUNS = [
+    'kivi_style_int4_curve_4k_s1234_phase5v2r2_7b_s1234',
+    'kivi_style_int4_curve_8k_s1234_phase5v2r2_7b_s1234',
+    'kivi_style_int4_curve_16k_s1234_phase5v2r2_7b_s1234',
+    'kivi_style_int4_curve_4k_s1234_phase5v2r2_8b_s1234',
+    'kivi_style_int4_curve_8k_s1234_phase5v2r2_8b_s1234',
+    'kivi_style_int4_curve_16k_s1234_phase5v2r2_8b_s1234',
+    'int8_ours_long_no_static_no_temp_fused_s1234_phase5v2_1p5b_s1234',
+]
+BASELINES = {
+    '7b': 7.06,  # kivi_style_int8_long PPL
+    '8b': 8.0,   # approximate
+    '1p5b': 9.0, # approximate
+}
+all_pass = True
+for run_id in REPAIR_RUNS:
+    rd = f'results/phase5v2/runs/{run_id}'
+    mf = json.load(open(f'{rd}/run_manifest.json'))
+    # Check all tasks success
+    for t, tv in mf['tasks'].items():
+        if tv['status'] != 'success':
+            print(f'FAIL: {run_id} task {t} = {tv[\"status\"]}')
+            all_pass = False
+    # Check PPL range
+    ppls = glob.glob(f'{rd}/profile_ppl_*.csv')
+    if ppls:
+        with open(ppls[0]) as f:
+            r = csv.DictReader(f)
+            for row in r:
+                ppl = float(row['ppl'])
+                if ppl > 50:
+                    print(f'FAIL: {run_id} PPL={ppl} > 50 (still polluted!)')
+                    all_pass = False
+                else:
+                    print(f'OK: {run_id} PPL={ppl}')
+print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
+"
+```
+
+**Step 6: 记录到 iteration.md**
+- 记录修复结果（PPL 值、验证状态）
+- 将本 Plan 标记为 ✅ 已完成
+
+#### 验证基准（用于交叉对比）
+
+| 模型 | kivi_style_int8 PPL（基准） | kivi_style_int4 PPL（预期） |
+|------|---------------------------|---------------------------|
+| 7B | 7.06 (verified) | 7-15 |
+| 8B | ~8.0 (TBD) | 8-20 |
+| 1.5B | ~9.0 (TBD) | N/A (无 kivi_int4 config) |
+
+#### Checklist
+
+- [ ] Step 1: 代码同步到远端 + md5 验证
+- [ ] Step 2: repair tool 隔离 6 个污染 run
+- [ ] Step 3: 重跑 6 个 kivi_style_int4 curve runs
+- [ ] Step 4: 补跑 1 个 int8_ours RULER 失败 run
+- [ ] Step 5: 7 个 run 全部通过数据验证
+- [ ] Step 6: iteration.md 记录完成
+
+#### 风险
+
+| 风险 | 概率 | 缓解 |
+|------|------|------|
+| 重跑时 GPU 资源不足 | 中 | 在 seed 间隙执行（3 模型 long config 完成后），独占约 30GB |
+| repair tool 的 selector 匹配到非目标 run | 低 | selector 用 `run_name~=kivi_style_int4_curve` 精确匹配，先 dry-run 确认 |
+| 重跑后 PPL 仍异常 | 极低 | 验证脚本会 catch，人工复查 |
+| 补跑的 run_tag 与正常 run 不同导致聚合遗漏 | 中 | 聚合前确认 aggregate_results.py 按 run_name（非 run_tag）分组 |
+
+### Plan: R22 审查修复 — 吞吐 profiling 前置修复 + 防御性改进
+- **批准日期**：2026-02-25
+- **前置条件**：Phase 5v2 质量评测完成
+- **状态**：待执行（吞吐 profiling 启动前必须完成）
+- **内容**：
+
+**P0: 吞吐 profiling 前必须修（阻塞 Phase 5v2 吞吐评测）**
+- [ ] **PRF-032** `[HIGH]` profile_latency.py "Hello " repeat prompt token 数不精确 → 改用 tokenizer 生成精确长度 token 序列
+- [ ] **PRF-033** `[HIGH]` 非 kivi quant_bits=None 写入 CSV → 按 kv_mode 推导实际 quant_bits 并记录
+- [ ] **PRF-034** `[MED]` profile_latency/memory 未调用 model.eval() → 添加 model.eval()
+
+**P1: 防御性改进（建议在下轮代码维护时修）**
+- [ ] **EVL-132** `[HIGH]` eval_ppl.py PPL NaN/Inf 静默写入 + exit(0) → 添加 NaN/Inf 检查，异常时 exit(1)
+- [ ] **ENG-110** `[HIGH]` batch EOS 用 all() 判定 → 改为 per-sequence mask（影响 batch>1 的吞吐评测）
+
+**P2: 文档更新**
+- [ ] **W2** CLAUDE.md §10 scale dtype 描述更新（float32 → 实际 fp16/input dtype）
+
+**不影响当前实验（仅跟踪）**：EVL-130(HF模式), EVL-131(repeat模式), EVL-133~137, ENG-111, PRF-035, CHK-037~039, UTL-014
+
 ### Plan: EMNLP 2026 Phase 6 — 聚合 + 统计修复 + 论文准备
 - **批准日期**：2026-02-23
 - **前置条件**：Phase 4 + Phase 5 完成
