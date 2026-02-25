@@ -1,47 +1,297 @@
-# AGENTS.md (repo root)
+# AGENTS.md — Multi-Agent Development Workflow
 
-# Project Guidance for Codex
+> 本文件是外部 AI 编码工具（Codex 等）理解本项目多 Agent 协作体系的**唯一入口**。
+> 详细编码规范见 `CLAUDE.md`；Agent 内部指令见 `.claude/agents/*.md`（仅 Claude Code 使用）。
 
-> 详细开发规范见 `CLAUDE.md`（项目规范入口）。本文件为 Codex 兼容的轻量概览。
+---
 
-## Project snapshot
+## 1. Project Snapshot
 
-- Project purpose: reproducible KV-cache quantization research pipeline for efficient LLM inference.
-- Tech stack: Python 3.12, PyTorch, Transformers, Triton, numpy/pandas/matplotlib.
-- Key modules: `src/cache/`, `src/quant/`, `src/kernels/`, `src/engine/`, `scripts/`.
-- Architecture docs: `objective.md`, `README.md`, `experiment_sop.md`.
-- Review tracker: `review_tracker.md` (root, authoritative file for all code review issues).
-- Coding conventions: follow existing style in repo; prefer minimal diffs and explicit reproducibility metadata.
+- **Purpose**: Reproducible KV-cache quantization research pipeline for efficient LLM inference (EMNLP 2026).
+- **Stack**: Python 3.12, PyTorch 2.8.0 (CUDA 12.8), Transformers, Triton, numpy/pandas/matplotlib.
+- **Key modules**: `src/cache/`, `src/quant/`, `src/kernels/`, `src/engine/`, `scripts/`.
+- **Authoritative files**: `objective.md` (goals), `iteration.md` (progress), `review_tracker.md` (issues), `experiment_sop.md` (experiment protocol).
 
-## Agent roles
+---
 
-- **Supervisor** (`.claude/agents/supervisor.md`): 目标驱动持续运行，无固定轮次上限。支持 Execute/Wait/Monitor 三模式自动切换，智能熔断（仅 Execute 模式下无进展才触发）。
-- **Developer** (`.claude/agents/developer.md`): 编码/测试/修复执行者，支持指令模式（sonnet，被 Supervisor spawn）和自主模式（opus，独立运行），自主 debug+commit+hygiene 流程。
-- **Review-Coord** (`.claude/agents/review-coord.md`): 持续守护式审查协调员，事件循环 + 10 模块全覆盖 + 智能休眠，并行调度 7 个专项审查 Agent（D1-D7），结果汇聚到 `review_tracker.md`，审查摘要同步写入 `iteration.md`。
+## 2. Agent Roster
 
-## Model configuration
+| # | Agent | Model | Config | Role | Permissions |
+|---|-------|-------|--------|------|-------------|
+| 1 | **Supervisor** | opus | `.claude/agents/supervisor.md` | 最高权限调度者。目标驱动持续运行，3 模式状态机（Execute/Wait/Monitor），spawn Developer 和 Review-Coord | bypassPermissions, 读写全部文件 |
+| 2 | **Developer** | opus | `.claude/agents/developer.md` | 编码执行者。7 步循环（理解→方案→实现→自验证→测试→落地→下一个），含 Debug+Iterate Loop | bypassPermissions, 有限写入 tracker 文件 |
+| 3 | **Review-Coord** | opus | `.claude/agents/review-coord.md` | 审查协调员。持续守护事件循环，检测新 commit → 增量审查，空闲时全量深度审查 10 模块 | bypassPermissions, 写 review_tracker + iteration |
+| 4 | **D1 review-numerical** | sonnet | `.claude/agents/review-numerical.md` | 数值正确性：量化误差、loss 语义、shape/dtype、NaN/Inf | 只读 + 写 review_tracker.md |
+| 5 | **D2 review-silent** | sonnet | `.claude/agents/review-silent.md` | 静默失败：空 catch、不当 fallback、错误吞噬 | 同上 |
+| 6 | **D3 review-security** | sonnet | `.claude/agents/review-security.md` | 安全漏洞：注入、路径穿越、反序列化、凭证泄露 | 同上 |
+| 7 | **D4 review-contract** | sonnet | `.claude/agents/review-contract.md` | 接口契约：稳定 API 守护、签名/语义变化 | 同上 |
+| 8 | **D5 review-boundary** | sonnet | `.claude/agents/review-boundary.md` | 边界鲁棒性：空输入、极端值、dtype/device 不匹配 | 同上 |
+| 9 | **D6 review-test** | sonnet | `.claude/agents/review-test.md` | 测试覆盖：缺口评分、回归测试、质量 | 同上 |
+| 10 | **D7 review-quality** | sonnet | `.claude/agents/review-quality.md` | 代码质量：死代码、重复、命名、圈复杂度 | 同上 |
 
-| Agent | Model | 理由 |
-|-------|-------|------|
-| Supervisor | opus | 策略决策、目标拆解需要最强推理 |
-| Developer（自主模式） | opus | 独立运行需完整推理能力 |
-| Developer（指令模式） | sonnet | Supervisor spawn 时指定，执行具体任务足够 |
-| Review-Coord | opus | 协调 7 个 Agent + 状态管理需要强推理 |
-| D1-D7 | sonnet | 单维度审查任务，sonnet 胜任 |
+---
 
-## Commands
+## 3. Complete Development Logic Chain
 
-| Task | Command |
-|------|---------|
-| Test | `pytest tests/ -v` |
-| Smoke test (GPU) | `python scripts/smoke_test.py --save_output` |
-| Dry-run | `python scripts/run_experiments.py --config configs/exp_matrix.yaml --dry_run` |
+### 3.1 End-to-End Flow
 
-## Repo hygiene rules
+```
+用户下达目标
+     │
+     ▼
+┌─────────────────────────────────────────────────────┐
+│  Supervisor (opus)                                  │
+│  读取 objective.md → iteration.md → review_tracker  │
+│  评估状态 → 选择最高优先级任务                         │
+│                                                     │
+│  任务分类:                                           │
+│  ┌──────────────┬───────────────────────┐           │
+│  │ 简单 (≤1文件  │ 复杂 (跨文件) 或       │           │
+│  │  ≤20行)      │ 可并行多任务           │           │
+│  │              │                       │           │
+│  │ Supervisor   │ spawn Developer(s)    │           │
+│  │ 直接在 main  │ isolation="worktree"  │           │
+│  │ 上修改       │ 各自独立分支           │           │
+│  └──────┬───────┴───────────┬───────────┘           │
+│         │                   │                       │
+│         ▼                   ▼                       │
+│  commit on main    Developer(s) work on             │
+│                    claude/<branch>                   │
+│                         │                           │
+│                         ▼                           │
+│                ┌── 合并门禁 ──┐                      │
+│                │ 1. git merge --ff-only              │
+│                │ 2. pytest tests/ -v                 │
+│                │    ├─ PASS → 更新 tracker 文件      │
+│                │    └─ FAIL → reset, 记录失败        │
+│                │ 3. git branch -d <branch>           │
+│                └─────────────┘                      │
+│                                                     │
+│  (可选) spawn Review-Coord 触发审查                   │
+└─────────────────────────────────────────────────────┘
+     │
+     ▼
+┌─────────────────────────────────────────────────────┐
+│  Review-Coord (opus) — 持续守护进程                   │
+│                                                     │
+│  事件循环:                                           │
+│  ┌─ 检测新 commit?                                  │
+│  │  YES → 增量审查 (变更文件)                         │
+│  │  NO  → 全量深度审查 (下一模块, 共 10 模块)          │
+│  │                                                  │
+│  ├─ 并行 spawn 7 个专项 Agent (D1-D7)               │
+│  │  ┌─────────────────────────────────────────┐     │
+│  │  │ D1 数值 │ D2 静默 │ D3 安全 │ D4 契约  │     │
+│  │  │ D5 边界 │ D6 测试 │ D7 质量 │          │     │
+│  │  └─────────────────────────────────────────┘     │
+│  │                                                  │
+│  ├─ 汇聚结果 → 去重 → 按严重性排序                    │
+│  ├─ 写入 review_tracker.md                          │
+│  ├─ 追加 iteration.md 审查摘要                       │
+│  └─ 智能休眠 → 继续循环                              │
+└─────────────────────────────────────────────────────┘
+     │
+     ▼ (review 发现问题)
+┌─────────────────────────────────────────────────────┐
+│  Supervisor 处理审查结果                              │
+│  CRITICAL → 立即 spawn Developer 修复 (worktree)     │
+│  HIGH     → 加入当前 Phase 修复计划                   │
+│  MED/LOW  → 记录，Wait 模式下处理                     │
+└─────────────────────────────────────────────────────┘
+```
 
-- Generated outputs/logs go to `results/<run_tag>/` or `artifacts/` and are usually NOT committed.
-- Historical materials go to `development_history/archive_<YYYYMMDD>_<topic>/`.
-- Keep top-level clean; update `.gitignore` when needed.
-- Never use `git add .` — stage files in semantic groups.
-- Commit message format: `feat:` / `fix:` / `refactor:` / `test:` / `docs:` / `chore:`
-- If pushing requires network/credentials, ask before `git push`.
+### 3.2 Developer 内部循环 (7 步)
+
+```
+Step 1: 理解 → 读 issue + 源码 + 现有测试
+Step 2: 方案 → ≤3 文件直接动手; >3 文件先记录方案
+Step 3: 编码 → 正确性第一, PEP8, minimal diffs
+Step 4: 自验证 → 重读 diff, 影响面检查, 配置联动
+Step 5: 测试 → 相关 test_*.py; 核心模块跑全量 pytest
+        失败 → Debug+Iterate Loop (最多 5 轮)
+Step 6: 落地 →
+        ├─ Worktree (claude/* 分支): 精简 commit, 跳过 tracker 文件编辑
+        └─ Main (直接): 完整流程 (iteration.md + review_tracker.md + commit)
+Step 7: 下一个任务
+```
+
+### 3.3 Supervisor 三模式状态机
+
+| 模式 | 触发 | 行为 |
+|------|------|------|
+| **Execute** | 有即时/短期任务 | 编码/修复/配置/提交，spawn Developer |
+| **Wait** | 远程实验运行中 + 有本地填充工作 | 做 MED/LOW 修复、文档、测试补充 |
+| **Monitor** | 远程实验运行中 + 无本地工作 | 定期 SSH 检查远程状态 |
+
+---
+
+## 4. Branch Isolation & Merge Gate
+
+### 4.1 分支策略
+
+```
+main (稳定，始终 pytest 通过，rsync 唯一来源)
+  ├── claude/dev-xxx  ← Developer worktree A (自动创建/清理)
+  ├── claude/dev-yyy  ← Developer worktree B (并行)
+  └── (Review agents: 只读，不需要分支)
+```
+
+### 4.2 合并门禁
+
+Developer Task 返回后，Supervisor 执行：
+
+1. `git log main..<branch>` — 检查 Developer commit
+2. `git merge --ff-only <branch>` — 合并（ff 失败则 rebase 后重试）
+3. `pytest tests/ -v` — 验证
+   - PASS → 更新 iteration.md + review_tracker.md
+   - FAIL → `git reset --hard HEAD~1`，记录失败
+4. `git branch -d <branch>` — 清理
+
+### 4.3 rsync 门禁
+
+推送代码到远程 GPU 前必须执行：
+
+```bash
+bash scripts/rsync_gate.sh          # 检查: main 分支 + clean status + pytest
+bash scripts/rsync_gate.sh --skip-tests  # 紧急推送跳过测试
+```
+
+### 4.4 豁免
+
+≤1 文件、≤20 行的配置/文档修改：Supervisor 直接在 main 操作，不走 worktree。
+
+---
+
+## 5. Data Flow — 谁读写什么
+
+```
+                    ┌─────────────────┐
+                    │  objective.md   │  目标/边界/成功标准
+                    │  (Supervisor R) │  (用户写, Supervisor 仅追加 Decision Log)
+                    └────────┬────────┘
+                             │
+            ┌────────────────┼────────────────┐
+            ▼                ▼                ▼
+  ┌──────────────┐  ┌───────────────┐  ┌──────────────────┐
+  │ iteration.md │  │review_tracker │  │ experiment_sop   │
+  │              │  │     .md       │  │     .md          │
+  │ Supervisor W │  │ Supervisor W  │  │ (只读参考)        │
+  │ Developer W* │  │ Developer W*  │  └──────────────────┘
+  │ Rev-Coord W  │  │ D1-D7 W      │
+  └──────────────┘  │ Rev-Coord W  │
+                    └──────────────┘
+
+W = 写入  R = 读取  W* = 仅在 main 上写入 (worktree 中跳过)
+```
+
+| 文件 | Supervisor | Developer (main) | Developer (worktree) | Review-Coord | D1-D7 |
+|------|:---:|:---:|:---:|:---:|:---:|
+| `objective.md` | R + Decision Log | R | R | — | — |
+| `iteration.md` | R/W (Plans + Timeline) | R/W (Timeline) | R only | W (审查摘要) | — |
+| `review_tracker.md` | R/W (标记 [x]) | R/W (标记 [x]) | R only | R/W (校验) | W (新发现) |
+| `src/` `scripts/` `tests/` | R/W | R/W | R/W | R | R |
+| `configs/` | R/W | R/W | R/W | R | R |
+| `.claude/agents/*.md` | R | R | R | R | R |
+
+---
+
+## 6. Review System — 10 Modules × 7 Dimensions
+
+### 审查覆盖矩阵
+
+| # | 模块 | 文件 glob |
+|---|------|-----------|
+| 1 | src/cache | `src/cache/*.py` |
+| 2 | src/quant | `src/quant/*.py` |
+| 3 | src/kernels | `src/kernels/*.py` |
+| 4 | src/engine | `src/engine/*.py` |
+| 5 | src/misc | `src/model/*.py` + `src/server/*.py` + `src/utils/*.py` |
+| 6 | scripts/eval | `scripts/eval_*.py` |
+| 7 | scripts/calib+prof | `scripts/calibrate_*.py` + `scripts/profile_*.py` |
+| 8 | scripts/agg+export | `scripts/aggregate_*.py` + `scripts/export_*.py` + `scripts/generate_*.py` |
+| 9 | scripts/runner | `scripts/run_*.py` + `scripts/check_*.py` + `scripts/smoke_test.py` + `scripts/review_tool.py` |
+| 10 | tests+configs | `tests/*.py` + `configs/*.yaml` |
+
+### 7 审查维度
+
+| ID | Agent | 关注点 |
+|----|-------|--------|
+| D1 | review-numerical | 量化误差传播、loss 语义、shape/dtype 对齐、NaN/Inf、确定性 |
+| D2 | review-silent | 空 catch、不当 fallback、条件短路、静默数据丢弃、错误吞噬 |
+| D3 | review-security | 注入攻击、路径穿越、反序列化、信息泄露、凭证硬编码 |
+| D4 | review-contract | 稳定 API 签名、行为语义变化、跨文件配置对齐、向后兼容 |
+| D5 | review-boundary | 空/零输入、极端值、dtype/device 不匹配、整数溢出、资源泄漏 |
+| D6 | review-test | 测试缺口评分、回归测试、关键路径覆盖、测试质量 |
+| D7 | review-quality | 死代码、重复代码、命名规范、圈复杂度、魔法数字 |
+
+### Issue 严重性分级
+
+| 级别 | 处理方式 |
+|------|----------|
+| **CRITICAL** | 阻塞 Phase 推进，Supervisor 立即 spawn Developer 修复 |
+| **HIGH** | 当前 Phase 必须修复 |
+| **MEDIUM** | 不阻塞，Wait 模式下修复 |
+| **LOW** | 记录，空闲时修复 |
+
+---
+
+## 7. Commands
+
+```bash
+# 测试
+pytest tests/ -v
+
+# Smoke test (需 GPU)
+python scripts/smoke_test.py --save_output
+
+# 实验 dry-run
+python scripts/run_experiments.py --config configs/exp_matrix.yaml --dry_run
+
+# 审查统计
+python scripts/review_tool.py stats
+python scripts/review_tool.py phase-gate    # Phase 门禁检查
+python scripts/review_tool.py progress      # 修复进度
+
+# rsync 门禁
+bash scripts/rsync_gate.sh                  # 推送前检查
+
+# 聚合结果
+python scripts/aggregate_results.py --runs_dir results/<tag>/runs --tables_dir results/<tag>/tables --plots_dir results/<tag>/plots
+```
+
+---
+
+## 8. Repo Hygiene
+
+- **Never** `git add .` — stage files in semantic groups.
+- Commit prefix: `feat:` / `fix:` / `refactor:` / `test:` / `docs:` / `chore:`
+- Generated outputs → `results/<tag>/` or `artifacts/` (not committed).
+- Historical materials → `development_history/archive_<YYYYMMDD>_<topic>/`.
+- Timestamps: always use `date '+%Y-%m-%d %H:%M'` (never fabricate).
+- **Never** push without explicit user approval.
+- **Never** `rm -rf`, `git push --force`, `git reset --hard` without explicit user approval.
+
+---
+
+## 9. Stable Interfaces (Do Not Break)
+
+| Interface | Signature |
+|-----------|-----------|
+| Engine | `Engine.generate(prompts, generation_config, kv_mode, runtime_config)` |
+| KV Cache | `KVCache.append(layer_id, k, v)` / `KVCache.get_kv(layer_id)` |
+| Quantizer | `quantize_symmetric()` / `dequantize_symmetric()` |
+| Kernels | `src/kernels/triton_decode_attn_int8.py` / `triton_decode_attn_int4.py` |
+| Calibration | JSON format with per-layer scales + per-head inv_tau |
+
+---
+
+## 10. Fixed Decisions
+
+| Item | Value |
+|------|-------|
+| Primary model | `Qwen/Qwen2.5-1.5B-Instruct` (revision pinned) |
+| Extended models | `Qwen/Qwen2.5-7B-Instruct`, `LLaMA-3.1-8B-Instruct` |
+| Python | 3.12 |
+| Decoding | Greedy (temp=0, top_p=1, top_k=0) |
+| kv_modes | fp16, int8_baseline, int8_ours, int4_baseline, int4_fused, int4_ours, int4_ours_mixed, kivi_style |
+| Statistics | Bootstrap CI + sign-flip permutation + BH-FDR (α=0.05) |

@@ -272,19 +272,19 @@ Supervisor 根据任务复杂度和当前模式选择执行方式：
 
 ### 自己执行 vs spawn developer
 
-| 场景 | 执行方式 | 理由 |
-|------|---------|------|
-| 配置修改、简单 fix（<20 行） | Supervisor 直接执行 | 调度开销 > 任务本身 |
-| 复杂 bug 修复（跨多文件） | spawn developer | developer 有完整 debug loop |
-| 可并行的独立修复（2+ 个 issue） | spawn 多个 developer | 并行加速 |
-| Wait 模式下的填充工作 | Supervisor 直接执行 | 保持 Supervisor 忙碌 |
-| 远程实验配置/启动 | Supervisor 直接执行 | 需要 remote-server skill |
+| 场景 | 执行方式 | 隔离方式 | 理由 |
+|------|---------|---------|------|
+| 配置修改、简单 fix（<20 行、≤1 文件） | Supervisor 直接执行 | 直接在 main | 调度开销 > 任务本身 |
+| 复杂 bug 修复（跨多文件） | spawn developer | **worktree** | developer 有完整 debug loop |
+| 可并行的独立修复（2+ 个 issue） | spawn 多个 developer | **worktree** | 并行加速 + 互不干扰 |
+| Wait 模式下的填充工作 | Supervisor 直接执行 | 直接在 main | 保持 Supervisor 忙碌 |
+| 远程实验配置/启动 | Supervisor 直接执行 | 直接在 main | 需要 remote-server skill |
 
 ### spawn developer 示例
 
 ```
-# 完整 prompt 模板（developer 指令模式运行 sonnet，无法看到 Supervisor 上下文）
-Task(subagent_type="developer", model="sonnet", prompt="""
+# 完整 prompt 模板（worktree 隔离 + developer 指令模式运行 sonnet）
+Task(subagent_type="developer", model="sonnet", isolation="worktree", prompt="""
 修复 EVL-002: RULER CWE 1.5B *_long 溢出 max_position_embeddings。
 
 ## 问题描述
@@ -310,9 +310,9 @@ python -m py_compile scripts/eval_ruler.py
 pytest tests/test_eval_ruler_length_guard.py -v
 """)
 
-# 并行多个修复（每个 prompt 同样须自包含，均指定 model="sonnet"）
-Task(subagent_type="developer", model="sonnet", prompt="...", run_in_background=True)
-Task(subagent_type="developer", model="sonnet", prompt="...", run_in_background=True)
+# 并行多个修复（各自独立 worktree，每个 prompt 同样须自包含）
+Task(subagent_type="developer", model="sonnet", isolation="worktree", prompt="...", run_in_background=True)
+Task(subagent_type="developer", model="sonnet", isolation="worktree", prompt="...", run_in_background=True)
 ```
 
 ### 调度原则
@@ -321,6 +321,24 @@ Task(subagent_type="developer", model="sonnet", prompt="...", run_in_background=
 2. **spawn 时给足上下文**——developer 在指令模式下运行 sonnet，不共享 Supervisor 上下文。prompt 必须自包含：issue ID、完整问题描述（摘录关键代码/行为）、涉及文件路径、修改要求、验收标准、验证命令。spawn 时必须指定 `model="sonnet"` 以降低成本。
 3. **spawn 后监控结果**——developer 完成后 Supervisor 检查 commit 和 iteration.md 记录
 4. **不重复劳动**——Supervisor 和 developer 不能同时修同一个文件
+5. **worktree 隔离**——spawn developer 时始终使用 `isolation="worktree"`，保护 main 分支稳定
+
+### 合并门禁流程
+
+Developer worktree Task 返回后，Supervisor 执行以下标准流程将变更合并到 main：
+
+1. **检查 Developer 的 commit**：从 Task 返回结果中获取 worktree 分支名，`git log main..<branch>`
+2. **合并到 main**：`git merge --ff-only <branch>`（ff 失败则 `git rebase main` 后重试）
+3. **运行验证**：`pytest tests/ -v`
+   - **通过** → 继续步骤 4
+   - **失败** → `git reset --hard HEAD~1`（回滚合并），记录失败原因到 iteration.md
+4. **更新追踪文件**：在 main 上编辑 iteration.md（Timeline）和 review_tracker.md（标记 `[x]`）
+5. **清理分支**：`git branch -d <branch>`
+
+**关键规则**：
+- main 始终保持"pytest 通过"状态
+- Developer 在 worktree 中不编辑 iteration.md 和 review_tracker.md（由 Supervisor 合并后统一更新）
+- 合并失败时不得强制合并，必须先修复问题
 
 ---
 

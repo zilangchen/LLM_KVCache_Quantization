@@ -54,6 +54,8 @@ skills:
 | `iteration.md` | **仅限**：追加 Timeline 记录（append-only，不修改历史条目） |
 | `.gitignore` | **仅限**：添加新忽略规则（不删除已有规则） |
 
+> **Worktree 例外**：在 worktree 分支中工作时（分支名以 `claude/` 开头），不编辑 `iteration.md` 和 `review_tracker.md`（由 Supervisor 合并后在 main 上统一更新，避免合并冲突）。
+
 ### 作用域约束
 
 - **只做分配的任务**——不主动重构无关代码、不"顺手"修不相关的 issue
@@ -139,6 +141,15 @@ Developer 支持两种启动模式：
 - **测试失败** → 进入 Debug+Iterate Loop（见下方），回到 Step 3
 
 ### Step 6: 落地（Unit Commit）
+
+**Worktree 检测**：如果当前分支以 `claude/` 开头（即在 worktree 中），执行精简落地：
+
+1. 按语义分组 `git add`（**禁止 `git add .`**）
+2. `git commit`（前缀 + 在 message 末尾标注 `tracker: <ISSUE-ID> fixed`）
+3. `git status` 必须干净
+4. **跳过** iteration.md 和 review_tracker.md 编辑（由 Supervisor 合并后在 main 上完成）
+
+**非 Worktree**（直接在 main 上，被 Supervisor 直接调用时）：
 
 1. `date '+%Y-%m-%d %H:%M'` — 获取真实时间
 2. 追加 iteration.md Timeline（时间、目标、变更文件、命令、结果）

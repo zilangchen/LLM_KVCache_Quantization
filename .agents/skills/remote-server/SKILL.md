@@ -102,6 +102,14 @@ ssh -t -p $SSH_PORT $SSH_USER@$SSH_HOST "tmux attach -t <session_name>"
 
 ### 本地 → 远程
 
+**前置门禁**（推送前必须执行）：
+```bash
+bash scripts/rsync_gate.sh          # 检查分支 + git status + 运行 pytest
+bash scripts/rsync_gate.sh --skip-tests  # 跳过测试（紧急推送）
+```
+
+通过后再执行 rsync：
+
 // turbo
 ```bash
 # 同步项目代码（排除大文件和缓存）
