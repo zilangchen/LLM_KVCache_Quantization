@@ -26,6 +26,32 @@
 
 当用户说"这个问题先存档"时，将问题记录到 `review_tracker.md`（审查问题）或 `iteration.md`（一般待办）。
 
+### 1.1 持久化 Memory 维护
+
+Memory 文件位于**项目级**目录: `~/.claude/projects/-Users-chenzilang-Desktop-LLM-KVCache-Quantization/memory/`
+（注意：从 home 目录启动的会话加载的是 home 层 memory，不是项目层。必须从项目目录启动才能加载正确的 memory。）
+
+`MEMORY.md` 前 200 行自动注入每次会话上下文。
+
+#### 更新触发时机（必须执行）
+
+| 触发事件 | 更新内容 |
+|----------|----------|
+| 修复重大 bug（如 CAL-019/020 级别）| debugging-patterns.md 追加根因+修复方案 |
+| Phase 推进或实验完成 | experiment-state.md 更新状态 |
+| review_tracker summary 变化 | MEMORY.md 更新计数行 |
+| 发现新的"反复踩坑"模式 | MEMORY.md 已知陷阱 + 对应专题文件 |
+| Agent 协作出现新的失败/成功模式 | agent-coordination.md 更新 |
+| 会话结束前（如有重要发现）| 相关专题文件追加 |
+
+#### 约束
+
+- MEMORY.md 严格控制在 **165 行以内**（200 行截断，留 buffer）
+- 专题文件各自不超过 150 行，超出时精简旧内容
+- 不记录临时状态（当前正在做什么）—— 那是 iteration.md 的职责
+- 不复制 CLAUDE.md 已有规范 —— 只记录"经验"和"状态"
+- 更新前先 Read 现有内容，避免重复
+
 ---
 
 ## 2. 目录规范
