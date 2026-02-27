@@ -489,17 +489,14 @@ class TestBootstrapCIBoundary(unittest.TestCase):
     """TST-008: Bootstrap CI boundary tests for n=1, n=2, n=3 and CI width
     monotonically decreasing with n."""
 
-    def test_n1_ci_is_degenerate(self):
-        """n=1: Cannot compute a meaningful CI. Bootstrap returns identical bounds
-        (single value), and the higher-level _add_ci95_columns masks this to NaN.
-        Verify _bootstrap_ci_mean returns low == high == the single value."""
+    def test_n1_ci_returns_nan(self):
+        """n=1: bootstrap CI is undefined and should return NaN bounds."""
         values = np.array([42.0], dtype=np.float64)
         low, high = agg._bootstrap_ci_mean(  # pylint: disable=protected-access
             values, n_bootstrap=5000, ci_level=0.95, seed=1234
         )
-        # With n=1 the function returns (val, val) -- both bounds equal the single value.
-        self.assertAlmostEqual(low, 42.0, places=10)
-        self.assertAlmostEqual(high, 42.0, places=10)
+        self.assertTrue(np.isnan(low), f"Expected NaN low bound for n=1, got {low}")
+        self.assertTrue(np.isnan(high), f"Expected NaN high bound for n=1, got {high}")
 
     def test_n1_add_ci95_columns_gives_nan(self):
         """n=1: _add_ci95_columns should produce NaN CI half-width (can't compute
@@ -1380,6 +1377,135 @@ class TestMainClaims32kTableMergeKeys(unittest.TestCase):
         )
         # Should still produce output (merge falls back to kv_mode for mem)
         self.assertGreaterEqual(len(out), 1)
+
+
+class TestAggregateWave21Fixes(unittest.TestCase):
+    """Wave 21 regressions for AGG-034/049/050/051/059/060/061/062."""
+
+    def _paired_latency_df(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {"kv_mode": "int8_baseline", "seed": 1234, "seq_len": 4096, "tpot_ms": 10.0},
+                {"kv_mode": "int8_ours", "seed": 1234, "seq_len": 4096, "tpot_ms": 8.0},
+                {"kv_mode": "int8_baseline", "seed": 1235, "seq_len": 4096, "tpot_ms": 9.0},
+                {"kv_mode": "int8_ours", "seed": 1235, "seq_len": 4096, "tpot_ms": 8.5},
+            ]
+        )
+
+    def test_bh_fdr_by_metric_avoids_cross_metric_dilution(self):
+        df = pd.DataFrame(
+            {
+                "metric": ["needle_pass_rate", "tpot_ms", "tpot_ms", "tpot_ms"],
+                "p_value": [0.01, 0.02, 0.03, 0.04],
+            }
+        )
+        q_global = agg._add_bh_fdr_qvalues(df, p_col="p_value", q_col="q_value")  # pylint: disable=protected-access
+        q_by_metric = agg._add_bh_fdr_qvalues_by_metric(  # pylint: disable=protected-access
+            df, metric_col="metric", p_col="p_value", q_col="q_value"
+        )
+
+        mask = q_global["metric"] == "needle_pass_rate"
+        needle_q_global = float(q_global.loc[mask, "q_value"].iloc[0])
+        needle_q_by_metric = float(q_by_metric.loc[mask, "q_value"].iloc[0])
+        self.assertGreater(needle_q_global, needle_q_by_metric)
+        self.assertAlmostEqual(needle_q_global, 0.04, places=12)
+        self.assertAlmostEqual(needle_q_by_metric, 0.01, places=12)
+
+    def test_significance_threshold_requires_favors_challenger(self):
+        df = pd.DataFrame(
+            [
+                {
+                    "p_value": 0.001,
+                    "q_value": 0.001,
+                    "meets_min_pairs": True,
+                    "favors_challenger": False,
+                },
+                {
+                    "p_value": 0.001,
+                    "q_value": 0.001,
+                    "meets_min_pairs": True,
+                    "favors_challenger": True,
+                },
+            ]
+        )
+        out = agg._apply_significance_thresholds(  # pylint: disable=protected-access
+            df,
+            alpha=0.05,
+            p_col="p_value",
+            q_col="q_value",
+        )
+        self.assertFalse(bool(out.iloc[0]["significant_p_alpha"]))
+        self.assertFalse(bool(out.iloc[0]["significant_q_alpha"]))
+        self.assertTrue(bool(out.iloc[1]["significant_p_alpha"]))
+        self.assertTrue(bool(out.iloc[1]["significant_q_alpha"]))
+
+    def test_pairings_cover_int8_fused_and_int4_ours_mixed(self):
+        self.assertIn(("fp16", "int8_fused"), agg.SIGNIFICANCE_PAIRINGS)
+        self.assertIn(("int8_baseline", "int8_fused"), agg.SIGNIFICANCE_PAIRINGS)
+        self.assertIn(("int4_ours", "int4_ours_mixed"), agg.SIGNIFICANCE_PAIRINGS)
+        self.assertIn(("fp16", "int8_fused"), agg.RELATIVE_GAIN_PAIRINGS)
+        self.assertIn(("int8_baseline", "int8_fused"), agg.RELATIVE_GAIN_PAIRINGS)
+        self.assertIn(("int4_ours", "int4_ours_mixed"), agg.RELATIVE_GAIN_PAIRINGS)
+
+    def test_collect_throughput_attempts_parses_kivi_style_seed_suffix(self):
+        with tempfile.TemporaryDirectory() as td:
+            runs_dir = Path(td) / "runs"
+            runs_dir.mkdir(parents=True, exist_ok=True)
+            (runs_dir / "kivi_style_s1234_throughput_8k_b4_demo").mkdir(parents=True, exist_ok=True)
+
+            out = agg._collect_throughput_attempts(  # pylint: disable=protected-access
+                runs_dir,
+                logs_dir=None,
+            )
+            self.assertEqual(len(out), 1)
+            row = out.iloc[0]
+            self.assertEqual(row["kv_mode"], "kivi_style")
+            self.assertEqual(int(row["seq_len"]), 8192)
+            self.assertEqual(int(row["batch"]), 4)
+
+    def test_significance_summary_records_effective_bootstrap_and_gain_method(self):
+        summary, _ = agg._significance_summary(  # pylint: disable=protected-access
+            self._paired_latency_df(),
+            metric_col="tpot_ms",
+            key_cols=["seq_len"],
+            pairings=[("int8_baseline", "int8_ours")],
+            metric_name="tpot_ms",
+            higher_is_better=False,
+            min_pairs=2,
+            alpha=0.05,
+            ci_level=0.95,
+            n_bootstrap=500,  # should be clamped to 1000
+            n_permutations=2000,
+            random_seed=1234,
+        )
+        self.assertEqual(len(summary), 1)
+        row = summary.iloc[0]
+        self.assertEqual(int(row["bootstrap_samples"]), 1000)
+        self.assertEqual(row["gain_method"], "mean_of_ratios")
+
+    def test_relative_gain_table_gain_method_marker(self):
+        df = pd.DataFrame(
+            [
+                {"kv_mode": "baseline", "seq_len": 4096, "score": 80.0},
+                {"kv_mode": "ours", "seq_len": 4096, "score": 88.0},
+            ]
+        )
+        out = agg._relative_gain_table(  # pylint: disable=protected-access
+            df,
+            metric_col="score",
+            metric_name="score",
+            key_cols=["seq_len"],
+            pairings=[("baseline", "ours")],
+            higher_is_better=True,
+        )
+        self.assertEqual(len(out), 1)
+        row = out.iloc[0]
+        self.assertEqual(row["gain_method"], "ratio_of_means")
+        self.assertAlmostEqual(
+            float(row["gain_pct"]),
+            float(row["gain_pct_ratio_of_means"]),
+            places=12,
+        )
 
 
 if __name__ == "__main__":
