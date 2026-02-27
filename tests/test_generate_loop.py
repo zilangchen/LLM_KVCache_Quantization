@@ -137,6 +137,7 @@ for mod_name in list(sys.modules.keys()):
 # Import the functions under test
 from src.engine.generate_loop import (
     _cache_stats_from_past_key_values,
+    _normalize_eos_token_id,
     _to_dynamic_cache_safely,
     _register_prefill_temperature_hooks,
 )
@@ -145,6 +146,30 @@ from src.engine.patch_model import (
     _resolve_attn_shape_meta,
     _infer_heads_from_proj,
 )
+
+
+# ===========================================================================
+# TST-030: _normalize_eos_token_id (ENG-059)
+# ===========================================================================
+
+
+class TestNormalizeEosTokenId(unittest.TestCase):
+    """TST-030: EOS token id normalization for list-valued tokenizer outputs."""
+
+    def test_none_returns_none(self):
+        self.assertIsNone(_normalize_eos_token_id(None))
+
+    def test_single_int_passes_through(self):
+        self.assertEqual(_normalize_eos_token_id(151643), 151643)
+
+    def test_list_uses_first_item(self):
+        self.assertEqual(_normalize_eos_token_id([151643, 151645]), 151643)
+
+    def test_tuple_uses_first_item(self):
+        self.assertEqual(_normalize_eos_token_id((42, 43)), 42)
+
+    def test_empty_list_returns_none(self):
+        self.assertIsNone(_normalize_eos_token_id([]))
 
 
 # ===========================================================================
