@@ -829,4 +829,41 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
   - `83116ee` test: add regressions for eos-list and eval_ppl guardrails
   - `pending` docs: sync wave20 tracker and iteration
 
+### 2026-02-28 02:09 | Wave 21 — AGG 统计正确性修复（论文关键路径）
+- **Goal**: 修复 AGG 高优先问题 8 项（AGG-034/049/050/051/059/060/061/062），确保 Phase 6 统计表可信
+- **Scope**:
+  - P0: BH-FDR 按 metric 分族校正 + significance 增加方向约束（必须 favors_challenger）
+  - P1: 补齐 int8_fused / int4_ours_mixed 的 significance+gain pairings，修复 kivi_style 吞吐目录正则
+  - P2: 单样本 bootstrap CI 置 NaN、bootstrap_samples 记录实际 clamp 值、gain 方法显式标注
+- **Changed files**:
+  - `scripts/aggregate_results.py`
+  - `tests/test_aggregate_results_stats.py`
+  - `review_tracker.md`
+  - `iteration.md`
+- **Commands**:
+  - `python3 -m py_compile scripts/aggregate_results.py tests/test_aggregate_results_stats.py`
+  - `pytest -q tests/test_aggregate_results_stats.py`
+  - `python scripts/review_tool.py stats`
+  - `python scripts/review_tool.py phase-gate`
+- **Outputs**:
+  - `py_compile`: pass
+  - `pytest`: 本地失败（pandas/numpy 二进制不兼容，`numpy.dtype size changed`），需远端环境验证
+  - `review_tool stats`: 预期 `995 total | 473 fixed + 6 false_positive | 516 open`
+  - `phase-gate`: 预期保持 READY（0 CRIT）
+- **Validation**:
+  - AGG-049/050: 新增 `_add_bh_fdr_qvalues_by_metric` + `_apply_significance_thresholds`
+  - AGG-034/060: 引入 `SIGNIFICANCE_PAIRINGS`/`RELATIVE_GAIN_PAIRINGS` 常量并补齐缺失配对
+  - AGG-059: 吞吐目录匹配改为基于 `KV_MODE_ORDER` 的已知模式 + 可选 `_s<seed>`
+  - AGG-051/061/062: n=1 CI -> NaN、bootstrap 元数据对齐实际采样数、`gain_method` 显式化
+  - 新增 Wave 21 回归测试覆盖上述关键路径
+- **Risks / follow-ups**:
+  - 本地 pandas/numpy ABI 问题导致 pytest 无法完成，需要远端/标准环境复核
+  - AGG-052/065 等统计族定义扩展仍 open，后续按优先级处理
+- **Commits**:
+  - `95f79eb` fix: statistical direction and BH-FDR per-metric correction (AGG-049, AGG-050)
+  - `7d81502` fix: significance pairings coverage and throughput regex (AGG-034, AGG-059, AGG-060)
+  - `e5ec62c` fix: gain semantics, bootstrap metadata, and single-seed CI handling (AGG-051, AGG-061, AGG-062)
+  - `fc6b361` test: add AGG regression tests for statistical correctness
+  - `pending` docs: sync wave21 tracker and iteration
+
 > 更早的条目见 `development_history/iteration_archive_202602.md`
