@@ -281,6 +281,35 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
 
 ## Timeline (Latest First)
 
+### 2026-02-28 01:30 | Memory 迁移：KV Cache memory 从 home 层移至项目层
+
+- **Goal**: 修复 Memory 路径错误 — 4 个 KV Cache 专题文件被写在了 home 层，从项目目录启动 Claude Code 时看不到
+- **Changed files**:
+  - `~/.claude/projects/-Users-chenzilang-Desktop-LLM-KVCache-Quantization/memory/debugging-patterns.md` (mv 过来)
+  - `~/.claude/projects/-Users-chenzilang-Desktop-LLM-KVCache-Quantization/memory/experiment-state.md` (mv 过来)
+  - `~/.claude/projects/-Users-chenzilang-Desktop-LLM-KVCache-Quantization/memory/agent-coordination.md` (mv 过来)
+  - `~/.claude/projects/-Users-chenzilang-Desktop-LLM-KVCache-Quantization/memory/tracker-operations.md` (mv 过来)
+  - `~/.claude/projects/-Users-chenzilang-Desktop-LLM-KVCache-Quantization/memory/MEMORY.md` (重写合并, 90 行)
+  - `~/.claude/projects/-Users-chenzilang/memory/MEMORY.md` (清理 KV 段, 190→139 行, 替换为指针)
+  - `CLAUDE.md` §1.1: 更新 Memory 路径为项目级 + 加注启动目录提醒
+  - `iteration.md`: 本条记录
+- **Validation**: 项目层 5 文件完整 (MEMORY.md 90行 ≤165), home 层无残留专题文件, CLAUDE.md 包含正确路径
+- **Risks / follow-ups**: 无功能变化, 仅 memory 组织结构优化
+
+### 2026-02-25 23:33 | 建立持久化 Memory 工作流
+
+- **Goal**: 创建结构化 Memory 文件体系，使跨会话知识沉淀系统化
+- **Changed files**:
+  - `~/.claude/projects/-Users-chenzilang/memory/MEMORY.md` (新建, 59 行): 主文件 — 环境、阶段、陷阱、产物、API、导航、索引
+  - `~/.claude/projects/-Users-chenzilang/memory/debugging-patterns.md` (新建): CAL-019/020、INT4 溢出、warnings 作用域等调试经验
+  - `~/.claude/projects/-Users-chenzilang/memory/experiment-state.md` (新建): 校准产物版本、Phase 5v2 矩阵状态
+  - `~/.claude/projects/-Users-chenzilang/memory/agent-coordination.md` (新建): Agent 协作模式与失败模式
+  - `~/.claude/projects/-Users-chenzilang/memory/tracker-operations.md` (新建): tracker 格式规范、批量操作模板
+  - `CLAUDE.md` §1.1: 新增持久化 Memory 维护规则 (触发时机表 + 约束)
+  - `iteration.md`: 本条记录
+- **Validation**: MEMORY.md 59 行 (≤165 上限), 5 文件均非空, CLAUDE.md 包含 §1.1
+- **Risks / follow-ups**: Memory 内容基于 iteration.md + review_tracker.md 提取的实际经验，非模板占位；后续每个 Phase 切换时做全量 review
+
 ### 2026-02-24 16:00 | Supervisor Session — Wave 16/17 完成，466→13 open
 
 - **Goal**: 自主修复 review_tracker.md 全部可修复 issues
@@ -746,5 +775,58 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
   - CFG-022 [MED]: 1.5B throughput int8_ours b1-b16 temp=true vs b24-b32 temp=false (inconsistency within config)
   - CFG-026 [HIGH]: 7B/8B calib_files missing in artifacts/ (need GPU to generate)
   - CFG-029 [HIGH]: LLaMA-3.1-8B model_revision: null (need to pin commit hash)
+
+### 2026-02-28 01:24 | Wave 19 — R22 P0/P1 修复（5 issues）+ worktree 清理
+- **Goal**: 实施全系统状态报告中的可执行项：P0 profiling 修复、P1 eval/engine 防御性改进、worktree 清理
+- **Key findings**:
+  - **PRF-032 [HIGH]**: `"Hello " * N` 经 BPE 合并后 token 数可能 < seq_len；改为 `[_base_id] * seq_len` 直接填充 token ID
+  - **PRF-033 [HIGH]**: `runtime_quant_bits` 仅对 kivi_style 调用 `resolve_quant_bits()`，其他模式传 None；改为所有模式统一调用
+  - **PRF-034 [MED]**: profile_latency.py / profile_memory.py 缺少 `model.eval()`；已添加
+  - **EVL-132 [HIGH]**: PPL NaN/Inf 时 exit(0) 伪装成功；添加 `math.isfinite()` 检查 + `_write_task_failure()` + `exit(EXIT_EXCEPTION)`
+  - **ENG-110 [HIGH]**: batch EOS `all()` 判定导致先完成序列生成垃圾；添加 per-sequence `eos_reached` 张量 + `torch.where` 屏蔽
+  - **Worktree 清理**: 移除 12 个闲置 worktree（4 Codex + 8 Cursor）+ 删除 codex/phase5v2-ruler-ag123-fix 分支
+- **Changed files**: scripts/profile_latency.py, scripts/profile_memory.py, scripts/eval_ppl.py, src/engine/generate_loop.py, review_tracker.md
+- **Validation**: `py_compile` 全部通过（本地无 GPU，pytest 依赖 numpy/libcblas 不可用）
+- **Running total**: 995 issues | 461 fixed + 6 false_positive | 528 open (1 CRIT, 209 HIGH, 278 MED, 40 LOW)
+- **Note**: 本地修改安全，不影响远端正在运行的 Phase 5v2 质量实验（profiling/eval 脚本仅在吞吐评测阶段使用）
+
+### 2026-02-28 01:41 | Wave 20 — CRIT 清零（EVL-086/ENG-059）+ 回归测试补齐
+- **Goal**: 收口 Wave 19 未提交修复，补齐 EVL-086（CRIT）与 ENG-059（HIGH），并新增最小回归测试
+- **Scope**:
+  - 修复 `eval_ppl.py` 默认温度开关漂移（default=True -> False）
+  - 修复 `generate_loop.py` 在 Qwen eos_token_id 为 list 时的 int(list) 崩溃
+  - 将 `EVL-054` 标记为 `EVL-132` 重复项关闭
+  - 新增 guardrails 测试文件 + 扩展 `test_generate_loop.py`
+- **Changed files**:
+  - `scripts/eval_ppl.py`
+  - `src/engine/generate_loop.py`
+  - `tests/test_generate_loop.py`
+  - `tests/test_eval_ppl_guardrails.py` (new)
+  - `review_tracker.md`
+  - `iteration.md`
+- **Commands**:
+  - `python -m py_compile scripts/profile_latency.py scripts/profile_memory.py scripts/eval_ppl.py src/engine/generate_loop.py tests/test_generate_loop.py tests/test_eval_ppl_guardrails.py`
+  - `pytest -q tests/test_generate_loop.py tests/test_eval_ppl_guardrails.py`
+  - `python scripts/review_tool.py stats`
+  - `python scripts/review_tool.py phase-gate`
+- **Outputs**:
+  - `py_compile`: pass
+  - `pytest`: `78 passed in 0.09s`
+  - `review_tool stats`: `995 total | 465 fixed + 6 false_positive | 524 open`
+  - `phase-gate`: no CRITICAL blockers, only HIGH warning list
+- **Validation**:
+  - EVL-086: 默认温度开关修复（CLI 直跑与 run_experiments 口径一致）
+  - ENG-059: eos_token_id 源头归一化（list/tuple -> first id），避免三处重复 int() 崩溃点
+  - TST-030: 增加 eos list 回归测试覆盖
+  - EVL-054: 按 duplicate of EVL-132 收口
+- **Risks / follow-ups**:
+  - 仍有 206 HIGH open，后续按 Phase 计划分波次修复
+  - `CLAUDE.md` 为既有本地改动，未纳入本波提交
+- **Commits**:
+  - `5d953d7` fix: profiling precision and quant_bits consistency (PRF-032/033/034)
+  - `46ca44c` fix: harden eval_ppl defaults and nan/inf guard (EVL-086, EVL-132)
+  - `7b773ed` fix: normalize eos token id and enforce per-sequence eos masking (ENG-059, ENG-110)
+  - `83116ee` test: add regressions for eos-list and eval_ppl guardrails
+  - `pending` docs: sync wave20 tracker and iteration
 
 > 更早的条目见 `development_history/iteration_archive_202602.md`
