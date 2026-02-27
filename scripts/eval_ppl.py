@@ -7,6 +7,7 @@ Uses wikitext-2-raw-v1 to measure PPL.
 import argparse
 import csv
 import json
+import math
 import os
 import sys
 import traceback
@@ -82,6 +83,31 @@ def _write_task_failure(
         payload["traceback"] = traceback.format_exc()
     path = out_dir / f"task_failure_{Path(__file__).stem}.json"
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=True), encoding="utf-8")
+
+
+def _handle_non_finite_ppl(
+    *,
+    args: argparse.Namespace,
+    ppl_val: float,
+    total_nll: float,
+    total_tokens: int,
+) -> None:
+    """Fail fast when PPL is NaN/Inf so run_experiments can detect the failure."""
+    if math.isfinite(ppl_val):
+        return
+    msg = (
+        f"PPL is {ppl_val} (NaN or Inf). "
+        f"total_nll={total_nll}, total_tokens={total_tokens}. "
+        "This usually indicates corrupted logits (all-zero, NaN, or Inf) "
+        "during evaluation. The result will NOT be written to CSV."
+    )
+    print(f"FATAL: {msg}")
+    _write_task_failure(
+        args=args,
+        failure_type="nan_inf_ppl",
+        message=msg,
+    )
+    raise SystemExit(EXIT_EXCEPTION)
 
 
 
@@ -583,7 +609,7 @@ def main():
         "--use_attn_temperature",
         dest="use_attn_temperature",
         action="store_true",
-        default=True,
+        default=False,
         help="Apply per-head temperature if available (int8_ours).",
     )
     parser.add_argument(
@@ -895,7 +921,16 @@ def main():
 
     seq_len = prev_end_loc
     ppl = torch.exp(total_nll / total_tokens)
-    print(f"\nResult PPL: {ppl.item():.2f}")
+
+    ppl_val = ppl.item()
+    _handle_non_finite_ppl(
+        args=args,
+        ppl_val=ppl_val,
+        total_nll=float(total_nll.item()),
+        total_tokens=int(total_tokens),
+    )
+
+    print(f"\nResult PPL: {ppl_val:.2f}")
 
     if args.save_csv:
         timestamp = datetime.now().isoformat()
