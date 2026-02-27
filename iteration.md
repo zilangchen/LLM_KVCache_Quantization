@@ -866,4 +866,43 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
   - `fc6b361` test: add AGG regression tests for statistical correctness
   - `pending` docs: sync wave21 tracker and iteration
 
+### 2026-02-28 02:19 | Wave 22 — Phase 6 输出链路修复（LTX + RPT）
+- **Goal**: 修复论文输出关键高优先问题（LTX-001/002/007/014, RPT-001/002/004），保证 Phase 6 聚合后可直接产出可信 LaTeX 表格与 claim 报告
+- **Scope**:
+  - LTX: `KV_MODE_DISPLAY` 与 `KV_MODE_ORDER` 对齐、pivot 列顺序固定、RULER subtask 按模型拆分、caption 模型名 LaTeX 转义
+  - RPT: `_read_csv` 异常可观测、relative row 选择去最高值偏置（中位代表）、cross-model degradation 字段语义修正
+  - Tests: 新增 LTX/RPT 回归测试覆盖上述行为
+- **Changed files**:
+  - `scripts/export_tables_latex.py`
+  - `scripts/generate_thesis_report.py`
+  - `tests/test_export_tables_latex.py`
+  - `tests/test_generate_thesis_report.py`
+  - `review_tracker.md`
+  - `iteration.md`
+- **Commands**:
+  - `python3 -m py_compile scripts/export_tables_latex.py scripts/generate_thesis_report.py tests/test_export_tables_latex.py tests/test_generate_thesis_report.py`
+  - `pytest -q tests/test_export_tables_latex.py tests/test_generate_thesis_report.py`
+  - `python scripts/review_tool.py stats`
+- **Outputs**:
+  - `py_compile`: pass
+  - `pytest`: fail（环境问题，pandas/numpy ABI 不兼容：`numpy.dtype size changed`）
+  - `review_tool stats`: `995 total | 480 fixed + 6 false_positive | 509 open`
+- **Validation**:
+  - LTX-014/LTX-001：`KV_MODE_DISPLAY` 由 `KV_MODE_ORDER` 派生，pivot 后按 canonical 顺序重排
+  - LTX-002：`_export_ruler_subtask_tables` 引入 `_split_by_model`，多模型不再混合
+  - LTX-007：新增 `_latex_escape`，模型短名在 caption 中安全输出
+  - RPT-001：`_read_csv` 异常写 logger.warning
+  - RPT-002：`_pick_best_relative_row` 改为中位数代表行（避免最大值偏置）
+  - RPT-004：`max_degradation_model` 仅在存在负向 gain 时输出
+  - AGG-052：在 tracker 标注 “partially addressed by AGG-049”
+- **Risks / follow-ups**:
+  - 本地 pytest 受 ABI 环境阻塞，需远端或标准环境补跑
+  - LTX/RPT 其余 MED/LOW 问题保持 deferred
+- **Commits**:
+  - `90a8069` fix: LaTeX table column order and KV mode alignment (LTX-001, LTX-014)
+  - `973393a` fix: LaTeX model split and caption escaping (LTX-002, LTX-007)
+  - `7bfae27` fix: thesis report claim validation correctness (RPT-001, RPT-002, RPT-004)
+  - `f4703bf` test: add LTX and RPT regression tests
+  - `pending` docs: sync wave22 tracker and iteration
+
 > 更早的条目见 `development_history/iteration_archive_202602.md`
