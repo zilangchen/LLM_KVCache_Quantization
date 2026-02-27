@@ -96,6 +96,39 @@ if not _HAS_SCIPY:
 _EXACT_ENUM_THRESHOLD = 16
 
 _KV_MODE_RANK = {mode: idx for idx, mode in enumerate(KV_MODE_ORDER)}
+_KV_MODE_PATTERN = "|".join(re.escape(mode) for mode in sorted(KV_MODE_ORDER, key=len, reverse=True))
+
+# AGG-059: Restrict throughput run-name parsing to known kv modes and allow
+# optional seed suffix (e.g., kivi_style_s1234_throughput_8k_b4).
+_THROUGHPUT_RUN_DIR_PATTERN = re.compile(
+    rf"(?P<kv_mode>{_KV_MODE_PATTERN})(?:_s[0-9]+)?_throughput_(?P<seq_tag>[0-9]+k?)_b(?P<batch>[0-9]+)"
+)
+
+# AGG-034 / AGG-060: Keep significance pairings aligned with supported kv modes.
+SIGNIFICANCE_PAIRINGS: List[tuple[str, str]] = [
+    ("int8_baseline", "int8_ours"),
+    ("fp16", "int8_fused"),
+    ("int8_baseline", "int8_fused"),
+    ("int4_baseline", "int4_ours"),
+    ("int4_fused", "int4_ours"),
+    ("int4_ours", "int4_ours_mixed"),
+    ("fp16", "int4_ours_mixed"),
+    ("kivi_style", "int8_ours"),       # Claims C9/C10: INT8-ours vs KIVI
+    ("kivi_style", "int8_baseline"),   # completeness: INT8-baseline vs KIVI
+]
+
+RELATIVE_GAIN_PAIRINGS: List[tuple[str, str]] = [
+    ("int8_baseline", "int8_ours"),
+    ("fp16", "int8_fused"),
+    ("int8_baseline", "int8_fused"),
+    ("int4_fused", "int4_ours"),
+    ("int4_ours", "int4_ours_mixed"),
+    ("fp16", "int8_ours"),
+    ("fp16", "int4_ours"),
+    ("fp16", "int4_ours_mixed"),
+    ("kivi_style", "int8_ours"),
+    ("kivi_style", "int8_baseline"),
+]
 
 
 def _kv_mode_rank(value: object) -> int:
@@ -730,13 +763,10 @@ def _collect_throughput_attempts(runs_dir: Path, logs_dir: Path | None) -> pd.Da
     Expected naming pattern includes: <kv_mode>_throughput_<seq_tag>_b<batch>
     """
     rows = []
-    pattern = re.compile(
-        r"(?P<kv_mode>[A-Za-z0-9_]+)_throughput_(?P<seq_tag>[0-9]+k?)_b(?P<batch>[0-9]+)"
-    )
     for run_dir in sorted(runs_dir.iterdir()):
         if not run_dir.is_dir():
             continue
-        m = pattern.search(run_dir.name)
+        m = _THROUGHPUT_RUN_DIR_PATTERN.search(run_dir.name)
         if not m:
             continue
         seq_len = _parse_seq_tag_to_len(m.group("seq_tag"))
@@ -2609,13 +2639,7 @@ def main() -> int:
 
     # Significance / paired-difference summaries by seed.
     # AGG-008: KIVI quant_bits (4 or 8) is not distinguished in pairings. Currently only INT8 KIVI runs exist in the experiment matrix.
-    pairings = [
-        ("int8_baseline", "int8_ours"),
-        ("int4_baseline", "int4_ours"),
-        ("int4_fused", "int4_ours"),
-        ("kivi_style", "int8_ours"),       # Claims C9/C10: INT8-ours vs KIVI
-        ("kivi_style", "int8_baseline"),   # completeness: INT8-baseline vs KIVI
-    ]
+    pairings = list(SIGNIFICANCE_PAIRINGS)
     sig_frames = []
     sig_pair_rows = []
     sig_specs = [
@@ -2723,15 +2747,7 @@ def main() -> int:
         _save_table(significance_pairs, tables_dir / "significance_pairs.csv")
 
     # Relative gain summary table for thesis discussion.
-    pairings = [
-        ("int8_baseline", "int8_ours"),
-        ("int4_fused", "int4_ours"),
-        ("int4_ours", "int4_ours_mixed"),
-        ("fp16", "int8_ours"),
-        ("fp16", "int4_ours"),
-        ("kivi_style", "int8_ours"),
-        ("kivi_style", "int8_baseline"),
-    ]
+    pairings = list(RELATIVE_GAIN_PAIRINGS)
     gain_frames = []
     gain_frames.append(
         _relative_gain_table(
