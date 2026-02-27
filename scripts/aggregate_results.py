@@ -1160,6 +1160,7 @@ def _significance_summary(
 
     keep_keys = [c for c in key_cols if c in paired.columns]
     group_cols = ["metric", "baseline_mode", "challenger_mode"] + keep_keys
+    effective_n_bootstrap = max(1000, int(n_bootstrap))
     rows = []
 
     for group_key, sub in paired.groupby(group_cols, dropna=False):
@@ -1239,13 +1240,17 @@ def _significance_summary(
         row["gain_pct_mean"] = float(np.mean(gain)) if gain.size else np.nan
         row["gain_pct_median"] = float(np.median(gain)) if gain.size else np.nan
         row["gain_pct_std"] = float(np.std(gain, ddof=1)) if gain.size > 1 else np.nan
+        row["gain_method"] = "mean_of_ratios"
 
         ci_seed = _stable_random_seed(random_seed, metric_name, *group_key)
         diff_ci_low, diff_ci_high = _bootstrap_ci_mean(
-            diff, n_bootstrap=n_bootstrap, ci_level=ci_level, seed=ci_seed
+            diff, n_bootstrap=effective_n_bootstrap, ci_level=ci_level, seed=ci_seed
         )
         gain_ci_low, gain_ci_high = _bootstrap_ci_mean(
-            gain, n_bootstrap=n_bootstrap, ci_level=ci_level, seed=_stable_random_seed(ci_seed, "gain")
+            gain,
+            n_bootstrap=effective_n_bootstrap,
+            ci_level=ci_level,
+            seed=_stable_random_seed(ci_seed, "gain"),
         )
         row["diff_ci95_low"] = diff_ci_low
         row["diff_ci95_high"] = diff_ci_high
@@ -1260,7 +1265,7 @@ def _significance_summary(
         row["p_value"] = p_value
         row["p_method"] = p_method
         row["permutation_samples"] = int(permutation_samples)
-        row["bootstrap_samples"] = int(n_bootstrap) if n_pairs >= 2 else 0
+        row["bootstrap_samples"] = int(effective_n_bootstrap) if n_pairs >= 2 else 0
         row["alpha"] = float(alpha)
         row["ci_level"] = float(ci_level)
         rows.append(row)
@@ -1389,9 +1394,9 @@ def _bootstrap_ci_mean(
     if n <= 0:
         return np.nan, np.nan
     if n == 1:
-        # AGG-014: single-sample CI returns identical bounds -- caller
-        # (_add_ci95_columns) already handles n<=1 by setting NaN.
-        return float(arr[0]), float(arr[0])
+        # AGG-051: single-sample bootstrap CI is statistically undefined for
+        # significance reporting; return NaN to avoid false zero-width certainty.
+        return np.nan, np.nan
 
     ci = float(ci_level)
     if not (0.0 < ci < 1.0):
@@ -1615,6 +1620,8 @@ def _relative_gain_table(
         row["delta_abs"] = delta_abs
         row["delta_pct"] = delta_pct
         row["gain_pct"] = gain_pct
+        row["gain_pct_ratio_of_means"] = gain_pct
+        row["gain_method"] = "ratio_of_means"
         row["duplicate_groups_collapsed"] = int(dup_groups)
         row["duplicate_extra_rows_collapsed"] = int(dup_rows)
         out_frames.append(row)
