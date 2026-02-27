@@ -1458,6 +1458,77 @@ def _add_bh_fdr_qvalues(
     return out
 
 
+def _add_bh_fdr_qvalues_by_metric(
+    df: pd.DataFrame,
+    *,
+    metric_col: str = "metric",
+    p_col: str = "p_value",
+    q_col: str = "q_value",
+) -> pd.DataFrame:
+    """
+    Apply BH-FDR independently per metric family.
+
+    AGG-049: Avoid mixing heterogeneous metrics (latency/PPL/quality) in one
+    BH family, which inflates family size and over-penalizes q-values.
+    """
+    if df.empty:
+        return df
+    if metric_col not in df.columns:
+        return _add_bh_fdr_qvalues(df, p_col=p_col, q_col=q_col)
+
+    out_frames: List[pd.DataFrame] = []
+    for _, sub in df.groupby(metric_col, dropna=False, sort=False):
+        out_frames.append(_add_bh_fdr_qvalues(sub, p_col=p_col, q_col=q_col))
+    if not out_frames:
+        return df
+    return pd.concat(out_frames, ignore_index=True)
+
+
+def _apply_significance_thresholds(
+    df: pd.DataFrame,
+    *,
+    alpha: float,
+    p_col: str = "p_value",
+    q_col: str = "q_value",
+) -> pd.DataFrame:
+    """
+    Add boolean significance flags with directional guard.
+
+    AGG-050: Two-tailed p/q significance must also require challenger-favored
+    direction to avoid "significant but worse" rows being flagged.
+    """
+    if df.empty:
+        return df
+    out = df.copy()
+    meets_min_pairs = (
+        out["meets_min_pairs"].astype(bool)
+        if "meets_min_pairs" in out.columns
+        else pd.Series(False, index=out.index)
+    )
+    favors_challenger = (
+        out["favors_challenger"].astype(bool)
+        if "favors_challenger" in out.columns
+        else pd.Series(False, index=out.index)
+    )
+    p_values = (
+        pd.to_numeric(out[p_col], errors="coerce")
+        if p_col in out.columns
+        else pd.Series(np.nan, index=out.index, dtype=np.float64)
+    )
+    q_values = (
+        pd.to_numeric(out[q_col], errors="coerce")
+        if q_col in out.columns
+        else pd.Series(np.nan, index=out.index, dtype=np.float64)
+    )
+    out["significant_p_alpha"] = (
+        p_values <= float(alpha)
+    ) & meets_min_pairs & favors_challenger
+    out["significant_q_alpha"] = (
+        q_values <= float(alpha)
+    ) & meets_min_pairs & favors_challenger
+    return out
+
+
 def _relative_gain_table(
     df: pd.DataFrame,
     *,
@@ -2606,16 +2677,16 @@ def main() -> int:
 
     if sig_frames:
         significance_summary = pd.concat(sig_frames, ignore_index=True)
-        significance_summary = _add_bh_fdr_qvalues(
+        significance_summary = _add_bh_fdr_qvalues_by_metric(
             significance_summary, p_col="p_value", q_col="q_value"
         )
         alpha = float(args.significance_alpha)
-        significance_summary["significant_p_alpha"] = (
-            pd.to_numeric(significance_summary["p_value"], errors="coerce") <= alpha
-        ) & significance_summary["meets_min_pairs"].astype(bool)
-        significance_summary["significant_q_alpha"] = (
-            pd.to_numeric(significance_summary["q_value"], errors="coerce") <= alpha
-        ) & significance_summary["meets_min_pairs"].astype(bool)
+        significance_summary = _apply_significance_thresholds(
+            significance_summary,
+            alpha=alpha,
+            p_col="p_value",
+            q_col="q_value",
+        )
         _save_table(significance_summary, tables_dir / "significance_summary.csv")
 
         coverage_cols = [
