@@ -497,7 +497,7 @@ def generate_from_ids(
     outlier_rescue_ratio = 0.0
     mixed_rescue = False
 
-    if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed"]:
+    if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused"]:
         import warnings
 
         if kv_mode == "int8_ours":
@@ -697,7 +697,7 @@ def generate_from_ids(
     fp16_use_model_cache = False
 
     hook_handles = []
-    if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed"] and use_attn_temperature and inv_tau is not None:
+    if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused"] and use_attn_temperature and inv_tau is not None:
         # Apply per-head temperature during prefill by scaling Q per head.
         # Decode already applies temperature inside the fused path.
         hook_handles = _register_prefill_temperature_hooks(model, inv_tau)
