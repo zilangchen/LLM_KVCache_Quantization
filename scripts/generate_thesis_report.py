@@ -205,7 +205,8 @@ def _default_claims(target_seq_len: int) -> List[ClaimSpec]:
 def _read_csv(path: Path) -> pd.DataFrame:
     try:
         return pd.read_csv(path)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to read CSV %s: %s", path, exc)
         return pd.DataFrame()
 
 
@@ -282,7 +283,13 @@ def _pick_best_relative_row(relative_gain: pd.DataFrame, claim: ClaimSpec) -> Op
     if sub.empty:
         return None
     if "gain_pct" in sub.columns:
-        sub = sub.sort_values("gain_pct", ascending=False)
+        # RPT-002: avoid "max gain" selection bias when multiple candidate rows
+        # survive filters. Use the row closest to median gain as representative.
+        gains = pd.to_numeric(sub["gain_pct"], errors="coerce")
+        valid = gains.notna()
+        if valid.any():
+            idx = (gains[valid] - float(gains[valid].median())).abs().sort_values(kind="stable").index[0]
+            return sub.loc[idx]
     return sub.iloc[0]
 
 
@@ -566,7 +573,13 @@ def build_claim_validation(
             ]
             if _finite_gain_pairs:
                 min_gain_model = str(min(_finite_gain_pairs, key=lambda x: x[1])[0])
-                max_degradation_model = str(min(_finite_gain_pairs, key=lambda x: x[1])[0])
+                # RPT-004: degradation is meaningful only for negative gains.
+                _degraded_pairs = [(mid, g) for mid, g in _finite_gain_pairs if float(g) < 0.0]
+                max_degradation_model = (
+                    str(min(_degraded_pairs, key=lambda x: x[1])[0])
+                    if _degraded_pairs
+                    else ""
+                )
             else:
                 min_gain_model = ""
                 max_degradation_model = ""
