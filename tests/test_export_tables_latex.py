@@ -35,8 +35,10 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 
 from export_tables_latex import (  # noqa: E402
     KV_MODE_DISPLAY,
+    _export_ruler_subtask_tables,
     _display_kv_mode,
     _latex_table_env,
+    _latex_escape,
     _pivot_metric,
     _read_csv,
     _sanitize_label,
@@ -49,6 +51,7 @@ from export_tables_latex import (  # noqa: E402
     export_needle,
     export_ppl,
 )
+from config_utils import KV_MODE_ORDER  # noqa: E402
 
 
 # ===========================================================================
@@ -288,6 +291,17 @@ class TestSplitByModel(unittest.TestCase):
         self.assertIn("LLaMA-3.1-8B", labels[0])  # Meta sorts before Qwen
         self.assertIn("Qwen2.5-1.5B-Instruct", labels[1])
 
+    def test_label_escapes_latex_special_chars(self):
+        df = pd.DataFrame(
+            {
+                "model_id": ["Org/Model_Name&v1", "Org/Another"],
+                "kv_mode": ["fp16", "fp16"],
+            }
+        )
+        result = _split_by_model(df)
+        labels = [label for _, label, _ in result]
+        self.assertTrue(any(r"Model\_Name\&v1" in label for label in labels))
+
 
 # ===========================================================================
 # _pivot_metric
@@ -398,6 +412,18 @@ class TestPivotMetric(unittest.TestCase):
         self.assertIn("depth", result.columns)
         self.assertIn("A", result.columns)
         self.assertIn("B", result.columns)
+
+    def test_kv_mode_column_order_follows_kv_mode_order(self):
+        df = pd.DataFrame(
+            {
+                "seq_len": [1024, 1024, 1024],
+                "kv_mode": ["int4_ours", "fp16", "int8_baseline"],
+                "metric_val": [1.0, 2.0, 3.0],
+            }
+        )
+        result = _pivot_metric(df, "metric_val")
+        metric_cols = [c for c in result.columns if c != "seq_len"]
+        self.assertEqual(metric_cols, ["fp16", "int8_baseline", "int4_ours"])
 
 
 # ===========================================================================
@@ -562,6 +588,10 @@ class TestLatexSpecialCharEscaping(unittest.TestCase):
         df = pd.DataFrame({"col": ["$10"]})
         result = _to_latex_tabular(df)
         self.assertIn(r"\$10", result)
+
+    def test_latex_escape_helper(self):
+        escaped = _latex_escape("Model_Name&v1")
+        self.assertEqual(escaped, r"Model\_Name\&v1")
 
 
 # ===========================================================================
@@ -819,6 +849,29 @@ class TestExportLongbench(unittest.TestCase):
             self.assertEqual(paths, [])
 
 
+class TestExportRulerSubtasks(unittest.TestCase):
+    """Regression tests for per-model subtask exports (LTX-002)."""
+
+    def test_export_ruler_subtasks_splits_by_model(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tables_dir = Path(tmpdir) / "tables"
+            out_dir = Path(tmpdir) / "latex"
+            tables_dir.mkdir()
+            csv_content = textwrap.dedent("""\
+                model_id,ruler_task,kv_mode,seq_len,batch,ruler_pass_rate_mean
+                Qwen/Qwen2.5_1.5B,single_niah,fp16,4096,1,0.90
+                Qwen/Qwen2.5_1.5B,single_niah,int8_ours,4096,1,0.91
+                Meta/LLaMA-3.1-8B,single_niah,fp16,4096,1,0.88
+                Meta/LLaMA-3.1-8B,single_niah,int8_ours,4096,1,0.89
+            """)
+            (tables_dir / "ruler_subtask_summary.csv").write_text(csv_content, encoding="utf-8")
+            paths = _export_ruler_subtask_tables(tables_dir, out_dir, label_prefix="tab")
+            self.assertEqual(len(paths), 2)
+            fnames = sorted(p.name for p in paths)
+            self.assertTrue(any("qwen2.5_1.5b" in name for name in fnames))
+            self.assertTrue(any("llama-3.1-8b" in name.lower() for name in fnames))
+
+
 # ===========================================================================
 # Integration: label correctness
 # ===========================================================================
@@ -916,12 +969,14 @@ class TestEdgeCases(unittest.TestCase):
 
     def test_kv_mode_display_complete_coverage(self):
         """Verify KV_MODE_DISPLAY has entries for all modes in KV_MODE_ORDER."""
-        from config_utils import KV_MODE_ORDER
         for mode in KV_MODE_ORDER:
             self.assertIn(
                 mode, KV_MODE_DISPLAY,
                 f"KV_MODE_DISPLAY is missing entry for '{mode}' from KV_MODE_ORDER",
             )
+
+    def test_kv_mode_display_order_matches_kv_mode_order(self):
+        self.assertEqual(list(KV_MODE_DISPLAY.keys()), list(KV_MODE_ORDER))
 
 
 if __name__ == "__main__":
