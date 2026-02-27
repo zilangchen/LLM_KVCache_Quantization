@@ -231,6 +231,7 @@ matrix:
     kv_mode: int4_fused
     quant_bits: 4
     calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
     use_attn_temperature: false
     clip_percentile_k: 99.9
     clip_percentile_v: 99.9
@@ -245,6 +246,7 @@ matrix:
     kv_mode: int4_fused
     quant_bits: 4
     calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
     use_attn_temperature: false
     clip_percentile_k: 99.9
     clip_percentile_v: 99.9
@@ -259,6 +261,7 @@ matrix:
     kv_mode: int4_fused
     quant_bits: 4
     calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
     use_attn_temperature: false
     clip_percentile_k: 99.9
     clip_percentile_v: 99.9
@@ -446,6 +449,7 @@ matrix:
     kv_mode: int4_fused
     quant_bits: 4
     calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
     use_attn_temperature: false
     clip_percentile_k: 99.9
     clip_percentile_v: 99.9
@@ -782,6 +786,7 @@ matrix:
     kv_mode: int4_fused
     quant_bits: 4
     calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
     use_attn_temperature: false
     clip_percentile_k: 99.9
     clip_percentile_v: 99.9
@@ -796,6 +801,7 @@ matrix:
     kv_mode: int4_fused
     quant_bits: 4
     calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
     use_attn_temperature: false
     clip_percentile_k: 99.9
     clip_percentile_v: 99.9
@@ -810,6 +816,7 @@ matrix:
     kv_mode: int4_fused
     quant_bits: 4
     calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
     use_attn_temperature: false
     clip_percentile_k: 99.9
     clip_percentile_v: 99.9
@@ -824,6 +831,7 @@ matrix:
     kv_mode: int4_fused
     quant_bits: 4
     calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
     use_attn_temperature: false
     clip_percentile_k: 99.9
     clip_percentile_v: 99.9
@@ -838,6 +846,7 @@ matrix:
     kv_mode: int4_fused
     quant_bits: 4
     calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
     use_attn_temperature: false
     clip_percentile_k: 99.9
     clip_percentile_v: 99.9

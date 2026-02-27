@@ -229,6 +229,22 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
 
 **不影响当前实验（仅跟踪）**：EVL-130(HF模式), EVL-131(repeat模式), EVL-133~137, ENG-111, PRF-035, CHK-037~039, UTL-014
 
+### Plan: Phase 5v2 推进策略 — int4_fused 污染隔离 + 剩余 seed 接力 + 重跑调度
+- **批准日期**：2026-02-28
+- **前置条件**：int4_fused 白名单修复完成（commit cec4bcf）并 rsync 推送到远端
+- **状态**：🟢 执行中
+- **背景**：4 个 runner 启动于 rsync 之前，int4_fused 质量评测因 `run_experiments.py` 旧代码不传 `--calib_file` 而无效。非 int4_fused 数据有效。
+- **内容**：
+  - [ ] 让当前 4 个 runner 自然完成（无需干预）
+  - [ ] 隔离 28 个污染 int4_fused 目录到 `results/phase5v2/quarantine/`（mv 非 rm）
+  - [ ] retry_s1234 完成 → 启动 1.5B int4_fused 重跑 (s1234+s1235, run_tag=phase5v2_1p5b_fused_fix)
+  - [ ] q_1p5b 完成 s1235 → 接力 s1236 → s1237 → s1238
+  - [ ] q_7b 完成 s1236 → 隔离 s1236 int4_fused → 接力 s1237 → s1238 → 7B fused fix
+  - [ ] q_8b 完成 s1236 → 隔离 s1236 int4_fused → 接力 s1237 → s1238 → 8B fused fix
+  - [ ] 聚合前验证：quarantine 隔离完整性 + PPL 抽查 + run_tag 区分
+- **关键路径**：8B (s1236 剩余~20h + s1237~32h + s1238~32h + fused fix~20h) ≈ ~104h ≈ 4.3天
+- **风险**：GPU OOM（低,交接确认旧进程退出）; quarantine误操作（低,用mv非rm）; run_tag重名（低,用*_fused_fix区分）
+
 ### Plan: EMNLP 2026 Phase 6 — 聚合 + 统计修复 + 论文准备
 - **批准日期**：2026-02-23
 - **前置条件**：Phase 4 + Phase 5 完成
@@ -274,6 +290,27 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
 - Risks / follow-ups:
 
 ## Timeline (Latest First)
+
+### 2026-02-28 07:37 | fix: int4_fused YAML calib_file 错误修复 + 污染隔离 + 调度脚本
+
+- **Goal**: 修复 int4_fused 使用 INT8 校准文件的 YAML 配置 bug；隔离已产生的污染数据；创建接力调度和监控脚本
+- **Changed files**:
+  - `configs/exp_matrix.yaml` — 9 处 int4_fused 条目添加 `calib_file: artifacts/kv_calib_kl_int4_selected.json`
+  - `configs/snapshots/exp_matrix_qwen25_7b_v1.yaml` — 9 处添加 `calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json`
+  - `configs/snapshots/exp_matrix_llama31_8b_v1.yaml` — 9 处添加 `calib_file: artifacts/kv_calib_kl_llama31_8b_int4.json`
+  - `scripts/dispatch_phase5v2.sh` — 新建（接力调度脚本）
+  - `scripts/monitor_phase5v2.sh` — 更新（添加 int4_fused 污染追踪 + --once 模式）
+- **Root cause**: int4_fused 条目无显式 `calib_file`，继承 `quant_defaults.calib_file`（INT8 校准）→ INT8 scales 用于 INT4 → PPL 灾难性退化（1,263,404 vs 预期 7-15）
+- **Commands**: `git diff --stat configs/` → 3 files, 27 insertions
+- **Outputs**: 修复 3×9=27 个 int4_fused 条目；远端已隔离 25 个污染目录到 quarantine/
+- **Validation**:
+  - [x] grep 确认所有 int4_fused 条目均有 calib_file
+  - [ ] rsync 到远端后重跑 fused_fix，验证 PPL 回归正常范围
+- **Commit**: pending
+- **Risks / follow-ups**:
+  - 远端已杀死错误的 fused_fix runner（PID 596723），需重启
+  - 远端 q_7b/q_8b 仍在用旧代码跑 s1236，产出的 int4_fused 数据需后续隔离
+  - 旧污染数据已 mv 到 quarantine/，可审计回滚
 
 ### 2026-02-28 06:50 | Agent 工作流治理优化：记录强制 + Token 节约 + Memory 增强
 
