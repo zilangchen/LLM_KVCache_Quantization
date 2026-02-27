@@ -262,11 +262,8 @@ def main():
 
     normalize_kv_params(args)
     set_seed(seed=args.seed, deterministic=True)
-    runtime_quant_bits = (
-        resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
-        if args.kv_mode == "kivi_style"
-        else getattr(args, "quant_bits", None)
-    )
+    # PRF-033: Resolve quant_bits for ALL kv_modes (not just kivi_style)
+    runtime_quant_bits = resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
 
     print(f"Loading {args.model_id}...")
     model_path = resolve_pretrained_path(args.model_id, revision=args.model_revision)
@@ -274,16 +271,18 @@ def main():
         model_path, revision=args.model_revision, trust_remote_code=True
     )
     model = AutoModelForCausalLM.from_pretrained(
-        model_path, 
-        torch_dtype=torch.float16, 
-        device_map="auto", 
+        model_path,
+        torch_dtype=torch.float16,
+        device_map="auto",
         revision=args.model_revision,
         trust_remote_code=True
     )
+    model.eval()  # PRF-034: Ensure eval mode for reproducibility
 
-    txt = "Hello " * args.seq_len
-    tokens = tokenizer.encode(txt, add_special_tokens=False)[:args.seq_len]
-    prompt_str = tokenizer.decode(tokens)
+    # PRF-032: Generate exact-length prompt by repeating a known token ID.
+    _hello_ids = tokenizer.encode("Hello", add_special_tokens=False)
+    _base_id = _hello_ids[0] if _hello_ids else (tokenizer.eos_token_id or 0)
+    tokens = [_base_id] * args.seq_len
 
     # Warmup
     warmup_ids = tokenizer("Hi", return_tensors="pt")["input_ids"].to(model.device)

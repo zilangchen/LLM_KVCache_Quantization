@@ -218,11 +218,9 @@ def main():
 
     normalize_kv_params(args)
     set_seed(seed=args.seed, deterministic=True)
-    runtime_quant_bits = (
-        resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
-        if args.kv_mode == "kivi_style"
-        else getattr(args, "quant_bits", None)
-    )
+    # PRF-033: Resolve quant_bits for ALL kv_modes (not just kivi_style)
+    # so the value passed to generate_from_ids and recorded in CSV is consistent.
+    runtime_quant_bits = resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
 
     # PRF-004: KIVIStyleKVCache does not use a decode_attn_impl kernel; any
     # value passed via --decode_attn_impl is silently ignored for kivi_style
@@ -243,22 +241,21 @@ def main():
         model_path, revision=args.model_revision, trust_remote_code=True
     )
     model = AutoModelForCausalLM.from_pretrained(
-        model_path, 
-        torch_dtype=torch.float16, 
-        device_map="auto", 
+        model_path,
+        torch_dtype=torch.float16,
+        device_map="auto",
         revision=args.model_revision,
         trust_remote_code=True
     )
+    model.eval()  # PRF-034: Ensure eval mode for reproducibility
 
-    # Fake prompt
-    prompt_tokens = args.seq_len
-    # Create dummy tokens (just Repeat 0)
-    # Using real text is better for correctness but for strict latency dummy is okay too. 
-    # Let's use the helper from profile_baseline or just simple repetition.
-    # We will use "Hello " * N
-    txt = "Hello " * (args.seq_len)
-    tokens = tokenizer.encode(txt, add_special_tokens=False)[:args.seq_len]
-    prompt_str = tokenizer.decode(tokens)
+    # PRF-032: Generate exact-length prompt by repeating a known token ID.
+    # Text-based tokenization ("Hello " * N) can produce fewer tokens than
+    # expected due to BPE subword merging. Instead, pick a common single token
+    # and tile it to exactly seq_len tokens, guaranteeing precise prompt length.
+    _hello_ids = tokenizer.encode("Hello", add_special_tokens=False)
+    _base_id = _hello_ids[0] if _hello_ids else (tokenizer.eos_token_id or 0)
+    tokens = [_base_id] * args.seq_len
 
     print(f"Warmup ({args.warmup} runs)...")
     warmup_ids = tokenizer("Hello", return_tensors="pt")["input_ids"].to(model.device)
