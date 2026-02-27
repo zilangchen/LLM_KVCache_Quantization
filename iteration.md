@@ -291,6 +291,7 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
 - **Commands**: `python3 -m py_compile scripts/eval_ppl.py`
 - **Outputs**: COMPILE OK; 全文搜索确认 3 处白名单均包含 int4_fused
 - **Validation**: ✅ 编译通过，grep 确认无遗漏
+- **Commit**: f009851
 - **Risks / follow-ups**:
   - 修复前已完成的 int4_fused runs 数据无效，需评估重跑范围
   - 需 rsync 推送到远端后重跑受影响的 int4_fused 评测
