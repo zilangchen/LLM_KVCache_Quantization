@@ -53,6 +53,27 @@ def _sanitize_label(text: str) -> str:
     text = re.sub(r'\s+', '_', text.strip())
     return text
 
+
+def _latex_escape(text: str) -> str:
+    """Escape text for safe insertion into LaTeX caption/table content."""
+    out = str(text)
+    replacements = {
+        "\\": r"\textbackslash{}",
+        "&": r"\&",
+        "%": r"\%",
+        "$": r"\$",
+        "#": r"\#",
+        "_": r"\_",
+        "{": r"\{",
+        "}": r"\}",
+        "~": r"\textasciitilde{}",
+        "^": r"\textasciicircum{}",
+    }
+    for src, dst in replacements.items():
+        out = out.replace(src, dst)
+    return out
+
+
 def _pretty_kv_mode_name(mode: str) -> str:
     mode = str(mode)
     if mode == "fp16":
@@ -121,7 +142,7 @@ def _split_by_model(
         suffix = f"_{safe}"
         # Short display name for captions: keep text after last "/"
         short_name = str(model_id).rsplit("/", 1)[-1]
-        label = f" ({short_name})"
+        label = f" ({_latex_escape(short_name)})"
         result.append((suffix, label, sub))
     return result
 
@@ -459,25 +480,31 @@ def _export_ruler_subtask_tables(
     stdf = _sort_kv_mode(stdf)
     stdf = _display_kv_mode(stdf)
 
-    for task_key, task_label in subtask_display.items():
-        task_df = stdf[stdf["ruler_task"] == task_key]
-        if task_df.empty:
-            continue
-        pivot = _pivot_metric(task_df, "ruler_pass_rate_mean", round_digits=2)
-        if pivot.empty:
-            continue
-        tabular = _to_latex_tabular(pivot, index=False)
-        safe_key = _sanitize_label(task_key)
-        label = f"{label_prefix}:ruler:{safe_key}"
-        latex = _latex_table_env(
-            tabular,
-            caption=f"RULER {task_label} pass rate vs context length (\\%)",
-            label=label,
-        )
-        fname = f"ruler_{safe_key}_vs_seq.tex"
-        out_path = out_dir / fname
-        _write(out_path, latex)
-        paths.append(out_path)
+    for model_suffix, model_label, model_df in _split_by_model(stdf):
+        for task_key, task_label in subtask_display.items():
+            task_df = model_df[model_df["ruler_task"] == task_key]
+            if task_df.empty:
+                continue
+            pivot = _pivot_metric(task_df, "ruler_pass_rate_mean", round_digits=2)
+            if pivot.empty:
+                continue
+            tabular = _to_latex_tabular(pivot, index=False)
+            safe_key = _sanitize_label(task_key)
+            safe_suffix = _sanitize_label(model_suffix)
+            label = f"{label_prefix}:ruler:{safe_key}{safe_suffix}"
+            latex = _latex_table_env(
+                tabular,
+                caption=f"RULER {task_label} pass rate vs context length (\\%){model_label}",
+                label=label,
+            )
+            fname = (
+                f"ruler_{safe_key}_vs_seq{model_suffix}.tex"
+                if model_suffix
+                else f"ruler_{safe_key}_vs_seq.tex"
+            )
+            out_path = out_dir / fname
+            _write(out_path, latex)
+            paths.append(out_path)
 
     return paths
 
