@@ -44,6 +44,17 @@ from src.utils.repro import set_seed
 _FUSED_KV_MODES = frozenset({"int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"})
 
 
+def _normalize_eos_token_id(eos_token_id) -> Optional[int]:
+    """Normalize tokenizer eos_token_id to a single int, handling list/tuple forms."""
+    if eos_token_id is None:
+        return None
+    if isinstance(eos_token_id, (list, tuple)):
+        if len(eos_token_id) == 0:
+            return None
+        return int(eos_token_id[0])
+    return int(eos_token_id)
+
+
 def _cache_stats_from_past_key_values(past_key_values) -> tuple[float, int]:
     """
     Best-effort memory/seq-len extraction from HF cache objects or legacy tuples.
@@ -756,12 +767,18 @@ def generate_from_ids(
             )
 
     # ========== DECODE PHASE ==========
-    eos_token_id = tokenizer.eos_token_id
+    eos_token_id = _normalize_eos_token_id(tokenizer.eos_token_id)
+
+    # ENG-110: Per-sequence EOS tracking. Once a sequence emits EOS, all its
+    # subsequent tokens are forced to eos_token_id to avoid garbage generation
+    # while waiting for slower sequences in the batch to finish.
+    eos_reached = torch.zeros(batch_size, dtype=torch.bool, device=model.device)
+    if stop_on_eos and eos_token_id is not None and max_new_tokens > 0 and generated_steps:
+        eos_reached = generated_steps[-1] == eos_token_id
 
     for _ in range(max(max_new_tokens - 1, 0)):
         if stop_on_eos and eos_token_id is not None:
-            # Stop only when all sequences have emitted EOS to keep shapes uniform.
-            if torch.all(generated_steps[-1] == int(eos_token_id)).item():
+            if torch.all(eos_reached).item():
                 break
 
         decode_timer = CUDATimer()
@@ -855,6 +872,17 @@ def generate_from_ids(
 
             next_token_logits = outputs.logits[:, -1, :]
             next_token = torch.argmax(next_token_logits, dim=-1)  # [B]
+
+            # ENG-110: Force completed sequences to emit EOS instead of garbage.
+            # Without this, sequences that finished early continue decoding with
+            # stale context, producing meaningless tokens in the output.
+            if stop_on_eos and eos_token_id is not None:
+                next_token = torch.where(
+                    eos_reached,
+                    torch.full_like(next_token, eos_token_id),
+                    next_token,
+                )
+                eos_reached = eos_reached | (next_token == eos_token_id)
 
         decode_timer.stop()
         decode_times.add(decode_timer.elapsed_ms)
