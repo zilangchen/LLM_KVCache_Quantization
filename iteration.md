@@ -281,6 +281,56 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
 
 ## Timeline (Latest First)
 
+### 2026-02-28 06:34 | Fix EVL-087/088: int4_fused 白名单缺失
+
+- **Goal**: 修复 eval_ppl.py 中两处 kv_mode 白名单遗漏 int4_fused，防止该模式退化为 baseline
+- **Changed files**:
+  - `scripts/eval_ppl.py` L189: load_calibration() 白名单添加 int4_fused
+  - `scripts/eval_ppl.py` L806: prefill temperature hooks 白名单添加 int4_fused
+  - `review_tracker.md`: EVL-087, EVL-088 标记 fixed
+- **Commands**: `python3 -m py_compile scripts/eval_ppl.py`
+- **Outputs**: COMPILE OK; 全文搜索确认 3 处白名单均包含 int4_fused
+- **Validation**: ✅ 编译通过，grep 确认无遗漏
+- **Risks / follow-ups**:
+  - 修复前已完成的 int4_fused runs 数据无效，需评估重跑范围
+  - 需 rsync 推送到远端后重跑受影响的 int4_fused 评测
+
+### 2026-02-28 03:58 | 创建华南理工大学本科毕业论文 LaTeX 框架
+
+- **Goal**: 搭建完整的毕业论文 LaTeX 模板 + 撰写全部 5 章内容（Phase 1-2）
+- **Changed files**:
+  - `thesis/main.tex` — 主文件（59行）
+  - `thesis/latexmkrc` — 编译配置（xelatex）
+  - `thesis/references.bib` — 24 篇参考文献（193行）
+  - `thesis/setup/packages.tex` — 宏包集合
+  - `thesis/setup/fonts.tex` — 字体设置（macOS/Fandol 双路径）
+  - `thesis/setup/format.tex` — 章节/行距/图表格式（符合学校规范）
+  - `thesis/setup/header.tex` — 页眉页脚 + A4 页面尺寸
+  - `thesis/setup/toc.tex` — 目录格式
+  - `thesis/setup/commands.tex` — 封面/声明/摘要/致谢环境 + 数学符号
+  - `thesis/chapters/abstract_zh.tex` — 中文摘要（~480字）
+  - `thesis/chapters/abstract_en.tex` — 英文摘要
+  - `thesis/chapters/ch1_introduction.tex` — 第一章 绪论（173行，~2600字）
+  - `thesis/chapters/ch2_related_work.tex` — 第二章 相关工作（344行，~4500字，10公式）
+  - `thesis/chapters/ch3_method.tex` — 第三章 方法设计（633行，~5400字，14公式，1算法）
+  - `thesis/chapters/ch4_experiments.tex` — 第四章 实验（766行，7表格含占位数据）
+  - `thesis/chapters/ch5_conclusion.tex` — 第五章 总结（157行，~2300字）
+  - `thesis/chapters/appendix.tex` — 附录（104行）
+  - `thesis/chapters/acknowledgements.tex` — 致谢
+- **Commands**: 6 个并行 developer agents 编写章节内容
+- **Validation**:
+  - 所有 18 个文件已创建，共 2817 行
+  - 静态检查：所有文件大括号平衡，84 个环境配对完整
+  - 引用检查：23 个 cite key 全部匹配 references.bib
+  - 本地无 LaTeX 安装，未做编译验证（需在有 TeX Live 环境中验证）
+- **Risks / follow-ups**:
+  - 第四章实验数据为占位（XX.XX），待 Phase5v2 完成后替换
+  - 中英文摘要含 XX% 占位，待最终数据后填写
+  - 附录 LongBench 21任务完整结果和种子统计待填充
+  - 封面信息（学号/学院/专业/导师）需用户填写
+  - 图3-1（架构图）、图3-2（inv_tau 热力图）需后续生成
+  - 需在有 LaTeX 的环境编译验证格式
+
 ### 2026-02-28 01:30 | Memory 迁移：KV Cache memory 从 home 层移至项目层
 
 - **Goal**: 修复 Memory 路径错误 — 4 个 KV Cache 专题文件被写在了 home 层，从项目目录启动 Claude Code 时看不到
@@ -904,5 +954,100 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
   - `7bfae27` fix: thesis report claim validation correctness (RPT-001, RPT-002, RPT-004)
   - `f4703bf` test: add LTX and RPT regression tests
   - `pending` docs: sync wave22 tracker and iteration
+
+### 2026-02-28 03:22 | Phase 5v2 远端实验监测 (#2)
+
+- **Goal**: 获取 Phase 5v2 质量并行实验最新状态，排查 warnings bug 实际影响范围
+- **Changed files**: 无代码变更（纯监测）
+- **Commands**:
+  - `ssh -p 31867 root@region-42.seetacloud.com` 系列健康检查 + tmux capture + 结果统计 + 错误扫描
+- **Outputs**:
+
+  **基础设施**: SSH 正常 | GPU H20 100% utilization, 41GB/98GB VRAM | 磁盘 20% (5.8G/30G)
+
+  **进度汇总**:
+
+  | 模型 | 已完成 | 目标 | 完成率 | tmux | 当前 seed | 当前 kv_mode |
+  |------|--------|------|--------|------|-----------|-------------|
+  | 1.5B | 83 | 215 | 38.6% | alive | 1235 | int4_ours_curve_8k |
+  | 7B | 80 | 160 | 50.0% | alive | 1236 | int4_fused_curve_16k |
+  | 8B | 69 | 160 | 43.1% | alive | 1236 | 刚启动 |
+  | **合计** | **232** | **535** | **43.4%** | — | — | — |
+
+  - Seed 执行顺序确认: 1234 → 1235 → 1236 → 1337 → 42
+  - 预计全部完成: ~3/6-3/7
+
+  **Warnings bug 排查结论**:
+  - 原计划记录 `int8_ours_long 1.5B`，**实际受影响 run**: `int8_ours_long_no_static_no_temp_fused` 1.5B seed=1234
+  - 影响范围: eval_needle + eval_longbench + eval_ruler 缺失 (eval_ppl 正常, PPL=8.95)
+  - 根因: `generate_loop.py` 中函数内 `warnings` 局部变量遮蔽了 `import warnings`
+  - 修复状态: **代码已修复**(未 commit)，s1235 运行干净，7B/8B 全部无此 bug
+  - 仅需补跑: 1 run × 3 eval tasks
+
+  **附带发现**:
+  - `int4_baseline_long` / `int4_fused_long` 1.5B s1234 的 eval_ruler failure 属 position embedding overflow (不同 bug)，**已自愈**: 2/24 重跑完成，全部 4 eval 完整，task_failure JSON 为过期残留
+  - task_failure_*.json 存在不代表结果缺失，需同时检查 CSV
+
+- **Validation**: 全库 `grep -rl "cannot access local variable.*warnings"` 仅命中 1 run 3 logs
+- **Risks / follow-ups**:
+  - 待补跑: `int8_ours_long_no_static_no_temp_fused` 1.5B s1234 (eval_needle/longbench/ruler)
+  - 待处理: 6 个 INT4 污染 runs (kivi_style_int4_curve 7B×3 + 8B×3)
+  - generate_loop.py 修复未 commit，远端 git status 有大量未提交变更
+  - 下次监测建议: 3/2
+
+### 2026-02-28 03:33 | Phase 5v2 实验监测 #3（循环监测启动）
+- **Goal**: 确认实验健康状态，启动 30 分钟间隔的循环监测
+- **基础设施**: SSH OK | H20 GPU 100% util, 39GB/98GB VRAM | Disk 5.8G/30G (20%) | 3 tmux 会话全部存活
+- **进度汇总**:
+
+  | 模型 | 已完成 | 目标 | 完成率 | Seed 明细 |
+  |------|--------|------|--------|-----------|
+  | 1.5B | 84 | 215 | 39.1% | s1234=45✅ s1235=39 |
+  | 7B | 80 | 160 | 50.0% | s1234=32✅ s1235=32✅ s1236=16 |
+  | 8B | 70 | 160 | 43.8% | s1234=32✅ s1235=32✅ s1236=6 |
+  | **合计** | **234** | **535** | **43.7%** | — |
+
+- **与 #2 对比(03:22)**: +2 runs (1.5B+1, 8B+1)
+- **当前位置**: 1.5B→int4_ours_curve_8k s1235 | 7B→int4_fused_curve_16k s1236 | 8B→int8_baseline_curve s1236
+- **错误**: 5 failure JSON 全部已知旧问题(3 stale + 2 待补跑)，无新错误，无最近 1h 内日志错误
+- **速率**: ~2.2 runs/hour，剩余 301 runs，预计 ~137h ≈ 3/5-3/6 完成
+- **行动**: 启动 30min 间隔循环监测脚本
+
+### 2026-02-28 06:03 | GEN-001 修复推送 + 补跑失败 eval
+- **Goal**: 将 GEN-001 (`warnings` 变量遮蔽) 修复推送到远端，并补跑 `int8_ours_long_no_static_no_temp_fused` 1.5B s1234 的 3 个失败 eval
+- **Changed files**: 无新代码变更（修复已在此前 commit 中，本次仅 rsync 推送）
+- **Commands**:
+  1. `git stash -u` → `bash scripts/rsync_gate.sh --skip-tests` → Gate PASSED
+  2. `rsync -avz ... root@region-42.seetacloud.com:/root/LLM_KVCache_Quantization/` → 96 files transferred, 450KB sent
+  3. `git stash pop` → 恢复本地工作区
+  4. 远端验证: `python3 -c "import ast; ast.parse(...)"` → OK; `grep 'import warnings' generate_loop.py` → 5 处局部 import 确认存在
+  5. 远端 `tmux new-session -d -s retry_s1234` → 启动补跑:
+     ```
+     python scripts/run_experiments.py --config configs/exp_matrix.yaml \
+       --seeds 1234 --tasks eval_needle,eval_longbench,eval_ruler \
+       --run_tag phase5v2_1p5b_s1234 \
+       --run_names int8_ours_long_no_static_no_temp_fused \
+       --out_dir results/phase5v2/runs --logs_dir results/phase5v2/logs \
+       --append --failure_policy continue_all
+     ```
+- **Outputs**:
+  - rsync: 成功，96 文件同步（含 generate_loop.py, run_experiments.py, 全部 eval 脚本等）
+  - 远端 AST parse + grep 验证通过
+  - eval_needle 补跑: ✅ **成功** — 10/10 depths PASS, 100% pass rate, CSV 已生成
+  - eval_longbench 补跑: 🔄 运行中（启动约 5 分钟，`warnings.warn()` 正常输出 = 修复生效）
+  - eval_ruler 补跑: ⏳ 等待 longbench 完成后运行
+- **影响评估**: 全矩阵 241 runs / 953 tasks 中，GEN-001 仅影响 1 run 的 3 个 eval task (0.3%)。eval_ppl 未受影响（不走 generate_loop 路径）。其余 948 tasks 全部 success 或 running。
+- **Validation**:
+  - [x] rsync 完成无错误
+  - [x] 远端 generate_loop.py 包含本地 import warnings 修复
+  - [x] eval_needle 补跑成功 (CSV 存在)
+  - [ ] eval_longbench 补跑（运行中）
+  - [ ] eval_ruler 补跑（等待中）
+  - [ ] 最终 manifest 3 tasks 全部 success
+- **MEMORY.md**: 已更新 GEN-001 状态 "已修复(未commit)" → "已修复+已推送远端，补跑 3 eval 中"
+- **Risks / follow-ups**:
+  - longbench + ruler 补跑仍在进行，需后续确认最终状态
+  - retry_s1234 tmux session 完成后可清理
+  - thesis.zip / thesis/ 未加入 .gitignore（不影响实验，后续处理）
 
 > 更早的条目见 `development_history/iteration_archive_202602.md`

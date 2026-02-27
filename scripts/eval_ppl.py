@@ -186,7 +186,7 @@ def load_calibration(
     outlier_rescue_ratio = 0.0
     mixed_rescue = False
 
-    if kv_mode not in ["int8_ours", "int4_ours", "int4_ours_mixed"]:
+    if kv_mode not in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused"]:
         # PRF-009: calib_file is intentionally a no-op for kivi_style mode --
         # KIVI uses its own internal calibration.
         return (
@@ -803,7 +803,7 @@ def main():
             quant_bits=args.quant_bits,
         )
         if (
-            args.kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed"]
+            args.kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused"]
             and args.use_attn_temperature
             and getattr(kv_cache, "inv_tau", None) is not None
         ):
