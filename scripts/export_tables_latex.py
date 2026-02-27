@@ -53,16 +53,21 @@ def _sanitize_label(text: str) -> str:
     text = re.sub(r'\s+', '_', text.strip())
     return text
 
+def _pretty_kv_mode_name(mode: str) -> str:
+    mode = str(mode)
+    if mode == "fp16":
+        return "FP16"
+    if mode == "kivi_style":
+        return "KIVI-style"
+    if mode.startswith("int") and "_" in mode:
+        bit, suffix = mode.split("_", 1)
+        return f"{bit.upper()}-{suffix.replace('_', '-')}"
+    return mode
+
+
+# LTX-014: derive display mapping from the single source of truth KV_MODE_ORDER.
 KV_MODE_DISPLAY: Dict[str, str] = {
-    "fp16": "FP16",
-    "int8_baseline": "INT8-baseline",
-    "int8_ours": "INT8-ours",
-    "int8_fused": "INT8-fused",
-    "int4_baseline": "INT4-baseline",
-    "int4_ours": "INT4-ours",
-    "int4_ours_mixed": "INT4-ours-mixed",
-    "int4_fused": "INT4-fused",
-    "kivi_style": "KIVI-style",
+    mode: _pretty_kv_mode_name(mode) for mode in KV_MODE_ORDER
 }
 
 
@@ -155,6 +160,22 @@ def _pivot_metric(
 
     pivot = sub.pivot(index=index_col, columns=columns_col, values=metric_col).reset_index()
     pivot = pivot.sort_values(index_col)
+
+    # LTX-001: enforce canonical kv_mode column order instead of lexicographic order.
+    metric_cols = [c for c in pivot.columns if c != index_col]
+    raw_rank = {mode: idx for idx, mode in enumerate(KV_MODE_ORDER)}
+    display_rank = {KV_MODE_DISPLAY[mode]: idx for idx, mode in enumerate(KV_MODE_ORDER)}
+
+    def _rank_col(col: object) -> tuple[int, str]:
+        key = str(col)
+        if key in raw_rank:
+            return raw_rank[key], key
+        if key in display_rank:
+            return display_rank[key], key
+        return len(KV_MODE_ORDER) + 1, key
+
+    ordered_metric_cols = sorted(metric_cols, key=_rank_col)
+    pivot = pivot[[index_col] + ordered_metric_cols]
 
     if round_digits is not None:
         metric_cols = [c for c in pivot.columns if c != index_col]
