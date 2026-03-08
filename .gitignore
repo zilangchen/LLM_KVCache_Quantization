@@ -25,6 +25,12 @@ logs/
 # Claude Code local config
 .claude/settings.local.json
 .claude/worktrees/
+.claude/hookify.*.local.md
+.claude/hooks/
+
+# Thesis (large files, not code)
+thesis/
+thesis.zip
 
 # Sensitive server credentials
 docs/autodl_server.md
