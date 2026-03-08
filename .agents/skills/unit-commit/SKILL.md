@@ -19,3 +19,7 @@ description: Use after completing a functional unit. Update iteration.md, run ta
    - Use message format: `feat|fix|refactor|test|docs|chore: ...`
    - If commit touches many concerns, split into multiple commits.
 5) Immediately run `$repo-hygiene`.
+6) **Memory checkpoint** (conditional — skip for routine changes):
+   - Fixed CRITICAL/HIGH bug → append root cause + fix to `debugging-patterns.md` in Memory
+   - Completed experiment phase milestone → update `experiment-state.md` in Memory
+   - Other routine changes → skip this step

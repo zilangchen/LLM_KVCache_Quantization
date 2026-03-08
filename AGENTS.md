@@ -18,8 +18,8 @@
 
 | # | Agent | Model | Config | Role | Permissions |
 |---|-------|-------|--------|------|-------------|
-| 1 | **Supervisor** | opus | `.claude/agents/supervisor.md` | 最高权限调度者。目标驱动持续运行，3 模式状态机（Execute/Wait/Monitor），spawn Developer 和 Review-Coord | bypassPermissions, 读写全部文件 |
-| 2 | **Developer** | opus | `.claude/agents/developer.md` | 编码执行者。7 步循环（理解→方案→实现→自验证→测试→落地→下一个），含 Debug+Iterate Loop | bypassPermissions, 有限写入 tracker 文件 |
+| 1 | **Supervisor** | opus | `.claude/agents/supervisor.md` | 最高权限调度者。目标驱动持续运行，3 模式状态机（Execute/Wait/Monitor），调用 Codex Developer 和 spawn Review-Coord | bypassPermissions, 读写全部文件 |
+| 2 | **Developer (Codex)** | GPT-5.4 | `.claude/agents/developer.md` | 编码执行者。由 Supervisor 通过 MCP 工具 `mcp__codex__codex` 调用，直接在 main 修复代码+跑测试，不提交。可读取 tracker（只读），可访问远程服务器。Supervisor 审核后落地 | 直接在 main 操作，Supervisor 审核提交 |
 | 3 | **Review-Coord** | opus | `.claude/agents/review-coord.md` | 审查协调员。持续守护事件循环，检测新 commit → 增量审查，空闲时全量深度审查 10 模块 | bypassPermissions, 写 review_tracker + iteration |
 | 4 | **D1 review-numerical** | sonnet | `.claude/agents/review-numerical.md` | 数值正确性：量化误差、loss 语义、shape/dtype、NaN/Inf | 只读 + 写 review_tracker.md |
 | 5 | **D2 review-silent** | sonnet | `.claude/agents/review-silent.md` | 静默失败：空 catch、不当 fallback、错误吞噬 | 同上 |
@@ -46,26 +46,27 @@
 │                                                     │
 │  任务分类:                                           │
 │  ┌──────────────┬───────────────────────┐           │
-│  │ 简单 (≤1文件  │ 复杂 (跨文件) 或       │           │
-│  │  ≤20行)      │ 可并行多任务           │           │
-│  │              │                       │           │
-│  │ Supervisor   │ spawn Developer(s)    │           │
-│  │ 直接在 main  │ isolation="worktree"  │           │
-│  │ 上修改       │ 各自独立分支           │           │
+│  │ 简单 (≤1文件  │ 复杂 (跨文件)          │           │
+│  │  ≤20行)      │                       │           │
+│  │              │ 调用 Codex Developer   │           │
+│  │ Supervisor   │ (两阶段流程)           │           │
+│  │ 直接在 main  │                       │           │
+│  │ 上修改       │ 阶段1: read-only 分析  │           │
+│  │              │ 阶段2: main 修复       │           │
 │  └──────┬───────┴───────────┬───────────┘           │
 │         │                   │                       │
 │         ▼                   ▼                       │
-│  commit on main    Developer(s) work on             │
-│                    claude/<branch>                   │
+│  commit on main    Codex 直接在 main 修复             │
+│                    + 跑测试 → 返回结果                │
 │                         │                           │
 │                         ▼                           │
-│                ┌── 合并门禁 ──┐                      │
-│                │ 1. git merge --ff-only              │
+│                ┌── Supervisor 审核 ──┐               │
+│                │ 1. git diff 检查修改                │
 │                │ 2. pytest tests/ -v                 │
-│                │    ├─ PASS → 更新 tracker 文件      │
-│                │    └─ FAIL → reset, 记录失败        │
-│                │ 3. git branch -d <branch>           │
-│                └─────────────┘                      │
+│                │    ├─ PASS → git add + commit       │
+│                │    └─ FAIL → codex-reply 继续迭代   │
+│                │ 3. 更新 iteration + tracker         │
+│                └────────────────────┘               │
 │                                                     │
 │  (可选) spawn Review-Coord 触发审查                   │
 └─────────────────────────────────────────────────────┘
@@ -94,60 +95,67 @@
      ▼ (review 发现问题)
 ┌─────────────────────────────────────────────────────┐
 │  Supervisor 处理审查结果                              │
-│  CRITICAL → 立即 spawn Developer 修复 (worktree)     │
+│  CRITICAL → 调用 Codex Developer 立即修复或自己修     │
 │  HIGH     → 加入当前 Phase 修复计划                   │
 │  MED/LOW  → 记录，Wait 模式下处理                     │
 └─────────────────────────────────────────────────────┘
 ```
 
-### 3.2 Developer 内部循环 (7 步)
+### 3.2 Codex Developer 调用流程
 
 ```
-Step 1: 理解 → 读 issue + 源码 + 现有测试
-Step 2: 方案 → ≤3 文件直接动手; >3 文件先记录方案
-Step 3: 编码 → 正确性第一, PEP8, minimal diffs
-Step 4: 自验证 → 重读 diff, 影响面检查, 配置联动
-Step 5: 测试 → 相关 test_*.py; 核心模块跑全量 pytest
-        失败 → Debug+Iterate Loop (最多 5 轮)
-Step 6: 落地 →
-        ├─ Worktree (claude/* 分支): 精简 commit, 跳过 tracker 文件编辑
-        └─ Main (直接): 完整流程 (iteration.md + review_tracker.md + commit)
-Step 7: 下一个任务
+Supervisor 选择 bug 修复
+  │
+  ├── 阶段 1: 讨论（read-only，安全）
+  │   → mcp__codex__codex(prompt="分析此 bug...", sandbox="read-only")
+  │   → Codex 返回根因分析 + 修复策略建议
+  │   → [可选] codex-reply 继续讨论细节（不限轮次）
+  │   → Supervisor 评估方案，确定最终修复策略
+  │
+  ├── 阶段 1.5: 计划评估（read-only，必须）
+  │   → codex-reply(prompt="我计划按此策略修复，请评估风险: ...")
+  │   → Codex 返回风险评估 + 改进建议
+  │   → Supervisor 综合判断：无风险→阶段2 / 有风险→调整 / 根本问题→回阶段1
+  │
+  ├── 阶段 2: 执行（danger-full-access）
+  │   → mcp__codex__codex(prompt="按以下策略修复: ...", sandbox="danger-full-access")
+  │   → Codex 修复代码 + 跑测试 → 返回结果
+  │   → [如需] codex-reply 持续迭代（不限轮次）
+  │   → Supervisor 审核 git diff + pytest
+  │
+  └── 落地（Supervisor 执行）
+      → 通过 → git add + commit（标注 codex-assisted）
+      → 追加 iteration.md + 更新 review_tracker.md
+
+回退: Codex 失败 → Supervisor 自行修复
 ```
 
 ### 3.3 Supervisor 三模式状态机
 
 | 模式 | 触发 | 行为 |
 |------|------|------|
-| **Execute** | 有即时/短期任务 | 编码/修复/配置/提交，spawn Developer |
+| **Execute** | 有即时/短期任务 | 编码/修复/配置/提交，调用 Codex Developer |
 | **Wait** | 远程实验运行中 + 有本地填充工作 | 做 MED/LOW 修复、文档、测试补充 |
 | **Monitor** | 远程实验运行中 + 无本地工作 | 定期 SSH 检查远程状态 |
 
 ---
 
-## 4. Branch Isolation & Merge Gate
+## 4. Branch & Sandbox Isolation
 
-### 4.1 分支策略
+### 4.1 隔离策略
 
 ```
 main (稳定，始终 pytest 通过，rsync 唯一来源)
-  ├── claude/dev-xxx  ← Developer worktree A (自动创建/清理)
-  ├── claude/dev-yyy  ← Developer worktree B (并行)
-  └── (Review agents: 只读，不需要分支)
+  └── Codex Developer 直接在 main 修复代码（不创建分支）
+      → Supervisor 审核 git diff → 通过后在 main 上 commit
+      → (Review agents: 只读，不需要分支)
 ```
 
-### 4.2 合并门禁
+- **Codex 直接在 main 操作**：Codex 以 `danger-full-access` 模式运行时，直接修改 main 工作目录中的文件
+- **Supervisor 审核后提交**：所有 Codex 修改经 `git diff` 审核 + `pytest` 验证后才提交到 main
+- **main 保护**：main 始终保持"pytest 通过"状态
 
-Developer Task 返回后，Supervisor 执行：
-
-1. `git log main..<branch>` — 检查 Developer commit
-2. `git merge --ff-only <branch>` — 合并（ff 失败则 rebase 后重试）
-3. `pytest tests/ -v` — 验证
-   - PASS → 更新 iteration.md + review_tracker.md
-   - FAIL → `git reset --hard HEAD~1`，记录失败
-4. `git branch -d <branch>` — 清理
-
-### 4.3 rsync 门禁
+### 4.2 rsync 门禁
 
 推送代码到远程 GPU 前必须执行：
 
@@ -155,10 +163,6 @@ Developer Task 返回后，Supervisor 执行：
 bash scripts/rsync_gate.sh          # 检查: main 分支 + clean status + pytest
 bash scripts/rsync_gate.sh --skip-tests  # 紧急推送跳过测试
 ```
-
-### 4.4 豁免
-
-≤1 文件、≤20 行的配置/文档修改：Supervisor 直接在 main 操作，不走 worktree。
 
 ---
 
@@ -176,22 +180,22 @@ bash scripts/rsync_gate.sh --skip-tests  # 紧急推送跳过测试
   │ iteration.md │  │review_tracker │  │ experiment_sop   │
   │              │  │     .md       │  │     .md          │
   │ Supervisor W │  │ Supervisor W  │  │ (只读参考)        │
-  │ Developer W* │  │ Developer W*  │  └──────────────────┘
-  │ Rev-Coord W  │  │ D1-D7 W      │
+  │ Rev-Coord W  │  │ D1-D7 W      │  └──────────────────┘
+  │              │  │ Rev-Coord W  │
   └──────────────┘  │ Rev-Coord W  │
                     └──────────────┘
 
-W = 写入  R = 读取  W* = 仅在 main 上写入 (worktree 中跳过)
+W = 写入  R = 读取
 ```
 
-| 文件 | Supervisor | Developer (main) | Developer (worktree) | Review-Coord | D1-D7 |
-|------|:---:|:---:|:---:|:---:|:---:|
-| `objective.md` | R + Decision Log | R | R | — | — |
-| `iteration.md` | R/W (Plans + Timeline) | R/W (Timeline) | R only | W (审查摘要) | — |
-| `review_tracker.md` | R/W (标记 [x]) | R/W (标记 [x]) | R only | R/W (校验) | W (新发现) |
-| `src/` `scripts/` `tests/` | R/W | R/W | R/W | R | R |
-| `configs/` | R/W | R/W | R/W | R | R |
-| `.claude/agents/*.md` | R | R | R | R | R |
+| 文件 | Supervisor | Codex Developer | Review-Coord | D1-D7 |
+|------|:---:|:---:|:---:|:---:|
+| `objective.md` | R + Decision Log | — | — | — |
+| `iteration.md` | R/W (Plans + Timeline) | R (只读，汇报 Supervisor 编辑) | W (审查摘要) | — |
+| `review_tracker.md` | R/W (标记 [x]) | R (只读，汇报 Supervisor 编辑) | R/W (校验) | W (新发现) |
+| `src/` `scripts/` `tests/` | R/W | R/W (直接在 main) | R | R |
+| `configs/` | R/W | R (直接在 main) | R | R |
+| `.claude/agents/*.md` | R | — | R | R |
 
 ---
 
@@ -228,7 +232,7 @@ W = 写入  R = 读取  W* = 仅在 main 上写入 (worktree 中跳过)
 
 | 级别 | 处理方式 |
 |------|----------|
-| **CRITICAL** | 阻塞 Phase 推进，Supervisor 立即 spawn Developer 修复 |
+| **CRITICAL** | 阻塞 Phase 推进，Supervisor 调用 Codex Developer 或自行修复 |
 | **HIGH** | 当前 Phase 必须修复 |
 | **MEDIUM** | 不阻塞，Wait 模式下修复 |
 | **LOW** | 记录，空闲时修复 |
