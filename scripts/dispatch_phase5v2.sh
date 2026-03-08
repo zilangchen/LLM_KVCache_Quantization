@@ -93,6 +93,9 @@ if [ "$SEED" = "fused_fix" ]; then
         --run_names "$FUSED_NAMES" \
         --out_dir "$OUT_DIR" \
         --logs_dir "$LOGS_DIR" \
+        --append \
+        --skip_completed_success \
+        --subprocess_timeout 14400 \
         --failure_policy continue_all
 else
     # 正常 seed 模式
@@ -111,7 +114,9 @@ else
         --run_names "$RUN_NAMES" \
         --out_dir "$OUT_DIR" \
         --logs_dir "$LOGS_DIR" \
+        --append \
         --skip_completed_success \
+        --subprocess_timeout 14400 \
         --failure_policy continue_all
 fi
 

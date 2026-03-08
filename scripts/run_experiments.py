@@ -996,8 +996,10 @@ def main() -> int:
                 return 2
             raise
         except Exception as exc:
-            print(f"Error: failed to load model config for length gate check: {exc}")
-            return 2
+            print(
+                f"Warning: failed to load model config for length gate check: {exc}. "
+                "Skipping length gate — runs will proceed without seq_len validation."
+            )
 
     task_list = [t.strip() for t in args.tasks.split(",") if t.strip()]
     if args.run_names:

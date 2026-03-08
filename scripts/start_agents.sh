@@ -1,5 +1,6 @@
 #!/bin/bash
-# 三个独立 Claude Code Agent 分屏，通过 iteration.md 间接沟通
+# Supervisor + Review-Coord 双窗格分屏
+# Developer 已改为 Codex MCP 工具调用，不再作为独立 Agent 启动
 # 用法: claudes 或 bash scripts/start_agents.sh
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,29 +19,25 @@ fi
 
 # ============================================================
 # 创建 tmux 布局 + 启动
-# Agent 定义见 .claude/agents/{supervisor,developer,review-coord}.md
+# Agent 定义见 .claude/agents/{supervisor,review-coord}.md
+# Developer (Codex) 由 Supervisor 通过 MCP 工具 mcp__codex__codex 调用
 # ============================================================
 
 tmux new-session -d -s "$SESSION" -c "$PROJECT_DIR"
-tmux split-window -h -t "$SESSION:0.0" -c "$PROJECT_DIR" -p 66
-tmux split-window -v -t "$SESSION:0.1" -c "$PROJECT_DIR" -p 50
+tmux split-window -h -t "$SESSION:0.0" -c "$PROJECT_DIR" -p 50
 sleep 0.5
 
 tmux send-keys -t "$SESSION:0.0" "claude --dangerously-skip-permissions --agent supervisor" Enter
 sleep 1
-tmux send-keys -t "$SESSION:0.1" "claude --dangerously-skip-permissions --agent developer" Enter
-sleep 1
-tmux send-keys -t "$SESSION:0.2" "claude --dangerously-skip-permissions --agent review-coord" Enter
+tmux send-keys -t "$SESSION:0.1" "claude --dangerously-skip-permissions --agent review-coord" Enter
 sleep 5
 
 tmux send-keys -t "$SESSION:0.0" "我是主管 Agent。按启动流程开始：获取真实时间 → 读 iteration.md + objective.md → 评估状态 → 制定迭代计划 → 开始执行。" Enter
-tmux send-keys -t "$SESSION:0.1" "我是开发 Agent。按启动流程开始：获取真实时间 → 读 review_tracker.md + iteration.md → 按优先级矩阵领取任务 → 开始修复。" Enter
-tmux send-keys -t "$SESSION:0.2" "持续审查模式启动。按启动流程开始：获取时间 → 读 review_tracker.md → 进入持续监控循环。" Enter
+tmux send-keys -t "$SESSION:0.1" "持续审查模式启动。按启动流程开始：获取时间 → 读 review_tracker.md → 进入持续监控循环。" Enter
 
 # Pane titles for easy identification
 tmux select-pane -t "$SESSION:0.0" -T "supervisor"
-tmux select-pane -t "$SESSION:0.1" -T "developer"
-tmux select-pane -t "$SESSION:0.2" -T "review-coord"
+tmux select-pane -t "$SESSION:0.1" -T "review-coord"
 tmux set -t "$SESSION" pane-border-format "#{pane_title}"
 tmux set -t "$SESSION" pane-border-status top
 
