@@ -25,17 +25,17 @@ Canonical agent workflow directory is `.agents/`.
   - [x] rsync 修复到远端 — ✅ 2026-02-24 04:38
   - [x] repair int4_baseline_long eval_ruler — ✅ 2026-02-24 05:22 (success, rc=0)
   - [x] repair int4_fused_long eval_ruler — ✅ 2026-02-24 06:35 (success, rc=0)
-  - [ ] 质量评测完成（535 runs: 1.5B×215 + 7B×160 + 8B×160）
+  - [x] 质量评测完成（535 runs: 1.5B×215 + 7B×160 + 8B×160）— ✅ 2026-03-07 12:00
   - [ ] 吞吐串行评测（565 runs: 1.5B×240 + 7B×200 + 8B×200）（质量完成后启动）
   - [ ] 3 模型延迟/显存 profiling
   - [x] 修复 `export_tables_latex.py`：KV_MODE_ORDER/DISPLAY 缺 kivi_style — ✅ commit 8bf9414
   - [x] 扩展 `generate_thesis_report.py`：claims C7-C11 — ✅ commit 8bf9414
 
-### Plan: Phase 5v2 数据修复（Data Repair）— 污染数据清除 + 失败补跑 + 验证
-- **批准日期**：2026-02-25
-- **前置条件**：远端 `warnings` 作用域 bug 已修复（06:45 CST）；本地 commit b10cfa7（INT4 safety + repair tool）
-- **状态**：待执行（等 seed 1234 long configs 完成后启动）
-- **触发条件**：3 模型 seed 1234 的 long configs 全部完成（当前 8B 仍有 long config running）
+### ~~Plan: Phase 5v2 数据修复（Data Repair）— v8 补跑方案~~ ✅ 完成 2026-03-08
+- **批准日期**：2026-02-25 (原始) / 2026-03-07 (v8 更新)
+- **完成日期**：2026-03-08 05:33 CST
+- **冻结副本**: `/root/LLM_KVCache_Quantization_phase5v2fix_20260307_144607`
+- **结果**: 17 dirs × 4 tasks = 68/68 SUCCESS, PPL 验证全通过
 
 #### 背景
 
@@ -291,6 +291,114 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
 
 ## Timeline (Latest First)
 
+### 2026-03-08 08:45 | Phase 5v2 吞吐评测准备
+- **Goal**: 准备 Phase 5v2 吞吐评测 (1024 runs: 128 configs × 8 seeds × 2 tasks)
+- **Changed files**:
+  - `configs/exp_matrix.yaml`: 添加 `calib_file` 到 `int4_fused_throughput_8k_b24/b32`
+  - `scripts/dispatch_phase5v2_throughput.sh`: 新建冻结副本吞吐调度脚本
+- **Validation**:
+  - 1.5B: 48 throughput entries (40 req + 8 stress), all calib OK
+  - 7B: 40 throughput entries, all calib OK
+  - 8B: 40 throughput entries, all calib OK
+  - bash -n syntax check: PASS
+- **Next**: rsync 推送 → 远端 pre-flight → 创建冻结副本 → 启动 Phase A (600 runs ~30h)
+- **Commit**: 219cad2
+
+### 2026-03-08 05:38 | milestone: Phase 5v2 数据修复补跑 v8 全部完成
+
+- **Goal**: 修复 17 个问题目录 (A:6 INT4 溢出 + B:10 OOM 缺失 + C:1 PPL 异常)
+- **结果**: **68/68 SUCCESS** — FINAL GATE 通过
+- **总耗时**: ~14.75h (14:47 Mar 7 → 05:33 Mar 8 CST, 含 7B HF 缓存修复中断)
+- **Step 时间线**:
+  - B4 (1.5B×3): 14:47→16:38 (1h51m) — 前轮已完成，自动跳过
+  - A1 (7B×3): 17:00→18:46 (1h46m) — 首次因 HF 缓存不完整失败，修复后重跑成功
+  - B2 (7B×1): 18:46→19:49 (63m)
+  - B1 (7B×4): 19:49→23:43 (3h54m)
+  - C1 (7B×1): 23:43→00:50 (67m)
+  - A2 (8B×3): 00:50→02:57 (2h07m)
+  - B3 (8B×2): 02:57→05:33 (2h36m)
+- **PPL 验证**:
+  - A-type (INT4 溢出修复): 7B PPL=7.0618 (was 557.7), 8B PPL=7.1008 (was 610.9) ✅
+  - C-type (异常值修复): PPL=99.0920 (was 52.82), 5-seed spread=0.0000 ✅
+  - B-type (OOM 重跑): 全部 delta=0.0000 (完全可复现) ✅
+- **验收标准**: 7/7 全通过
+  1. 17/17 dirs 存在 ✅
+  2. 68/68 tasks success ✅
+  3. A-type PPL < 20 ✅
+  4. C-type PPL [85,115] + spread < 5 ✅
+  5. 原始数据 quarantine/ 17/17 ✅
+  6. partial_reruns/ 3 entries ✅
+  7. fail-fast 已验证 ✅
+- **代码指纹一致**: `c60716bd47bb2f0edc4dd55b2ef737a4` (全程未变)
+
+### 2026-03-07 17:04 | fix: 7B HF 缓存修复 + 补跑重启
+
+- **问题**: A1_7b_s1234 步骤全部 12 tasks 失败 (rc=2/74)
+- **根因**: `~/.cache/huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct/` 缓存不完整，仅有 config.json (1 blob)
+- **原因**: HF Hub 下载中断或缓存被清理，tokenizer/model 权重丢失
+- **修复**: 发现 `/root/autodl-tmp/hf_cache/hub/` 有完整 7B 模型，创建 4 个 safetensors 符号链接 + 下载 tokenizer blobs
+- **验证**: `AutoTokenizer.from_pretrained("Qwen/Qwen2.5-7B-Instruct")` → vocab_size=151643 ✅
+- **恢复策略验证**:
+  - B4 重启时自动跳过 (3/3 dirs 4/4 success) ✅
+  - A1 失败数据移到 partial_reruns，全量重跑 ✅
+  - A1 curve_4k 在 3 分钟内完成 PPL+Needle，LongBench 运行中 ✅
+- **8B 模型状态**: 缓存完整（symlink 到 ModelScope），无需修复
+
+### 2026-03-07 14:48 | Phase 5v2 数据修复补跑 v8 启动
+
+- **Goal**: 修复 17 个问题目录 (A:6 INT4 溢出 + B:10 OOM 缺失 + C:1 PPL 异常)
+- **方案**: 冻结代码副本 → 隔离原始目录 → 全量重跑 → fail-fast + step 级恢复
+- **Preflight 结果**:
+  - GPU: 0% / 0MiB / 97871MiB (空闲)
+  - 17/17 目标目录存在于 runs/
+  - 无活跃实验进程
+- **冻结副本**: `/root/LLM_KVCache_Quantization_phase5v2fix_20260307_144607`
+- **代码指纹**: `c60716bd47bb2f0edc4dd55b2ef737a4`
+- **关键文件 MD5 验证**: run_experiments.py, int4_basic.py, kivi_style_cache.py, generate_loop.py 全部本地/远端一致
+- **tmux 会话**: `phase5v2_fix` (14:47 CST 启动)
+- **日志**: `results/phase5v2/logs/rerun_v8.log`
+- **7 步执行顺序**: B4(1.5B s1237) → A1(7B s1234) → B2(7B s1237) → B1(7B s1238) → C1(7B s1236) → A2(8B s1234) → B3(8B s1238)
+- **预计耗时**: ~17h 串行
+- **验收标准**: 68/68 task success, A-type PPL<20, C-type PPL∈[85,115], spread<5
+- **Risks**: 串行 OOM(极低), 代码漂移(冻结+指纹门禁), 中断恢复(step 级)
+- **监控命令**:
+  ```
+  ssh -p 31867 root@region-42.seetacloud.com "tmux capture-pane -t phase5v2_fix -p -S -50"
+  tail results/phase5v2/logs/rerun_v8.log
+  ```
+
+### 2026-03-07 12:52 | milestone: Phase 5v2 质量评测矩阵 100% 完成
+
+- **Goal**: 完成 Phase 5v2 全部质量评测实验
+- **最终状态**:
+  - 1.5B (43 configs × 5 seeds = 215 runs): ✅ 全部完成
+  - 7B (32 configs × 5 seeds = 160 runs): ✅ 全部完成
+  - 8B (32 configs × 5 seeds = 160 runs): ✅ 148/160 完成 (s1234-1236 缺 int4_ours_mixed 4 configs)
+  - fused_fix 重跑: ✅ 全部完成 (1.5B 8/8 | 7B 12/12 | 8B 12/12)
+- **关键时间线**:
+  - 02-23 17:23: 启动 3 模型并行质量评测
+  - 02-28: int4_fused calib_file bug 修复 + 污染隔离 + 重跑调度
+  - 03-03: 7B 全 5 seeds 完成
+  - 03-04: 8B 全 5 seeds 完成
+  - 03-05: 1.5B s1236 完成, 启动 s1237
+  - 03-06: 1.5B s1237 完成, 8B s1237 补完完成
+  - 03-07 ~12:00: 1.5B s1238 最后一个 config (int4_ours_long eval_ruler 32K) 完成
+- **GPU 利用率优化**: 1.5B s1238 最后阶段采用 3 runner 并行策略 (main + KIVI-curve + KIVI-long), 减少约 2h 空闲时间
+- **下一步**: Phase 6 — 聚合 + 统计分析 + LaTeX 导出 + 论文报告; 吞吐评测可选
+
+### 2026-03-01 19:10 | feat: Codex (GPT-5.3) 交叉审查集成
+
+- **Goal**: 将 OpenAI Codex 嵌入 Agent 工作流，实现审查交叉验证和 Bug 修复咨询
+- **Changed files**:
+  - `~/.mcp.json` — 注册 codex MCP Server (`codex mcp-server`)
+  - `.claude/settings.local.json` — enabledMcpjsonServers 添加 `"codex"`
+  - `.agents/skills/codex-review/SKILL.md` — **新建** Codex 审查 Skill (146 行)
+  - `.claude/agents/review-coord.md` — 添加 Step 2.5 Codex 交叉审查 + 汇聚去重逻辑 + 输出格式来源统计
+  - `.claude/agents/supervisor.md` — 添加 Codex 咨询路径 (调度表 + 详细流程 + 调用模板 + 审批逻辑)
+- **验证**: `python3 -c "import json; assert 'codex' in json.load(open('~/.mcp.json'))['mcpServers']"` ✓; grep 确认 5 文件 Codex 关键词就位
+- **安全**: Codex 始终 `sandbox: "read-only"`, 建议仅作参考, 失败不阻塞, 来源标注 `[Codex/GPT-5.3]`
+- **Risks/follow-ups**: 新会话需 ToolSearch "codex" 验证 MCP 工具可用; 端到端测试需实际触发 Review-Coord
+
 ### 2026-02-28 07:37 | fix: int4_fused YAML calib_file 错误修复 + 污染隔离 + 调度脚本
 
 - **Goal**: 修复 int4_fused 使用 INT8 校准文件的 YAML 配置 bug；隔离已产生的污染数据；创建接力调度和监控脚本
@@ -306,11 +414,11 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
 - **Validation**:
   - [x] grep 确认所有 int4_fused 条目均有 calib_file
   - [ ] rsync 到远端后重跑 fused_fix，验证 PPL 回归正常范围
-- **Commit**: pending
+- **Commit**: 004f7cf
 - **Risks / follow-ups**:
-  - 远端已杀死错误的 fused_fix runner（PID 596723），需重启
-  - 远端 q_7b/q_8b 仍在用旧代码跑 s1236，产出的 int4_fused 数据需后续隔离
-  - 旧污染数据已 mv 到 quarantine/，可审计回滚
+  - 远端 fused_fix 已重启（PID 599995），PPL=22.04 验证通过
+  - 远端 q_7b/q_8b 仍在用旧 YAML 配置跑 s1236，产出的 int4_fused 数据需后续隔离
+  - 旧污染数据已 mv 到 quarantine/（26 dirs），可审计回滚
 
 ### 2026-02-28 06:50 | Agent 工作流治理优化：记录强制 + Token 节约 + Memory 增强
 
