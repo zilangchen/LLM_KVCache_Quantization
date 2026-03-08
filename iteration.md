@@ -302,7 +302,7 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
   - 8B: 40 throughput entries, all calib OK
   - bash -n syntax check: PASS
 - **Next**: rsync 推送 → 远端 pre-flight → 创建冻结副本 → 启动 Phase A (600 runs ~30h)
-- **Commit**: 219cad2
+- **Commit**: f614003
 
 ### 2026-03-08 05:38 | milestone: Phase 5v2 数据修复补跑 v8 全部完成
 
