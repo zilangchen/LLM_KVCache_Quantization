@@ -291,6 +291,13 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
 
 ## Timeline (Latest First)
 
+### 2026-03-09 21:22 | Phase 6 启动 — Core Profiling 准备
+- **Goal**: 创建 Phase 6 core profiling 调度脚本，同步代码到远端，创建冻结副本
+- **Changed files**:
+  - `scripts/dispatch_phase6_core.sh`: 新建，24 non-KIVI configs/model × 8 seeds = 192 dirs/model
+- **Context**: Phase 5v2 全部完成 (1560 dirs)，缺 4K/16K/32K profile_latency/profile_memory 数据
+- **Next**: rsync → freeze (含 artifacts/) → 试聚合 → 启动 core profiling (~26h)
+
 ### 2026-03-08 08:45 | Phase 5v2 吞吐评测准备
 - **Goal**: 准备 Phase 5v2 吞吐评测 (1024 runs: 128 configs × 8 seeds × 2 tasks)
 - **Changed files**:
