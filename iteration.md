@@ -766,3 +766,18 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
 - **Contamination scope**: int4_fused quality evals (PPL+Needle+RULER+LongBench) across all 3 models × 4 configs × 5 seeds = 240 runs 需重跑；吞吐评测不受影响
 - **Validation**: py_compile 通过; grep 确认所有白名单位置均含 int4_fused
 - **Commit**: c37cd83
+
+### 2026-03-09 12:58 | Phase 5v2 吞吐评测：三级备份 + merge push
+- **Goal**: GPU 驱动崩溃后，重启前完成数据备份和代码推送
+- **背景**: Step 6 (8B-B) 执行中 CUDA runtime 崩溃（nvidia-smi NVML Error），Step 6/7 未完成
+- **管线完成度**: Steps 1-5 ✅, Step 6 ❌ (55 runs 剩余), Step 7 ❌ (64 runs 未执行)
+- **数据量**: 1442 dirs (906 throughput + 536 quality), 182M runs/
+- **备份完成**:
+  - Level 1: 远端数据盘 `/root/autodl-tmp/phase5v2_backup_20260309_125340/` — 1442 dirs ✅
+  - Level 2: 本地 `results/phase5v2_remote_backup/` — 1442 dirs ✅
+  - Level 3: git merge origin/main (12 conflicts → ours) + push ✅ (commit 95af277)
+- **冻结副本验证**:
+  - Path: `/root/LLM_KVCache_Quantization_throughput_20260308_140946`
+  - Commit: `e5c78e48f8b48b1c6957c74ab28d86ca8b0d4a7c`
+  - Fingerprint: `a1945015e88e33ff3d60cda85e7bc5df` ✅ MATCH
+- **下一步**: 用户手动重启 AutoDL (关机→开机) → 验证 GPU → 恢复 Step 6/7 (~3h)
