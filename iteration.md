@@ -26,8 +26,8 @@ Canonical agent workflow directory is `.agents/`.
   - [x] repair int4_baseline_long eval_ruler — ✅ 2026-02-24 05:22 (success, rc=0)
   - [x] repair int4_fused_long eval_ruler — ✅ 2026-02-24 06:35 (success, rc=0)
   - [x] 质量评测完成（535 runs: 1.5B×215 + 7B×160 + 8B×160）— ✅ 2026-03-07 12:00
-  - [ ] 吞吐串行评测（565 runs: 1.5B×240 + 7B×200 + 8B×200）（质量完成后启动）
-  - [ ] 3 模型延迟/显存 profiling
+  - [x] 吞吐串行评测 — ✅ 2026-03-09 (1024 dirs: 1.5B×320 + 7B×320 + 8B×320 + Stress×64)
+  - [x] 3 模型延迟/显存 profiling — ✅ 包含在吞吐评测中 (profile_latency + profile_memory)
   - [x] 修复 `export_tables_latex.py`：KV_MODE_ORDER/DISPLAY 缺 kivi_style — ✅ commit 8bf9414
   - [x] 扩展 `generate_thesis_report.py`：claims C7-C11 — ✅ commit 8bf9414
 
@@ -781,3 +781,23 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
   - Commit: `e5c78e48f8b48b1c6957c74ab28d86ca8b0d4a7c`
   - Fingerprint: `a1945015e88e33ff3d60cda85e7bc5df` ✅ MATCH
 - **下一步**: 用户手动重启 AutoDL (关机→开机) → 验证 GPU → 恢复 Step 6/7 (~3h)
+
+### 2026-03-09 16:32 | Phase 5v2 吞吐评测：GPU 重启 + 管线恢复完成
+- **Goal**: 重启 GPU 后恢复 Step 6 (8B Phase B) 和 Step 7 (1.5B Stress)
+- **重启**: AutoDL 关机→开机，GPU H20 完全恢复（97GB free）
+- **Step 6 恢复 (8B Phase B)**:
+  - 隔离 2 个 GPU crash dirs → `quarantine_gpu_crash/`
+  - `continue_on_oom` 执行 120 dirs: 108 双 CSV + 12 OOM (b16 预期)
+  - 方法进度: fp16→int8_baseline→int8_ours→int4_baseline→int4_fused→int4_ours→kivi_int8→kivi_int4
+  - 耗时: ~1h55min
+- **Step 7 (1.5B Stress)**:
+  - 64 dirs: 55 双 CSV + 9 OOM
+  - 方法: int8_baseline, int8_ours, int4_fused, int4_ours × b24/b32 × 8 seeds
+  - 耗时: ~1h30min
+- **最终统计**:
+  - 吞吐 dirs: 1024 (1.5B:320 + 7B:320 + 8B:320 + Stress:64)
+  - 质量 dirs: 536
+  - 总计: 1560 dirs + 2 quarantine = 1562
+  - runs/ size: 186M
+- **管线完成度**: Steps 1-7 全部 ✅
+- **下一步**: Phase 6 聚合 + 论文（可进入）
