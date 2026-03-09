@@ -78,6 +78,40 @@ mcp__codex__codex(
 4. 修复后需要重点验证的测试场景
 ```
 
+### Plan Debate 模板（Phase 2.2，read-only）
+
+用于 Supervisor 在规划阶段与 Codex 协商方案。Codex 作为战略顾问提供反馈。
+
+```
+你是一个 Python 项目的架构顾问。Supervisor 正在规划下一步工作，请审阅方案并提供战略级反馈。
+
+## 项目目标摘要
+<从 objective.md 提取的相关 Success Criteria>
+
+## 当前进度
+<iteration.md Approved Plans 摘要 + 最近完成的里程碑>
+
+## 待解决的关键问题
+<review_tracker.md CRITICAL/HIGH open issues 摘要（如有）>
+
+## Supervisor 的初步方案
+### 目标
+<本轮要达成什么>
+
+### 方案
+<具体做法：改哪些文件、关键逻辑、验证方式>
+
+### 任务分类
+<短期 / 长期>
+
+请提供：
+1. **盲点分析**：方案是否遗漏了重要的边界情况或依赖关系
+2. **替代方案**：是否有更简洁、更安全、或更高效的实现路径
+3. **实现难度**：预估实现复杂度和主要技术风险
+4. **验证建议**：推荐的测试策略和验收标准
+5. **与项目目标的对齐度**：方案是否最优地服务于 Success Criteria
+```
+
 ### Bug 修复模板（阶段 2，danger-full-access）
 
 用于实际执行修复。基于阶段 1 + 1.5 讨论确定的策略。

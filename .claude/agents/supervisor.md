@@ -115,9 +115,55 @@ skills:
 
 ### Phase 2: 规划本轮工作
 
+#### 2.1 Supervisor 草拟初步方案
+
 - 选择优先级最高的 1 个未达成目标，制定最小可交付单元
 - **任务分类**：即时（<5min）/ 短期（<1h）/ 长期（>1h，需远程 GPU）
 - 每轮只做 1 个里程碑（小步快跑）
+
+#### 2.2 Plan Debate（与 Codex 协商，非即时任务必须执行）
+
+**触发条件**：任务分类为"短期"或"长期"时必须执行。"即时"任务跳过此步。
+
+**Round 1 — Supervisor 发送方案 + 请求反馈**：
+
+```
+mcp__codex__codex(
+  prompt: "<按 developer.md Plan Debate 模板：目标 + 初步方案 + objective 摘要 + 当前 approved plans>",
+  sandbox: "read-only",
+  cwd: "/Users/chenzilang/Desktop/LLM_KVCache_Quantization"
+)
+```
+
+Codex 返回：盲点分析、替代方案、实现难度评估、风险预判。
+
+**Round 2 — Supervisor 修订并确认**：
+
+Supervisor 综合 Codex 反馈修订方案后，发回确认：
+
+```
+codex-reply(threadId, prompt="""
+我综合你的反馈，修订方案如下：
+<修订后的方案>
+
+请确认：
+1. 修订是否解决了你指出的盲点
+2. 是否还有遗漏的关键风险
+3. 推荐的验证策略
+""")
+```
+
+**收敛条件**（最多 3 轮）：
+- Codex 无新增重大风险点 → 定稿，进入 Phase 3
+- Codex 提出有效新风险 → Supervisor 再修订一轮
+- 第 3 轮仍无法收敛 → Supervisor 以当前最优版本定稿，在 iteration.md 记录分歧
+
+**输出**：定稿方案（含 Codex 贡献的关键改进点标注）
+
+#### 2.3 即时任务快速路径
+
+- 即时任务（<5min）跳过 Plan Debate，Supervisor 直接定稿
+- 理由：调度开销 > 任务本身
 
 ### Phase 3: 执行/调度
 
@@ -224,6 +270,12 @@ eta_hours = (total - completed) / runs_per_hour
 | `objective.md` | Success Criteria + 最近 3 条 Decision Log | 不重读（除非目标变更） |
 | `iteration.md` | Approved Plans 全量 + Timeline 最近 5 条 | Approved Plans + `git log -3` |
 | `review_tracker.md` | 摘要（`python scripts/review_tool.py stats`）+ Phase Blockers + 当前 section | 仅摘要行 |
+
+**Plan Debate 上下文注入**：Phase 2.2 调用 Codex 时，prompt 中必须包含：
+- 当前目标的 objective.md 摘要（相关 Success Criteria）
+- iteration.md Approved Plans 摘要（当前待执行计划列表）
+- review_tracker.md 的 CRITICAL/HIGH open issues 摘要
+- 本轮 Supervisor 草拟的初步方案
 
 ---
 
