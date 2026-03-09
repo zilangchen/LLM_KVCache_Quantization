@@ -118,7 +118,6 @@ def _default_claims(target_seq_len: int) -> List[ClaimSpec]:
             min_gain_pct=-1.0,
             require_q_significance=False,
             target_seq_len=target_seq_len,
-            target_batch=1,
             note="Week5 external-validity benchmark.",
         ),
         ClaimSpec(
@@ -130,7 +129,6 @@ def _default_claims(target_seq_len: int) -> List[ClaimSpec]:
             min_gain_pct=-1.0,
             require_q_significance=False,
             target_seq_len=target_seq_len,
-            target_batch=1,
             note="Week5 external-validity benchmark.",
         ),
         # --- INT4 claims (RQ1: cross-bit-width generalization) ---
@@ -168,7 +166,6 @@ def _default_claims(target_seq_len: int) -> List[ClaimSpec]:
             min_gain_pct=-1.0,
             require_q_significance=False,
             target_seq_len=target_seq_len,
-            target_batch=1,
             note="KIVI-style SOTA baseline comparison.",
         ),
         ClaimSpec(
@@ -192,7 +189,6 @@ def _default_claims(target_seq_len: int) -> List[ClaimSpec]:
             min_gain_pct=-1.0,
             require_q_significance=False,
             target_seq_len=target_seq_len,
-            target_batch=1,
             target_model_ids=[
                 "Qwen/Qwen2.5-7B-Instruct",
                 "meta-llama/Llama-3.1-8B-Instruct",

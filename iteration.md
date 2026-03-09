@@ -291,20 +291,46 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
 
 ## Timeline (Latest First)
 
-### 2026-03-09 23:21 | Phase 6 Core Profiling 执行中
-- **Goal**: 补跑 4K/8K/16K/32K profile_latency + profile_memory
+### 2026-03-10 04:27 | milestone: Phase 6 全部完成 — Core Profiling + 聚合出表 + Claim 验证
+- **Goal**: 补跑 4K/8K/16K/32K profile_latency/profile_memory → 合并 → 聚合 → LaTeX → Claim 验证
 - **Changed files**:
   - `scripts/dispatch_phase6_core.sh`: 24 non-KIVI configs/model × 8 seeds = 192 dirs/model
   - `scripts/audit_phase6_core.py`: 任务级审计脚本
-  - `scripts/phase6_post_profiling.sh`: Steps 3-7 聚合管线
+  - `scripts/phase6_post_profiling.sh`: Steps 3-7 聚合管线 (修复 mkdir + --out_dir)
+  - `scripts/generate_thesis_report.py`: 修复 C5/C6/C9/C11 的 target_batch NaN 过滤 bug
 - **Step 0**: ✅ rsync + freeze (含 artifacts/ FIX-1) → fingerprint=`0942b55d`, 6/6 calib OK
 - **Step 1**: ✅ 试聚合确认 latency/memory 仅含 8K → 4K/16K/32K 缺口确认
-- **Step 2**: 🔄 Core profiling 运行中 (tmux: phase6_core)
-  - 1.5B: 192/192 ✅ GATE: PASS (0 OOM, 95min)
-  - 7B: 37/192 🔄 (~32s/dir, 预计 02:00-04:00 完成)
-  - 8B: 0/192 ⏳
+- **Step 2**: ✅ Core profiling 全部完成 (576/576, ALL PASS, 0 OOM)
+  - 1.5B: 192/192 GATE: PASS (0 OOM, 95min)
+  - 7B: 192/192 GATE: PASS (0 OOM, 144min)
+  - 8B: 192/192 GATE: PASS (0 OOM, 175min, 21:25→04:17 CST)
+  - Fingerprint OK: 冻结副本全程未修改
+- **Step 3**: ✅ Merge → emnlp_final_raw (2136 dirs = 1560 phase5v2 + 576 phase6, 295 long dirs)
+- **Step 4**: ✅ Strictable copy (2137 dirs) — 首次 rsync 失败（mkdir 缺失），已修复
+- **Step 5a**: ✅ Aggregate exit 0 — latency_summary 182 rows, memory_summary 182 rows
+  - **关键**: seq_lens = {4096, 8192, 16384, 32704} ← Phase 6 核心产出
+  - thesis_main_claims_32k: 31 rows, significance_summary: 358 rows
+- **Step 5b**: ✅ LaTeX export — 39 .tex 文件
+- **Step 5c**: ✅ Claim validation (修复后重跑)
+- **Step 6**: Strict QA exit 2 (46 mixed failure issues, 均为已知 eval_ruler OOM, 非阻塞)
+- **Step 7 Claim Results**: 8 PASS / 1 FAIL / 2 INCONCLUSIVE / 0 ERROR
+  - C1: ✅ PASS — TPOT gain 17.27% (threshold ≥5%), q=0.016, strong evidence
+  - C2: ✅ PASS — KV mem gain 43.75% (threshold ≥20%), moderate evidence
+  - C3: ✅ PASS — Needle 0% degradation (threshold ≥-1%)
+  - C4: ✅ PASS — PPL -0.085% degradation (threshold ≥-0.5%)
+  - C5: ✅ PASS — LongBench +0.16% (threshold ≥-1%)
+  - C6: ❌ FAIL — RULER -2.82% (threshold ≥-1%), LLaMA-8B 单模型, RULER CWE 已知问题
+  - C7: ⚠️ INCONCLUSIVE — aggregate 未生成 int4_baseline vs int4_ours 比较对
+  - C8: ⚠️ INCONCLUSIVE — 同上 (PPL)
+  - C9: ✅ PASS — vs KIVI LongBench +19.28%
+  - C10: ✅ PASS — vs KIVI Needle 0%
+  - C11: ✅ PASS — 7B/8B 跨模型稳健 (both PASS)
+- **Step 8**: ✅ 备份完成
+  - 远端数据盘: `/root/autodl-tmp/phase6_backup_20260310_042708/` (2.7G)
+  - `results/final_journal_v2/` 已创建 (rsync from emnlp_final_raw, 对齐 objective.md 路径)
+  - 本地 tables/plots/latex_tables/report 已 rsync
 - **Freeze**: `/root/LLM_KVCache_Quantization_phase6_freeze_20260309_212302`
-- **Next**: 7B/8B 完成后审计 → Steps 3-7 聚合管线
+- **产出路径**: `results/emnlp_final_raw/` = `results/final_journal_v2/` (对齐 objective.md §444)
 
 ### 2026-03-09 21:22 | Phase 6 启动 — Core Profiling 准备
 - **Goal**: 创建调度脚本 + 同步到远端 + 创建冻结副本

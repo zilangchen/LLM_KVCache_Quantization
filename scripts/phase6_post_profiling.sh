@@ -85,8 +85,8 @@ if [ -d "$FINAL_STRICT" ]; then
     mv "$FINAL_STRICT" "$BACKUP_S"
 fi
 
+mkdir -p "$FINAL_STRICT/runs" "$FINAL_STRICT/logs"
 rsync -a "$FINAL_RAW/runs/" "$FINAL_STRICT/runs/"
-mkdir -p "$FINAL_STRICT/logs"
 if [ -d "$FINAL_RAW/logs" ]; then
     rsync -a "$FINAL_RAW/logs/" "$FINAL_STRICT/logs/"
 fi
@@ -162,7 +162,7 @@ echo "  LaTeX files: $TEX_COUNT" | tee -a "$LOG"
 echo "  5c: Running generate_thesis_report.py..." | tee -a "$LOG"
 $PYTHON "$SRC/scripts/generate_thesis_report.py" \
     --tables_dir "$TABLES_DIR" \
-    --report_dir "$REPORT_DIR" 2>&1 | tee -a "$LOG"
+    --out_dir "$REPORT_DIR" 2>&1 | tee -a "$LOG"
 REPORT_EXIT=$?
 echo "  report exit: $REPORT_EXIT" | tee -a "$LOG"
 
