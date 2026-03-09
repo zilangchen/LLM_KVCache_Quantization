@@ -291,12 +291,25 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
 
 ## Timeline (Latest First)
 
-### 2026-03-09 21:22 | Phase 6 启动 — Core Profiling 准备
-- **Goal**: 创建 Phase 6 core profiling 调度脚本，同步代码到远端，创建冻结副本
+### 2026-03-09 23:21 | Phase 6 Core Profiling 执行中
+- **Goal**: 补跑 4K/8K/16K/32K profile_latency + profile_memory
 - **Changed files**:
-  - `scripts/dispatch_phase6_core.sh`: 新建，24 non-KIVI configs/model × 8 seeds = 192 dirs/model
-- **Context**: Phase 5v2 全部完成 (1560 dirs)，缺 4K/16K/32K profile_latency/profile_memory 数据
-- **Next**: rsync → freeze (含 artifacts/) → 试聚合 → 启动 core profiling (~26h)
+  - `scripts/dispatch_phase6_core.sh`: 24 non-KIVI configs/model × 8 seeds = 192 dirs/model
+  - `scripts/audit_phase6_core.py`: 任务级审计脚本
+  - `scripts/phase6_post_profiling.sh`: Steps 3-7 聚合管线
+- **Step 0**: ✅ rsync + freeze (含 artifacts/ FIX-1) → fingerprint=`0942b55d`, 6/6 calib OK
+- **Step 1**: ✅ 试聚合确认 latency/memory 仅含 8K → 4K/16K/32K 缺口确认
+- **Step 2**: 🔄 Core profiling 运行中 (tmux: phase6_core)
+  - 1.5B: 192/192 ✅ GATE: PASS (0 OOM, 95min)
+  - 7B: 37/192 🔄 (~32s/dir, 预计 02:00-04:00 完成)
+  - 8B: 0/192 ⏳
+- **Freeze**: `/root/LLM_KVCache_Quantization_phase6_freeze_20260309_212302`
+- **Next**: 7B/8B 完成后审计 → Steps 3-7 聚合管线
+
+### 2026-03-09 21:22 | Phase 6 启动 — Core Profiling 准备
+- **Goal**: 创建调度脚本 + 同步到远端 + 创建冻结副本
+- **Commits**: ab1572c (dispatch script), pending (audit+pipeline scripts)
+- **Validation**: rsync_gate PASS, fingerprint match, 6/6 calib files OK
 
 ### 2026-03-08 08:45 | Phase 5v2 吞吐评测准备
 - **Goal**: 准备 Phase 5v2 吞吐评测 (1024 runs: 128 configs × 8 seeds × 2 tasks)
