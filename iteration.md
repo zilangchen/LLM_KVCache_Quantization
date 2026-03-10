@@ -291,6 +291,22 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
 
 ## Timeline (Latest First)
 
+### 2026-03-11 00:06 | fix: C7/C8 INCONCLUSIVE → FAIL, 修正 C6 根因描述
+- **Goal**: 解决 C7/C8 INCONCLUSIVE（补全 aggregate + export 过滤），更新 C6 根因归因
+- **Changed files**:
+  - `scripts/aggregate_results.py`: L124 添加 `("int4_baseline", "int4_ours")` 到 `RELATIVE_GAIN_PAIRINGS`
+  - `scripts/export_tables_latex.py`: L642 白名单扩展 `int4_baseline` + `kivi_style`
+- **远端重跑**: aggregate → LaTeX export → claim validation（三步全部 exit 0）
+- **结果**: C7/C8 从 INCONCLUSIVE → **FAIL**
+  - C7: INT4-ours needle -3.33% vs INT4-baseline（阈值 ≥-1%）
+  - C8: INT4-ours PPL -15.92% vs INT4-baseline（阈值 ≥-0.5%）
+  - **科学含义**: KL 行为对齐校准在 INT8 有效，但 INT4 精度下未保持非劣效性
+- **C6 根因修正**: 从"单一 prompt budget 溢出"改为"CWE 子任务多因素局限"（5 条未关闭 issue）
+- **Final claims**: **8 PASS / 3 FAIL / 0 INCONCLUSIVE / 0 ERROR**
+- **数据同步**: 远端 emnlp_final_raw + final_journal_v2 已更新，本地已 rsync
+- **LaTeX**: 39 .tex files, 18 plots（Codex review 修正了之前的 41/20 数字）
+- **Codex review**: 两轮审查发现 3 个 HIGH + 2 个 MEDIUM issue，全部已修正
+
 ### 2026-03-10 04:27 | milestone: Phase 6 全部完成 — Core Profiling + 聚合出表 + Claim 验证
 - **Goal**: 补跑 4K/8K/16K/32K profile_latency/profile_memory → 合并 → 聚合 → LaTeX → Claim 验证
 - **Changed files**:

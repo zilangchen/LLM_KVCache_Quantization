@@ -639,8 +639,8 @@ def export_relative_gain(tables_dir: Path, out_dir: Path, *, label_prefix: str) 
             ]
         )
     ]
-    df = df[df["baseline_mode"].isin(["int8_baseline", "int4_fused"])]
-    df = df[df["challenger_mode"].isin(["int8_ours", "int4_ours"])]
+    df = df[df["baseline_mode"].isin(["int8_baseline", "int4_baseline", "int4_fused", "kivi_style"])]
+    df = df[df["challenger_mode"].isin(["int8_ours", "int4_ours", "int8_baseline"])]
     if "seq_len" in df.columns:
         seq = pd.to_numeric(df["seq_len"], errors="coerce")
         if (seq == 32704).any():

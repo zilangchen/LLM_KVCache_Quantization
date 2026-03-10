@@ -32,6 +32,10 @@ logs/
 thesis/
 thesis.zip
 
+# Session artifacts (planning-with-files skill)
+progress.md
+task_plan.md
+
 # Sensitive server credentials
 docs/autodl_server.md
 

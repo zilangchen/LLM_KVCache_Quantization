@@ -121,6 +121,7 @@ RELATIVE_GAIN_PAIRINGS: List[tuple[str, str]] = [
     ("int8_baseline", "int8_ours"),
     ("fp16", "int8_fused"),
     ("int8_baseline", "int8_fused"),
+    ("int4_baseline", "int4_ours"),
     ("int4_fused", "int4_ours"),
     ("int4_ours", "int4_ours_mixed"),
     ("fp16", "int8_ours"),
