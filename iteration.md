@@ -291,6 +291,22 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
 
 ## Timeline (Latest First)
 
+### 2026-03-11 03:13 | Phase 7B: 学位论文 ch4 数据填充完成
+- **Goal**: 将 ch4_experiments.tex 中全部 ~18 处 XX.XX/TODO/待验证占位符替换为真实实验数据
+- **Changed files**:
+  - `thesis/chapters/ch4_experiments.tex`: 填充 Table 4.2（主结果 7 modes）、Table 4.5（跨模型 7B+8B）、Table 4.6（KIVI 对比）、Table 4.7（11 claim 验证总表 8P/3F）；C1-C11 文字分析；3 张 \includegraphics 替换 fbox 占位符；消融分析段落重写
+  - `scripts/fill_thesis_data.py`: 新增可审计数据提取脚本（mainline overrides for 1.5B int8_ours）
+  - `findings.md`: ISSUE-1/ISSUE-2 解析更新
+  - `thesis/figures/`: 复制 3 张 PNG（needle/TPOT/KV memory 曲线）
+- **Validation**: `grep 'XX\.XX\|TODO\|待验证\|待替换\|待填充' ch4_experiments.tex` → 0 matches
+- **Key data points used**:
+  - fp16: PPL=8.93, Needle=100%, LongBench=4.82%, RULER=24.38%, TPOT=24.39ms, KV=896MB
+  - int8_ours (mainline): PPL=8.95, Needle=100%, LongBench=5.00%, RULER=24.38%, TPOT=47.14ms, KV=504MB
+  - C1: +17.27% TPOT gain (q=0.016), C2: -43.75% KV mem, C6 FAIL: -2.64% RULER
+  - C7 FAIL: -2.0% INT4 Needle, C8 FAIL: -15.92% INT4 PPL
+- **Note**: thesis/ 在 .gitignore 中（不进 git），仅 fill_thesis_data.py 和 findings.md 需要提交
+- **Next**: 提交 → Phase 7C EMNLP 论文骨架搭建
+
 ### 2026-03-11 02:52 | Phase 7A: Git cleanup + model_id 路径污染源头修复
 - **Goal**: 提交 C7/C8 修复；修复 ISSUE-1（LLaMA-8B model_id 路径污染 9 个 CSV）
 - **Changed files**:

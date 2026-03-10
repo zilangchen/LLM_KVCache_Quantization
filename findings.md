@@ -2,6 +2,23 @@
 
 ## Research & Discovery Log
 
+### 2026-03-11 | ISSUE-1 & ISSUE-2 Resolution (model_id + ablation filtering)
+
+**ISSUE-1 (model_id path pollution)**: Fixed in `aggregate_results.py` via `_canonicalize_model_id()`.
+- 9 CSV files had `/root/autodl-tmp/modelscope_cache/...` as model_id for LLaMA-8B
+- After fix: thesis_main_claims_32k.csv has exactly 3 model_ids, 24 rows (was 31)
+- LaTeX: 33 .tex files (was 39; 6 pollution files removed)
+- Claim validation re-run: 8 PASS / 3 FAIL (C6=-2.64%, C7=-2.00%, C8=-15.92%)
+
+**ISSUE-2 (1.5B int8_ours Needle@32K ablation contamination)**:
+- needle_summary aggregated 35 observations (7 configs × 5 seeds), mean=70.29%
+- **Mainline config** (`int8_ours_long_static_v3_no_temp_adaptive_fused`): **100%** (5/5 seeds)
+- Ablation variants dragging down mean:
+  - `int8_ours_long_fused` (no calibration): 38%
+  - `static_v2_no_temp_fused` (old non-adaptive): 20%
+  - `static_v2_temp_fused` (temp scaling, non-adaptive): 34%
+- **Paper treatment**: Use mainline-only values; ablation failures support adaptive fused kernel importance
+
 ### 2026-03-11 | C7/C8 Resolved → FAIL (INT4 Calibration Limitation)
 - **C7 FAIL**: INT4-ours needle_pass_rate -3.33% vs INT4-baseline (threshold ≥-1%)
   - 1.5B: -100% (complete failure), 7B: NaN (no valid data), 8B: -3.33%
@@ -32,4 +49,6 @@
 - Total experimental dirs: 2136 (1560 phase5v2 + 576 phase6)
 - Latency/memory seq_lens: {4096, 8192, 16384, 32704}
 - Zero OOM across all 576 phase6 core profiling runs (H20 96GB sufficient)
-- LaTeX tables: 39 .tex files, Plots: 18 .png files
+- LaTeX tables: 33 .tex files (post model_id fix), Plots: 18 .png files
+- Mainline config pattern: `*_static_v3_no_temp_adaptive_fused` (all models)
+- Ablation configs to exclude: `*_fused` (no calibration), `*_static_v2_*`, `*_no_static_no_temp_*`, `*_kl_*`, `*_percentile_*`, `*_k_only_*`
