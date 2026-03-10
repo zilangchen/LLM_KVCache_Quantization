@@ -291,6 +291,19 @@ print('ALL PASS' if all_pass else 'SOME CHECKS FAILED')
 
 ## Timeline (Latest First)
 
+### 2026-03-11 02:52 | Phase 7A: Git cleanup + model_id 路径污染源头修复
+- **Goal**: 提交 C7/C8 修复；修复 ISSUE-1（LLaMA-8B model_id 路径污染 9 个 CSV）
+- **Changed files**:
+  - `scripts/aggregate_results.py`: 添加 `MODEL_ID_ALIASES` + `_canonicalize_model_id()`, 在 `_read_csvs()` 中调用
+  - `scripts/export_tables_latex.py`: 扩展白名单（前序提交）
+  - `iteration.md`: Timeline 追加
+  - `findings.md`: 新增 claim 根因分析
+  - `.gitignore`: 排除 progress.md / task_plan.md
+- **Commits**: e5afa27 (7A.1: pairing + findings), pending (7A.2: model_id fix)
+- **Validation**: `py_compile` 通过；远端重跑 aggregate+export+report 待执行
+- **Risks**: 远端重跑后需验证 thesis_main_claims_32k.csv 中 model_id 只有 3 个值
+- **Next**: rsync 到远端 → 重跑三步管线 → rsync 回 → 进入 7B ch4 填充
+
 ### 2026-03-11 00:06 | fix: C7/C8 INCONCLUSIVE → FAIL, 修正 C6 根因描述
 - **Goal**: 解决 C7/C8 INCONCLUSIVE（补全 aggregate + export 过滤），更新 C6 根因归因
 - **Changed files**:

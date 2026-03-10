@@ -117,6 +117,30 @@ SIGNIFICANCE_PAIRINGS: List[tuple[str, str]] = [
     ("kivi_style", "int8_baseline"),   # completeness: INT8-baseline vs KIVI
 ]
 
+# ---------------------------------------------------------------------------
+# Model ID canonicalization — normalize local cache paths to HuggingFace IDs.
+# Remote servers (AutoDL) download models via modelscope, which creates local
+# paths like /root/autodl-tmp/modelscope_cache/LLM-Research/Meta-Llama-3___1-8B-Instruct.
+# These paths leak into run CSVs via model_id columns.  We canonicalize at the
+# _read_csvs level so ALL downstream summaries use consistent HF IDs.
+# ---------------------------------------------------------------------------
+MODEL_ID_ALIASES: Dict[str, str] = {
+    "/root/autodl-tmp/modelscope_cache/LLM-Research/Meta-Llama-3___1-8B-Instruct": "meta-llama/Llama-3.1-8B-Instruct",
+}
+
+
+def _canonicalize_model_id(df: pd.DataFrame) -> pd.DataFrame:
+    """Replace local-path model_id values with canonical HuggingFace IDs."""
+    if "model_id" not in df.columns or df.empty:
+        return df
+    replaced = df["model_id"].replace(MODEL_ID_ALIASES)
+    n_fixed = int((replaced != df["model_id"]).sum())
+    if n_fixed > 0:
+        logger.info("_canonicalize_model_id: normalized %d rows.", n_fixed)
+    df["model_id"] = replaced
+    return df
+
+
 RELATIVE_GAIN_PAIRINGS: List[tuple[str, str]] = [
     ("int8_baseline", "int8_ours"),
     ("fp16", "int8_fused"),
@@ -202,7 +226,8 @@ def _read_csvs(runs_dir: Path, patterns: Iterable[str]) -> pd.DataFrame:
             frames.append(df)
     if not frames:
         return pd.DataFrame()
-    return pd.concat(frames, ignore_index=True)
+    combined = pd.concat(frames, ignore_index=True)
+    return _canonicalize_model_id(combined)
 
 
 def _to_numeric(df: pd.DataFrame, cols: Iterable[str]) -> pd.DataFrame:
