@@ -974,6 +974,60 @@ matrix:
     batch: 1
 
   # =========================================================================
+  # INT4 rescue Tier 1: Calibration strategy comparison
+  # Base config = T0-C (1.5B best: adaptive=false, temp=false)
+  # Varies only the calibration file/strategy.
+  # =========================================================================
+
+  # T1-KL: Re-generated KL calibration (post CAL-019/020 fix, group_size=16)
+  - run_name: int4_rescue_kl_v4_long
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_int4_v4_g16.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: false
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # T1-MSE: MSE calibration (group_size=16)
+  - run_name: int4_rescue_mse_v4_long
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_mse_int4_v4_g16.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: false
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # T1-PCTL: Percentile calibration (no KL/MSE optimization, pure statistics)
+  - run_name: int4_rescue_pctl_v4_long
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: percentile
+    calib_file: artifacts/kv_calib_pctl_int4_v4_g16.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: false
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
   # KIVI-style INT8 — asymmetric quantization baseline
   # =========================================================================
   - run_name: kivi_style_int8_curve_4k
