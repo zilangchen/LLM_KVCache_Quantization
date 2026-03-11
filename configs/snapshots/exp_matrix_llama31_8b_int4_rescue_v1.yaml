@@ -99,3 +99,64 @@ matrix:
     seq_len: 32704
     gen_len: 64
     batch: 1
+
+  # =========================================================================
+  # INT4 baseline entries (copied from exp_matrix_llama31_8b_v1.yaml)
+  # ENG-066: Must re-run baseline with float32 scale fix — old data invalid.
+  # model_revision pinned to 043efdca... (fixing config debt from original snapshot).
+  # =========================================================================
+  - run_name: int4_baseline_long
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  - run_name: int4_baseline_curve_4k
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  - run_name: int4_baseline_curve_8k
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 64
+    batch: 1
+
+  - run_name: int4_baseline_curve_16k
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 16384
+    gen_len: 64
+    batch: 1
