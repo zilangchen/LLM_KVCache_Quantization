@@ -1,0 +1,101 @@
+# INT4 rescue config: Llama-3.1-8B-Instruct
+# Derived from: configs/snapshots/exp_matrix_llama31_8b_v1.yaml
+# Purpose: Tier 0 smoke test — 2×2 configuration grid for INT4-ours rescue.
+# Does NOT modify the frozen historical snapshot.
+# Used by scripts/run_experiments.py
+#
+# NOTE: model_revision pinned to 043efdca... (from final_emnlp2026_v1.yaml L56),
+# fixing the config debt where exp_matrix_llama31_8b_v1.yaml had model_revision: null.
+# Remote server uses local ModelScope path:
+#   /root/autodl-tmp/modelscope_cache/LLM-Research/Meta-Llama-3___1-8B-Instruct
+
+project:
+  name: kv-cache-quant-llama31-8b
+  model_id: meta-llama/Llama-3.1-8B-Instruct
+  model_revision: 043efdca396f2b6f4b5714d76d70df7840856ed7
+
+runtime:
+  seed: 1234
+  device: cuda
+  dtype: fp16
+  decoding:
+    temperature: 0.0
+    top_p: 1.0
+    top_k: 0
+  quant_defaults:
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_llama31_8b_int8.json
+    use_attn_temperature: true
+    use_static_scales: true
+    adaptive_static_scales: false
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    clip_percentile_k: 99.5
+    clip_percentile_v: 99.5
+    group_size_k: 16
+    group_size_v: 16
+  kernel_defaults:
+    decode_attn_impl: triton_fused
+
+matrix:
+  # =========================================================================
+  # INT4 rescue: 2×2 configuration grid (Tier 0 smoke test)
+  # Tests adaptive_static_scales × use_attn_temperature.
+  # T0-D (adaptive=false, temp=true) = existing int4_ours_long in *_llama31_8b_v1.yaml.
+  # =========================================================================
+
+  # T0-A: adaptive=true, temp=true
+  - run_name: int4_rescue_adaptive_temp_long
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_llama31_8b_int4.json
+    use_attn_temperature: true
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # T0-B: adaptive=true, temp=false (aligned with INT8-ours mainline strategy)
+  - run_name: int4_rescue_adaptive_notemp_long
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_llama31_8b_int4.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # T0-C: adaptive=false, temp=false (temperature-only ablation)
+  - run_name: int4_rescue_noadapt_notemp_long
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_llama31_8b_int4.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: false
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 32704
+    gen_len: 64
+    batch: 1

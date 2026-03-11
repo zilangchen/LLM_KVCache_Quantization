@@ -913,6 +913,67 @@ matrix:
     batch: 1
 
   # =========================================================================
+  # INT4 rescue: 2×2 configuration grid (Tier 0 smoke test)
+  # Tests adaptive_static_scales × use_attn_temperature to find the optimal
+  # combination for INT4-ours, aligning with INT8-ours mainline strategy.
+  # T0-D (adaptive=false, temp=true) = existing int4_ours_long, no need to re-run.
+  # =========================================================================
+
+  # T0-A: adaptive=true, temp=true (current INT4-ours + enable adaptive)
+  - run_name: int4_rescue_adaptive_temp_long
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_int4_selected.json
+    use_attn_temperature: true
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # T0-B: adaptive=true, temp=false (aligned with INT8-ours mainline strategy)
+  - run_name: int4_rescue_adaptive_notemp_long
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_int4_selected.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # T0-C: adaptive=false, temp=false (temperature-only ablation)
+  - run_name: int4_rescue_noadapt_notemp_long
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_int4_selected.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: false
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
   # KIVI-style INT8 — asymmetric quantization baseline
   # =========================================================================
   - run_name: kivi_style_int8_curve_4k
