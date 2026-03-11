@@ -28,8 +28,20 @@ logs/
 .claude/hookify.*.local.md
 .claude/hooks/
 
-# Thesis (large files, not code)
-thesis/
+# Thesis compiled outputs (keep source tracked)
+thesis/*.pdf
+thesis/*.aux
+thesis/*.bbl
+thesis/*.blg
+thesis/*.log
+thesis/*.out
+thesis/*.toc
+thesis/*.lof
+thesis/*.lot
+thesis/*.fls
+thesis/*.fdb_latexmk
+thesis/*.synctex.gz
+thesis/*.xdv
 thesis.zip
 
 # Session artifacts (planning-with-files skill)

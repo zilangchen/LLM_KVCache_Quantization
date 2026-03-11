@@ -1,0 +1,26 @@
+% ============================================================
+% fonts.tex — 字体设置 (macOS 优先，Fandol 回退)
+% ============================================================
+
+% --- 中文字体 ---
+% macOS: Songti SC / Heiti SC / Kaiti SC
+% Linux/Fandol: FandolSong / FandolHei / FandolKai
+\IfFontExistsTF{Songti SC}{%
+  \setCJKmainfont[BoldFont=Heiti SC, ItalicFont=Kaiti SC]{Songti SC}
+  \setCJKsansfont{Heiti SC}
+  \setCJKmonofont{Kaiti SC}
+}{%
+  \setCJKmainfont[BoldFont=FandolHei, ItalicFont=FandolKai]{FandolSong}
+  \setCJKsansfont{FandolHei}
+  \setCJKmonofont{FandolKai}
+}
+% 注: \songti \heiti \kaishu 已由 ctex 自动定义，无需重复声明
+
+% --- 英文字体 ---
+\setmainfont{Times New Roman}
+\setsansfont{Helvetica}
+\IfFontExistsTF{Menlo}{%
+  \setmonofont{Menlo}
+}{%
+  \setmonofont{Courier New}
+}

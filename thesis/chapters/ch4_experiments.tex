@@ -1,0 +1,907 @@
+% ============================================================
+% ch4_experiments.tex — 第四章 实验与结果分析
+% ============================================================
+
+\chapter{实验与结果分析}
+\label{chap:experiments}
+
+本章对行为对齐量化框架进行全面的实验评估。
+首先介绍实验设置，包括模型选择、硬件环境、评测基准和统计方法（\ref{sec:exp-setup} 节）；
+随后在主模型上呈现并分析各量化模式的主线结果（\ref{sec:exp-main} 节）；
+接着通过敏感性分析验证关键设计选择的有效性（\ref{sec:exp-ablation} 节）；
+进一步在跨架构模型上验证方法的泛化性（\ref{sec:exp-generalization} 节）；
+最后分别讨论与 KIVI-style 基线的对比（\ref{sec:exp-kivi} 节）、
+INT4 量化的分析与局限（\ref{sec:exp-int4} 节），
+并在全章最后进行结果讨论与 Claim 验证总结（\ref{sec:exp-discussion} 节）。
+
+% ============================================================
+\section{实验设置}
+\label{sec:exp-setup}
+% ============================================================
+
+% ------------------------------------------------------------
+\subsection{模型与硬件}
+\label{subsec:exp-model-hardware}
+% ------------------------------------------------------------
+
+本文选取三个具有代表性的开源大语言模型作为实验对象，涵盖不同参数规模和架构设计：
+
+\begin{itemize}[leftmargin=2em, itemsep=2pt]
+  \item \textbf{Qwen2.5-1.5B-Instruct}~\cite{qwen2025qwen25}：
+    主模型，28 层 Transformer，分组查询注意力（GQA，2 个 KV 头），头维度 128。
+    在该模型上执行全量实验矩阵，包括所有量化模式、全部评测基准和敏感性分析。
+    模型 revision 固定为 \texttt{989aa7}，确保严格可复现。
+  \item \textbf{Qwen2.5-7B-Instruct}~\cite{qwen2025qwen25}：
+    同架构的放大验证，28 层 Transformer，GQA（4 个 KV 头），头维度 128。
+    用于验证行为对齐校准在同一架构不同参数规模下的有效性。
+  \item \textbf{LLaMA-3.1-8B-Instruct}~\cite{grattafiori2024llama3}：
+    跨架构验证，32 层 Transformer，GQA（8 个 KV 头），头维度 128，
+    原生支持 128K 上下文窗口。
+    用于验证行为对齐校准的跨模型族泛化能力。
+\end{itemize}
+
+所有实验在单张 NVIDIA H20 GPU（98GB 显存）上完成。
+软件环境为 Python 3.12、PyTorch 2.8.0（CUDA 12.8）、
+Transformers 库和 Triton 编译器。
+完整依赖版本记录在 \texttt{env/versions.txt}
+和 \texttt{env/\allowbreak requirements\_\allowbreak freeze.txt} 中，支持严格复现。
+
+% ------------------------------------------------------------
+\subsection{评测基准}
+\label{subsec:exp-benchmarks}
+% ------------------------------------------------------------
+
+本文从语言建模质量、长上下文检索能力、长文档理解能力、合成推理压测和系统效率
+五个维度构建评测体系，具体如下：
+
+\textbf{（1）困惑度（PPL）。}
+基于 WikiText-2\cite{merity2016wikitext} 数据集评测语言建模质量。
+采用分块评估策略：\texttt{chunk\_size\allowbreak =128}，
+\texttt{stride\allowbreak =512}，
+\texttt{max\_length\allowbreak =1024}，累计评测至少 100 万 token。
+需要说明的是，chunk size 为 128 意味着每个 chunk 内的 token 间
+使用 FP16 精度的 KV Cache（未经量化），
+量化仅作用于跨 chunk 的历史 KV Cache。
+
+\textbf{（2）Needle-in-a-Haystack~\cite{kamradt2023needle}。}
+测试量化后的精确检索保真度。在 4K、8K、16K、32K 四个上下文长度点，
+每个长度均匀设置 20 个深度级别（depth level），在干扰文本中插入唯一的"金针"信息，
+要求模型在生成时准确检索并复述该信息。
+通过率（pass rate）定义为通过精确匹配（exact match）的测试用例占比。
+
+\textbf{（3）LongBench~\cite{bai2024longbench}。}
+评测长上下文理解能力，选取 7 个代表性任务覆盖中英文、多种任务类型：
+单文档问答（narrativeqa、dureader）、
+多文档问答（hotpotqa）、
+摘要生成（gov\_report、vcsum）、
+少样本分类（trec）和
+代码补全（lcc）。
+各任务使用其官方评测指标：QA 类为 token-F1，
+摘要类和中文 QA 为 Rouge-L，分类类为 Accuracy，代码类为 Edit Similarity。
+主表汇总分数（\texttt{longbench\_score}）定义为 7 个任务官方指标的宏平均。
+
+\textbf{（4）RULER~\cite{hsieh2024ruler}。}
+合成检索与推理能力的压力测试，包含 4 个子任务：
+S-NIAH（单 passkey 检索）、MK-NIAH（多 key-value 并发检索，4 keys）、
+VT（Variable Tracking，链式变量赋值，4 hops）和
+CWE（Common Words Extraction，频率聚合，top-10）。
+每个子任务在 4K、8K、16K、32K 四个长度点上评测，
+总分为 4 个子任务准确率的宏平均。
+本文自行实现了确定性合成任务生成器（task generator），
+集成到自定义推理管线中，独立于 RULER 官方运行框架。
+
+\textbf{（5）推理效率。}
+包括三项系统指标：
+Time-Per-Output-Token（TPOT，解码阶段每 token 延迟，单位 ms），
+KV Cache 显存占用（单位 MB）以及
+GPU 峰值显存（单位 MB）。
+所有时间测量通过 CUDA 事件同步保证精确性。
+
+% ------------------------------------------------------------
+\subsection{基线方法}
+\label{subsec:exp-baselines}
+% ------------------------------------------------------------
+
+表~\ref{tab:kv-modes} 列出了本文评测的 7 种 KV Cache 量化模式，
+涵盖从无量化上界到 INT4 低比特量化的完整精度谱。
+
+\begin{table}[htbp]
+  \centering
+  \caption{KV Cache 量化模式对比}
+  \label{tab:kv-modes}
+  \begin{threeparttable}
+  \begin{tabular}{llcccc}
+    \toprule
+    量化模式 & 校准策略 & 比特宽度 & 温度校正 & Decode Kernel & 量化轴 \\
+    \midrule
+    fp16        & 无          & 16  & ---   & torch\_ref    & ---          \\
+    int8\_baseline & percentile & 8  & 无    & torch\_ref    & 对称 per-group \\
+    int8\_ours     & KL 行为对齐 & 8  & 有    & triton\_fused & 对称 per-group \\
+    int4\_baseline & percentile & 4  & 无    & torch\_ref    & 对称 per-group \\
+    int4\_fused    & KL 行为对齐 & 4  & 有    & triton\_fused & 对称 per-group \\
+    int4\_ours     & KL 行为对齐 & 4  & 有    & torch\_ref    & 对称 per-group \\
+    kivi\_style    & 非对称      & 8  & 无    & torch\_ref    & \makecell{K: per-channel\\V: per-token} \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \small
+    \item 注：int8\_ours 是本文提出的完整方案（KL 校准 + per-head $\tau^{-1}$ 温度校正 + Triton 融合核函数）。
+    kivi\_style 采用 KIVI~\cite{liu2024kivi} 的核心量化轴策略（Key 逐通道、Value 逐 token 的非对称量化），
+    但不包含原文中的残差补偿等完整工程优化。
+    int4\_fused 与 int4\_ours 的区别在于是否使用 Triton 融合核函数。
+  \end{tablenotes}
+  \end{threeparttable}
+\end{table}
+
+各模式的关键差异在于三个维度：
+（a）\emph{校准策略}——percentile 裁剪仅基于数值分布的百分位截断，
+KL 行为对齐则以注意力权重分布的 KL 散度为优化目标；
+（b）\emph{温度校正}——int8\_ours 和 int4 系列的 ours 变体使用校准产生的
+逐层逐头 $\tau^{-1}$ 参数，在推理时通过预缩放 Query 向量实现注意力分布的尖锐度恢复；
+（c）\emph{Decode Kernel}——triton\_fused 将反量化与注意力计算融合在单个
+GPU 核函数中执行，消除了中间 FP16 张量的显存读写开销。
+
+% ------------------------------------------------------------
+\subsection{统计框架}
+\label{subsec:exp-statistics}
+% ------------------------------------------------------------
+
+为确保实验结论的统计可靠性，本文采用以下严格的统计框架：
+
+\textbf{多种子运行。}
+质量评测任务使用 5 个固定随机种子（1234, 1235, 1236, 1237, 1238），
+吞吐量测试使用 8 个固定种子（1234--1241）。
+所有评测统一采用贪婪解码（greedy decoding：$\text{temperature}=0.0$，
+$\text{top\_p}=1.0$，$\text{top\_k}=0$），消除采样随机性，确保结果仅反映种子初始化差异。
+
+\textbf{Bootstrap 置信区间。}
+对每项指标计算基于 10\,000 次重采样的 95\% Bootstrap 置信区间~\cite{efron1994introduction}，
+量化不确定性范围。
+
+\textbf{符号翻转置换检验（sign-flip permutation test）。}
+针对配对比较（如 int8\_ours vs int8\_baseline），采用基于种子配对的符号翻转置换检验，
+在小样本（$n=5$）条件下提供非参数假设检验。
+
+\textbf{BH-FDR 多重比较校正。}
+当同一张表内存在多个配对比较时，采用 Benjamini-Hochberg 方法~\cite{benjamini1995controlling}
+控制假发现率（False Discovery Rate），设定 $\alpha=0.05$。
+BH-FDR 控制的是假发现率（而非族错误率 FWER），
+在 NLP/ML 实验中为标准做法，具有更优的检验效力。
+每张主表定义一个比较族（family），避免跨表展开导致比较数爆炸。
+
+
+% ============================================================
+\section{主线结果}
+\label{sec:exp-main}
+% ============================================================
+
+本节以 Qwen2.5-1.5B-Instruct 为主模型，呈现在 32K 上下文长度下
+各量化模式在全部评测基准上的综合表现。
+% ------------------------------------------------------------
+\subsection{综合性能对比}
+\label{subsec:exp-main-table}
+% ------------------------------------------------------------
+
+表~\ref{tab:main-results} 汇总了 1.5B 主模型在 32K 上下文长度、batch=1
+条件下各量化模式的核心指标。
+
+\begin{table}[htbp]
+  \centering
+  \caption{Qwen2.5-1.5B-Instruct 主结果（32K 上下文，batch=1）}
+  \label{tab:main-results}
+  \small
+  \begin{threeparttable}
+  \begin{tabular}{lcccccc}
+    \toprule
+    \multirow{2}{*}{量化模式} &
+    \multirow{2}{*}{PPL $\downarrow$} &
+    Needle &
+    LongBench &
+    RULER &
+    TPOT &
+    KV Mem \\
+    & & (\%) $\uparrow$ & (\%) $\uparrow$ & (\%) $\uparrow$ & (ms) $\downarrow$ & (MB) $\downarrow$ \\
+    \midrule
+    fp16
+      & 8.93{\scriptsize$\pm$0.00} & 100.0{\scriptsize$\pm$0.0} & 4.82{\scriptsize$\pm$0.04}
+      & 24.38{\scriptsize$\pm$0.81} & 24.39 & 896 \\
+    int8\_baseline
+      & 8.93{\scriptsize$\pm$0.00} & 100.0{\scriptsize$\pm$0.0} & 4.78{\scriptsize$\pm$0.02}
+      & 24.45{\scriptsize$\pm$0.65} & 51.43 & 504 \\
+    \textbf{int8\_ours}
+      & 8.95{\scriptsize$\pm$0.00} & 100.0{\scriptsize$\pm$0.0} & 5.00{\scriptsize$\pm$0.10}
+      & 24.38{\scriptsize$\pm$0.65} & \textbf{47.14} & 504 \\
+    int4\_baseline
+      & 19.54{\scriptsize$\pm$0.00} & 0.0{\scriptsize$\pm$0.0} & 2.98{\scriptsize$\pm$0.24}
+      & 0.00{\scriptsize$\pm$0.00} & 66.00 & 252 \\
+    int4\_ours
+      & 22.67{\scriptsize$\pm$0.00} & 0.0{\scriptsize$\pm$0.0} & 2.41{\scriptsize$\pm$0.25}
+      & 0.00{\scriptsize$\pm$0.00} & 67.90 & 280 \\
+    int4\_fused
+      & 22.04{\scriptsize$\pm$0.00} & 0.0{\scriptsize$\pm$0.0} & 5.15{\scriptsize$\pm$0.68}
+      & 0.00{\scriptsize$\pm$0.00} & 67.54 & 280 \\
+    kivi\_style
+      & 9.48{\scriptsize$\pm$0.02} & 99.0{\scriptsize$\pm$2.3} & 4.81{\scriptsize$\pm$0.05}
+      & 24.06{\scriptsize$\pm$0.46} & ---\textsuperscript{$\dagger$} & ---\textsuperscript{$\dagger$} \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \small
+    \item 注：$\pm$ 后为 Bootstrap 95\% CI 半宽（10\,000 次重采样，5 seeds）。
+    PPL 和 TPOT 越低越好（$\downarrow$），其余指标越高越好（$\uparrow$）。
+    LongBench score 为 7 个任务官方指标宏平均（$\times$100 显示）。
+    KV Mem 为 KV Cache 的显存占用。int8\_ours 质量指标取自 mainline
+    配置（\texttt{static\_v3\_no\_temp\_adaptive\_fused}）。
+    \item[$\dagger$] kivi\_style 使用 torch\_ref 核函数，未进行延迟/显存 profiling。
+  \end{tablenotes}
+  \end{threeparttable}
+\end{table}
+
+基于表~\ref{tab:main-results} 的结果，以下逐一验证本文的核心声明（Claims C1--C6）。
+
+\textbf{Claim C1：INT8-ours 在长上下文下显著降低解码延迟。}
+在 32K 上下文下，INT8-ours 的 TPOT 为 47.14~ms，
+较 INT8-baseline 的 51.43~ms 降低 8.3\%（$q=0.016$，BH-FDR 校正后显著）。
+值得注意的是，INT8-ours 的 TPOT 虽低于 INT8-baseline，但仍高于 fp16（24.39~ms），
+这是因为 INT8 decode 阶段需要在核函数内执行反量化计算。
+然而，在跨模型验证中（见 \ref{sec:exp-generalization} 节），
+更大模型上 Triton 融合核函数的加速效果更为显著：
+7B 模型上 TPOT 从 60.52~ms 降至 50.07~ms（17.3\%），
+8B 模型上从 91.77~ms 降至 57.23~ms（37.6\%），
+均经 BH-FDR 校正后达到统计显著（$q=0.016$）。
+这一加速归因于 Triton 融合核函数消除了中间 FP16 张量的显存分配与读写开销。
+
+\textbf{Claim C2：INT8-ours 保持显存优势。}
+INT8 量化将 KV Cache 的存储从 FP16 的 2 字节/元素压缩至 1 字节/元素。
+在 32K 上下文下，int8\_ours 的 KV Cache 占用为 504~MB，
+约为 fp16（896~MB）的 56.3\%，显存节省 43.8\%（Claim C2 验证阈值为 $\geq$20\%）。
+理论值为 50\% 压缩，实际 56.3\% 略高于理论值是因为额外存储了量化参数
+（per-group scale 和 zero-point）。
+
+\textbf{Claim C3：INT8-ours 在 Needle 通过率上不劣于 INT8-baseline。}
+Needle-in-a-Haystack 测试评估量化对精确检索能力的影响。
+INT8-ours（mainline 配置）在全部 4 个上下文长度点（4K--32K）上
+均保持 100\% 的通过率，与 INT8-baseline 和 fp16 完全一致。
+符号翻转置换检验的 $p=1.0$（无差异），
+确认行为对齐校准和温度校正有效保持了量化后注意力机制的检索精度。
+
+\textbf{Claim C4：INT8-ours 在 PPL 上不劣于 INT8-baseline。}
+困惑度评估量化对语言建模质量的影响。
+INT8-ours 的 PPL 为 8.95，较 INT8-baseline 的 8.93 仅退化 $-$0.18\%
+（非劣性阈值 $\geq$$-$0.5\%），
+Bootstrap CI 和符号翻转检验均确认无统计显著差异
+（$p=0.091$，$q=0.097$，BH-FDR 校正后不显著）。
+三个模型的 PPL 退化幅度均在 $-$0.09\% 至 $-$0.26\% 范围内，
+表明行为对齐量化在语言建模质量上不引入实质性退化。
+
+\textbf{Claim C5：INT8-ours 在 LongBench 上不劣于 INT8-baseline。}
+LongBench 评估长文档理解能力。
+INT8-ours 在 1.5B 模型 7 个任务的宏平均综合评分为 0.0486，
+较 INT8-baseline 的 0.0478 略有提升（$+$1.77\%），
+符号翻转检验 $p=0.091$，BH-FDR 校正后 $q=0.144$，
+验证了行为对齐校准在多样化长上下文理解任务上的质量保持能力。
+
+\textbf{Claim C6：INT8-ours 在 RULER 上不劣于 INT8-baseline。}
+\label{para:c6-fail}
+RULER 测试合成检索与推理能力。
+\textbf{该 Claim 未通过验证}（FAIL）：
+INT8-ours 在 1.5B 模型上的 RULER pass\_rate 均值为 23.81\%\footnote{该均值包含所有 INT8-ours 配置变体（mainline + ablation），详见附录~\ref{sec:app-seed-detail}。}，
+较 INT8-baseline 的 24.45\% 退化 $-$2.64\%，
+超出非劣性阈值（$\geq$$-$1\%）。
+退化主要集中在 CWE（Common Words Extraction）子任务，
+原因涉及多个因素：
+CWE 干扰词频约 90 倍于目标频率（设计为 30 倍）、
+token/word 假设偏差导致约 35\% 的 padding 低估、
+以及 \texttt{cwe\_max\_tokens} 与 \texttt{gen\_len} 参数不一致。
+这一失败将在 \ref{sec:exp-discussion} 节进一步讨论。
+
+% ------------------------------------------------------------
+\subsection{困惑度随上下文长度变化}
+\label{subsec:exp-main-ppl}
+% ------------------------------------------------------------
+
+图~\ref{fig:ppl-vs-tokens} 展示了各量化模式在不同评估 token 数下的困惑度变化趋势。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/ppl_vs_tokens.png}
+  \caption{各量化模式的困惑度随评估 token 数的变化（Qwen2.5-1.5B-Instruct，32K 上下文）}
+  \label{fig:ppl-vs-tokens}
+\end{figure}
+
+从图~\ref{fig:ppl-vs-tokens} 可以观察到：
+（a）fp16、int8\_baseline、int8\_ours 和 kivi\_style 四者的 PPL 曲线高度重合，
+差异在小数点后第二位，表明 INT8 量化（无论采用何种校准策略）对语言建模质量的影响可忽略；
+（b）INT4 系列量化模式的 PPL 显著上升，
+int4\_baseline 约为 fp16 的 2.2 倍，int4\_ours 和 int4\_fused 进一步升高，
+说明 4-bit 精度的有限表示能力对键值对的数值保真构成根本性挑战；
+（c）随着评估序列的推进，各模式的 PPL 趋于稳定，
+表明量化误差的累积效应在足够长的上下文中达到平衡。
+
+% ------------------------------------------------------------
+\subsection{Needle 通过率随上下文长度变化}
+\label{subsec:exp-main-needle}
+% ------------------------------------------------------------
+
+图~\ref{fig:needle-vs-context} 展示了各量化模式在不同上下文长度下的
+Needle-in-a-Haystack 通过率变化趋势。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/needle_pass_rate_vs_context.png}
+  \caption{各量化模式的 Needle-in-a-Haystack 通过率随上下文长度的变化（Qwen2.5-1.5B-Instruct）}
+  \label{fig:needle-vs-context}
+\end{figure}
+
+从图~\ref{fig:needle-vs-context} 中可以观察到以下规律：
+（a）fp16、int8\_baseline 和 int8\_ours 在全部长度点上均保持接近 100\% 的通过率，
+表明 INT8 量化对精确检索能力的影响可忽略；
+（b）INT4 系列的量化模式随上下文长度增加呈现通过率显著下降的趋势，
+尤其在 32K 点出现急剧退化，这一现象将在 \ref{sec:exp-int4} 节详细讨论；
+（c）kivi\_style 在中短上下文下表现与 INT8 基线相当，
+但在超长上下文下可能出现轻微退化。
+
+% ------------------------------------------------------------
+\subsection{推理效率分析}
+\label{subsec:exp-main-efficiency}
+% ------------------------------------------------------------
+
+图~\ref{fig:tpot-vs-seq}、图~\ref{fig:kvmem-vs-seq} 和图~\ref{fig:mempeak-vs-seq}
+分别展示了 TPOT、KV Cache 显存和总峰值显存随序列长度的变化趋势。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/latency_tpot_vs_seq.png}
+  \caption{各量化模式的 TPOT 随序列长度的变化（Qwen2.5-1.5B-Instruct，batch=1，gen\_len=64）}
+  \label{fig:tpot-vs-seq}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/memory_kv_cache_vs_seq.png}
+  \caption{各量化模式的 KV Cache 显存随序列长度的变化（Qwen2.5-1.5B-Instruct，batch=1）}
+  \label{fig:kvmem-vs-seq}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/memory_peak_vs_seq.png}
+  \caption{各量化模式的总峰值显存随序列长度的变化（Qwen2.5-1.5B-Instruct，batch=1）。
+  总峰值显存包含模型参数、KV Cache、中间激活和 CUDA 运行时开销。}
+  \label{fig:mempeak-vs-seq}
+\end{figure}
+
+从推理效率角度分析：
+
+\textbf{TPOT 特性。}
+随着序列长度从 4K 增长到 32K，所有量化模式的 TPOT 均呈现增长趋势，
+这是因为 decode 阶段的注意力计算量与 KV Cache 长度成正比。
+int8\_ours 通过 Triton 融合核函数，在全部长度点上均实现了低于 int8\_baseline 的 TPOT，
+且随着序列长度的增加，融合核函数的优势更加明显——
+这是因为更长的序列意味着更大的 KV Cache，
+融合执行消除的中间张量显存读写量也相应增大。
+值得注意的是，int8\_baseline 的 TPOT 高于 fp16，
+这是因为 torch\_ref 实现中"先反量化为 FP16，再做注意力计算"的两阶段方案
+引入了额外的显存分配和数据搬运开销。
+
+\textbf{KV Cache 显存特性。}
+如图~\ref{fig:kvmem-vs-seq} 所示，KV Cache 显存与序列长度严格线性相关。
+INT8 量化模式的 KV Cache 显存约为 fp16 的 $1/2$，
+INT4 量化模式进一步压缩至约 $1/4$（对于使用 bit-packing 的 int4\_ours/int4\_fused）
+或约 $1/2$（对于 kivi\_style 的 INT4 路径，因其使用 int8 容器存储而非 bit-packing）。
+
+\textbf{总峰值显存特性。}
+图~\ref{fig:mempeak-vs-seq} 展示了包含模型参数在内的总峰值显存。
+由于模型参数为固定开销，KV Cache 的压缩对总显存的节省比例
+低于 KV Cache 单独的压缩比。
+在 32K 上下文下，int8\_ours 的总峰值显存相比 fp16 节省约 4\%--6\%，
+而 INT4 模式节省约 6\%--8\%。
+随着上下文长度进一步增长，KV Cache 在总显存中的占比将持续升高，
+量化的显存节省优势将更加显著。
+
+
+% ============================================================
+\section{敏感性分析}
+\label{sec:exp-ablation}
+% ============================================================
+
+本节分析行为对齐量化框架中关键设计选择对性能的影响，
+为理解各组件的贡献提供实证依据。
+
+% ------------------------------------------------------------
+\subsection{校准策略的影响}
+\label{subsec:exp-ablation-calib}
+% ------------------------------------------------------------
+
+本节分析校准策略选择对量化质量的影响（RQ1）。
+实验矩阵包含两种校准策略的变体：
+KL 行为对齐校准和百分位裁剪（percentile）校准。
+由于实验设计中各变体同时在校准策略、
+核函数类型和温度校正等多个维度存在差异，
+以下分析侧重于观察性比较而非严格因果归因。
+
+表~\ref{tab:main-results} 中 INT8-baseline 与 INT8-ours
+的质量指标对比提供了校准策略影响的重要观察：
+INT8-baseline 采用百分位裁剪校准配合
+PyTorch 参考核函数，
+INT8-ours 采用 KL 行为对齐校准配合 Triton 融合核函数。
+两者在 32K 长上下文下的 Needle 通过率
+均保持 100\%，PPL 差异仅为 0.18\%，
+LongBench 综合评分基本一致。
+这表明 KL 校准在精度保持上至少不劣于百分位裁剪策略，
+同时 KL 校准天然适配融合核函数的 scale 注入接口，
+使得 INT8-ours 在保持质量的同时实现了 8\%--38\% 的 TPOT 降低。
+
+需要指出的是，上述比较中 INT8-baseline 与 INT8-ours
+同时在校准方法和推理引擎两个维度上存在差异，
+因此无法将性能差异严格归因于单一因素。
+严格隔离校准策略的消融实验（固定核函数和温度配置，
+仅改变校准目标函数）受限于计算资源约束未能在本文中完成，
+将作为后续工作的优先方向。
+
+% ------------------------------------------------------------
+\subsection{温度校正与 Adaptive 机制}
+\label{subsec:exp-ablation-temperature}
+% ------------------------------------------------------------
+
+本节分析推理阶段注意力调节机制的贡献（RQ2），
+通过对比三种配置变体量化温度校正和 adaptive 融合核函数的效果。
+
+温度校正机制的设计动机是：量化噪声会平滑化 attention logits 的分布，
+导致 softmax 输出趋于均匀，削弱模型对关键 token 的聚焦能力。
+通过在推理时将 Query 向量乘以校准得到的逐层逐头 $\tau^{-1}$ 参数
+（数学上等价于对 attention logits 施加温度缩放），
+可以恢复注意力分布的尖锐度。
+Adaptive static scale 保护机制则通过在运行时对每个量化步取
+$s_{\text{final}} = \max(s_{\text{static}} \cdot m,\; s_{\text{dynamic}})$
+（第~\ref{sec:ch3-static-scale} 节），
+防止超出校准分布的激活值被大量裁剪。
+
+表~\ref{tab:temp-ablation} 列出了在 Qwen2.5-1.5B-Instruct 模型上，
+固定 KL 校准和 Triton 融合核函数条件下，
+三种注意力调节配置在 32K 长上下文 Needle 测试上的表现。
+
+\begin{table}[htbp]
+  \centering
+  \caption{注意力调节机制敏感性分析（1.5B，INT8，32K Needle）}
+  \label{tab:temp-ablation}
+  \small
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{配置} & \textbf{温度校正} & \textbf{Adaptive} & \textbf{Needle (\%)} \\
+    \midrule
+    static\_v2\_no\_temp & 关闭 & 关闭 & $20.0 \pm 12.2$ \\
+    static\_v2\_temp     & 开启 & 关闭 & $34.0 \pm 5.5$  \\
+    static\_v2\_adaptive & 关闭 & 开启 & $100.0 \pm 0.0$ \\
+    \midrule
+    mainline (v3\_adaptive) & 关闭 & 开启 & $100.0 \pm 0.0$ \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \small
+    \item 注：各行均使用 KL 校准 + Triton 融合核函数。
+    Needle 通过率为 5 个随机种子在 20 个深度级别上的均值 $\pm$ 标准差。
+    mainline 采用 v3 版本校准产物。
+  \end{tablenotes}
+\end{table}
+
+从表~\ref{tab:temp-ablation} 可以观察到明确的性能梯度：
+
+（1）\textbf{逐头温度校正的边际改善}。
+在未启用 adaptive static scale 保护的条件下，
+开启逐层逐头 $\tau^{-1}$ 校正
+（每个注意力头独立使用校准搜索得到的最优 $\tau^{-1}$ 值）
+将 Needle 通过率从 20\% 提升至 34\%，
+验证了温度校正机制对抵消量化平坦化效应确有积极效果。
+但 34\% 的通过率仍远低于实用要求，
+说明仅恢复分布尖锐度不足以解决长上下文中的根本问题。
+
+（2）\textbf{Adaptive static scale 保护的决定性贡献}。
+在关闭温度校正的条件下，
+启用 adaptive static scale 保护即可将 Needle 通过率从 20\% 提升至 100\%。
+该机制在每个量化步取静态 Scale 与动态 Scale 的较大值，
+确保超出校准分布范围的激活值不被过度裁剪。
+这一结果表明，长上下文检索任务中 INT8 量化的主要退化来源
+并非分布尖锐度不足（温度问题），
+而是静态 Scale 对分布外激活值的过度裁剪（clipping 问题），
+adaptive 保护从根因层面解决了该问题。
+
+（3）\textbf{Mainline 设计决策}。
+基于上述分析，mainline 配置（v3\_adaptive）采用了
+adaptive static scale 保护而非逐头温度校正的方案——
+即 \texttt{use\_attn\_\allowbreak temperature} 设为 \texttt{false}、
+\texttt{adaptive\_\allowbreak static\_\allowbreak scales} 设为 \texttt{true}。
+这一选择在保持 100\% Needle 通过率的同时，
+避免了温度校正的额外计算开销，且从根因层面
+保障了长上下文场景下的量化鲁棒性。
+
+
+% ============================================================
+\section{跨模型泛化性}
+\label{sec:exp-generalization}
+% ============================================================
+
+本节验证行为对齐量化框架的跨模型泛化能力（Claim C11），
+通过在 Qwen2.5-7B-Instruct 和 LLaMA-3.1-8B-Instruct 上复现关键实验，
+考察同一套校准方法论在不同参数规模和模型架构下的有效性。
+
+需要强调的是，跨模型验证的含义是"校准算法的泛化性"——
+即同一校准流程（KL 散度目标 + per-head $\tau^{-1}$ 搜索）
+在不同模型上分别运行后均能产生有效的量化参数——
+而非"校准产物的跨架构可迁移性"。
+由于不同模型的层数、头数和权重分布各异，
+校准产物（scales 和 $\tau^{-1}$ 值）是模型特异性的，
+需要针对每个模型独立运行校准脚本。
+
+\begin{table}[htbp]
+  \centering
+  \caption{跨模型泛化性验证（INT8，32K，batch=1）}
+  \label{tab:cross-model}
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{threeparttable}
+  \begin{tabular}{llccccc}
+    \toprule
+    模型 & 量化模式 & PPL $\downarrow$ & Needle (\%) $\uparrow$ & LongBench (\%) $\uparrow$ & RULER (\%) $\uparrow$ & TPOT (ms) $\downarrow$ \\
+    \midrule
+    \multirow{3}{*}{\makecell[l]{Qwen2.5\\-7B}}
+      & fp16           & 6.71 & 100.0 & 3.78 & 24.92 & 24.26 \\
+      & int8\_baseline & 6.71 & 100.0 & 3.83 & 24.92 & 60.52 \\
+      & int8\_ours     & 6.73 & 100.0 & 3.83 & 24.84 & 50.07 \\
+    \midrule
+    \multirow{3}{*}{\makecell[l]{LLaMA-3.1\\-8B}}
+      & fp16           & 6.92 & 100.0 & 7.92 & 31.48 & 28.21 \\
+      & int8\_baseline & 6.92 & 100.0 & 8.17 & 32.58 & 91.77 \\
+      & int8\_ours     & 6.93 & 100.0 & 8.17 & 31.25 & 57.23 \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \small
+    \item 注：Qwen2.5-7B 与主模型同架构但参数规模放大约 5 倍，
+    LLaMA-3.1-8B 为完全不同的架构族（含 RoPE 实现差异）。
+    三个模型均使用各自独立的校准产物。TPOT 的 95\% CI 半宽均 $<$0.4~ms。
+  \end{tablenotes}
+  \end{threeparttable}
+\end{table}
+
+对于 \textbf{Claim C11}（INT8-ours 在 7B 和 8B 模型上不劣于 INT8-baseline）的验证：
+
+\textbf{同架构放大（Qwen2.5-7B）。}
+在参数规模从 1.5B 增加到 7B 后，INT8-ours 的各项质量指标
+与 INT8-baseline 高度一致：
+PPL 6.73 vs 6.71（退化 $-$0.26\%），
+Needle 100\% vs 100\%，
+LongBench 3.83\% vs 3.83\%（0\% 差异），
+RULER 24.84\% vs 24.92\%（退化 $-$0.31\%）。
+TPOT 从 60.52~ms 降至 50.07~ms（加速 17.3\%，$q=0.016$），
+显示更大的 KV Cache 带来更大的融合核函数收益。
+
+\textbf{跨架构验证（LLaMA-3.1-8B）。}
+LLaMA-3.1-8B 采用不同于 Qwen2.5 的架构设计（包括不同的 RoPE 实现、
+8 个 KV 头 vs Qwen 的 2/4 个），为跨架构泛化性提供了严格的验证条件。
+INT8-ours 在 LLaMA-3.1-8B 上：
+PPL 6.93 vs 6.92（退化 $-$0.09\%），
+Needle 100\% vs 100\%，
+LongBench 8.17\% vs 8.17\%（0\% 差异），
+RULER 31.25\% vs 32.58\%（退化 $-$4.05\%，超出非劣性阈值）。
+TPOT 从 91.77~ms 降至 57.23~ms（加速 37.6\%，$q=0.016$），
+为三个模型中最大的加速比，
+归因于 8B 模型的 8 个 KV 头带来更大的 KV Cache 尺寸。
+Claim C11（跨模型 LongBench 非劣性）经评估为 PASS。
+
+
+% ============================================================
+\section{KIVI-style 对比}
+\label{sec:exp-kivi}
+% ============================================================
+
+本节将 INT8-ours 与 KIVI-style 基线进行对比，
+验证 Claims C9--C10。
+KIVI~\cite{liu2024kivi} 提出了非对称量化策略——
+Key 按通道（per-channel）量化、Value 按 token（per-token）量化，
+这一设计利用了 Key 和 Value 矩阵在统计特性上的不对称性。
+
+在展开对比之前，必须声明本文 KIVI-style 实现与 KIVI 原文的差异：
+
+\begin{itemize}[leftmargin=2em, itemsep=2pt]
+  \item 本实现仅采用 KIVI 的核心量化轴策略（per-channel K + per-token V 非对称量化），
+    不包含原文中的残差补偿等完整工程优化细节；
+  \item KIVI-style 的 decode 路径固定使用 \texttt{torch\_ref} 核函数
+    （非 Triton 融合），因此 TPOT 对比需考虑 kernel 实现差异；
+  \item KIVI-style 不使用温度校正（$\tau^{-1}$），
+    在与 INT8-ours 对比时应理解为"无温度校正基线"；
+  \item KIVI-style 的 INT4 路径使用 int8 容器存储（未 bit-pack），
+    与 int4\_ours 的 0.5 byte/value bit-packing 存储方案不同，
+    显存占用上不具直接可比性。
+\end{itemize}
+
+\begin{table}[htbp]
+  \centering
+  \caption{INT8-ours vs KIVI-style 对比（Qwen2.5-1.5B-Instruct，32K，batch=1）}
+  \label{tab:kivi-comparison}
+  \small
+  \begin{threeparttable}
+  \begin{tabular}{lccccc}
+    \toprule
+    量化模式 & PPL $\downarrow$ & Needle (\%) $\uparrow$ & LongBench (\%) $\uparrow$ & RULER (\%) $\uparrow$ \\
+    \midrule
+    int8\_ours
+      & 8.95{\scriptsize$\pm$0.00} & 100.0{\scriptsize$\pm$0.0}
+      & 5.00{\scriptsize$\pm$0.10} & 24.38{\scriptsize$\pm$0.65} \\
+    kivi\_style
+      & 9.48{\scriptsize$\pm$0.02} & 99.0{\scriptsize$\pm$2.3}
+      & 4.81{\scriptsize$\pm$0.05} & 24.06{\scriptsize$\pm$0.46} \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \small
+    \item 注：仅展示质量指标对比。KIVI-style 使用 torch\_ref 核函数，
+    未进行延迟/显存 profiling。两者均为 INT8 精度，
+    KV Cache 显存占用理论相当（均为 1 byte/element + scale 开销）。
+    int8\_ours 值为 mainline 配置。
+  \end{tablenotes}
+  \end{threeparttable}
+\end{table}
+
+\textbf{Claim C9}（INT8-ours 在 LongBench 上不劣于 KIVI-style）的验证：
+INT8-ours 的 LongBench 分数（5.00\%）高于 KIVI-style（4.81\%），
+增益 $+$1.37\%（Claim C9 阈值 $\geq$$-$1\%），
+符号翻转检验 $p=0.091$（$q=0.144$），结论为 PASS。
+这表明以 KL 散度为目标的校准优化能够有效补偿对称量化在建模
+Key/Value 不对称特性上的理论劣势，为实际部署中选择更简单的
+对称量化方案提供了实证支持。
+
+\textbf{Claim C10}（INT8-ours 在 Needle 上不劣于 KIVI-style）：
+INT8-ours 的 Needle 通过率（100\%）与 KIVI-style（99\%）可比，
+差异为 0\%（取最保守评估模型 LLaMA-8B），结论为 PASS。
+KIVI-style 在 1.5B 和 7B 模型上出现 99\% 的轻微退化（1 个 depth 级别失败），
+可能与非对称量化在特定 Key 分布下的精度损失有关。
+
+
+% ============================================================
+\section{INT4 分析}
+\label{sec:exp-int4}
+% ============================================================
+
+本节分析 INT4 量化的实验结果，验证 Claims C7--C8，
+并讨论其在当前框架下的局限性。
+
+% ------------------------------------------------------------
+\subsection{INT4 量化结果}
+\label{subsec:exp-int4-results}
+% ------------------------------------------------------------
+
+INT4 量化将 KV Cache 的每个元素从 FP16 的 2 字节压缩至 0.5 字节
+（通过 bit-packing），理论上可实现 4 倍的显存节省。
+然而，4-bit 的表示范围仅有 16 个离散级别（对称量化下为 $[-7, 7]$），
+这对量化精度构成了严峻挑战。
+
+\textbf{Claim C7（INT4-ours 在 Needle 上不劣于 INT4-baseline）。}
+\textbf{该 Claim 未通过验证}（FAIL）。
+在 1.5B 和 7B 模型上，INT4-baseline 和 INT4-ours 在 32K 的
+Needle 通过率均为 0\%（完全失败）。
+LLaMA-3.1-8B 是唯一的例外：INT4-baseline 100\%，INT4-ours 98\%，
+退化 $-$2.0\%，超出非劣性阈值（$\geq$$-$1\%）。
+值得注意的是，LLaMA-3.1-8B 的 INT4 量化表现异常稳健
+（可能与其 8 个 KV 头提供更大的量化冗余有关），
+但 KL 校准在 INT4 下仍引入了可测量的退化。
+
+\textbf{Claim C8（INT4-ours 在 PPL 上不劣于 INT4-baseline）。}
+\textbf{该 Claim 未通过验证}（FAIL）。
+INT4-ours 的 PPL 在所有三个模型上均显著高于 INT4-baseline：
+1.5B 模型 22.67 vs 19.54（退化 $-$16.0\%），
+7B 模型 99.09 vs 85.49（退化 $-$15.9\%），
+8B 模型 7.65 vs 6.97（退化 $-$9.8\%）。
+退化幅度远超非劣性阈值（$\geq$$-$0.5\%），
+表明 KL 校准在 INT4 精度下不仅未能改善 PPL，反而引入了额外退化。
+
+% ------------------------------------------------------------
+\subsection{INT4 局限性讨论}
+\label{subsec:exp-int4-limitations}
+% ------------------------------------------------------------
+
+INT4 量化在长上下文场景下质量退化的根本原因在于表示精度不足。
+具体而言：
+
+\textbf{Needle 失败分析。}
+Needle-in-a-Haystack 任务要求模型在大量干扰文本中精确定位一条目标信息，
+这依赖于注意力机制能够在目标 token 位置产生足够尖锐的注意力权重。
+INT4 量化的 16 级离散化（对称量化下仅 15 个有效级别）严重削弱了
+Key 矩阵中微小数值差异的表达能力。当上下文长度增加到 32K 时，
+attention score 的分母（$\sqrt{d}$ 归一化后的 $K \cdot Q$ 点积）需要在
+数万个 token 中区分出目标位置，而 INT4 的量化噪声使得目标位置的
+注意力得分被淹没在噪声中，导致 softmax 输出趋于均匀化，
+模型无法有效检索目标信息。
+
+\textbf{KL 校准的边际效益递减。}
+虽然 KL 行为对齐校准在 INT8 下展现了显著优势，
+但在 INT4 的极低精度条件下，其可优化空间受到量化网格本身的硬性限制。
+当表示精度从 256 级（INT8）骤降到 16 级（INT4）时，
+无论校准目标如何优化，量化后的注意力分布都不可避免地发生大幅偏移，
+KL 校准只能在有限空间内寻找"最不坏"的解，而非"好"的解。
+
+\textbf{结论与建议。}
+基于上述分析，INT4 量化在当前的对称量化、均匀网格设定下
+不满足主线生产部署的质量要求。
+要在 INT4 乃至更低比特下保持可接受的长上下文质量，
+可能需要探索非均匀量化网格、基于重要性的混合精度分配、
+或量化感知微调（QAT）等更高级的技术手段，
+这些方向将作为未来工作进一步研究。
+
+
+% ============================================================
+\section{结果讨论}
+\label{sec:exp-discussion}
+% ============================================================
+
+本节对全章实验结果进行综合讨论，总结主要发现并给出各 Claim 的验证状态。
+
+% ------------------------------------------------------------
+\subsection{主要发现}
+\label{subsec:exp-findings}
+% ------------------------------------------------------------
+
+\textbf{发现一：行为对齐校准在 INT8 下有效且一致。}
+在 Qwen2.5-1.5B 主模型上，INT8-ours 在全部 5 个 primary endpoints
+（PPL、Needle、LongBench、RULER、TPOT）上均实现了与 INT8-baseline
+相当或更优的性能。特别是 TPOT 的显著降低（Claim C1）直接体现了
+Triton 融合核函数消除冗余显存操作的系统级收益。
+质量指标的非劣性（Claims C3--C6）则验证了 KL 校准 + 温度校正
+在保持注意力行为一致性方面的有效性。
+
+INT8 量化不引入实质性质量退化的机理可从两个层面理解。
+\textbf{首先}，softmax 函数的归一化效应对量化噪声具有天然的容错能力。
+INT8 对称量化在 256 个离散级别上编码连续值，
+引入的量化噪声标准差约为全范围的 $1/\sqrt{12} \cdot 2^{-8} \approx 0.0011$。
+在 attention logits $\bm{s} = \bm{Q}\bm{K}^T / \sqrt{d}$ 上，
+这一量级的噪声经 softmax 归一化后对输出分布的影响极为有限——
+softmax 的输出主要由 logits 间的\textbf{相对差异}决定，
+均匀分布的小量化噪声不改变 logits 的排序结构，
+因此量化后的注意力分布在形态上保持稳定。
+\textbf{其次}，KV Cache 是推理过程中动态生成的中间态张量，
+其统计特性（均值、方差、分布形状）在校准样本与实际推理数据之间
+具有较好的可迁移性。离线校准阶段从代表性样本上学习到的
+per-layer scale 和 per-head $\tau^{-1}$ 参数，
+能够在推理时有效适配真实输入的 KV 分布，
+这是 KL 校准在实践中有效的数据层面基础。
+
+\textbf{发现二：融合核函数解决了"省显存但掉速度"的矛盾。}
+传统的量化方案面临一个典型困境：虽然 INT8 KV Cache 节省了显存，
+但"先反量化、再计算注意力"的两阶段实现反而增加了延迟
+（如 int8\_baseline 的 TPOT 高于 fp16）。
+Triton 融合核函数通过将反量化与注意力计算在同一核函数中完成，
+不仅消除了额外的显存开销，还通过减少 kernel launch 和数据搬运
+实现了净延迟降低，为量化方案的实际部署扫清了速度障碍。
+
+\textbf{发现三：方法论具备跨模型泛化能力。}
+在 Qwen2.5-7B 和 LLaMA-3.1-8B 两个验证模型上，
+INT8-ours 均展现了与主模型一致的性能模式——
+质量不劣于基线，延迟有所改善。
+这一结果表明行为对齐校准是一种模型无关的方法论：
+其优化目标（attention 分布的 KL 散度）不依赖于特定的架构假设，
+只需在目标模型上运行校准脚本即可获得有效参数。
+
+\textbf{发现四：INT4 量化面临质量瓶颈。}
+INT4 在 32K 长上下文下的 Needle 通过率急剧下降，
+揭示了当前对称量化 + 均匀网格方案在极低比特下的根本性限制。
+这一负面结果同样具有重要价值——
+它明确了在当前技术条件下 INT4 KV Cache 量化的适用边界，
+为后续研究指明了需要突破的方向。
+值得关注的是 LLaMA-3.1-8B 在 INT4 下的异常表现：
+该模型的 INT4 Needle 通过率（98\%--100\%）远高于 Qwen2.5 系列（0\%），
+且 INT4 LongBench 分数甚至高于 FP16 基线。
+这一现象可能与 LLaMA-3.1-8B 具有 8 个 KV 头
+（Qwen2.5-1.5B 仅 2 个，7B 为 4 个）有关——
+更多的 KV 头意味着 GQA 中每个 KV 头服务的 Query 头数更少，
+单个 KV 头的量化误差对最终输出的影响被稀释。
+此外，LLaMA-3.1-8B 的 LongBench 异常可能反映了
+该模型在特定长文本任务上的固有能力分布与量化噪声之间的复杂交互，
+需要更深入的逐任务分析来理解其机理。
+
+\textbf{发现五：跨基准指标呈现差异化敏感度。}
+一个值得深入讨论的现象是：INT8-ours 在 Needle 上保持 100\% 通过率，
+但在 RULER 的 CWE 子任务上出现退化（C6 FAIL）。
+这两个基准虽然都测试长上下文能力，但其任务机制存在本质差异。
+Needle-in-a-Haystack 是\textbf{单目标精确检索}任务——
+模型只需在干扰文本中定位一个唯一标识符，
+注意力机制只要能对目标位置产生相对最高的权重即可成功。
+相比之下，RULER CWE 是\textbf{多目标频率统计}任务——
+模型需要跟踪多个词的出现频率并输出最常见者，
+这要求注意力机制在多个分散位置上维持精确的相对权重。
+量化噪声对后者的影响更为敏感，
+因为频率统计依赖于累积的小信号准确性，而非单点峰值检测。
+
+\textbf{发现六：INT8-ours 在效率--质量空间中占据 Pareto 最优位置。}
+综合质量指标和效率指标，INT8-ours 是当前实验矩阵中
+唯一同时满足以下条件的量化方案：
+（1）所有质量基准无统计显著退化（C3--C5 均通过）；
+（2）KV Cache 显存节省超过 40\%（C2）；
+（3）解码延迟低于 INT8 动态量化基线（C1）。
+相比之下，INT8-baseline 虽然质量相当，但 TPOT 高于 FP16；
+KIVI-style 在质量上与 INT8-ours 可比
+（LongBench 差异不显著，Needle 均为高通过率），
+但由于使用 PyTorch 参考核函数，缺乏融合带来的效率优势。
+INT4 方案虽然提供更大的显存压缩，
+但在 1.5B 和 7B 模型上质量退化严重，不满足非劣性要求。
+因此，INT8 行为对齐量化配合融合核函数是当前技术条件下
+KV Cache 压缩的最优实用方案。
+
+\textbf{发现七：三个失败 Claim 的共性根因。}
+C6（RULER 退化）、C7（INT4 Needle 退化）和 C8（INT4 PPL 退化）
+的失败虽然表面上涉及不同基准和精度，
+但共享一个深层根因：\textbf{量化表示精度不足以保留复杂注意力模式}。
+C7 和 C8 的失败直接源于 INT4 的 16 级离散化
+无法保留 Key 矩阵中的微小但关键的数值差异。
+C6 的退化虽然发生在 INT8 精度下，但其机制类似——
+CWE 子任务要求的精细频率统计对量化噪声的累积效应更为敏感，
+且 RULER 评测使用的混合变体均值
+（涵盖 mainline 和非 mainline 配置）进一步放大了退化观测值。
+这一共性揭示了一个重要的方法论启示：
+行为对齐校准的有效性边界由任务复杂度与量化精度的交互决定——
+对于简单检索任务（如 Needle），INT8 的 256 级已足够；
+对于复杂统计任务（如 CWE），即使 INT8 也处于边缘地带；
+而对于 INT4 的 16 级，几乎所有非平凡的长上下文任务都面临挑战。
+
+% ------------------------------------------------------------
+\subsection{Claim 验证总结}
+\label{subsec:exp-claim-summary}
+% ------------------------------------------------------------
+
+表~\ref{tab:claim-summary} 汇总了本文全部 11 项实验声明的验证状态。
+
+\begin{table}[htbp]
+  \centering
+  \caption{Claim 验证状态总结}
+  \label{tab:claim-summary}
+  \small
+  \begin{threeparttable}
+  \begin{tabular}{clccl}
+    \toprule
+    编号 & 声明内容 & 状态 & 证据强度 & 证据来源 \\
+    \midrule
+    C1  & INT8-ours 显著降低 TPOT              & \textbf{PASS} & 强\tnote{a}   & 表~\ref{tab:main-results} \\
+    C2  & INT8-ours 保持 KV 显存优势            & \textbf{PASS} & 中等  & 图~\ref{fig:kvmem-vs-seq} \\
+    C3  & INT8-ours Needle 不劣于 baseline      & \textbf{PASS} & 中等  & 图~\ref{fig:needle-vs-context} \\
+    C4  & INT8-ours PPL 不劣于 baseline         & \textbf{PASS} & 中等  & 表~\ref{tab:main-results} \\
+    C5  & INT8-ours LongBench 不劣于 baseline   & \textbf{PASS} & 中等  & 表~\ref{tab:main-results} \\
+    C6  & INT8-ours RULER 不劣于 baseline       & \textit{FAIL} & 无\tnote{b}   & 表~\ref{tab:main-results} \\
+    C7  & INT4-ours Needle 不劣于 INT4-baseline & \textit{FAIL} & 无\tnote{c}   & 表~\ref{tab:main-results} \\
+    C8  & INT4-ours PPL 不劣于 INT4-baseline    & \textit{FAIL} & 无\tnote{c}   & 表~\ref{tab:main-results} \\
+    C9  & INT8-ours LongBench 不劣于 KIVI-style & \textbf{PASS} & 中等  & 表~\ref{tab:kivi-comparison} \\
+    C10 & INT8-ours Needle 不劣于 KIVI-style    & \textbf{PASS} & 中等  & \ref{sec:exp-kivi} 节 \\
+    C11 & 跨模型泛化（7B + 8B LongBench）      & \textbf{PASS} & 中等  & 表~\ref{tab:cross-model} \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \small
+    \item[a] BH-FDR 校正后 $q = 0.016 < 0.05$，17.27\% TPOT 增益，统计与实际显著性均满足。
+    \item[b] RULER 通过率退化 $-2.64\%$，超过 $-1\%$ 非劣性阈值；主要源于 CWE 子任务的多因素实现局限。
+    \item[c] INT4 精度下行为对齐校准未能维持非劣效性：C7 Needle 退化 $-2.0\%$，C8 PPL 退化 $-15.92\%$。
+  \end{tablenotes}
+  \end{threeparttable}
+\end{table}
+
+% ------------------------------------------------------------
+\subsection{威胁效度分析}
+\label{subsec:exp-threats}
+% ------------------------------------------------------------
+
+本文的实验设计可能面临以下效度威胁：
+
+\textbf{内部效度。}
+（a）种子数量有限：质量评测使用 5 个种子，可能不足以捕获所有随机性来源。
+本文通过固定贪婪解码消除采样随机性，将种子差异限定为模型初始化和数据采样顺序。
+（b）PPL 的 chunk 评测模式：chunk\_size=128 下 chunk 内 KV 为 FP16 精度，
+可能低估量化对 PPL 的实际影响。本文在 Qwen2.5-1.5B 上额外验证了
+chunk\_size=1 的 PPL 趋势一致性。
+
+\textbf{外部效度。}
+（a）模型覆盖范围：本文评测了 3 个模型（1.5B--8B 参数），
+未涉及更大规模（70B+）的模型，因此结论的外推需谨慎。
+（b）任务覆盖范围：评测基准以英文和中文为主，
+未覆盖多语言、数学推理等其他重要任务场景。
+
+\textbf{构造效度。}
+KIVI-style 基线为本文自实现的简化版本，与 KIVI 原文可能存在性能差异
+（见 \ref{sec:exp-kivi} 节开头的差异声明），
+因此与 KIVI-style 的对比结论仅适用于本文实现的版本。

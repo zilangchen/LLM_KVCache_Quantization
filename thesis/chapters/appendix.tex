@@ -1,0 +1,509 @@
+% ============================================================
+% appendix.tex — 附录
+% ============================================================
+
+\chapter{附录}
+
+% ============================================================
+\section{实验环境详情}
+% ============================================================
+
+表~\ref{tab:app-env} 列出了本文所有实验所使用的软硬件环境配置。
+
+\begin{table}[htbp]
+  \centering
+  \caption{实验软硬件环境}
+  \label{tab:app-env}
+  \begin{tabular}{ll}
+    \toprule
+    \textbf{项目} & \textbf{配置} \\
+    \midrule
+    GPU             & NVIDIA H20, 98\,GB HBM \\
+    CPU             & Intel Xeon (AutoDL Cloud) \\
+    操作系统        & Ubuntu 22.04 LTS \\
+    Python          & 3.12 \\
+    PyTorch         & 2.8.0 (CUDA 12.8) \\
+    Transformers    & 4.48+ \\
+    Triton          & 3.2+ \\
+    NumPy           & 2.x \\
+    pandas          & 2.x \\
+    Matplotlib      & 3.x \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+所有实验均采用确定性设置：固定随机种子（主实验 1234--1238，吞吐实验 1234--1241），贪心解码策略（\texttt{temperature=0.0}, \texttt{top\_p=1.0}, \texttt{top\_k=0}），以确保结果的可复现性。
+
+% ============================================================
+\section{校准产物格式}
+\label{sec:app-calib-schema}
+% ============================================================
+
+离线校准阶段产出的 JSON 文件遵循以下 schema：
+
+\begin{lstlisting}[
+  basicstyle=\small\ttfamily,
+  frame=single,
+  breaklines=true,
+  numbers=left,
+  numberstyle=\tiny,
+  caption={校准产物 JSON schema},
+  label={lst:calib-schema}
+]
+{
+  "model_name": "Qwen/Qwen2.5-1.5B-Instruct",
+  "calib_method": "kl_selected",
+  "num_layers": 28,
+  "layers": {
+    "0": {
+      "k_scale": <float32>,
+      "v_scale": <float32>,
+      "inv_tau": [<float32>, ...],  // per-head, length = num_heads
+      "k_zero_point": <float32>,    // optional, asymmetric only
+      "v_zero_point": <float32>     // optional, asymmetric only
+    },
+    "1": { ... },
+    ...
+  },
+  "metadata": {
+    "quant_bits": 8,
+    "calibration_samples": 128,
+    "calibration_seq_len": 2048,
+    "timestamp": "2026-xx-xx"
+  }
+}
+\end{lstlisting}
+
+其中：
+\begin{itemize}[nosep]
+  \item \texttt{k\_scale} / \texttt{v\_scale}：逐层对称量化的缩放因子，始终以 float32 存储。
+  \item \texttt{inv\_tau}：逐头温度校正因子 $\tau^{-1}$，用于在注意力 softmax 前调节 logits 的分布锐度。
+  \item \texttt{k\_zero\_point} / \texttt{v\_zero\_point}：仅在 KIVI 风格非对称量化模式下出现。
+\end{itemize}
+
+% ============================================================
+\section{完整 LongBench 结果}
+\label{sec:app-longbench-full}
+% ============================================================
+
+表~\ref{tab:app-longbench-full} 列出了三种模型在 32K 上下文长度下、七种量化模式的
+LongBench 聚合结果，包含 F1 宏平均、包含匹配宏平均以及综合评分。
+数值后的"$\pm$"表示 Bootstrap 95\% 置信区间半宽。
+INT8-ours 在所有模型上均与 FP16 基线保持可比的质量，
+而 INT4 方案（尤其在 1.5B 和 7B 上）出现显著退化。
+
+\begin{table}[htbp]
+  \centering
+  \caption{LongBench 完整结果（32K 上下文，三模型 $\times$ 七量化模式）}
+  \label{tab:app-longbench-full}
+  \zihao{5}
+  \begin{tabular}{llrrr}
+    \toprule
+    \textbf{模型} & \textbf{量化模式} & \textbf{F1 宏平均} & \textbf{包含匹配率(\%)} & \textbf{综合评分} \\
+    \midrule
+    \multirow{7}{*}{1.5B}
+      & fp16            & $5.53 \pm 0.05$ & $99.9 \pm 0.2$ & $0.0482 \pm 0.0004$ \\
+      & int8\_baseline  & $5.50 \pm 0.02$ & $99.9 \pm 0.2$ & $0.0478 \pm 0.0002$ \\
+      & int8\_ours      & $5.54 \pm 0.04$ & $99.9 \pm 0.1$ & $0.0482 \pm 0.0004$ \\
+      & int4\_baseline  & $2.91 \pm 0.26$ & $45.9 \pm 2.0$ & $0.0298 \pm 0.0024$ \\
+      & int4\_fused     & $0.00 \pm 0.00$ & $0.0 \pm 0.0$  & $0.0515 \pm 0.0068$ \\
+      & int4\_ours      & $0.00 \pm 0.00$ & $0.0 \pm 0.0$  & $0.0241 \pm 0.0025$ \\
+      & kivi\_style     & $5.58 \pm 0.07$ & $99.9 \pm 0.1$ & $0.0481 \pm 0.0005$ \\
+    \midrule
+    \multirow{7}{*}{7B}
+      & fp16            & $4.29 \pm 0.15$ & $100.0 \pm 0.0$ & $0.0378 \pm 0.0008$ \\
+      & int8\_baseline  & $4.38 \pm 0.14$ & $100.0 \pm 0.0$ & $0.0383 \pm 0.0007$ \\
+      & int8\_ours      & $4.44 \pm 0.14$ & $100.0 \pm 0.0$ & $0.0383 \pm 0.0009$ \\
+      & int4\_baseline  & $0.00 \pm 0.00$ & $0.0 \pm 0.0$   & $0.0172 \pm 0.0024$ \\
+      & int4\_fused     & $0.45 \pm 0.13$ & $4.2 \pm 0.9$   & $0.0183 \pm 0.0020$ \\
+      & int4\_ours      & $0.00 \pm 0.01$ & $0.4 \pm 0.5$   & $0.0027 \pm 0.0011$ \\
+      & kivi\_style     & $4.28 \pm 0.14$ & $99.9 \pm 0.1$  & $0.0378 \pm 0.0011$ \\
+    \midrule
+    \multirow{7}{*}{8B}
+      & fp16            & $10.29 \pm 0.76$ & $99.7 \pm 0.5$ & $0.0792 \pm 0.0066$ \\
+      & int8\_baseline  & $10.71 \pm 0.85$ & $99.7 \pm 0.5$ & $0.0817 \pm 0.0092$ \\
+      & int8\_ours      & $10.72 \pm 0.85$ & $99.6 \pm 0.7$ & $0.0817 \pm 0.0092$ \\
+      & int4\_baseline  & $12.95 \pm 1.02$ & $99.7 \pm 0.5$ & $0.1037 \pm 0.0087$ \\
+      & int4\_fused     & $15.89 \pm 1.37$ & $99.8 \pm 0.3$ & $0.1505 \pm 0.0138$ \\
+      & int4\_ours      & $19.88 \pm 1.34$ & $99.4 \pm 0.5$ & $0.1908 \pm 0.0111$ \\
+      & kivi\_style     & $8.72 \pm 0.98$  & $99.6 \pm 0.3$ & $0.0682 \pm 0.0069$ \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \footnotesize
+    \item 注：1.5B = Qwen2.5-1.5B-Instruct，7B = Qwen2.5-7B-Instruct，8B = LLaMA-3.1-8B-Instruct。
+    评测采用合成 LongBench 数据集（7 类子任务），各行数值为 5 个随机种子的均值。
+    LLaMA-3.1-8B INT4 方案的较高 F1 值可能与该模型在长文本任务上的固有能力差异有关。
+  \end{tablenotes}
+\end{table}
+
+% ============================================================
+\section{种子级统计明细}
+\label{sec:app-seed-detail}
+% ============================================================
+
+表~\ref{tab:app-sig-quality} 和表~\ref{tab:app-sig-tpot} 分别列出了 INT8-ours 相对于
+INT8-baseline 在质量指标和推理延迟上的统计检验结果。
+所有检验均基于 5--8 个配对种子的 sign-flip 置换检验，
+多重比较校正采用 Benjamini-Hochberg FDR 控制（$\alpha=0.05$）。
+
+% --- 质量指标统计检验 ---
+\begin{table}[htbp]
+  \centering
+  \caption{INT8-ours vs INT8-baseline 质量指标统计检验（32K 上下文）}
+  \label{tab:app-sig-quality}
+  \zihao{5}
+  \begin{tabular}{llrrrrrr}
+    \toprule
+    \textbf{模型} & \textbf{指标} & \textbf{基线均值} & \textbf{本文均值} & \textbf{增益(\%)} & \textbf{$p$值} & \textbf{$q$值} & \textbf{显著} \\
+    \midrule
+    \multirow{4}{*}{1.5B}
+      & perplexity$\downarrow$      & 8.9316 & 8.9497 & $-0.20$ & 0.0909 & 0.0974 & 否 \\
+      & needle\_pass\_rate$\uparrow$ & 100.00 & 100.00 & $+0.00$ & 1.0000 & 1.0000 & 否 \\
+      & longbench\_score$\uparrow$  & 0.0478 & 0.0486 & $+1.77$ & 0.0909 & 0.1435 & 否 \\
+      & ruler\_pass\_rate$\uparrow$ & 24.45  & 23.81  & $-2.64$ & 0.0909 & 0.7273 & 否 \\
+    \midrule
+    \multirow{4}{*}{7B}
+      & perplexity$\downarrow$      & 6.7145 & 6.7322 & $-0.26$ & 0.0909 & 0.0974 & 否 \\
+      & needle\_pass\_rate$\uparrow$ & 100.00 & 100.00 & $+0.00$ & 1.0000 & 1.0000 & 否 \\
+      & longbench\_score$\uparrow$  & 0.0383 & 0.0383 & $+0.17$ & 0.9394 & 0.9553 & 否 \\
+      & ruler\_pass\_rate$\uparrow$ & 24.92  & 24.84  & $-0.31$ & 1.0000 & 1.0000 & 否 \\
+    \midrule
+    \multirow{4}{*}{8B}
+      & perplexity$\downarrow$      & 6.9193 & 6.9252 & $-0.09$ & 0.0909 & 0.0974 & 否 \\
+      & needle\_pass\_rate$\uparrow$ & 100.00 & 100.00 & $+0.00$ & 1.0000 & 1.0000 & 否 \\
+      & longbench\_score$\uparrow$  & 0.0817 & 0.0817 & $+0.09$ & 0.8788 & 0.9416 & 否 \\
+      & ruler\_pass\_rate$\uparrow$ & 32.58  & 31.25  & $-4.05$ & 0.0909 & 0.7273 & 否 \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \footnotesize
+    \item[a] 1.5B 模型的 Needle 行报告 mainline 配置结果（5 种子均为 100\%）。
+    含 ablation 变体的混合均值为 70.29\%（7 种配置 $\times$ 5 种子 = 35 观测）。
+    \item[b] LongBench 和 RULER 的 INT8-ours 值为所有配置变体（mainline + ablation）的混合均值。
+    RULER 退化（$-$2.64\%）主要受非 mainline 配置拉低。
+    \item 注：$n=5$ 个配对种子，sign-flip 置换检验。所有质量指标的差异均未达到 BH-FDR 校正后的统计显著性。
+  \end{tablenotes}
+\end{table}
+
+% --- TPOT 统计检验 ---
+\begin{table}[htbp]
+  \centering
+  \caption{INT8-ours vs INT8-baseline 解码延迟统计检验（32K，batch=1，gen\_len=64）}
+  \label{tab:app-sig-tpot}
+  \zihao{5}
+  \begin{tabular}{lrrrrrrr}
+    \toprule
+    \textbf{模型} & \textbf{基线 TPOT (ms)} & \textbf{本文 TPOT (ms)} & \textbf{加速(\%)} & \textbf{$p$值} & \textbf{$q$值} & \textbf{显著} & \textbf{$n$} \\
+    \midrule
+    1.5B & 51.42 & 47.14 & $+8.32$  & 0.0117 & 0.0159 & \textbf{是} & 8 \\
+    7B   & 60.52 & 50.07 & $+17.26$ & 0.0117 & 0.0159 & \textbf{是} & 8 \\
+    8B   & 91.77 & 57.23 & $+37.64$ & 0.0117 & 0.0159 & \textbf{是} & 8 \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \footnotesize
+    \item 注：$n=8$ 个配对种子（1234--1241），sign-flip 置换检验。三种模型上的 TPOT 降低均达到
+    BH-FDR 校正后的统计显著性（$q < 0.05$）。加速幅度随模型规模增大而增大，
+    这与更大的 KV Cache 使得融合核函数的带宽节省效果更加显著一致。
+  \end{tablenotes}
+\end{table}
+
+% ============================================================
+\section{质量评测补充图表}
+\label{sec:app-quality-plots}
+% ============================================================
+
+本节提供主线质量评测指标的可视化补充。
+图~\ref{fig:app-ruler-vs-context} 展示了 RULER 通过率随上下文长度的变化趋势，
+图~\ref{fig:app-longbench-vs-context} 展示了 LongBench 综合评分的对应趋势。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/ruler_pass_rate_vs_context.png}
+  \caption{各量化模式的 RULER 通过率随上下文长度的变化（Qwen2.5-1.5B-Instruct）。
+  RULER 评估覆盖 4 个子任务：S-NIAH、MK-NIAH、VT 和 CWE。}
+  \label{fig:app-ruler-vs-context}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/longbench_score_vs_context.png}
+  \caption{各量化模式的 LongBench 综合评分随上下文长度的变化（Qwen2.5-1.5B-Instruct）。
+  综合评分为 7 类子任务官方指标的宏平均。}
+  \label{fig:app-longbench-vs-context}
+\end{figure}
+
+% ============================================================
+\section{Needle-in-a-Haystack 深度-位置热力图}
+\label{sec:app-needle-heatmaps}
+% ============================================================
+
+图~\ref{fig:app-needle-4k}--\ref{fig:app-needle-32k} 展示了各量化模式在
+4 种上下文长度下 Needle 通过率关于插入深度的详细分布。
+其中图~\ref{fig:app-needle-8k}（8K）和图~\ref{fig:app-needle-16k}（16K）
+呈现了从短上下文到长上下文过渡过程中 INT4 退化的渐进特征。
+图~\ref{fig:app-needle-exact} 进一步以精确匹配（exact match）这一更严格标准
+展示了各模式随上下文长度的通过率变化。
+热力图横轴为 needle 在 haystack 中的相对位置（深度百分比），
+每列对应一种量化模式。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\textwidth]{figures/needle_curve_depth_ctx4096.png}
+  \caption{Needle-in-a-Haystack 深度-位置分布（上下文长度 4K）}
+  \label{fig:app-needle-4k}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\textwidth]{figures/needle_curve_depth_ctx8192.png}
+  \caption{Needle-in-a-Haystack 深度-位置分布（上下文长度 8K）}
+  \label{fig:app-needle-8k}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\textwidth]{figures/needle_curve_depth_ctx16384.png}
+  \caption{Needle-in-a-Haystack 深度-位置分布（上下文长度 16K）}
+  \label{fig:app-needle-16k}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\textwidth]{figures/needle_curve_depth_ctx32704.png}
+  \caption{Needle-in-a-Haystack 深度-位置分布（上下文长度 32K）。
+  INT4 系列量化模式在 32K 长上下文下出现显著的通过率退化，
+  尤其在 haystack 深层位置（60\%--90\% 区间），
+  说明量化噪声对远距离注意力检索的影响更为严重。}
+  \label{fig:app-needle-32k}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/needle_exact_match_vs_context.png}
+  \caption{Needle-in-a-Haystack 精确匹配率随上下文长度的变化。
+  精确匹配（exact match）采用比通过率更严格的评判标准。}
+  \label{fig:app-needle-exact}
+\end{figure}
+
+% ============================================================
+\section{推理效率与扩展性补充图表}
+\label{sec:app-efficiency-plots}
+% ============================================================
+
+本节提供推理延迟、吞吐量和显存的补充可视化。
+图~\ref{fig:app-tpot-gain} 展示了各量化模式相对 FP16 的 TPOT 加速比，
+图~\ref{fig:app-throughput-batch} 和图~\ref{fig:app-throughput-per-seq}
+分别展示了总吞吐量和单序列吞吐量随 batch size 的扩展曲线，
+图~\ref{fig:app-kvmem-batch} 和图~\ref{fig:app-mempeak-batch}
+分别展示了 KV Cache 显存和总峰值显存随 batch size 的变化，
+图~\ref{fig:app-prefill-batch} 展示了 prefill 阶段吞吐量的对比。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/latency_tpot_gain_vs_fp16.png}
+  \caption{各量化模式相对 FP16 基线的 TPOT 加速比。
+  正值表示加速（TPOT 降低），负值表示减速。
+  int8\_ours（Triton 融合核函数）在所有模型上均实现正加速，
+  而 int8\_baseline（torch\_ref）因两阶段反量化开销导致减速。}
+  \label{fig:app-tpot-gain}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/throughput_tok_per_s_vs_batch.png}
+  \caption{吞吐量（tokens/s）随 batch size 的扩展曲线（Qwen2.5-1.5B-Instruct，seq\_len=4096）。
+  随着 batch size 增大，量化模式的吞吐优势逐渐显现。}
+  \label{fig:app-throughput-batch}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/throughput_tok_per_s_per_seq_vs_batch.png}
+  \caption{单序列吞吐量（tokens/s/seq）随 batch size 的变化。
+  当 batch size 增大时，单序列吞吐量下降，
+  但量化模式的下降速率慢于 FP16，体现了更高的显存效率。}
+  \label{fig:app-throughput-per-seq}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/memory_kv_cache_vs_batch.png}
+  \caption{KV Cache 显存随 batch size 的变化（Qwen2.5-1.5B-Instruct，seq\_len=4096）。
+  KV Cache 显存与 batch size 严格线性增长，
+  INT8 和 INT4 量化分别实现约 2$\times$ 和 4$\times$ 的显存压缩。}
+  \label{fig:app-kvmem-batch}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/memory_peak_vs_batch.png}
+  \caption{总峰值显存随 batch size 的变化（Qwen2.5-1.5B-Instruct，seq\_len=4096）。
+  随着 batch size 增大，KV Cache 在总显存中的占比升高，
+  量化的显存节省优势更加显著。}
+  \label{fig:app-mempeak-batch}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/prefill_tok_per_s_vs_batch.png}
+  \caption{Prefill 阶段吞吐量随 batch size 的变化（Qwen2.5-1.5B-Instruct）。
+  Prefill 阶段为计算密集型，量化对其影响较小，
+  各模式的 prefill 吞吐量差异主要来自 KV Cache 写入开销。}
+  \label{fig:app-prefill-batch}
+\end{figure}
+
+% ============================================================
+\section{RULER 子任务分解}
+\label{sec:app-ruler-subtask}
+% ============================================================
+
+RULER 评测包含 4 个子任务：S-NIAH（单针检索）、MK-NIAH（多键检索）、
+VT（变量追踪）和 CWE（常见词提取）。
+表~\ref{tab:app-ruler-subtask} 展示了 1.5B 主模型在各子任务上的
+通过率分解，揭示了不同子任务对量化噪声的差异化敏感度。
+
+\begin{table}[htbp]
+  \centering
+  \caption{RULER 子任务通过率分解（Qwen2.5-1.5B-Instruct，32K 上下文）}
+  \label{tab:app-ruler-subtask}
+  \small
+  \begin{tabular}{lcccc}
+    \toprule
+    \textbf{量化模式} & \textbf{S-NIAH (\%)} & \textbf{MK-NIAH (\%)} & \textbf{VT (\%)} & \textbf{CWE (\%)} \\
+    \midrule
+    fp16            & $8.33 \pm 6.83$   & $99.06 \pm 1.03$  & $0.31 \pm 0.49$  & $0.00 \pm 0.00$ \\
+    int8\_baseline  & $9.79 \pm 7.99$   & $99.17 \pm 0.86$  & $0.31 \pm 0.49$  & $0.00 \pm 0.00$ \\
+    int8\_ours\tnote{a}
+                    & $2.75 \pm 2.38$   & $96.19 \pm 1.22$  & $0.03 \pm 0.07$  & $0.00 \pm 0.00$ \\
+    int4\_baseline  & $0.00 \pm 0.00$   & $0.00 \pm 0.00$   & $0.00 \pm 0.00$  & $0.00 \pm 0.00$ \\
+    int4\_ours      & $0.00 \pm 0.00$   & $0.00 \pm 0.00$   & $0.00 \pm 0.00$  & $0.00 \pm 0.00$ \\
+    kivi\_style     & $8.33 \pm 6.83$   & $98.13 \pm 1.28$  & $0.31 \pm 0.49$  & $0.00 \pm 0.00$ \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \footnotesize
+    \item[a] int8\_ours 的均值包含所有配置变体（mainline + ablation，$n=45$），
+    MK-NIAH 和 S-NIAH 退化主要受非 mainline 变体拉低。
+    \item 注：$\pm$ 为 Bootstrap 95\% CI 半宽。CWE 子任务在所有模式下均接近 0\%，
+    原因在于 CWE 评测的设计特性（干扰词频高于目标词频约 90 倍）
+    而非量化引起。VT 子任务同样因评测难度极高而普遍接近零通过率。
+    实际质量差异主要体现在 S-NIAH 和 MK-NIAH 两个检索类子任务上。
+  \end{tablenotes}
+\end{table}
+
+从表~\ref{tab:app-ruler-subtask} 可以看出，RULER 的整体通过率
+主要由 MK-NIAH 贡献（各模式均在 96\%--99\% 区间），
+而 S-NIAH 的绝对通过率普遍较低（$<$10\%），
+这是因为 S-NIAH 采用严格的精确匹配标准，
+长上下文下的单点检索对模型注意力精度要求极高。
+INT4 量化模式在所有子任务上均完全失败（通过率 0\%），
+与主文中 Needle 的观察一致，进一步确认了 4-bit 量化在 32K 上下文下的根本性精度不足。
+
+% ============================================================
+\section{批处理扩展容量}
+\label{sec:app-batch-capacity}
+% ============================================================
+
+表~\ref{tab:app-batch-capacity} 展示了各量化模式在 seq\_len=8192 条件下
+的最大可支持 batch size。该指标直接反映量化的显存节省在实际批量推理中的价值。
+
+\begin{table}[htbp]
+  \centering
+  \caption{各量化模式的最大可支持 batch size（Qwen2.5-1.5B-Instruct，seq\_len=8192）}
+  \label{tab:app-batch-capacity}
+  \small
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{量化模式} & \textbf{最大成功 batch} & \textbf{测试范围} & \textbf{状态} \\
+    \midrule
+    fp16            & 16 & 1--16 & 完整通过 \\
+    int8\_baseline  & 24 & 1--32 & batch=32 OOM \\
+    int8\_ours      & 32 & 1--32 & 完整通过 \\
+    int4\_baseline  & 16 & 1--16 & 完整通过 \\
+    int4\_fused     & 32 & 1--32 & 完整通过 \\
+    int4\_ours      & 32 & 1--32 & 完整通过 \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \footnotesize
+    \item 注：int8\_ours 和 INT4 融合模式（int4\_fused/int4\_ours）均可支持 batch=32，
+    而 fp16 在 batch=16 时已达容量上限。int8\_baseline 在 batch=32 时 OOM，
+    原因是 torch\_ref 核函数的中间 FP16 张量分配在高 batch 下超出显存限制。
+    int8\_ours 的 Triton 融合核函数通过消除中间张量分配，将可服务 batch 从 24 提升到 32，
+    实现了 33\% 的并发能力提升。
+  \end{tablenotes}
+\end{table}
+
+% ============================================================
+\section{Claim 验证详细汇总}
+\label{sec:app-claim-detail}
+% ============================================================
+
+表~\ref{tab:app-claim-summary} 汇总了全部 11 项核心声明的验证结果，
+包括实际观测增益、阈值、统计检验结果和证据强度。
+
+\begin{table}[htbp]
+  \centering
+  \caption{Claim 验证详细汇总（11 项核心声明）}
+  \label{tab:app-claim-summary}
+  \zihao{5}
+  \setlength{\tabcolsep}{3pt}
+  \begin{tabular}{clcrrrcl}
+    \toprule
+    \textbf{ID} & \textbf{核心声明} & \textbf{结果} & \textbf{阈值} & \textbf{观测} & \textbf{$q$值} & \textbf{证据} & \textbf{关键模型} \\
+    \midrule
+    C1  & TPOT 显著降低             & PASS & $\geq$5\%    & +17.3\%   & 0.016 & 强    & 7B \\
+    C2  & KV 显存优势               & PASS & $\geq$20\%   & +43.7\%   & ---   & 中    & 8B \\
+    C3  & Needle 不劣于 baseline    & PASS & $\geq$$-$1\%  & 0.0\%     & 1.000 & 中    & 7B \\
+    C4  & PPL 不劣于 baseline       & PASS & $\geq$$-$0.5\% & $-$0.18\% & 0.097 & 中    & 1.5B \\
+    C5  & LongBench 不劣于 baseline & PASS & $\geq$$-$1\%  & +0.16\%   & 0.144 & 中    & 7B \\
+    C6  & RULER 不劣于 baseline     & FAIL & $\geq$$-$1\%  & $-$2.64\% & 0.727 & 无    & 1.5B \\
+    C7  & INT4 Needle 不劣于        & FAIL & $\geq$$-$1\%  & $-$2.0\%  & 1.000 & 无    & 8B \\
+    C8  & INT4 PPL 不劣于           & FAIL & $\geq$$-$0.5\% & $-$15.9\% & 0.097 & 无    & 7B \\
+    C9  & LongBench 不劣于 KIVI     & PASS & $\geq$$-$1\%  & +1.37\%   & 0.144 & 中    & 7B \\
+    C10 & Needle 不劣于 KIVI        & PASS & $\geq$$-$1\%  & 0.0\%     & 1.000 & 中    & 8B \\
+    C11 & 跨模型 LongBench 不劣于   & PASS & $\geq$$-$1\%  & +0.05\%   & 0.955 & 中    & 7B+8B \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \footnotesize
+    \item 注：C1--C5、C9--C11 为 INT8 相关声明，C6 为 INT8 RULER 声明，C7--C8 为 INT4 声明。
+    ``阈值''为非劣性/优效性的最小增益要求。``$q$值''为 BH-FDR 校正后的调整 $p$ 值。
+    ``---'' 表示该声明不要求统计检验（直接比较确定性指标）。
+    三项 FAIL（C6、C7、C8）的共性分析见正文 \ref{sec:exp-discussion} 节。
+  \end{tablenotes}
+\end{table}
+
+% ============================================================
+\section{校准产物版本说明}
+\label{sec:app-calib-provenance}
+% ============================================================
+
+本文主线实验使用的校准产物信息如下：
+
+\begin{itemize}[leftmargin=2em, itemsep=2pt]
+  \item \textbf{校准文件}：\texttt{kv\_calib\_kl\_\allowbreak selected\_v3\_quick.json}
+  \item \textbf{校准方法}：KL 散度行为对齐校准（kl\_selected）
+  \item \textbf{校准模型}：Qwen2.5-1.5B-Instruct
+  \item \textbf{校准样本}：128 条 WikiText-103 文本，序列长度 2048 tokens
+  \item \textbf{生成日期}：2026-02-12
+  \item \textbf{量化精度}：INT8 对称量化，per-group（group\_size=16）
+  \item \textbf{产物内容}：28 层 $\times$（k\_scale, v\_scale, per-head inv\_tau）
+\end{itemize}
+
+\textbf{已知局限。}
+该校准产物生成时，校准脚本中 Q 向量的预处理流程尚未包含
+input\_layernorm 和 RoPE 位置编码（CAL-019/020 问题），
+该问题已在后续版本中修复。
+1.5B 模型的 INT8 量化在主线实验中展现了与 FP16
+几乎一致的质量（PPL 退化 $-$0.18\%，Needle 100\%），
+当前结果提示该校准产物对 1.5B 主线的影响可能有限，
+但尚未完成修复后的重校准对比验证，
+完整的验证列为未来工作（第~\ref{sec:conclusion-future} 节）。
+
+7B 和 8B 模型的校准文件在远端 GPU 服务器上独立生成，
+各模型的 per-layer scale 和 per-head inv\_tau 参数均为模型特异性的。
+这些校准产物的 provenance 依赖远端实验记录，
+当前本地仓库未完整收录其校准日志。

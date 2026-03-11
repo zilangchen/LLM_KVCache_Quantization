@@ -1,0 +1,43 @@
+% ============================================================
+% header.tex — 页眉页脚 (fancyhdr)
+% ============================================================
+\usepackage{fancyhdr}
+
+% --- 页面尺寸（A4, 上下左右各 25mm）---
+\usepackage{geometry}
+\geometry{
+  a4paper,
+  top    = 25mm,
+  bottom = 25mm,
+  left   = 25mm,
+  right  = 25mm,
+  headheight = 14pt,
+  headsep    = 10mm,
+  footskip   = 10mm,
+}
+
+% --- 正文页眉样式 ---
+\fancypagestyle{mainmatter}{%
+  \fancyhf{}%
+  \fancyhead[CE]{\zihao{5}\songti 华南理工大学学士学位论文}%
+  \fancyhead[CO]{\zihao{5}\songti \leftmark}%
+  \fancyfoot[C]{\zihao{5}\thepage}%
+  \renewcommand{\headrulewidth}{1.0pt}%
+  \renewcommand{\footrulewidth}{0pt}%
+}
+
+% --- 前置部分样式（摘要/目录：罗马页码，无页眉线）---
+\fancypagestyle{frontmatter}{%
+  \fancyhf{}%
+  \fancyfoot[C]{\zihao{5}\thepage}%
+  \renewcommand{\headrulewidth}{0pt}%
+  \renewcommand{\footrulewidth}{0pt}%
+}
+
+% --- 空白页样式 ---
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyfoot[C]{\zihao{5}\thepage}%
+  \renewcommand{\headrulewidth}{0pt}%
+  \renewcommand{\footrulewidth}{0pt}%
+}

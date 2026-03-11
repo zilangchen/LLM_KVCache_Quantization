@@ -1,0 +1,15 @@
+% ============================================================
+% abstract_en.tex — English Abstract
+% ============================================================
+
+\begin{abstracten}
+
+Large Language Models (LLMs) have achieved remarkable progress in natural language processing, yet the memory footprint of the key-value (KV) cache during autoregressive inference grows linearly with the sequence length, severely limiting deployment efficiency and scalability in long-context scenarios. Existing KV cache quantization methods typically minimize per-layer mean squared error, neglecting how quantization errors propagate and amplify through the attention mechanism, which leads to notable generation quality degradation under low-bit (e.g., INT4) settings.
+
+To address this issue, we propose a behavior-aligned quantization framework for efficient LLM inference. The framework adopts the KL divergence of attention output distributions as the calibration objective. During an offline calibration phase, per-layer quantization scales and per-head temperature correction factors ($\tau^{-1}$) are jointly optimized on a small set of representative samples so that the post-quantization attention behavior remains distributionally aligned with the full-precision baseline. For the inference stage, we design and implement fused quantized decode-attention kernels in Triton that combine dequantization, temperature correction, and attention computation into a single GPU kernel invocation, eliminating additional memory overhead while significantly reducing memory-access latency.
+
+We conduct systematic evaluations on three models---Qwen2.5-1.5B-Instruct, Qwen2.5-7B-Instruct, and LLaMA-3.1-8B-Instruct---across seven quantization modes (FP16, INT8, and INT4 variants) on five benchmarks: perplexity, Needle-in-a-Haystack retrieval, LongBench comprehensive ability, RULER long-context reasoning, and decode latency. Experimental results show that the INT8 behavior-aligned scheme maintains generation quality with no statistically significant degradation compared with the FP16 baseline (Bootstrap CI + BH-FDR correction, $\alpha=0.05$) on all benchmarks, while achieving approximately 44\% KV cache memory reduction and 8\%--38\% decode latency reduction over the INT8 dynamic quantization baseline. Our experiments also reveal the applicability boundary of behavior-aligned calibration under INT4 precision: the inherent accuracy loss of 4-bit quantization exceeds the compensatory capacity of the calibration method, leading to notable quality degradation on perplexity and long-context retrieval tasks, providing empirical evidence for the bit-width applicability range of quantization methods.
+
+\keywordsen{Large Language Model; Key-Value Cache; Quantization; Attention Mechanism; Behavior-Aligned Calibration}
+
+\end{abstracten}

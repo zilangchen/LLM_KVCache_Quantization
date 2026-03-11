@@ -1,0 +1,29 @@
+% ============================================================
+% toc.tex — 目录格式 (tocloft)
+% ============================================================
+\usepackage{tocloft}
+
+% --- 目录标题：小二号黑体居中 ---
+\renewcommand{\cfttoctitlefont}{\hfill\zihao{-2}\heiti\bfseries}
+\renewcommand{\cftaftertoctitle}{\hfill}
+
+% --- 章条目：四号黑体 ---
+\renewcommand{\cftchapfont}{\zihao{4}\heiti}
+\renewcommand{\cftchappagefont}{\zihao{4}\normalfont}
+\renewcommand{\cftchapleader}{\cftdotfill{\cftdotsep}}
+
+% --- 节条目：小四号宋体 ---
+\renewcommand{\cftsecfont}{\zihao{-4}\songti}
+\renewcommand{\cftsecpagefont}{\zihao{-4}\normalfont}
+
+% --- 条条目：小四号宋体 ---
+\renewcommand{\cftsubsecfont}{\zihao{-4}\songti}
+\renewcommand{\cftsubsecpagefont}{\zihao{-4}\normalfont}
+
+% --- 行距 1.5 倍 ---
+\setlength{\cftbeforechapskip}{0pt}
+\setlength{\cftbeforesecskip}{0pt}
+\setlength{\cftbeforesubsecskip}{0pt}
+
+% --- 目录深度到 subsection ---
+\setcounter{tocdepth}{2}

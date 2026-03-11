@@ -1,0 +1,179 @@
+% ============================================================
+% ch1_introduction.tex — 第一章 绪论
+% ============================================================
+\chapter{绪论}
+
+\section{研究背景}
+
+近年来，大语言模型（Large Language Model, LLM）在自然语言处理领域取得了突破性进展。
+以 GPT-4、LLaMA~3~\cite{grattafiori2024llama3} 和 Qwen2.5~\cite{qwen2025qwen25} 为代表的大语言模型，
+通过扩大参数规模和预训练数据量，在文本生成、阅读理解、代码编写和逻辑推理等任务上展现出卓越的能力。
+然而，随着模型参数规模从数十亿增长至数千亿，长上下文场景下的推理效率问题日益凸显，
+成为制约大语言模型广泛部署的核心瓶颈之一。
+
+现代大语言模型普遍采用 Transformer~\cite{vaswani2017attention} 架构，
+其自回归解码（autoregressive decoding）过程中，每生成一个新的 token 都需要与所有历史 token 的键值对（Key-Value pair）进行注意力计算。
+为避免重复计算，推理系统会将已计算的键值对缓存起来，形成键值缓存（KV Cache）。
+KV Cache 机制是自回归解码的核心加速手段，能够将单步解码的时间复杂度从 $O(n^2)$ 降低至 $O(n)$，
+但其代价是显存占用随序列长度线性增长。
+
+具体而言，对于一个具有 $L$ 层 Transformer、每层 $h$ 个键值头（KV head）、头维度为 $d$ 的模型，
+在序列长度为 $s$ 时，KV Cache 的显存占用可表示为：
+\begin{equation}
+  M_{\text{KV}} = 2 \times L \times h \times d \times s \times b
+  \label{eq:kv_memory}
+\end{equation}
+其中，因子 $2$ 对应键（Key）和值（Value）两个矩阵，$b$ 为每个元素占用的字节数（FP16 下 $b=2$）。
+
+以 Qwen2.5-7B-Instruct 模型为例，该模型包含 28 层 Transformer，采用分组查询注意力（Grouped-Query Attention, GQA）~\cite{ainslie2023gqa} 机制，
+每层具有 4 个键值头，头维度为 128。在 FP16 精度下，当上下文长度达到 \num{32768} 个 token 时，
+单个请求的 KV Cache 占用约为：
+\begin{equation}
+  M_{\text{KV}}^{\text{7B}} = 2 \times 28 \times 4 \times 128 \times 32768 \times 2 \approx \SI{1.75}{\giga\byte}
+  \label{eq:kv_memory_7b}
+\end{equation}
+而在批量推理场景下，KV Cache 的总显存消耗将随批大小成倍增长，可轻易超过模型参数本身的显存占用。
+vLLM~\cite{kwon2023vllm} 等推理框架通过 PagedAttention 技术改善了显存碎片问题，但并未从根本上减少 KV Cache 的绝对存储量。
+
+量化（quantization）技术是降低 KV Cache 显存占用的重要手段。
+通过将 FP16 精度的键值对压缩为 INT8 甚至 INT4 表示，可以将 KV Cache 的显存分别降至原始的 $1/2$ 和 $1/4$，
+从而在有限的 GPU 显存中支持更长的上下文或更大的并发批次。
+
+\section{问题定义与研究动机}
+
+现有的 KV Cache 量化方法在校准策略（calibration strategy）的选择上，
+通常采用基于均方误差（Mean Squared Error, MSE）或百分位裁剪（percentile clipping）的方案。
+MSE 校准通过最小化量化前后张量的逐元素数值误差来确定量化参数；
+百分位裁剪则通过截断分布尾部的异常值来缩小量化范围，以降低大多数数值的量化误差。
+
+然而，上述方法存在本质局限性。MSE 校准优化的是数值层面的重建误差，
+但数值误差的最小化并不等同于模型行为的保真。
+在注意力机制中，键和值经过缩放点积（scaled dot-product）运算后通过 softmax 函数映射为概率分布。
+softmax 函数的非线性特性意味着，即使键矩阵中微小的数值偏差，
+也可能在某些注意力模式下被放大，导致注意力权重分布发生显著改变；
+反之，某些看似较大的数值误差可能因 softmax 的归一化效应而对最终分布影响甚微。
+百分位裁剪策略同样面临问题：其裁剪阈值的选择缺乏与下游注意力行为的关联，
+对不同层、不同头的特征分布差异缺乏自适应能力。
+
+本文的核心洞察在于：KV Cache 量化的最终目标不是最小化存储表示的数值误差，
+而是保持量化前后注意力行为（attention behavior）的一致性。
+具体而言，若将 FP16 精度下的注意力权重分布记为 $\bm{p}$，
+量化后的注意力权重分布记为 $\bm{q}$，
+则量化质量应当以两者之间的分布差异来衡量：
+\begin{equation}
+  D_{\KL}(\bm{p} \| \bm{q}) = \sum_{i} p_i \log \frac{p_i}{q_i}
+  \label{eq:kl_divergence}
+\end{equation}
+其中，$D_{\KL}$ 为 Kullback-Leibler 散度，衡量量化引入的注意力行为偏移程度。
+
+基于上述洞察，本文提出以注意力权重分布的 KL 散度作为校准目标函数，
+直接优化量化参数使得注意力行为尽可能保持不变。
+这一"行为对齐"（Behavior Alignment）的思路将校准过程从数值优化层面提升到语义保真层面，
+为 KV Cache 量化提供了新的理论视角和技术路径。
+
+\section{国内外研究现状}
+
+KV Cache 量化的研究建立在模型量化和高效注意力计算两大技术方向之上，
+以下从三个方面简述相关研究现状，更详细的分析将在第二章展开。
+
+\subsection{模型量化}
+
+模型量化旨在通过降低数值精度来压缩模型体积、加速推理，代表性工作包括：
+
+SmoothQuant\cite{xiao2023smoothquant}
+提出将权重和激活之间的量化难度进行平滑迁移，
+通过数学等价变换使得两者均可使用 INT8 量化，
+实现了对 Transformer 模型的高效 W8A8 量化推理。
+GPTQ\cite{frantar2023gptq}
+基于近似二阶信息（Hessian 矩阵），
+以逐层最优方式进行训练后权重量化，
+在 3-bit 和 4-bit 精度下保持了较高的生成质量。
+AWQ\cite{lin2024awq} 提出激活感知的权重量化策略，
+通过识别对模型输出影响最大的"显著"权重通道（salient channels），
+对其施加保护性缩放，在低比特量化中取得了优异的精度保持效果。
+上述方法主要面向模型权重的量化，
+与本文关注的 KV Cache 量化在目标和技术路径上有所不同，
+但其量化理论和误差分析方法为本文提供了重要参考。
+
+\subsection{KV Cache 量化}
+
+专门针对 KV Cache 的量化研究是近年来的热点方向。
+KIVI~\cite{liu2024kivi} 提出了非对称量化策略，
+对 Key 矩阵采用逐通道（per-channel）量化，对 Value 矩阵采用逐 token（per-token）量化，
+利用两者统计特性的差异分别选择最优的量化维度，在 2-bit 量化下仍能保持较好的生成质量。
+KIVI 的工作首次系统揭示了 Key 和 Value 在量化敏感性上的不对称特征，对后续研究产生了重要影响。
+KVQuant~\cite{hooper2024kvquant} 进一步探索了非均匀量化（non-uniform quantization）方案，
+通过对键值分布进行更精细的建模，在极低比特（2-bit）场景下实现了百万级上下文长度的推理支持。
+ZipCache~\cite{he2024zipcache} 则从 token 重要性的角度出发，
+通过识别和区分显著 token（salient token）与普通 token，
+对前者保持高精度存储，对后者进行激进压缩，实现了混合精度的 KV Cache 管理。
+
+上述方法在量化策略设计上取得了显著进展，但其校准过程仍然依赖于数值误差指标（如 MSE），
+未能从注意力行为保真的角度建立校准目标，这正是本文研究的出发点。
+
+\subsection{高效注意力计算}
+
+高效注意力计算是优化 LLM 推理性能的另一重要方向。
+FlashAttention~\cite{dao2022flashattention} 通过分块计算（tiling）和内核融合（kernel fusion）技术，
+显著减少了注意力计算过程中的高带宽内存（HBM）访问次数，在不改变计算结果的前提下实现了数倍的加速。
+FlashAttention-2~\cite{dao2024flashattention2} 进一步优化了并行策略和工作划分，
+在现代 GPU 架构上达到了接近理论峰值的计算效率。
+
+然而，当前的融合注意力核函数主要面向 FP16 精度的标准注意力计算，
+尚未充分支持量化 KV Cache 场景下的在线反量化（online dequantization）与注意力计算的融合。
+本文基于 Triton~\cite{tillet2019triton} 编程框架，设计并实现了融合量化解码注意力核函数，
+将 INT8/INT4 反量化操作与缩放点积注意力计算整合在单个 GPU 核函数中，
+避免了中间结果的显存写回，进一步提升了量化推理的端到端效率。
+
+\section{本文研究内容与主要贡献}
+
+本文面向大语言模型长上下文推理的效率瓶颈，
+围绕 KV Cache 量化的校准策略、融合计算和实证评估三个维度展开研究，主要贡献如下：
+
+\textbf{贡献一：行为对齐校准框架。}
+本文提出以注意力权重分布的 KL 散度作为校准目标函数，
+取代传统的 MSE 校准策略。
+该框架在校准阶段同时搜索每层的量化尺度（scale）和逐头温度校正参数（inverse temperature, $\tau^{-1}$），
+使量化后的注意力分布在形态上与 FP16 基准保持一致。
+与纯数值优化不同，行为对齐校准直接面向注意力机制的语义输出进行优化，
+从理论上为 KV Cache 量化建立了更合理的目标函数。
+
+\textbf{贡献二：Triton 融合量化解码注意力核函数。}
+本文基于 Triton 编程框架，设计并实现了支持 INT8 和 INT4 精度的融合量化解码注意力核函数。
+该核函数在单个 GPU kernel 调用中完成量化 KV Cache 的在线反量化、缩放点积注意力计算和 softmax 归一化，
+并原生支持 GQA 机制。相比"先反量化、再计算注意力"的两阶段方案，
+融合核函数消除了中间 FP16 张量的显存读写开销，降低了访存瓶颈。
+
+\textbf{贡献三：全面的实证研究。}
+本文在 3 个模型（Qwen2.5-1.5B-Instruct、Qwen2.5-7B-Instruct、LLaMA-3.1-8B-Instruct）上，
+系统评估了 7 种量化模式（FP16 基准、INT8 基线、INT8 行为对齐、INT4 基线、INT4 融合、INT4 行为对齐、KIVI 风格）
+在 5 个评测基准（困惑度、LongBench~\cite{bai2024longbench}、RULER~\cite{hsieh2024ruler}、Needle-in-a-Haystack~\cite{kamradt2023needle}、延迟与显存）上的表现。
+实验采用 Bootstrap 置信区间和符号翻转置换检验~\cite{efron1994introduction,benjamini1995controlling}，
+以严格的统计框架验证了行为对齐量化在精度保持和推理效率上的优势。
+
+\section{论文组织结构}
+
+本文共分为五章，各章内容安排如下：
+
+\textbf{第一章\quad 绪论。}
+阐述研究背景，分析 KV Cache 量化的问题定义与研究动机，
+综述国内外研究现状，介绍本文的研究内容与主要贡献。
+
+\textbf{第二章\quad 相关工作与技术基础。}
+详细介绍 Transformer 注意力机制、KV Cache 原理、量化理论基础，
+以及 KIVI、KVQuant 等代表性 KV Cache 量化方法的技术细节与局限性，
+为后续章节奠定理论基础。
+
+\textbf{第三章\quad 行为对齐量化框架设计。}
+详细阐述行为对齐校准框架的设计思路、KL 散度目标函数的数学推导、
+校准参数搜索算法、Triton 融合核函数的设计与实现，
+以及整体推理系统的架构集成方案。
+
+\textbf{第四章\quad 实验与结果分析。}
+介绍实验设置（模型、数据集、评测指标、统计方法），
+呈现并分析各量化模式在多个基准上的实验结果，
+包括精度评测、长上下文理解能力评测、推理效率评测和敏感性分析。
+
+\textbf{第五章\quad 总结与展望。}
+总结本文的主要工作和研究成果，分析现有方案的局限性，
+并展望未来在更低比特量化、动态精度分配和工业部署等方面的研究方向。

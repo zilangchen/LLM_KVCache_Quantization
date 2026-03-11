@@ -58,19 +58,20 @@
 
 ## 6) 论文结论报告（Week-3，建议主文直接引用）
 
-- `reports/claim_validation.csv`
-- `reports/statistical_decision_summary.csv`
-- `reports/reproducibility_gate.csv`
-- `reports/paper_ready_summary.md`
+- `report/claim_validation.csv`
+- `report/statistical_decision_summary.csv`
+- `report/reproducibility_gate.csv`
+- `report/paper_ready_summary.md`
 
-## 7) 可审计证据（必须）
+## 7) 可审计证据（建议，远端保留）
 
-- `gates/gate0_smoke_test.log`
-- `gates/gate1_dry_run.log`
-- `gates/gate2_triton_unittest.log`
-- `gates/gate3_verify_int8_fused.log`
-- `gates/gate3_verify_int8_ours.log`
-- （若含 INT4）`gates/gate3_verify_int4_fused.log`、`gates/gate3_verify_int4_ours.log`
+> 注：以下 gate 日志在远端 GPU 服务器的实验过程中生成，
+> 本地 `results/emnlp_final_raw/` 合并产物中不含此目录。
+> 如需审计，从远端 `results/phase5v2/` 或 `results/phase6/` 中获取。
+
+- 远端: `logs/` 目录下的各 task 执行日志
+- 远端: 各 run 目录下的 `run_manifest.json`（含完整命令行和环境哈希）
+- 本地: `artifacts/evidence_audit.md`（证据可采性审计报告）
 
 ## 8) 口径一致性额外检查（Phase5v2）
 - [ ] 旧 Phase5 中包含 `eval_longbench` / `eval_ruler` 的运行已标记 legacy，且未参与新聚合
@@ -107,9 +108,9 @@ required = [
     "plots/ppl_vs_tokens.png",
     "plots/throughput_tok_per_s_vs_batch.png",
     "latex_tables/all_tables.tex",
-    "gates/gate0_smoke_test.log",
-    "gates/gate1_dry_run.log",
-    "gates/gate2_triton_unittest.log",
+    "report/claim_validation.csv",
+    "report/paper_ready_summary.md",
+    "report/reproducibility_gate.csv",
 ]
 missing = [p for p in required if not (base / p).exists()]
 print("MISSING:", missing if missing else "None")

@@ -1,0 +1,837 @@
+% ============================================================
+% ch3_method.tex — 第三章 行为对齐量化框架设计
+% ============================================================
+\chapter{行为对齐量化框架设计}
+
+本章详细阐述面向高效推理的大语言模型键值缓存行为对齐量化框架的设计与实现。
+第~\ref{sec:ch3-overview} 节介绍框架的总体架构，包括离线校准与在线推理两个阶段的协同设计；
+第~\ref{sec:ch3-calibration} 节系统描述基于 KL 散度的行为对齐校准方法及其两阶段搜索策略；
+第~\ref{sec:ch3-invtau} 节深入分析逐头温度校正机制的数学原理与 Q 预缩放等价性；
+第~\ref{sec:ch3-static-scale} 节讨论静态 Scale 与自适应保护机制的设计考量；
+第~\ref{sec:ch3-triton} 节展示基于 Triton 编写的融合量化解码注意力核函数；
+第~\ref{sec:ch3-system} 节介绍系统的整体实现，涵盖 KV Cache 管理、生成循环集成与多种量化模式的统一接口；
+第~\ref{sec:ch3-complexity} 节从时间复杂度、显存占用和访存效率三个维度对框架进行定量分析；
+第~\ref{sec:ch3-summary} 节对本章内容进行小结。
+
+
+% ============================================================
+\section{框架总体设计}
+\label{sec:ch3-overview}
+
+\subsection{系统架构概述}
+
+本文提出的行为对齐量化框架采用"离线校准——在线推理"的两阶段设计范式。
+其核心思想是：在离线阶段通过少量校准数据搜索能够最大程度保持注意力行为一致性的量化参数，
+然后在在线推理阶段以极低的额外开销使用这些参数执行高效的量化推理。
+该设计将计算密集的参数搜索过程从推理关键路径中分离出来，
+确保了在线阶段的推理延迟不因行为对齐校准而增加。
+图~\ref{fig:ch3-framework} 展示了框架的总体架构。
+
+\begin{figure}[htbp]
+  \centering
+  \resizebox{0.95\textwidth}{!}{%
+  \begin{tikzpicture}[
+    box/.style={rectangle, draw, rounded corners=2pt, minimum width=2.6cm,
+                minimum height=0.6cm, text centered, font=\small},
+    arr/.style={-{Stealth[length=2.5mm]}, semithick},
+    phase/.style={draw, dashed, rounded corners=6pt, inner sep=8pt, gray},
+  ]
+  % === 离线校准阶段 ===
+  \node[box, fill=blue!8]   (data)   at (0, 5)      {校准数据集};
+  \node[box, fill=blue!8]   (fwd)    at (0, 4)      {FP16 前向传播};
+  \node[box, fill=blue!8]   (qkv)    at (0, 3)      {逐层 QKV 采样};
+  \node[box, fill=green!10] (scale)  at (-1.4, 1.8) {Scale 搜索};
+  \node[box, fill=green!10] (invtau) at ( 1.4, 1.8) {$\tau^{-1}$ 优化};
+  \node[box, fill=yellow!20, minimum width=3.6cm, font=\small\ttfamily]
+                             (json)   at (0, 0.5)    {校准产物 JSON};
+
+  % === 在线推理阶段 ===
+  \node[box, fill=orange!10] (load)   at (7.5, 5)   {加载校准产物};
+  \node[box, fill=orange!10] (pscale) at (7.5, 4)   {Q 预缩放（$\tau^{-1}$）};
+  \node[box, fill=orange!10] (kvs)    at (7.5, 3)   {INT8/4 KV 存储};
+  \node[box, fill=red!8]     (fused)  at (7.5, 1.8) {Triton 融合解码};
+  \node[box, fill=red!8]     (out)    at (7.5, 0.5) {生成输出};
+
+  % === 阶段边框与标签 ===
+  \node[phase, fit=(data)(fwd)(qkv)(scale)(invtau)(json),
+        label={[font=\heiti\small]above:离线校准阶段}] {};
+  \node[phase, fit=(load)(pscale)(kvs)(fused)(out),
+        label={[font=\heiti\small]above:在线推理阶段}] {};
+
+  % === 离线箭头 ===
+  \draw[arr] (data) -- (fwd);
+  \draw[arr] (fwd)  -- (qkv);
+  \draw[arr] (qkv.south) -- ++(0,-0.3) -| (scale.north);
+  \draw[arr] (qkv.south) -- ++(0,-0.3) -| (invtau.north);
+  \draw[arr] (scale.south)  |- (json.west);
+  \draw[arr] (invtau.south) |- (json.east);
+
+  % === 在线箭头 ===
+  \draw[arr] (load)   -- (pscale);
+  \draw[arr] (pscale) -- (kvs);
+  \draw[arr] (kvs)    -- (fused);
+  \draw[arr] (fused)  -- (out);
+
+  % === 跨阶段连接 ===
+  \draw[arr, dashed, thick, red!70!black]
+    (json.east) -- ++(1.2,0) -| (load.west)
+    node[pos=0.15, above, font=\footnotesize, text=black]
+      {per-layer scales $+$ per-head $\tau^{-1}$};
+  \end{tikzpicture}%
+  }% end resizebox
+  \caption{行为对齐量化框架总体架构}
+  \label{fig:ch3-framework}
+\end{figure}
+
+\subsection{离线校准阶段}
+
+离线校准阶段的目标是在少量代表性校准数据上确定两类关键量化参数：
+（1）逐层逐组的静态量化 Scale $s$，用于将浮点键值张量映射到整数表示；
+（2）逐层逐头的注意力温度校正因子 $\tau^{-1}$（inverse temperature），用于补偿量化导致的注意力分布偏移。
+
+具体而言，离线校准阶段执行以下流程：
+\begin{enumerate}[label=(\arabic*)]
+  \item \textbf{校准数据采集}：
+    使用 FP16 精度的参考模型在校准数据集（如 WikiText-103~\cite{merity2016wikitext} 的子集）上执行前向传播，
+    逐层提取 Query 向量 $\bQ$、Key 矩阵 $\bK$ 和 Value 矩阵 $\bV$。
+    其中，Query 向量需经过输入层归一化（input layer normalization）和旋转位置编码（Rotary Position Embedding, RoPE）~\cite{su2024rope} 处理，
+    以确保校准时的 $\bQ \bK^T$ 点积与实际推理时一致。
+  \item \textbf{Scale 搜索}：
+    在候选 clip percentile 和 group size 的网格上，
+    通过量化——反量化——计算 KL 散度的流程评估每组参数的行为偏差，
+    选择使 KL 散度最小的量化参数组合。
+  \item \textbf{逐头 $\tau^{-1}$ 优化}：
+    在确定最优 Scale 的基础上，为每个注意力头独立搜索最优的温度校正因子 $\tau^{-1}$，
+    进一步降低量化后注意力分布与参考分布之间的 KL 散度。
+  \item \textbf{校准产物输出}：
+    将搜索结果序列化为 JSON 格式的校准产物文件，包含模型配置信息、逐层 Key/Value 的静态 Scale、
+    逐层逐头的 $\tau^{-1}$ 值以及搜索超参数记录。
+\end{enumerate}
+
+\subsection{在线推理阶段}
+
+在线推理阶段加载离线校准产物，以极低的额外计算开销执行量化推理：
+\begin{enumerate}[label=(\arabic*)]
+  \item \textbf{加载校准产物}：
+    启动时一次性从 JSON 文件中读取静态 Scale 和 $\tau^{-1}$，预加载到 GPU 显存。
+  \item \textbf{Prefill 阶段}：
+    对输入序列执行完整的前向传播。在每一层的注意力计算前，
+    使用逐头 $\tau^{-1}$ 对 Query 向量进行预缩放（Q pre-scaling），
+    然后将 Key 和 Value 使用静态 Scale 量化为 INT8/INT4 格式存入缓存。
+  \item \textbf{Decode 阶段}：
+    每步生成一个新 token。新的 Query 向量同样经过 $\tau^{-1}$ 预缩放后，
+    通过 Triton 编写的融合核函数（fused kernel）直接从 INT8/INT4 缓存中读取并反量化 Key/Value，
+    在片上完成注意力计算，避免将反量化结果写回全局显存。
+\end{enumerate}
+
+
+% ============================================================
+\section{行为对齐校准方法}
+\label{sec:ch3-calibration}
+
+\subsection{KL 散度目标函数}
+
+本文选择 Kullback-Leibler（KL）散度作为衡量量化前后注意力行为一致性的目标函数。
+对于给定的 Query 向量 $\bq \in \mathbb{R}^{d_k}$ 和 Key 矩阵 $\bK \in \mathbb{R}^{n \times d_k}$，
+FP16 精度下的注意力权重分布定义为：
+\begin{equation}
+  \bm{p}_{\text{ref}} = \softmax\!\left(\frac{\bq \bK^T}{\sqrt{d_k}}\right)
+  \label{eq:ch3-pref}
+\end{equation}
+其中 $n$ 为上下文长度，$d_k$ 为注意力头维度。
+设 $\hat{\bK}$ 为经过量化——反量化（quantize-dequantize）后的 Key 矩阵，
+量化后的注意力权重分布为：
+\begin{equation}
+  \bm{p}_{\text{quant}} = \softmax\!\left(\frac{\bq \hat{\bK}^T}{\sqrt{d_k}}\right)
+  \label{eq:ch3-pquant}
+\end{equation}
+行为对齐校准的目标是最小化两者之间的 KL 散度：
+\begin{equation}
+  D_{\KL}\!\left(\bm{p}_{\text{ref}} \,\|\, \bm{p}_{\text{quant}}\right)
+  = \sum_{i=1}^{n} p_{\text{ref},i} \cdot \ln\frac{p_{\text{ref},i}}{p_{\text{quant},i}}
+  \label{eq:ch3-kl}
+\end{equation}
+
+选择 KL 散度而非均方误差（MSE）作为目标函数基于以下考量：
+\begin{enumerate}[label=(\arabic*)]
+  \item \textbf{分布层面的度量}：
+    KL 散度直接衡量两个概率分布之间的差异，而 MSE 度量的是逐元素数值误差。
+    注意力权重经过 softmax 归一化后形成概率分布，
+    KL 散度能够更准确地捕捉分布形态（如峰值位置、尾部衰减）的变化。
+  \item \textbf{对尾部分布的敏感性}：
+    当 $p_{\text{ref},i}$ 较大而 $p_{\text{quant},i}$ 偏小时，
+    KL 散度中的 $\ln(p_{\text{ref},i}/p_{\text{quant},i})$ 项会产生较大的惩罚，
+    从而对注意力集中位置的偏移施加更强的约束。
+    这一特性对于保持模型的长距离依赖建模能力尤为重要。
+  \item \textbf{信息论解释}：
+    KL 散度等价于使用量化分布 $\bm{p}_{\text{quant}}$ 编码来自参考分布 $\bm{p}_{\text{ref}}$ 的样本时，
+    相对于最优编码所额外消耗的信息量（单位：nat）。这一解释为量化误差提供了清晰的信息论含义。
+  \item \textbf{softmax 非线性下 MSE 的局限性}：
+    设 Key 矩阵的量化误差为 $\bm{\delta} = \hat{\bK} - \bK$，
+    则量化后的注意力 logits 变为
+    $\bm{l}_{\text{ref}} + \bq\bm{\delta}^T / \sqrt{d_k}$。
+    由于 softmax 函数对 logits 差值的指数放大特性，
+    即使 $\|\bm{\delta}\|_2^2$ 较小（MSE 优化目标），
+    若误差 $\bm{\delta}$ 恰好增大了某些位置间的 logit 差异，
+    经 softmax 映射后可能导致注意力权重的显著重新分配。
+    反之，MSE 较大的量化方案可能因误差方向与注意力梯度正交
+    而对最终分布影响甚微。
+    KL 散度直接在 softmax 输出空间上度量，
+    天然规避了这一"数值精度与行为保真度不一致"的问题。
+\end{enumerate}
+
+在实际计算中，为防止 $\ln(0)$ 导致的数值不稳定，
+对概率值施加小量截断 $\epsilon = 10^{-6}$：
+\begin{equation}
+  D_{\KL}\!\left(\bm{p}_{\text{ref}} \,\|\, \bm{p}_{\text{quant}}\right)
+  \approx \sum_{i=1}^{n}
+    \tilde{p}_{\text{ref},i} \cdot
+    \left(\ln\tilde{p}_{\text{ref},i} - \ln\tilde{p}_{\text{quant},i}\right)
+  \label{eq:ch3-kl-approx}
+\end{equation}
+其中 $\tilde{p} = \max(p, \epsilon)$。
+由于 softmax 输出的主要概率质量远大于 $\epsilon$，
+截断引入的近似偏差在实际中可以忽略不计。
+
+
+\subsection{两阶段搜索策略}
+\label{subsec:ch3-two-stage}
+
+本文采用两阶段分离搜索策略，
+其核心动机在于避免 Scale 搜索与温度校正之间的循环依赖：
+$\tau^{-1}$ 的最优值依赖于已确定的 Scale（因为反量化结果受 Scale 影响），
+而 Scale 的评估则不应包含 $\tau^{-1}$（否则温度校正会掩盖不同 Scale 之间的实际量化误差差异）。
+
+\paragraph{第一阶段：Scale 搜索}
+
+在第一阶段中，框架不施加任何温度校正（即 $\tau^{-1} = 1$），
+在候选 clip percentile $p_c$ 和 group size $g$ 的笛卡尔积上进行网格搜索。
+对于每组候选参数，执行以下步骤：
+
+\begin{enumerate}[label=(\alph*)]
+  \item 从校准样本的 Key/Value 激活值中计算逐组绝对值最大值（absmax），
+        取 $p_c$ 百分位数作为裁剪阈值；
+  \item 计算静态 Scale：$s = \text{absmax}_{p_c} / q_{\max}$，
+        其中 $q_{\max} = 127$（INT8）或 $q_{\max} = 7$（INT4）；
+  \item 对每个校准样本执行量化——反量化，计算量化后注意力分布与参考分布之间的 KL 散度；
+  \item 汇总所有层、所有头、所有样本的 KL 散度统计量（均值、P95、最大值）和裁剪率。
+\end{enumerate}
+
+候选参数的选择采用鲁棒性优先策略（robust selection）：
+优先在裁剪率满足约束（Key 裁剪率 $\leq 5\%$、Value 裁剪率 $\leq 5\%$）的可行集中，
+按 P95 KL 散度升序排列选择最优参数。
+若所有候选均不满足裁剪率约束，则回退至按裁剪率总和升序排列的策略。
+Key 和 Value 分别独立搜索最优的 clip percentile，
+Group size 则保持 Key 和 Value 一致。
+
+\paragraph{第二阶段：逐头 $\tau^{-1}$ 优化}
+
+在第一阶段确定最优 Scale 之后，第二阶段为每个注意力头独立搜索最优的温度校正因子 $\tau^{-1}$。
+候选值集合涵盖了从平滑化（$\tau^{-1} < 1$）到锐化（$\tau^{-1} > 1$）的范围：
+\begin{equation}
+  \mathcal{T} = \{0.5,\; 0.7,\; 0.85,\; 1.0,\; 1.2,\; 1.5,\; 2.0\}
+  \label{eq:tau-candidates}
+\end{equation}
+
+对于第 $l$ 层第 $h$ 个注意力头，最优 $\tau^{-1}$ 的选择为：
+\begin{equation}
+  \tau^{-1}_{l,h} = \argmin_{\tau^{-1} \in \mathcal{T}}
+  \frac{1}{|\mathcal{D}|} \sum_{(\bq, \bK) \in \mathcal{D}}
+  D_{\KL}\!\left(
+    \bm{p}_{\text{ref}} \,\Big\|\,
+    \softmax\!\left(\frac{\bq \hat{\bK}^T \cdot \tau^{-1}}{\sqrt{d_k}}\right)
+  \right)
+  \label{eq:ch3-invtau-opt}
+\end{equation}
+其中 $\mathcal{D}$ 为校准样本集合，$\hat{\bK}$ 为使用第一阶段确定的 Scale 进行量化——反量化后的 Key 矩阵。
+
+分组查询注意力（GQA）~\cite{ainslie2023gqa}机制下，
+多个 Query 头共享同一个 KV 头。
+设 Query 头数为 $H_q$、KV 头数为 $H_{kv}$，则第 $h$ 个 Query 头对应的 KV 头索引为 $\lfloor h / (H_q / H_{kv}) \rfloor$。
+每个 Query 头仍然独立搜索 $\tau^{-1}$，但使用相同的量化 Key 矩阵。
+
+\subsection{算法伪代码}
+
+算法~\ref{alg:ch3-calibration} 总结了行为对齐校准的完整流程。
+
+\begin{algorithm}[htbp]
+  \caption{行为对齐校准算法}
+  \label{alg:ch3-calibration}
+  \begin{algorithmic}[1]
+    \Require 参考模型 $\mathcal{M}$；校准数据集 $\mathcal{D}$；
+             候选 clip percentile 集合 $\mathcal{P}_c$；
+             候选 group size 集合 $\mathcal{G}$；
+             候选温度因子集合 $\mathcal{T}$；
+             量化位宽 $b$（$q_{\max} = 2^{b-1} - 1$）
+    \Ensure 逐层 Key/Value Scale $\{s^K_l, s^V_l\}$；逐头温度因子 $\{\tau^{-1}_{l,h}\}$
+
+    \Statex \textbf{// 阶段 0：采集校准样本}
+    \For{每个校准样本 $x \in \mathcal{D}$}
+      \State 执行 FP16 前向传播，提取每层的 $\bQ$（含 LayerNorm + RoPE）、$\bK$、$\bV$
+    \EndFor
+
+    \Statex
+    \Statex \textbf{// 阶段 1：Scale 搜索（无温度校正）}
+    \For{每组候选参数 $(p_c, g) \in \mathcal{P}_c \times \mathcal{G}$}
+      \State 计算 Scale：$s = \text{percentile}(|\bK|, p_c) / q_{\max}$（逐层逐组）
+      \State 量化——反量化：$\hat{\bK} = \text{round}(\bK / s) \cdot s$
+      \State 计算 KL 散度统计量：$\text{mean\_kl}, \text{p95\_kl}, \text{clip\_rate}$
+    \EndFor
+    \State 按鲁棒性策略选择最优 $(p_c^*, g^*)$，确定 $\{s^K_l\}$ 和 $\{s^V_l\}$
+
+    \Statex
+    \Statex \textbf{// 阶段 2：逐头 $\tau^{-1}$ 优化}
+    \For{每层 $l = 1, \dots, L$}
+      \For{每个注意力头 $h = 1, \dots, H_q$}
+        \For{每个候选 $\tau^{-1} \in \mathcal{T}$}
+          \State $\text{loss}(\tau^{-1}) \gets \frac{1}{|\mathcal{D}|}\sum_{(\bq,\bK) \in \mathcal{D}}
+            D_{\KL}\!\left(\bm{p}_{\text{ref}} \,\|\, \softmax\!\left(\frac{\bq\hat{\bK}^T \cdot \tau^{-1}}{\sqrt{d_k}}\right)\right)$
+        \EndFor
+        \State $\tau^{-1}_{l,h} \gets \argmin_{\tau^{-1} \in \mathcal{T}} \text{loss}(\tau^{-1})$
+      \EndFor
+    \EndFor
+
+    \Statex
+    \State \Return $\{s^K_l, s^V_l\}$, $\{\tau^{-1}_{l,h}\}$
+  \end{algorithmic}
+\end{algorithm}
+
+
+% ============================================================
+\section{逐头温度校正机制}
+\label{sec:ch3-invtau}
+
+\subsection{量化导致注意力分布平坦化的原因分析}
+
+量化过程引入的舍入误差和裁剪误差作用于 Key 矩阵 $\bK$ 后，
+会导致注意力 logits $\bq\hat{\bK}^T / \sqrt{d_k}$ 相对于参考值 $\bq\bK^T / \sqrt{d_k}$ 发生偏移。
+由于量化误差的随机性特点，同一 Query 向量与不同 Key 向量的点积受到近似均匀的噪声扰动，
+导致 logits 之间的差异被缩小，softmax 输出的概率分布趋于平坦化。
+
+这一现象可以从信息论角度理解：
+当注意力分布从尖锐（低熵）变为平坦（高熵）时，
+模型对关键位置的聚焦能力下降，
+等价于在注意力层引入了信息丢失。
+对于需要精确捕捉长距离依赖的任务（如大海捞针检索、长文本分类等），
+这种平坦化效应尤为有害。
+
+不同层和不同注意力头受量化影响的程度各异：
+浅层头通常关注局部模式（如相邻 token），其注意力分布本身较为分散，受平坦化影响相对较小；
+深层头则可能负责全局信息汇聚，具有高度集中的注意力分布，量化导致的平坦化对其影响更为显著。
+这一观察构成了逐头（per-head）温度校正的核心动机。
+图~\ref{fig:ch3-invtau-heatmap} 展示了 Qwen2.5-1.5B 校准后的逐层逐头 $\tau^{-1}$ 分布，
+可以看到绝大多数头的 $\tau^{-1} = 1.0$（无需校正），校准具有高度稀疏性。
+
+\subsection{温度校正的数学描述}
+
+引入逐头温度校正因子 $\tau^{-1}_{l,h}$（inverse temperature），
+校正后的注意力计算定义为：
+\begin{equation}
+  \bm{p}_{\text{corrected}} = \softmax\!\left(\frac{\bq\hat{\bK}^T \cdot \tau^{-1}_{l,h}}{\sqrt{d_k}}\right)
+  \label{eq:ch3-corrected-attn}
+\end{equation}
+
+温度校正因子的物理含义如下：
+\begin{itemize}
+  \item $\tau^{-1} > 1$（等效温度 $\tau < 1$）：
+    缩放后的 logits 绝对值增大，softmax 输出更加尖锐（锐化效应），
+    可补偿量化导致的分布平坦化；
+  \item $\tau^{-1} < 1$（等效温度 $\tau > 1$）：
+    缩放后的 logits 绝对值减小，softmax 输出更加平滑（平滑化效应），
+    适用于量化后注意力分布过度集中的情形；
+  \item $\tau^{-1} = 1$：
+    不施加任何校正，退化为标准量化基线。
+\end{itemize}
+
+\subsection{Q 预缩放等价性}
+
+在实际实现中，温度校正因子 $\tau^{-1}$ 并不直接作用于 logits，
+而是通过预缩放 Query 向量来等价实现。这一设计的数学基础如下：
+
+\begin{equation}
+\begin{aligned}
+  \text{Attn}(\bQ \cdot \tau^{-1},\; \hat{\bK},\; \hat{\bV})
+  &= \softmax\!\left(\frac{(\bQ \cdot \tau^{-1})\hat{\bK}^T}{\sqrt{d_k}}\right) \hat{\bV} \\[6pt]
+  &= \softmax\!\left(\frac{\bQ \hat{\bK}^T \cdot \tau^{-1}}{\sqrt{d_k}}\right) \hat{\bV}
+\end{aligned}
+\label{eq:ch3-q-prescale}
+\end{equation}
+
+式~\eqref{eq:ch3-q-prescale} 表明，
+将 $\tau^{-1}$ 作用于 $\bQ$ 与将其作用于 $\bQ\hat{\bK}^T$ 在数学上完全等价，
+因为标量乘法满足结合律。
+这一等价性使得温度校正可以在 Query 投影阶段一次性完成，具有以下实现优势：
+
+\begin{enumerate}[label=(\arabic*)]
+  \item \textbf{无需修改注意力核函数签名}：
+    Q 预缩放在进入 Triton 融合核函数之前完成，
+    核函数内部的 $\bQ\hat{\bK}^T$ 计算和 online softmax 逻辑无需任何修改，
+    从而避免了核函数的代码膨胀和多版本维护成本。
+  \item \textbf{逐头独立缩放}：
+    $\tau^{-1}$ 存储为形状 $[L, H_q]$ 的张量，
+    在 prefill 和 decode 阶段通过广播（broadcast）作用于 $\bQ$ 的对应头维度：
+    \begin{equation}
+      \bQ'_{l,h,:,:} = \bQ_{l,h,:,:} \cdot \tau^{-1}_{l,h}
+      \label{eq:ch3-q-prescale-impl}
+    \end{equation}
+    其中 $l$ 为层索引，$h$ 为头索引。
+  \item \textbf{Prefill 阶段无额外 kernel launch}：
+    Q 预缩放是逐元素乘法，可与 Query 投影的输出张量原地（in-place）操作融合，
+    不引入额外的 GPU kernel 启动开销。
+\end{enumerate}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.7\textwidth]{figures/ch3_invtau_heatmap.png}
+  \caption{Qwen2.5-1.5B-Instruct 模型校准得到的逐层逐头 $\tau^{-1}$ 分布。
+    绝大多数注意力头的 $\tau^{-1}=1.0$（无需校正），仅第 0--1 层的 5 个头
+    需要温度校正（$\tau^{-1} \in \{0.50, 0.70, 0.85\}$），
+    表明校准具有高度稀疏性}
+  \label{fig:ch3-invtau-heatmap}
+\end{figure}
+
+
+% ============================================================
+\section{静态 Scale 与自适应保护}
+\label{sec:ch3-static-scale}
+
+\subsection{静态 Scale 的设计}
+
+本框架采用离线校准得到的静态 Scale 来执行量化，
+而非每个 token 步动态计算 Scale。静态 Scale 的优势在于：
+\begin{enumerate}[label=(\arabic*)]
+  \item \textbf{避免运行时 absmax 计算}：
+    动态量化需要在每次 append 操作时扫描输入张量以计算绝对值最大值，
+    这对于高维度张量（如 $d_k = 128$）会引入不可忽视的延迟。
+    静态 Scale 将这一计算移至离线阶段，在线推理时仅需一次内存读取。
+  \item \textbf{跨 token 的量化一致性}：
+    静态 Scale 确保不同 token 步使用相同的量化网格，
+    这对于长序列推理中缓存的逐步积累尤为重要——
+    不会出现因动态 Scale 变化导致的早期 token 与晚期 token 量化精度不一致的问题。
+  \item \textbf{校准产物的可复现性}：
+    静态 Scale 存储在 JSON 文件中，推理结果完全由模型权重和校准产物决定，
+    便于实验的精确复现。
+\end{enumerate}
+
+静态 Scale 的计算遵循对称量化（symmetric quantization）公式。
+对于输入张量 $\bx \in \mathbb{R}^{B \times H \times S \times D}$，
+按 group size $g$ 将最后一维划分为 $G = D / g$ 个组：
+\begin{equation}
+  s_{b,h,s,j} = \frac{\text{percentile}\!\left(|x_{b,h,s,jg:(j+1)g}|,\; p_c\right)}{q_{\max}}
+  \label{eq:ch3-static-scale}
+\end{equation}
+其中 $j = 0, \dots, G-1$ 为组索引，$p_c$ 为 clip percentile（典型值为 99.5），
+$q_{\max} = 127$（INT8）或 $q_{\max} = 7$（INT4）。
+
+量化操作为：
+\begin{equation}
+  \hat{x} = \text{clamp}\!\left(\text{round}\!\left(\frac{x}{s}\right),\; -q_{\max},\; q_{\max}\right) \cdot s
+  \label{eq:ch3-quant-deq}
+\end{equation}
+
+Scale 张量始终以 float32 精度存储，不随输入张量的 dtype 变化，
+以避免 float16 精度下极小 Scale 值退化为零导致的数值不稳定。
+
+\subsection{自适应保护机制}
+
+静态 Scale 的一个潜在风险是：当推理时的输入分布超出校准数据的覆盖范围时，
+某些激活值可能超出静态 Scale 对应的量化区间，
+导致大量值被裁剪至 $\pm q_{\max}$，引起显著的精度退化。
+
+为应对这一风险，本框架设计了自适应保护机制（adaptive static scale protection）。
+其核心思想是：在每次量化时，
+比较静态 Scale 与当前输入的动态 Scale，取两者的较大值作为最终 Scale：
+\begin{equation}
+  s_{\text{final}} = \max\!\left(s_{\text{static}} \cdot m,\; s_{\text{dynamic}}\right)
+  \label{eq:ch3-adaptive}
+\end{equation}
+其中 $s_{\text{static}}$ 为离线校准得到的静态 Scale，
+$s_{\text{dynamic}} = |x|_{\max} / q_{\max}$ 为当前输入的动态 Scale，
+$m \geq 1$ 为保护裕度（protection margin），默认值为 $1.0$。
+
+自适应保护的设计逻辑如下：
+\begin{itemize}
+  \item 当输入分布在校准覆盖范围内时，$s_{\text{dynamic}} \leq s_{\text{static}}$，
+        最终使用静态 Scale，保持校准一致性；
+  \item 当出现异常大的激活值时，$s_{\text{dynamic}} > s_{\text{static}}$，
+        自动切换为动态 Scale，避免大量裁剪；
+  \item 保护裕度 $m$ 可根据应用场景调节：$m > 1$ 提供更宽松的保护，$m = 1$ 则为最严格模式。
+\end{itemize}
+
+此外，本框架在量化后对裁剪率进行实时监控：
+当某层的裁剪率超过预设阈值（默认 5\%）时，发出运行时警告，
+提示用户可能需要重新校准或启用自适应保护。
+
+
+% ============================================================
+\section{Triton 融合量化解码注意力}
+\label{sec:ch3-triton}
+
+在自回归解码阶段，每步仅生成一个 token（$q_{\text{len}} = 1$），
+但需要与整个上下文的 Key/Value 缓存进行注意力计算。
+若采用"先反量化全部缓存至 FP16，再执行标准注意力"的朴素方案，
+将产生大量不必要的全局显存读写，抵消量化带来的存储收益。
+
+本框架采用 Triton~\cite{tillet2019triton} 编程语言实现了融合量化解码注意力核函数，
+将 INT8/INT4 反量化与注意力计算在单个 GPU kernel 内完成。
+该核函数借鉴了 FlashAttention~\cite{dao2022flashattention} 的 online softmax 技术，
+避免材化（materialize）完整的注意力得分矩阵。
+
+\subsection{INT8 核函数设计}
+\label{subsec:ch3-triton-int8}
+
+INT8 融合核函数的输入输出如下：
+\begin{itemize}
+  \item 输入：$\bQ \in \mathbb{R}^{B \times H_q \times d_k}$（FP16），
+        $\bK_{\text{int8}} \in \mathbb{Z}^{B \times H_{kv} \times S \times d_k}$（INT8），
+        $\bV_{\text{int8}} \in \mathbb{Z}^{B \times H_{kv} \times S \times d_k}$（INT8），
+        $s^K \in \mathbb{R}^{B \times H_{kv} \times S \times G}$（FP16），
+        $s^V \in \mathbb{R}^{B \times H_{kv} \times S \times G}$（FP16），
+        上下文长度向量 $\bm{c} \in \mathbb{Z}^B$
+  \item 输出：$\bO \in \mathbb{R}^{B \times H_q \times d_k}$（FP16）
+\end{itemize}
+
+核函数的 Grid 维度为 $(B, H_q)$，即每个（batch, query head）对启动一个程序实例（program）。
+每个程序实例沿序列维度以大小为 $\texttt{BLOCK\_SIZE}$ 的分块进行循环迭代。
+
+每个分块内的计算流程如下：
+\begin{enumerate}[label=\textbf{Step \arabic*.}]
+  \item \textbf{加载 INT8 Key 分块}：
+    从全局显存读取 $\bK_{\text{int8}}[b, h_{kv}, t:t{+}B_s, :]$ 至 SRAM，形状为 $[B_s, d_k]$；
+    同时加载对应的 Scale $s^K[b, h_{kv}, t:t{+}B_s, :]$，形状为 $[B_s, G]$。
+  \item \textbf{片上反量化}：
+    将 Key 重塑为 $[B_s, G, g]$，Scale 重塑为 $[B_s, G, 1]$，
+    执行逐元素乘法得到 FP32 精度的 Key：
+    $\bK_{\text{fp32}} = \bK_{\text{int8}}.\text{float32}() \times s^K.\text{float32}()$。
+    反量化在 FP32 精度下执行以避免 FP16 乘法的精度损失。
+  \item \textbf{计算注意力得分}：
+    $\text{score}_i = \sum_{j=1}^{d_k} q_j \cdot k_{i,j}$，然后乘以缩放因子 $1/\sqrt{d_k}$。
+    使用逐元素乘法累加（而非矩阵乘法），因为 $\bq$ 为一维向量，不适用于 tensor core 加速。
+  \item \textbf{Online Softmax 更新}：
+    维护全局最大值 $m$ 和指数和 $\ell$。对当前分块：
+    \begin{equation}
+    \begin{aligned}
+      m' &= \max(m,\; \max_i \text{score}_i) \\
+      \alpha &= e^{m - m'}, \quad \beta_i = e^{\text{score}_i - m'} \\
+      \ell' &= \ell \cdot \alpha + \sum_i \beta_i
+    \end{aligned}
+    \label{eq:ch3-online-softmax}
+    \end{equation}
+  \item \textbf{加载 INT8 Value 分块并反量化}：
+    与 Key 分块相同的流程，得到 $\bV_{\text{fp32}}$。
+  \item \textbf{累积加权输出}：
+    $\text{acc} \gets \text{acc} \cdot \alpha + \sum_i \beta_i \cdot \bV_{\text{fp32}}[i, :]$
+  \item \textbf{分块结束后归一化}：
+    $\bO = \text{acc} / \ell$，转换为 FP16 写回全局显存。
+\end{enumerate}
+
+分块大小 $B_s$ 采用启发式选择策略：
+当上下文长度 $\geq 8192$ 时使用 $B_s = 128$，否则使用 $B_s = 64$，
+以在寄存器压力和并行度之间取得平衡。
+
+
+\subsection{INT4 核函数设计}
+\label{subsec:ch3-triton-int4}
+
+INT4 量化采用 bit-packing 存储：两个 INT4 值（$[-8, 7]$）打包为一个 INT8 字节，
+存储维度从 $d_k$ 压缩为 $d_k / 2$。INT4 核函数的设计复用了 INT8 核函数的计算流程，
+仅在输入阶段增加一个解包（unpack）步骤。
+
+解包操作将 packed INT8 张量（形状 $[B, H_{kv}, S, d_k/2]$）还原为
+signed INT8 张量（形状 $[B, H_{kv}, S, d_k]$，值域 $[-8, 7]$）：
+\begin{equation}
+\begin{aligned}
+  \text{high} &= (x_{\text{packed}} \gg 4) \quad \text{（算术右移，保留符号位）} \\
+  \text{low}  &= (x_{\text{packed}} \ll 4) \gg 4 \quad \text{（先左移再算术右移，实现符号扩展）}
+\end{aligned}
+\label{eq:ch3-unpack-int4}
+\end{equation}
+解包后的 INT8 张量直接送入 INT8 核函数执行后续的反量化和注意力计算。
+这一设计避免了为 INT4 单独编写一套 Triton 核函数，降低了代码维护成本。
+
+\subsection{GQA 支持机制}
+\label{subsec:ch3-gqa}
+
+分组查询注意力（GQA）~\cite{ainslie2023gqa} 中，
+$H_q$ 个 Query 头被均匀分为 $H_{kv}$ 组，每组共享同一对 KV 头。
+定义重复因子 $N_{\text{rep}} = H_q / H_{kv}$，
+核函数通过以下映射实现 GQA 支持：
+\begin{equation}
+  h_{kv} = \lfloor h_q / N_{\text{rep}} \rfloor
+  \label{eq:ch3-gqa-mapping}
+\end{equation}
+其中 $h_q$ 为 Query 头索引。
+在核函数内部，Grid 按 $(B, H_q)$ 启动，
+每个程序实例根据 $h_{kv}$ 索引读取对应的 KV 缓存，
+无需在显存中复制 KV 头，从而节省了 $N_{\text{rep}}$ 倍的显存带宽。
+
+
+% ============================================================
+\section{系统实现}
+\label{sec:ch3-system}
+
+\subsection{KV Cache 管理架构}
+
+本框架实现了统一的 KV Cache 管理接口，支持多种量化模式下的透明切换。
+所有 Cache 类型均实现 \texttt{append(\allowbreak layer\_id, k, v)}
+和 \texttt{get\_kv(\allowbreak layer\_id)} 两个核心方法，
+对上层生成循环提供一致的抽象。
+
+\begin{enumerate}[label=(\arabic*)]
+  \item \textbf{FP16Cache}：
+    直接以 FP16 精度存储 Key/Value 张量，作为无损基线。
+  \item \textbf{INT8Cache}：
+    在 \texttt{append} 时执行对称量化（公式~\eqref{eq:ch3-quant-deq}），
+    将 Key/Value 存储为 INT8 格式，同时保存 FP32 精度的 Scale 张量。
+    支持动态 Scale（基线）和静态 Scale（本文方法）两种模式，
+    以及自适应保护机制（第~\ref{sec:ch3-static-scale} 节）。
+    在 decode 阶段可选择 Triton 融合路径或 PyTorch 参考实现。
+  \item \textbf{INT4Cache}：
+    在 INT8Cache 的基础上增加 bit-packing 层。
+    \texttt{append} 时先量化为 INT4 值域 $[-8, 7]$，
+    然后将相邻两个 INT4 值打包为一个 INT8 字节存储。
+    \texttt{get\_kv} 时执行解包和反量化。
+    存储维度从 $[B, H, S, d_k]$ 压缩为 $[B, H, S, d_k/2]$。
+  \item \textbf{KIVIStyleCache}：
+    实现 KIVI~\cite{liu2024kivi} 风格的非对称量化策略。
+    Key 采用 per-channel 量化（沿序列维度计算 Scale），
+    Value 采用 per-token 量化（沿特征维度计算 Scale）。
+    该缓存类型不使用本文的行为对齐校准，作为对比基线。
+\end{enumerate}
+
+Cache 内部采用预分配——按需扩展的内存管理策略：
+初始分配最小容量（256 个 token），
+当缓存序列长度超过当前容量时，以 2 倍增长因子重新分配缓冲区，
+避免频繁的小块内存分配导致的显存碎片化。
+
+\subsection{生成循环集成}
+
+生成循环（generation loop）是连接校准产物、Cache 管理和 Triton 核函数的枢纽。
+其核心集成逻辑包括：
+
+\begin{enumerate}[label=(\arabic*)]
+  \item \textbf{校准产物注入}：
+    启动时从 JSON 文件加载静态 Scale 和 $\tau^{-1}$，
+    转换为 PyTorch 张量并移至 GPU 设备，
+    分别存储到 Cache 引擎的
+    \texttt{static\_\allowbreak k\_scale}、
+    \texttt{static\_\allowbreak v\_scale} 和
+    \texttt{inv\_tau} 属性中。
+  \item \textbf{注意力前向替换}：
+    通过猴子补丁（monkey-patching）机制，
+    将模型每一层的注意力前向函数替换为自定义实现。
+    替换后的前向函数在 $q_{\text{len}} = 1$（decode 阶段）时
+    拦截原始计算路径，
+    转而调用融合 decode 实现：
+    先对 Query 施加 $\tau^{-1}$ 预缩放，
+    再通过 Triton 核函数直接在 INT8/INT4 缓存上完成注意力计算。
+  \item \textbf{多量化模式路由}：
+    根据配置文件中指定的 \texttt{kv\_mode} 参数，
+    自动选择对应的 Cache 类型和 decode 路径。
+\end{enumerate}
+
+\subsection{量化模式总览}
+
+表~\ref{tab:ch3-kv-modes} 总结了本框架支持的 7 种量化模式及其核心特征。
+
+\begin{table}[htbp]
+  \centering
+  \caption{本框架支持的量化模式（实验配置）}
+  \label{tab:ch3-kv-modes}
+  \zihao{5}
+  \begin{threeparttable}
+  \begin{tabular}{llcccl}
+    \toprule
+    \textbf{模式名称} & \textbf{位宽} & \textbf{静态 Scale} & $\bm{\tau^{-1}}$ & \textbf{融合 Kernel} & \textbf{说明} \\
+    \midrule
+    fp16            & 16-bit & ---  & ---  & ---  & FP16 无损基线 \\
+    int8\_baseline  & 8-bit  & 否   & 否   & 否   & INT8 动态量化基线 \\
+    int8\_ours      & 8-bit  & 是   & 是   & 是   & 本文方法（INT8） \\
+    int4\_baseline  & 4-bit  & 否   & 否   & 否   & INT4 动态量化基线 \\
+    int4\_fused     & 4-bit  & 是   & 是   & 是   & INT4 行为对齐 + 融合 \\
+    int4\_ours      & 4-bit  & 是   & 是   & 否   & INT4 行为对齐 \\
+    kivi\_style     & 8-bit  & ---  & 否   & 否   & KIVI 风格非对称量化 \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \small
+    \item 注：baseline 模式使用 PyTorch 参考实现（\texttt{torch\_ref}），
+    ours/fused 模式中的"融合 Kernel"指 Triton 融合量化解码注意力核函数。
+    int4\_fused 与 int4\_ours 的唯一区别在于是否使用融合核函数（见第四章表~\ref{tab:kv-modes}）。
+    kivi\_style 支持 INT8 和 INT4 两种精度，主对比实验使用 INT8。
+  \end{tablenotes}
+  \end{threeparttable}
+\end{table}
+
+其中，\texttt{int8\_ours} 和 \texttt{int4\_ours} 是本文提出的行为对齐量化方法，
+使用离线校准产生的静态 Scale 和逐头 $\tau^{-1}$ 校正因子。
+\texttt{int8\_ours} 进一步配合 Triton 融合核函数以获得最佳推理效率。
+baseline 模式采用 PyTorch 参考实现和动态 percentile 量化，用于评估行为对齐校准的增益。
+\texttt{kivi\_style} 实现了 KIVI~\cite{liu2024kivi} 的 per-channel/per-token 非对称量化策略，
+采用 PyTorch 参考实现（无 Triton 融合），作为已有工作的对比基线。
+
+
+% ============================================================
+\section{复杂度与资源分析}
+\label{sec:ch3-complexity}
+
+本节从时间复杂度、显存占用和访存效率三个维度对框架进行定量分析，
+为第四章的实验结果提供理论预期。
+
+\subsection{离线校准时间复杂度}
+
+离线校准的计算开销主要来自两个搜索阶段。
+设校准样本数为 $N$，校准序列长度为 $n$，模型层数为 $L$，
+Query 头数为 $H_q$，注意力头维度为 $d_k$。
+
+\paragraph{第一阶段（Scale 搜索）}
+
+候选参数为 clip percentile 集合 $\mathcal{P}_c$（默认 $|\mathcal{P}_c| = 4$：
+$\{99.0, 99.5, 99.9, 100.0\}$）和 group size 集合 $\mathcal{G}$（默认 $|\mathcal{G}| = 4$：
+$\{16, 32, 64, 128\}$）的笛卡尔积。
+对每组候选参数，需对全部校准样本的全部层和头执行量化——反量化——KL 散度计算。
+单次 KL 计算包含 $\bq\hat{\bK}^T$ 点积（$O(n d_k)$）和 softmax + KL 求和（$O(n)$），
+因此第一阶段总时间复杂度为：
+\begin{equation}
+  T_1 = O\!\left(|\mathcal{P}_c| \cdot |\mathcal{G}| \cdot N \cdot L \cdot H_q \cdot n \cdot d_k\right)
+  \label{eq:ch3-complexity-stage1}
+\end{equation}
+
+\paragraph{第二阶段（$\tau^{-1}$ 搜索）}
+
+在已确定的最优 Scale 上，为每个注意力头遍历 $|\mathcal{T}|$ 个候选温度因子
+（默认 $|\mathcal{T}| = 7$：$\{0.5, 0.7, 0.85, 1.0, 1.2, 1.5, 2.0\}$），
+第二阶段的时间复杂度为：
+\begin{equation}
+  T_2 = O\!\left(|\mathcal{T}| \cdot N \cdot L \cdot H_q \cdot n \cdot d_k\right)
+  \label{eq:ch3-complexity-stage2}
+\end{equation}
+
+由于 $|\mathcal{P}_c| \cdot |\mathcal{G}| = 16 > |\mathcal{T}| = 7$，
+第一阶段占主要开销。
+在默认配置（$N=128$, $n=512$, $d_k=128$）下，
+Qwen2.5-1.5B（$L=28$, $H_q=12$）的完整校准在单张 H20 GPU 上约需 15--20 分钟，
+Qwen2.5-7B（$L=28$, $H_q=28$）约需 40--50 分钟。
+
+\subsection{KV Cache 显存精确公式}
+
+对于具有 $L$ 层、$H_{kv}$ 个 KV 头、头维度 $d_k$、
+当前序列长度 $S$ 的模型，KV Cache 的显存占用如下。
+
+\paragraph{FP16 模式}
+Key 和 Value 各以 FP16 格式存储：
+\begin{equation}
+  M_{\text{fp16}} = 2 \cdot L \cdot H_{kv} \cdot S \cdot d_k \cdot 2 \;\text{bytes}
+  = 4 L H_{kv} S d_k
+  \label{eq:ch3-mem-fp16}
+\end{equation}
+
+\paragraph{INT8 模式}
+Key/Value 以 INT8 存储，每组 $g$ 个元素共享一个 FP32 Scale：
+\begin{equation}
+  M_{\text{int8}} = 2 L H_{kv} S \left(d_k + \frac{d_k}{g} \cdot 4\right)
+  = 2 L H_{kv} S \cdot d_k \!\left(1 + \frac{4}{g}\right)
+  \label{eq:ch3-mem-int8}
+\end{equation}
+
+\paragraph{INT4 模式}
+两个 INT4 值打包为一个 INT8 字节，存储维度减半：
+\begin{equation}
+  M_{\text{int4}} = 2 L H_{kv} S \left(\frac{d_k}{2} + \frac{d_k}{g} \cdot 4\right)
+  = 2 L H_{kv} S \cdot d_k \!\left(\frac{1}{2} + \frac{4}{g}\right)
+  \label{eq:ch3-mem-int4}
+\end{equation}
+
+INT8 与 FP16 的显存比值为 $(1 + 4/g) / 2$。
+在默认 group size $g = 16$ 下，该比值为 $1.25 / 2 = 62.5\%$，
+即 KV Cache 显存节省约 37.5\%。
+实验中观测到的 44\% 节省
+（504~MB vs 896~MB，第四章表~\ref{tab:kv-modes}）
+高于此理论值，其差异主要来自 Scale 张量在实际实现中
+以紧凑布局存储且部分参数跨 token 共享带来的额外节省。
+
+INT4 在 $g=16$ 下的理论比值为 $(0.5 + 0.25)/2 = 37.5\%$，
+显存节省可达 62.5\%，代价是第四章所示的质量退化。
+
+\subsection{Triton 核函数访存分析}
+
+decode 阶段的注意力计算属于典型的访存密集型（memory-bound）操作：
+每个 token 步仅处理一个 Query 向量（$q_{\text{len}} = 1$），
+但需遍历整个 KV 缓存。衡量核函数效率的关键指标是
+算术强度（Arithmetic Intensity, AI），定义为每字节访存的浮点运算数。
+
+对于 INT8 融合核函数，每个长度为 $B_s$ 的分块需要：
+\begin{itemize}
+  \item \textbf{访存量}：
+    Key 数据 $B_s \cdot d_k$ 字节 $+$ Key Scale $B_s \cdot (d_k/g) \cdot 4$ 字节 $+$
+    Value 数据和 Scale 同样大小，
+    合计 $2 B_s \cdot d_k (1 + 4/g)$ 字节；
+  \item \textbf{计算量}：
+    $\bq\hat{\bK}^T$ 点积 $B_s \cdot d_k$ 次 FMA $+$ $\bm{\beta} \cdot \hat{\bV}$
+    加权求和 $B_s \cdot d_k$ 次 FMA $+$ 反量化 $2 B_s \cdot d_k$ 次乘法，
+    合计约 $4 B_s \cdot d_k$ 次浮点运算。
+\end{itemize}
+
+因此 INT8 核函数的算术强度为：
+\begin{equation}
+  \text{AI}_{\text{int8}} = \frac{4 B_s \cdot d_k}{2 B_s \cdot d_k (1 + 4/g)}
+  = \frac{2}{1 + 4/g}
+  \;\text{FLOP/byte}
+  \label{eq:ch3-ai-int8}
+\end{equation}
+
+$g=16$ 时 $\text{AI}_{\text{int8}} = 2 / 1.25 = 1.6$ FLOP/byte。
+作为对比，FP16 朴素实现需读取 $2 B_s \cdot d_k \cdot 2$ 字节，
+算术强度为 $4 B_s \cdot d_k / (4 B_s \cdot d_k) = 1.0$ FLOP/byte。
+INT8 融合核函数的算术强度为 FP16 的 1.6 倍，
+这解释了量化方案在访存密集的 decode 阶段能够实现加速的根本原因：
+相同的计算量对应更少的数据搬运。
+
+\subsection{校准产物存储开销}
+
+校准产物以 JSON 格式存储，包含：
+\begin{itemize}
+  \item 逐层 Key/Value 的静态 Scale：$2 L \cdot (d_k / g)$ 个 FP32 值；
+  \item 逐层逐头 $\tau^{-1}$：$L \cdot H_q$ 个 FP32 值；
+  \item 模型配置和搜索超参数等元数据。
+\end{itemize}
+
+对于 Qwen2.5-7B（$L=28$, $H_q=28$, $d_k=128$, $g=16$），
+校准参数总量为 $2 \times 28 \times 8 + 28 \times 28 = 1{,}232$ 个浮点数，
+JSON 文件大小约 30--50~KB。
+校准产物的存储开销相对于模型权重（7B $\approx$ 14~GB FP16）完全可以忽略不计。
+
+
+% ============================================================
+\section{本章小结}
+\label{sec:ch3-summary}
+
+本章详细阐述了面向高效推理的大语言模型键值缓存行为对齐量化框架的设计与实现。
+本框架的核心创新体现在以下三个方面：
+
+\begin{enumerate}[label=(\arabic*)]
+  \item \textbf{行为对齐校准方法}：
+    提出了以 KL 散度为目标函数的两阶段校准策略，
+    通过先搜索最优量化 Scale、再优化逐头温度校正因子 $\tau^{-1}$ 的分离设计，
+    在确保量化参数最优的同时避免了循环依赖问题。
+    与传统的 MSE 校准不同，本方法直接优化注意力权重分布的相似度，
+    从行为层面而非数值层面保障量化质量。
+  \item \textbf{逐头温度校正机制}：
+    针对量化导致的注意力分布平坦化问题，
+    设计了逐层逐头的 $\tau^{-1}$ 校正因子，
+    并通过 Q 预缩放的等价变换实现了零成本集成——
+    无需修改 Triton 核函数签名，仅在 Query 投影输出上施加逐元素缩放即可生效。
+  \item \textbf{融合量化解码注意力}：
+    基于 Triton 实现了 INT8 和 INT4 的融合解码注意力核函数，
+    将反量化、注意力得分计算和 online softmax 在单个 GPU kernel 内完成，
+    避免了中间结果的全局显存读写；
+    同时通过 GQA 映射机制支持分组查询注意力架构，
+    并复用 INT8 核函数实现 INT4 路径，降低了代码维护复杂度。
+\end{enumerate}
+
+此外，复杂度分析表明：INT8 融合核函数的算术强度为 FP16 朴素实现的 1.6 倍（$g=16$），
+为 decode 阶段的加速提供了理论依据；
+校准产物仅需数十 KB 存储，部署开销可忽略不计。
+
+下一章将通过全面的实验评估验证本框架在困惑度、长文本理解、
+大海捞针检索等任务上的有效性，并与多种基线方法进行系统对比。

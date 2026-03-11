@@ -1,0 +1,127 @@
+% ============================================================
+% commands.tex — 自定义命令与环境
+% ============================================================
+
+% === 封面信息变量 ===
+\newcommand{\thesistitle}{面向高效推理的大语言模型键值缓存行为对齐量化框架}
+\newcommand{\thesisauthor}{陈梓浪}
+\newcommand{\thesisstudentid}{202264642457}
+\newcommand{\thesiscollege}{吴贤铭智能工程学院}
+\newcommand{\thesismajor}{智能制造工程}
+\newcommand{\thesissupervisor}{曾子倩}
+\newcommand{\thesissubmitdate}{2026年6月}
+
+% === 封面 ===
+\newcommand{\makecover}{%
+  \begin{titlepage}
+    \centering
+    \vspace*{2cm}
+    {\zihao{1}\heiti\bfseries 华南理工大学} \\[0.5cm]
+    {\zihao{2}\heiti 本科毕业设计（论文）} \\[3cm]
+    {\zihao{2}\heiti\bfseries \thesistitle} \\[4cm]
+    \begin{tabular}{rl}
+      {\zihao{4}\heiti 学\qquad 院：} & {\zihao{4}\songti \thesiscollege} \\[0.5em]
+      {\zihao{4}\heiti 专\qquad 业：} & {\zihao{4}\songti \thesismajor} \\[0.5em]
+      {\zihao{4}\heiti 学生姓名：}    & {\zihao{4}\songti \thesisauthor} \\[0.5em]
+      {\zihao{4}\heiti 学生学号：}    & {\zihao{4}\songti \thesisstudentid} \\[0.5em]
+      {\zihao{4}\heiti 指导教师：}    & {\zihao{4}\songti \thesissupervisor} \\[0.5em]
+      {\zihao{4}\heiti 提交日期：}    & {\zihao{4}\songti \thesissubmitdate} \\
+    \end{tabular}
+  \end{titlepage}
+}
+
+% === 原创性声明 ===
+\newcommand{\makedeclaration}{%
+  \clearpage
+  \thispagestyle{empty}
+  \begin{center}
+    {\zihao{2}\heiti 华南理工大学\\学位论文原创性声明}
+  \end{center}
+  \vspace{0.5\baselineskip}
+  \zihao{4}\songti\setlength{\parindent}{2em}
+
+  本人郑重声明：所呈交的论文是本人在导师的指导下独立进行研究所取得的研究成果。
+  除了文中特别加以标注引用的内容外，本论文不包含任何其他个人或集体已经发表或撰写的成果作品。
+  对本文的研究做出重要贡献的个人和集体，均已在文中以明确方式标明。
+  本人完全意识到本声明的法律后果由本人承担。
+
+  \vspace{2cm}
+  \begin{flushright}
+    作者签名：\underline{\hspace{4cm}} \qquad 日期：\underline{\hspace{2cm}}年\underline{\hspace{1cm}}月\underline{\hspace{1cm}}日
+  \end{flushright}
+
+  \vspace{2cm}
+  \begin{center}
+    {\zihao{2}\heiti 学位论文版权使用授权书}
+  \end{center}
+  \vspace{0.5\baselineskip}
+
+  本学位论文作者完全了解学校有关保留、使用学位论文的规定，即：学校有权保存并向国家有关部门或机构送交论文的复印件和电子版，
+  允许学位论文被查阅；学校可以公布学位论文的全部或部分内容，可以允许采用影印、缩印或其它复制手段保存、汇编学位论文。
+  本人电子文档的内容和纸质论文的内容相一致。
+
+  \vspace{2cm}
+  \begin{flushright}
+    作者签名：\underline{\hspace{4cm}} \qquad 日期：\underline{\hspace{2cm}}年\underline{\hspace{1cm}}月\underline{\hspace{1cm}}日 \\[1em]
+    指导教师签名：\underline{\hspace{4cm}} \qquad 日期：\underline{\hspace{2cm}}年\underline{\hspace{1cm}}月\underline{\hspace{1cm}}日
+  \end{flushright}
+}
+
+% === 中文摘要环境 ===
+\newenvironment{abstractzh}{%
+  \clearpage
+  \begin{center}
+    {\zihao{-2}\heiti\bfseries 摘\qquad 要}
+  \end{center}
+  \vspace{0.5\baselineskip}
+  \zihao{-4}\songti\setlength{\parindent}{2em}
+}{}
+
+% === 中文关键词 ===
+\newcommand{\keywordszh}[1]{%
+  \par\vspace{0.5\baselineskip}\noindent
+  {\zihao{-4}\heiti 关键词：}{\zihao{-4}\songti #1}
+}
+
+% === 英文摘要环境 ===
+\newenvironment{abstracten}{%
+  \clearpage
+  \begin{center}
+    {\zihao{-2}\bfseries Abstract}
+  \end{center}
+  \vspace{0.5\baselineskip}
+  \zihao{-4}\setlength{\parindent}{2em}
+}{}
+
+% === 英文关键词 ===
+\newcommand{\keywordsen}[1]{%
+  \par\vspace{0.5\baselineskip}\noindent
+  {\zihao{-4}\bfseries Keywords: }{\zihao{-4} #1}
+}
+
+% === 致谢环境 ===
+\newenvironment{acknowledgements}{%
+  \clearpage
+  \chapter*{致\qquad 谢}
+  \addcontentsline{toc}{chapter}{致谢}
+  \zihao{-4}\songti\setlength{\parindent}{2em}
+}{}
+
+% === 常用缩写 ===
+\newcommand{\ie}{\textit{i.e.}}
+\newcommand{\eg}{\textit{e.g.}}
+\newcommand{\etal}{\textit{et al.}}
+\newcommand{\cf}{\textit{cf.}}
+
+% === 数学符号 ===
+\newcommand{\bx}{\bm{x}}
+\newcommand{\bq}{\bm{q}}
+\newcommand{\bk}{\bm{k}}
+\newcommand{\bv}{\bm{v}}
+\newcommand{\bK}{\bm{K}}
+\newcommand{\bV}{\bm{V}}
+\newcommand{\bQ}{\bm{Q}}
+\newcommand{\bO}{\bm{O}}
+\DeclareMathOperator{\softmax}{softmax}
+\DeclareMathOperator{\KL}{KL}
+\DeclareMathOperator*{\argmin}{arg\,min}

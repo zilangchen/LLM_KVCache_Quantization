@@ -1,0 +1,60 @@
+% ============================================================
+% format.tex — 章节标题 / 编号 / 行距 / 段落格式
+% ============================================================
+\usepackage{titlesec}
+\usepackage{setspace}
+
+% --- 行距：正文 1.5 倍 ---
+\onehalfspacing
+
+% --- 段落首行缩进 2 字符 ---
+\setlength{\parindent}{2em}
+
+% --- 章标题：小二号黑体，居中，单倍行距，段前段后各 0.5 行 ---
+% "第X章" 格式由 ctexbook 的 chapter/name 控制
+\ctexset{
+  chapter = {
+    format     = \centering\zihao{-2}\heiti\bfseries,
+    name       = {第,章},
+    number     = \chinese{chapter},
+    aftername  = \quad,
+    beforeskip = 0.5\baselineskip,
+    afterskip  = 0.5\baselineskip,
+    fixskip    = true,
+  },
+  section = {
+    format     = \raggedright\zihao{-3}\heiti,
+    beforeskip = 0.5\baselineskip,
+    afterskip  = 0.5\baselineskip,
+    fixskip    = true,
+  },
+  subsection = {
+    format     = \raggedright\zihao{4}\heiti,
+    beforeskip = 0.5\baselineskip,
+    afterskip  = 0.5\baselineskip,
+    fixskip    = true,
+  },
+}
+
+% --- 图表标题格式：五号宋体，按章编号用短横线 ---
+\captionsetup{
+  font         = {small},          % 五号宋体（去除 sf 避免映射到黑体）
+  labelsep     = quad,
+  skip         = 6pt,
+}
+\captionsetup[figure]{
+  position     = bottom,
+  labelfont    = bf,
+}
+\captionsetup[table]{
+  position     = top,
+  labelfont    = bf,
+}
+
+% --- 图表按章编号 ---
+\counterwithin{figure}{chapter}
+\counterwithin{table}{chapter}
+\counterwithin{equation}{chapter}
+\renewcommand{\thefigure}{\thechapter-\arabic{figure}}
+\renewcommand{\thetable}{\thechapter-\arabic{table}}
+\renewcommand{\theequation}{\thechapter-\arabic{equation}}
