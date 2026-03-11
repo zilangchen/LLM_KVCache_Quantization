@@ -67,7 +67,7 @@ python scripts/smoke_test.py --save_output
 ### 3. 一键全量复现（推荐）
 
 ```bash
-bash scripts/run_final_thesis_plus.sh
+bash scripts/run_final_thesis_plus.sh  <!-- legacy: 当前使用 dispatch_phase5v2_*.sh + dispatch_phase6_core.sh -->
 ```
 
 自动完成：闸门检查 → 主线实验 → batch 扩展 → 聚合出表出图 → LaTeX 导出。
@@ -206,7 +206,7 @@ python scripts/export_tables_latex.py \
 │   ├── calibrate_behavior.py     # KL 校准
 │   ├── smoke_test.py             # 最小验证
 │   ├── verify_fused_decode.py    # Fused decode 正确性
-│   └── run_final_thesis_plus.sh  # 一键全量复现
+│   └── run_final_thesis_plus.sh  # 一键全量复现 (legacy: 当前使用 dispatch_phase5v2_*.sh + dispatch_phase6_core.sh)
 ├── configs/
 │   └── exp_matrix.yaml   # 唯一实验配置文件
 ├── artifacts/            # 校准文件（JSON）

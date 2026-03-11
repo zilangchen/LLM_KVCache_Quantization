@@ -1,7 +1,7 @@
 # 论文写作前置清单（Final Thesis Plus）
 
 > 目的：在正式写论文前，确保“图表是否齐全、口径是否一致、复现是否可审计”。
-> 本清单对应 `results/final_thesis_plus_*` 目录。
+> 本清单对应 `results/emnlp_final_raw/` 目录。
 
 ## 1) 必需图（主文）
 
@@ -89,11 +89,11 @@
 
 ```bash
 cd /root/LLM_KVCache_Quantization
-BASE_DIR="results/final_thesis_plus_YYYYMMDD_HHMMSS"
+BASE_DIR="results/emnlp_final_raw"
 
 python - <<'PY'
 from pathlib import Path
-base = Path("results/final_thesis_plus_YYYYMMDD_HHMMSS")
+base = Path("results/emnlp_final_raw")
 required = [
     "tables/latency_summary.csv",
     "tables/memory_summary.csv",

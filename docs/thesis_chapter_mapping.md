@@ -1,7 +1,7 @@
 # 论文章节 - 图表映射（Thesis Chapter Mapping）
 
 > 用途：明确论文每一章需要引用哪些实验数据、图表和代码，确保写作时不遗漏。
-> 数据来源：`results/final_thesis_plus_20260219_045623/`
+> 数据来源：`results/emnlp_final_raw/`
 
 ---
 
@@ -64,7 +64,7 @@
   - 模型：`Qwen/Qwen2.5-1.5B-Instruct`
   - 硬件：NVIDIA H20 96GB
   - 配置：`configs/exp_matrix.yaml`
-  - 环境：`results/final_thesis_plus_20260219_045623/env/versions.txt`
+  - 环境：`results/emnlp_final_raw/env/versions.txt`
 
 ### 4.2 主线性能对比（核心表格）
 
@@ -110,7 +110,7 @@
 ### 4.6 消融分析
 
 - **温度消融**：
-  - 主线（no_temp）数据：`results/final_thesis_plus_20260219_045623/`
+  - 主线（no_temp）数据：`results/emnlp_final_raw/`
   - 对比（with_temp）数据：`results/runs/int8_ours_kl_temp_fused_*`、`results/runs/int8_ours_long_fused_*`
   - [需整理] 提取历史数据做对比表格
 - **Group size 敏感性**：[需补跑或从历史数据提取]
