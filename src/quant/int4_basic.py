@@ -134,7 +134,9 @@ def quantize_symmetric_int4(
     # it can become 0.0, then clamp(min=1e-5) is too late — the value is
     # already zero and scale=0 causes NaN from round(x/0).
     abs_max = abs_max.clamp(min=1e-5)
-    abs_max = abs_max.to(tensor.dtype)
+    # ENG-066: Keep abs_max in float32 before /7.0 to preserve INT4 scale precision.
+    # fp16 relative error (~0.1%) is amplified 18× by INT4's coarse step size (1/7 vs 1/127).
+    abs_max = abs_max.to(torch.float32)
 
     # INT4 symmetric range is [-7, 7]; asymmetric uses [-8, 7] (see asymmetric_quant.py).
     scale = abs_max / 7.0
@@ -147,8 +149,8 @@ def quantize_symmetric_int4(
     
     # Store scales without trailing singleton dim for cache/storage compatibility:
     # [B, H, S, num_groups, 1] -> [B, H, S, num_groups]
-    # ENG-028: Preserve input dtype instead of forcing fp16, consistent with INT8 path.
-    scale = scale.to(tensor.dtype).squeeze(-1)
+    # ENG-066: Preserve float32 scale for INT4 precision chain.
+    scale = scale.to(torch.float32).squeeze(-1)
     
     return quantized, scale
 
@@ -184,7 +186,8 @@ def quantize_symmetric_int4_with_scale(
     reshaped = tensor.view(batch, heads, seq_len, num_groups, group_size)
 
     scale_expanded = _normalize_static_scale(scale, batch, heads, seq_len, num_groups)
-    scale_expanded = scale_expanded.to(tensor.dtype).clamp(min=1e-5)
+    # ENG-066: Keep static scale in float32 for INT4 precision.
+    scale_expanded = scale_expanded.to(torch.float32).clamp(min=1e-5)
 
     quantized = torch.round(reshaped / scale_expanded).clamp(-7, 7).to(torch.int8)
     quantized = quantized.view(batch, heads, seq_len, head_dim)

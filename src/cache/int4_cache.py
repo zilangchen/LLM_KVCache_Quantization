@@ -295,7 +295,8 @@ class INT4KVCache:
             raise ValueError(f"Unsupported static scale shape: {tuple(scale.shape)}")
 
         scale_view = scale_view.expand(batch, heads, seq_len, num_groups)
-        return scale_view.to(tensor.dtype).clamp(min=1e-5)
+        # ENG-066: Keep scales in float32 for INT4 precision chain.
+        return scale_view.to(torch.float32).clamp(min=1e-5)
 
     def _compute_dynamic_group_scale(self, tensor: Tensor) -> Tensor:
         """
@@ -310,7 +311,8 @@ class INT4KVCache:
         num_groups = head_dim // self.group_size
         reshaped = tensor.view(batch, heads, seq_len, num_groups, self.group_size)
         absmax = reshaped.abs().amax(dim=-1)
-        return (absmax.clamp(min=1e-5) / 7.0).to(tensor.dtype)
+        # ENG-066: Keep dynamic scale in float32 for INT4 precision.
+        return (absmax.clamp(min=1e-5) / 7.0).to(torch.float32)
 
     def _apply_outlier_rescue(self, tensor: Tensor, scale: Tensor) -> Tensor:
         """
@@ -461,8 +463,9 @@ class INT4KVCache:
         # Dequantize
         k = dequantize_symmetric_int4(q_k, scale_k)
         v = dequantize_symmetric_int4(q_v, scale_v)
-
-        return k, v
+        # ENG-066: Ensure output dtype matches cache dtype (fp16) regardless of internal
+        # scale precision. Without this, float32 scales would propagate to attention math.
+        return k.to(self.dtype), v.to(self.dtype)
 
     def get_int4_tensors(self, layer_id: int) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
         """

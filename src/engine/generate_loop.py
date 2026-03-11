@@ -541,15 +541,15 @@ def generate_from_ids(
                 clip_percentile = calib_clip_k if calib_clip_k is not None else clip_percentile
 
                 if use_static_scales and "k_scale" in calib:
-                    # ENG-021: Scales are loaded as fp16 to match the dtype used by
-                    # the INT8/INT4 cache engine's scale buffers. This means very
-                    # small scale values (< ~6e-8) will underflow to zero and very
-                    # large values (> 65504) will overflow to inf. If precision loss
-                    # is a concern (e.g. scales derived from low-magnitude activations),
-                    # consider loading as fp32 and casting inside the cache engine.
-                    static_k_scale = torch.tensor(calib["k_scale"], dtype=torch.float16)
+                    # ENG-021/ENG-066: INT4 scales loaded as float32 to preserve
+                    # precision through the quantization chain. INT4's coarse step
+                    # size (1/7) amplifies fp16 rounding error ~18×. INT8 path
+                    # remains fp16 (step size 1/127 tolerates fp16 precision).
+                    _scale_dtype = torch.float32 if kv_mode.startswith("int4") else torch.float16
+                    static_k_scale = torch.tensor(calib["k_scale"], dtype=_scale_dtype)
                 if use_static_scales and "v_scale" in calib:
-                    static_v_scale = torch.tensor(calib["v_scale"], dtype=torch.float16)
+                    _scale_dtype = torch.float32 if kv_mode.startswith("int4") else torch.float16
+                    static_v_scale = torch.tensor(calib["v_scale"], dtype=_scale_dtype)
 
                 # ENG-048: Detect asymmetric k_scale / v_scale presence and warn.
                 # Having k_scale without v_scale (or vice versa) means one side uses

@@ -7,6 +7,7 @@ from src.quant.int4_basic import (
     dequantize_symmetric_int4,
     pack_int4,
     quantize_symmetric_int4,
+    quantize_symmetric_int4_with_scale,
     unpack_int4,
 )
 from src.quant.int8_basic import (
@@ -32,12 +33,14 @@ class TestInt4Basic(unittest.TestCase):
         q, scale = quantize_symmetric_int4(x, percentile=99.9, group_size=group_size)
         self.assertEqual(q.shape, x.shape)
         self.assertEqual(q.dtype, torch.int8)
-        self.assertEqual(scale.dtype, torch.float16)
+        # ENG-066: scale is now float32 for INT4 precision chain.
+        self.assertEqual(scale.dtype, torch.float32)
         self.assertEqual(scale.shape, (B, H, S, D // group_size))
 
         y = dequantize_symmetric_int4(q, scale)
         self.assertEqual(y.shape, x.shape)
-        self.assertEqual(y.dtype, torch.float16)
+        # ENG-066: dequantize follows scale dtype, which is now float32.
+        self.assertEqual(y.dtype, torch.float32)
         self.assertTrue(torch.isfinite(y).all().item())
 
         # TST-047: Quantization error upper bound assertion.
@@ -392,16 +395,17 @@ class TestInt4Float16Input(unittest.TestCase):
         q, scale = quantize_symmetric_int4(x_fp16, percentile=100.0, group_size=32)
         self.assertEqual(q.dtype, torch.int8)
         self.assertEqual(q.shape, x_fp16.shape)
-        # Scale should preserve input dtype (fp16)
-        self.assertEqual(scale.dtype, torch.float16)
+        # ENG-066: Scale is now float32 for INT4 precision chain.
+        self.assertEqual(scale.dtype, torch.float32)
 
         y = dequantize_symmetric_int4(q, scale)
-        self.assertEqual(y.dtype, torch.float16)
+        # ENG-066: dequantize follows scale dtype (now float32).
+        self.assertEqual(y.dtype, torch.float32)
         self.assertEqual(y.shape, x_fp16.shape)
         self.assertTrue(torch.isfinite(y).all())
 
         # Roundtrip error should be bounded (INT4 is less precise)
-        err = (x_fp16 - y).abs().max().item()
+        err = (x_fp16.float() - y).abs().max().item()
         self.assertLess(err, 0.5, f"INT4 fp16 roundtrip max error too large: {err}")
 
     def test_int4_quant_float16_vs_float32_consistency(self):
@@ -1028,6 +1032,52 @@ class TestKIVICacheGrowBoundary(unittest.TestCase):
         v2 = torch.randn(B, H, 3, D)
         with self.assertRaises(ValueError):
             cache.append(0, k2, v2)
+
+
+class TestENG066Float32ScaleChain(unittest.TestCase):
+    """ENG-066: Verify float32 scale precision chain for INT4."""
+
+    def test_quantize_symmetric_int4_scale_is_float32(self):
+        """Scale output from quantize_symmetric_int4 must be float32."""
+        x = torch.randn(1, 4, 2, 128, dtype=torch.float16)
+        _, scale = quantize_symmetric_int4(x, percentile=99.9, group_size=32)
+        self.assertEqual(scale.dtype, torch.float32)
+
+    def test_quantize_with_static_scale_preserves_float32(self):
+        """quantize_symmetric_int4_with_scale preserves float32 scale."""
+        x = torch.randn(1, 4, 2, 128, dtype=torch.float16)
+        static_scale = torch.rand(4, 4, dtype=torch.float32) * 0.1 + 0.01  # [H, G]
+        _, scale_out = quantize_symmetric_int4_with_scale(x, static_scale, group_size=32)
+        self.assertEqual(scale_out.dtype, torch.float32)
+
+    def test_dequant_output_follows_scale_dtype(self):
+        """dequantize output dtype follows scale.dtype (float32)."""
+        x = torch.randn(1, 4, 2, 128, dtype=torch.float16)
+        q, scale = quantize_symmetric_int4(x, percentile=99.9, group_size=32)
+        self.assertEqual(scale.dtype, torch.float32)
+        y = dequantize_symmetric_int4(q, scale)
+        self.assertEqual(y.dtype, torch.float32)  # follows scale
+
+    def test_int4_cache_get_kv_returns_cache_dtype(self):
+        """get_kv() must return self.dtype (fp16) regardless of internal scale precision."""
+        cache = INT4KVCache(num_layers=1, device="cpu", group_size=32,
+                            dtype=torch.float16, bit_packed=False)
+        k = torch.randn(1, 4, 8, 128, dtype=torch.float16)
+        v = torch.randn(1, 4, 8, 128, dtype=torch.float16)
+        cache.append(0, k, v)
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.dtype, torch.float16)
+        self.assertEqual(v_out.dtype, torch.float16)
+
+    def test_int4_cache_internal_scale_is_float32(self):
+        """Internal scale buffers should be float32 after ENG-066."""
+        cache = INT4KVCache(num_layers=1, device="cpu", group_size=32,
+                            dtype=torch.float16, bit_packed=False)
+        k = torch.randn(1, 4, 8, 128, dtype=torch.float16)
+        v = torch.randn(1, 4, 8, 128, dtype=torch.float16)
+        cache.append(0, k, v)
+        self.assertEqual(cache._k_scale[0].dtype, torch.float32)
+        self.assertEqual(cache._v_scale[0].dtype, torch.float32)
 
 
 if __name__ == "__main__":
