@@ -321,6 +321,10 @@ Group size 则保持 Key 和 Value 一致。
 这一观察构成了逐头（per-head）温度校正的核心动机。
 图~\ref{fig:ch3-invtau-heatmap} 展示了 Qwen2.5-1.5B 校准后的逐层逐头 $\tau^{-1}$ 分布，
 可以看到绝大多数头的 $\tau^{-1} = 1.0$（无需校正），校准具有高度稀疏性。
+这一稀疏性表明：INT8 的 256 个离散级别对绝大多数注意力头已提供充足的表示精度，
+量化引入的分布偏移经 softmax 归一化后自然消解。
+仅少数浅层头因其特殊的局部注意力模式对量化噪声更为敏感，
+需要温度校正来恢复分布尖锐度。
 
 \subsection{温度校正的数学描述}
 
@@ -431,6 +435,11 @@ $q_{\max} = 127$（INT8）或 $q_{\max} = 7$（INT4）。
 
 Scale 张量始终以 float32 精度存储，不随输入张量的 dtype 变化，
 以避免 float16 精度下极小 Scale 值退化为零导致的数值不稳定。
+
+然而，静态 Scale 的有效性前提是校准数据能够充分代表推理时的输入分布。
+当实际推理中出现校准未覆盖的激活值范围时，
+静态 Scale 可能导致过度裁剪（clipping），引起显著的精度退化。
+下文的自适应保护机制正是为解决这一边界情况而设计。
 
 \subsection{自适应保护机制}
 
@@ -657,7 +666,9 @@ Cache 内部采用预分配——按需扩展的内存管理策略：
     \small
     \item 注：baseline 模式使用 PyTorch 参考实现（\texttt{torch\_ref}），
     ours/fused 模式中的"融合 Kernel"指 Triton 融合量化解码注意力核函数。
-    int4\_fused 与 int4\_ours 的唯一区别在于是否使用融合核函数（见第四章表~\ref{tab:kv-modes}）。
+    int4\_fused 与 int4\_ours 共享相同的校准参数（scale 与 $\tau^{-1}$），
+    仅在推理实现路径上有区别（Triton 融合核函数 vs PyTorch 参考实现），
+    用于在第四章中分离校准收益与核函数加速的各自贡献。
     kivi\_style 支持 INT8 和 INT4 两种精度，主对比实验使用 INT8。
   \end{tablenotes}
   \end{threeparttable}

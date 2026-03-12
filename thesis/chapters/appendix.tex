@@ -546,8 +546,8 @@ input\_layernorm 和 RoPE 位置编码（CAL-019/020 问题），
 \end{table}
 
 \textbf{主要发现。}
-（1）float32 scale 修复在 Qwen2.5-7B 上带来最显著改善（PPL 从修复前推算的高位降至 52.19），
-验证了 runtime scale 精度对 INT4 质量的实质影响。
+（1）在与历史主线结果的对照中，float32 scale 修复在 Qwen2.5-7B 上带来最显著改善：
+INT4 PPL 由约 85.49/86.56 降至 52.19，说明 runtime scale 精度是影响 INT4 质量的重要因素之一。
 （2）LLaMA-3.1-8B 的 Needle 通过率在 baseline 和 ours 中均为 100\%，
 说明精度修复同时惠及了两种校准策略，而非单独扩大 ours 的相对优势。
 （3）Qwen2.5-1.5B 和 LLaMA-3.1-8B 的 PPL 中 ours 仍略逊于 baseline，
