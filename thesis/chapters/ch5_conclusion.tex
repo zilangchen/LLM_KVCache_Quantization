@@ -108,6 +108,9 @@ LongBench 综合评分在 1.5B 和 7B 模型上大幅下降。
 在跨模型对比中，LLaMA-3.1-8B 的 INT4 退化幅度小于 Qwen 系列，
 可能受益于其 8 个 KV 头对量化误差的更强稀释效应。
 如何在 INT4 乃至更低比特下保持长上下文检索能力，仍是一个开放性问题。
+后续工程分析进一步揭示，运行时 scale 参数的精度链路（float32 vs float16）
+也是影响 INT4 质量的因素之一，修复后部分模型的 PPL 获得显著改善，
+但整体仍未达到跨模型一致的非劣性水平（详见第~\ref{subsec:exp-int4-limitations} 节）。
 
 \textbf{KIVI-style 基线的实现差异。}
 本文实现的 KIVI-style 基线采用了 KIVI~\citep{liu2024kivi}

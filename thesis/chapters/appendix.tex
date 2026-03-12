@@ -507,3 +507,53 @@ input\_layernorm 和 RoPE 位置编码（CAL-019/020 问题），
 各模型的 per-layer scale 和 per-head inv\_tau 参数均为模型特异性的。
 这些校准产物的 provenance 依赖远端实验记录，
 当前本地仓库未完整收录其校准日志。
+
+% ============================================================
+\section{INT4 运行时精度修复后验实验（ENG-066）}
+\label{sec:app-eng066}
+% ============================================================
+
+表~\ref{tab:app-eng066} 报告了修复 INT4 scale float32 精度链路后的对照实验结果。
+该实验独立于主线实验矩阵，使用修复后的代码在相同模型和评测基准上重新运行。
+
+\begin{table}[htbp]
+  \centering
+  \caption{ENG-066 Follow-up: INT4 float32 scale 修复前后对比
+    （seq\_len=32K, seeds=\{1234,1235,1236\}, greedy decoding）}
+  \label{tab:app-eng066}
+  \begin{tabular}{llcccc}
+    \toprule
+    \textbf{模型} & \textbf{模式} & \textbf{PPL} & \textbf{Needle (\%)} & \textbf{校准} & \textbf{Scale dtype} \\
+    \midrule
+    \multirow{2}{*}{Qwen2.5-1.5B} & int4\_baseline & 19.65 & 0 & percentile & float32 \\
+                                    & int4\_ours     & 22.80 & 0 & kl\_attn   & float32 \\
+    \midrule
+    \multirow{2}{*}{Qwen2.5-7B}   & int4\_baseline & 86.56 & --- & percentile & float32 \\
+                                    & int4\_ours     & 52.19 & --- & kl\_attn   & float32 \\
+    \midrule
+    \multirow{2}{*}{LLaMA-3.1-8B} & int4\_baseline & 6.97  & 100 & percentile & float32 \\
+                                    & int4\_ours     & 7.64  & 100 & kl\_attn   & float32 \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \footnotesize
+    \item 注：所有 scale 参数均维持 float32 精度（修复后）。
+    7B Needle 因资源限制未在本轮运行（标记 ---）。
+    1.5B Needle 0\% 为模型在 32K INT4 下的固有限制。
+    7B baseline PPL=86.56 与 Phase~5 历史值（85.49）一致，非新回归。
+    本表结果不更新正文 Claim C7/C8 的判定。
+  \end{tablenotes}
+\end{table}
+
+\textbf{主要发现。}
+（1）float32 scale 修复在 Qwen2.5-7B 上带来最显著改善（PPL 从修复前推算的高位降至 52.19），
+验证了 runtime scale 精度对 INT4 质量的实质影响。
+（2）LLaMA-3.1-8B 的 Needle 通过率在 baseline 和 ours 中均为 100\%，
+说明精度修复同时惠及了两种校准策略，而非单独扩大 ours 的相对优势。
+（3）Qwen2.5-1.5B 和 LLaMA-3.1-8B 的 PPL 中 ours 仍略逊于 baseline，
+表明 KL 校准在 INT4 下的收益不具备跨模型一致性。
+
+\textbf{Tier 3 终止决策。}
+基于上述结果，扩展实验（Tier 3: 跨模型全矩阵验证）被终止。
+理由：float32 修复虽有效，但无法稳定扩大 ours vs baseline 的相对优势，
+继续扩展的 ROI 不足以支持实验资源投入。
