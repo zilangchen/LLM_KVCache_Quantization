@@ -4,15 +4,14 @@
 # Does NOT modify the frozen historical snapshot.
 # Used by scripts/run_experiments.py
 #
-# NOTE: model_revision pinned to 043efdca... (from final_emnlp2026_v1.yaml L56),
-# fixing the config debt where exp_matrix_llama31_8b_v1.yaml had model_revision: null.
-# Remote server uses local ModelScope path:
-#   /root/autodl-tmp/modelscope_cache/LLM-Research/Meta-Llama-3___1-8B-Instruct
+# NOTE: model_revision reverted to null (043efdca... does not exist on HF hub — 404).
+# The original exp_matrix_llama31_8b_v1.yaml also used null; this matches Phase 5v2 data.
+# Remote server uses local ModelScope/HF cache (snapshot 0e9e39f...).
 
 project:
   name: kv-cache-quant-llama31-8b
   model_id: meta-llama/Llama-3.1-8B-Instruct
-  model_revision: 043efdca396f2b6f4b5714d76d70df7840856ed7
+  model_revision: null
 
 runtime:
   seed: 1234
