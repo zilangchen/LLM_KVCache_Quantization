@@ -293,7 +293,7 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
 % ============================================================
 
 本节提供推理延迟、吞吐量和显存的补充可视化。
-图~\ref{fig:app-tpot-gain} 展示了各量化模式相对 FP16 的 TPOT 加速比，
+图~\ref{fig:app-tpot-gain} 展示了各量化模式相对 FP16 的 TPOT 变化，
 图~\ref{fig:app-throughput-batch} 和图~\ref{fig:app-throughput-per-seq}
 分别展示了总吞吐量和单序列吞吐量随 batch size 的扩展曲线，
 图~\ref{fig:app-kvmem-batch} 和图~\ref{fig:app-mempeak-batch}
@@ -303,18 +303,20 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.85\textwidth]{figures/latency_tpot_gain_vs_fp16.png}
-  \caption{各量化模式相对 FP16 基线的 TPOT 加速比。
+  \caption{各量化模式相对 FP16 基线的 TPOT 变化（Qwen2.5-1.5B-Instruct，batch=1）。
   正值表示加速（TPOT 降低），负值表示减速。
-  int8\_ours（Triton 融合核函数）在所有模型上均实现正加速，
-  而 int8\_baseline（torch\_ref）因两阶段反量化开销导致减速。}
+  在 batch=1 的单序列解码场景下，量化操作的计算开销尚未被批处理摊薄，
+  因此所有量化模式的 TPOT 均高于 FP16 基线。
+  int8\_ours 的开销（$-$75\%\textasciitilde{}$-$96\%）低于 int8\_baseline（$-$78\%\textasciitilde{}$-$112\%），
+  体现了融合核函数对反量化开销的缓解作用。}
   \label{fig:app-tpot-gain}
 \end{figure}
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.85\textwidth]{figures/throughput_tok_per_s_vs_batch.png}
-  \caption{吞吐量（tokens/s）随 batch size 的扩展曲线（Qwen2.5-1.5B-Instruct，seq\_len=4096）。
-  随着 batch size 增大，量化模式的吞吐优势逐渐显现。}
+  \caption{吞吐量（tokens/s）随 batch size 的扩展曲线（Qwen2.5-1.5B-Instruct，seq\_len=8192）。
+  随着 batch size 增大，量化模式的显存节省转化为更高的并发能力。}
   \label{fig:app-throughput-batch}
 \end{figure}
 
