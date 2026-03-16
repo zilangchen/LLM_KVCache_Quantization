@@ -1,0 +1,71 @@
+# Postfix gate config: Qwen2.5-1.5B-Instruct — INT4 unified gate
+# Purpose: Minimal matrix for M3 unified gate test.
+# Contains ONLY int4_baseline_long + int4_ours_postfix_long.
+# int4_ours_postfix_long binds postfix calibration (version=2, isolated from legacy).
+# Created: 2026-03-17 (M1-2)
+
+project:
+  name: kv-cache-quant-qwen2p5-1p5b
+  model_id: Qwen/Qwen2.5-1.5B-Instruct
+  model_revision: 989aa7980e4cf806f80c7fef2b1adb7bc71aa306
+
+runtime:
+  seed: 1234
+  device: cuda
+  dtype: fp16
+  decoding:
+    temperature: 0.0
+    top_p: 1.0
+    top_k: 0
+  quant_defaults:
+    quant_bits: 4
+    calib_strategy: kl_attn
+    use_static_scales: true
+    adaptive_static_scales: false
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    clip_percentile_k: 99.5
+    clip_percentile_v: 99.5
+    group_size_k: 32
+    group_size_v: 32
+  kernel_defaults:
+    decode_attn_impl: triton_fused
+
+matrix:
+  # =========================================================================
+  # INT4 baseline: identical to legacy exp_matrix.yaml int4_baseline_long
+  # No postfix calibration binding — keeps baseline semantics clean.
+  # =========================================================================
+  - run_name: int4_baseline_long
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # INT4-ours postfix: binds postfix calibration v2, aligned with INT8-ours
+  # mainline strategy (no temperature, no adaptive).
+  # =========================================================================
+  - run_name: int4_ours_postfix_long
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/calibration_postfix_v1/kv_calib_kl_1p5b_int4_postfix.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: false
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
