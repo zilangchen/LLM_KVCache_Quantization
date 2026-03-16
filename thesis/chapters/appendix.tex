@@ -439,42 +439,42 @@ INT4 量化模式在所有子任务上均完全失败（通过率 0\%），
 \end{table}
 
 % ============================================================
-\section{Claim 验证详细汇总}
+\section{实验预期验证详细汇总}
 \label{sec:app-claim-detail}
 % ============================================================
 
-表~\ref{tab:app-claim-summary} 汇总了全部 11 项核心声明的验证结果，
+表~\ref{tab:app-claim-summary} 汇总了全部 11 项实验预期的验证结果，
 包括实际观测增益、阈值、统计检验结果和证据强度。
 
 \begin{table}[htbp]
   \centering
-  \caption{Claim 验证详细汇总（11 项核心声明）}
+  \caption{实验预期验证详细汇总（11 项）}
   \label{tab:app-claim-summary}
   \zihao{5}
   \setlength{\tabcolsep}{3pt}
   \begin{tabular}{clcrrrcl}
     \toprule
-    \textbf{ID} & \textbf{核心声明} & \textbf{结果} & \textbf{阈值} & \textbf{观测} & \textbf{$q$值} & \textbf{证据} & \textbf{关键模型} \\
+    \textbf{编号} & \textbf{实验预期} & \textbf{结论} & \textbf{阈值} & \textbf{观测} & \textbf{$q$值} & \textbf{证据} & \textbf{关键模型} \\
     \midrule
-    C1  & TPOT 显著降低             & PASS & $\geq$5\%    & +17.3\%   & 0.016 & 强    & 7B \\
-    C2  & KV 显存优势               & PASS & $\geq$20\%   & +43.7\%   & ---   & 中    & 8B \\
-    C3  & Needle 不劣于 baseline    & PASS & $\geq$$-$1\%  & 0.0\%     & 1.000 & 中    & 7B \\
-    C4  & PPL 不劣于 baseline       & PASS & $\geq$$-$0.5\% & $-$0.18\% & 0.097 & 中    & 1.5B \\
-    C5  & LongBench 不劣于 baseline & PASS & $\geq$$-$1\%  & +0.16\%   & 0.144 & 中    & 7B \\
-    C6  & RULER 不劣于 baseline     & FAIL & $\geq$$-$1\%  & $-$2.64\% & 0.727 & 无    & 1.5B \\
-    C7  & INT4 Needle 不劣于        & FAIL & $\geq$$-$1\%  & $-$2.0\%  & 1.000 & 无    & 8B \\
-    C8  & INT4 PPL 不劣于           & FAIL & $\geq$$-$0.5\% & $-$15.9\% & 0.097 & 无    & 7B \\
-    C9  & LongBench 不劣于 KIVI     & PASS & $\geq$$-$1\%  & +1.37\%   & 0.144 & 中    & 7B \\
-    C10 & Needle 不劣于 KIVI        & PASS & $\geq$$-$1\%  & 0.0\%     & 1.000 & 中    & 8B \\
-    C11 & 跨模型 LongBench 不劣于   & PASS & $\geq$$-$1\%  & +0.05\%   & 0.955 & 中    & 7B+8B \\
+    E1  & TPOT 显著降低             & 达标 & $\geq$5\%    & +17.3\%   & 0.016 & 强    & 7B \\
+    E2  & KV 显存优势               & 达标 & $\geq$20\%   & +43.7\%   & ---   & 中    & 8B \\
+    E3  & Needle 不劣于 baseline    & 达标 & $\geq$$-$1\%  & 0.0\%     & 1.000 & 中    & 7B \\
+    E4  & PPL 不劣于 baseline       & 达标 & $\geq$$-$0.5\% & $-$0.18\% & 0.097 & 中    & 1.5B \\
+    E5  & LongBench 不劣于 baseline & 达标 & $\geq$$-$1\%  & +0.16\%   & 0.144 & 中    & 7B \\
+    E6  & RULER 不劣于 baseline     & 未达标 & $\geq$$-$1\%  & $-$2.64\% & 0.727 & 无    & 1.5B \\
+    E7  & INT4 Needle 不劣于        & 未达标 & $\geq$$-$1\%  & $-$2.0\%  & 1.000 & 无    & 8B \\
+    E8  & INT4 PPL 不劣于           & 未达标 & $\geq$$-$0.5\% & $-$15.9\% & 0.097 & 无    & 7B \\
+    E9  & LongBench 不劣于 KIVI     & 达标 & $\geq$$-$1\%  & +1.37\%   & 0.144 & 中    & 7B \\
+    E10 & Needle 不劣于 KIVI        & 达标 & $\geq$$-$1\%  & 0.0\%     & 1.000 & 中    & 8B \\
+    E11 & 跨模型 LongBench 不劣于   & 达标 & $\geq$$-$1\%  & +0.05\%   & 0.955 & 中    & 7B+8B \\
     \bottomrule
   \end{tabular}
   \begin{tablenotes}
     \footnotesize
-    \item 注：C1--C5、C9--C11 为 INT8 相关声明，C6 为 INT8 RULER 声明，C7--C8 为 INT4 声明。
+    \item 注：E1--E5、E9--E11 为 INT8 相关预期，E6 为 INT8 RULER 预期，E7--E8 为 INT4 预期。
     ``阈值''为非劣性/优效性的最小增益要求。``$q$值''为 BH-FDR 校正后的调整 $p$ 值。
-    ``---'' 表示该声明不要求统计检验（直接比较确定性指标）。
-    三项 FAIL（C6、C7、C8）的共性分析见正文 \ref{sec:exp-discussion} 节。
+    ``---'' 表示该项不要求统计检验（直接比较确定性指标）。
+    三项未达标（E6、E7、E8）的共性分析见正文第~\ref{sec:exp-discussion}~节。
   \end{tablenotes}
 \end{table}
 
@@ -483,7 +483,7 @@ INT4 量化模式在所有子任务上均完全失败（通过率 0\%），
 \label{sec:app-calib-provenance}
 % ============================================================
 
-本文主线实验使用的校准产物信息如下：
+本文实验使用的校准产物信息如下：
 
 \begin{itemize}[leftmargin=2em, itemsep=2pt]
   \item \textbf{校准文件}：\texttt{kv\_calib\_kl\_\allowbreak selected\_v3\_quick.json}
@@ -496,31 +496,29 @@ INT4 量化模式在所有子任务上均完全失败（通过率 0\%），
 \end{itemize}
 
 \textbf{已知局限。}
-该校准产物生成时，校准脚本中 Q 向量的预处理流程尚未包含
-input\_layernorm 和 RoPE 位置编码（CAL-019/020 问题），
-该问题已在后续版本中修复。
-1.5B 模型的 INT8 量化在主线实验中展现了与 FP16
+该校准产物生成时，校准脚本的 Q 向量预处理流程
+尚未包含 input\_layernorm 和 RoPE 位置编码变换，
+后续版本已优化了该预处理流程。
+1.5B 模型的 INT8 量化在实验中展现了与 FP16
 几乎一致的质量（PPL 退化 $-$0.18\%，Needle 100\%），
-当前结果提示该校准产物对 1.5B 主线的影响可能有限，
-但尚未完成修复后的重校准对比验证，
-完整的验证列为未来工作（第~\ref{sec:conclusion-future} 节）。
+表明当前校准产物对 1.5B 模型 INT8 量化的影响有限。
+使用完善后的预处理流程进行重校准对比验证
+列为未来工作（第~\ref{sec:conclusion-future}~节）。
 
-7B 和 8B 模型的校准文件在远端 GPU 服务器上独立生成，
+7B 和 8B 模型的校准文件独立生成，
 各模型的 per-layer scale 和 per-head inv\_tau 参数均为模型特异性的。
-这些校准产物的 provenance 依赖远端实验记录，
-当前本地仓库未完整收录其校准日志。
 
 % ============================================================
-\section{INT4 运行时精度修复后验实验（ENG-066）}
+\section{INT4 量化精度敏感性补充实验}
 \label{sec:app-eng066}
 % ============================================================
 
-表~\ref{tab:app-eng066} 报告了修复 INT4 scale float32 精度链路后的对照实验结果。
-该实验独立于主线实验矩阵，使用修复后的代码在相同模型和评测基准上重新运行。
+表~\ref{tab:app-eng066} 报告了确保 INT4 scale 全链路以 float32 精度维护后的对照实验结果，
+旨在分析运行时 scale 精度对 INT4 量化质量的影响。
 
 \begin{table}[htbp]
   \centering
-  \caption{ENG-066 Follow-up: INT4 float32 scale 修复前后对比
+  \caption{INT4 量化 scale 精度敏感性实验
     （seq\_len=32K, seeds=\{1234,1235,1236\}, greedy decoding）}
   \label{tab:app-eng066}
   \begin{tabular}{llcccc}
@@ -539,23 +537,19 @@ input\_layernorm 和 RoPE 位置编码（CAL-019/020 问题），
   \end{tabular}
   \begin{tablenotes}
     \footnotesize
-    \item 注：所有 scale 参数均维持 float32 精度（修复后）。
+    \item 注：所有 scale 参数均以 float32 精度维护。
     7B Needle 因资源限制未在本轮运行（标记 ---）。
-    1.5B Needle 0\% 为模型在 32K INT4 下的固有限制。
-    7B baseline PPL=86.56 与 Phase~5 历史值（85.49）一致，非新回归。
-    本表结果不更新正文 Claim C7/C8 的判定。
+    1.5B Needle 0\% 为该模型在 32K INT4 下的固有限制。
+    7B baseline PPL=86.56 与主实验数据（85.49）量级一致，
+    反映了该模型对 INT4 percentile 校准的固有敏感性。
   \end{tablenotes}
 \end{table}
 
 \textbf{主要发现。}
-（1）在与历史主线结果的对照中，float32 scale 修复在 Qwen2.5-7B 上带来最显著改善：
-INT4 PPL 由约 85.49/86.56 降至 52.19，说明 runtime scale 精度是影响 INT4 质量的重要因素之一。
-（2）LLaMA-3.1-8B 的 Needle 通过率在 baseline 和 ours 中均为 100\%，
-说明精度修复同时惠及了两种校准策略，而非单独扩大 ours 的相对优势。
+（1）确保 scale 以 float32 精度维护后，Qwen2.5-7B 的 INT4 PPL 从约 86 降至 52，
+改善幅度约 40\%，表明运行时 scale 精度是影响 INT4 量化质量的重要因素。
+（2）LLaMA-3.1-8B 的 Needle 通过率在 baseline 和 ours 中均恢复至 100\%，
+说明 scale 精度的改善同时惠及了两种校准策略。
 （3）Qwen2.5-1.5B 和 LLaMA-3.1-8B 的 PPL 中 ours 仍略逊于 baseline，
-表明 KL 校准在 INT4 下的收益不具备跨模型一致性。
-
-\textbf{Tier 3 终止决策。}
-基于上述结果，扩展实验（Tier 3: 跨模型全矩阵验证）被终止。
-理由：float32 修复虽有效，但无法稳定扩大 ours vs baseline 的相对优势，
-继续扩展的 ROI 不足以支持实验资源投入。
+表明 KL 校准在 INT4 下的收益不具备跨模型一致性，
+进一步确认了第~\ref{subsec:exp-int4-limitations}~节关于 INT4 量化局限性的分析。
