@@ -96,22 +96,25 @@ def capture_kv_tensors(
     past_kv = outputs.past_key_values
     kv_pairs: List[Tuple[torch.Tensor, torch.Tensor]] = []
 
-    # Handle DynamicCache (modern HF) or tuple-of-tuples (legacy)
+    # Handle DynamicCache (modern HF) or tuple-of-tuples (legacy).
+    # DynamicCache in HF >= 4.57 supports __getitem__ and __len__,
+    # returning (key, value) tuples per layer, but is NOT a tuple/list.
+    num_layers_kv = 0
     if hasattr(past_kv, "key_cache") and hasattr(past_kv, "value_cache"):
-        # DynamicCache: .key_cache[layer] = [B, H, S, D], .value_cache[layer] = [B, H, S, D]
-        for i in range(len(past_kv.key_cache)):
+        # Some DynamicCache versions expose key_cache/value_cache lists
+        num_layers_kv = len(past_kv.key_cache)
+        for i in range(num_layers_kv):
             k = past_kv.key_cache[i].detach().clone()
             v = past_kv.value_cache[i].detach().clone()
             kv_pairs.append((k, v))
-    elif isinstance(past_kv, (tuple, list)):
-        for layer_kv in past_kv:
-            if isinstance(layer_kv, (tuple, list)) and len(layer_kv) == 2:
+    elif hasattr(past_kv, "__len__") and hasattr(past_kv, "__getitem__"):
+        # DynamicCache or tuple-of-tuples: iterate via indexing
+        num_layers_kv = len(past_kv)
+        for i in range(num_layers_kv):
+            layer_kv = past_kv[i]
+            if isinstance(layer_kv, (tuple, list)) and len(layer_kv) >= 2:
                 k = layer_kv[0].detach().clone()
                 v = layer_kv[1].detach().clone()
-                kv_pairs.append((k, v))
-            elif hasattr(layer_kv, "key_cache"):
-                k = layer_kv.key_cache.detach().clone()
-                v = layer_kv.value_cache.detach().clone()
                 kv_pairs.append((k, v))
     else:
         print(f"WARNING: Unknown past_key_values type: {type(past_kv)}")
