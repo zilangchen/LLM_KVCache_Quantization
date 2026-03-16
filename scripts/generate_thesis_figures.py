@@ -30,55 +30,65 @@ DPI = 300
 
 # Semantic color palette — visually distinct, colorblind-friendly
 COLORS = {
-    "fp16":          "#2C3E50",  # dark slate (baseline anchor)
-    "int8_baseline": "#E67E22",  # orange
-    "int8_ours":     "#27AE60",  # green (protagonist — emphasized)
-    "int4_baseline": "#E74C3C",  # red
-    "int4_fused":    "#8E44AD",  # purple
-    "int4_ours":     "#3498DB",  # blue
-    "kivi_style":    "#E91E63",  # pink
+    "fp16":              "#2C3E50",  # dark slate (baseline anchor)
+    "int8_baseline":     "#E67E22",  # orange
+    "int8_ours":         "#27AE60",  # green (protagonist — emphasized)
+    "int4_baseline":     "#E74C3C",  # red
+    "int4_fused":        "#8E44AD",  # purple
+    "int4_ours":         "#3498DB",  # blue
+    "kivi_style":        "#E91E63",  # pink
+    "int4_kivi_aligned": "#00BCD4",  # cyan (KIVI + inv_tau)
+    "int4_mixed_kv":     "#795548",  # brown (K-INT8/V-INT4 hybrid)
 }
 
 LABELS = {
-    "fp16":          "FP16",
-    "int8_baseline": "INT8-Baseline",
-    "int8_ours":     "INT8-Ours",
-    "int4_baseline": "INT4-Baseline",
-    "int4_fused":    "INT4-Fused",
-    "int4_ours":     "INT4-Ours",
-    "kivi_style":    "KIVI-style",
+    "fp16":              "FP16",
+    "int8_baseline":     "INT8-Baseline",
+    "int8_ours":         "INT8-Ours",
+    "int4_baseline":     "INT4-Baseline",
+    "int4_fused":        "INT4-Fused",
+    "int4_ours":         "INT4-Ours",
+    "kivi_style":        "KIVI-style",
+    "int4_kivi_aligned": "KV-RoleAlign (K)",
+    "int4_mixed_kv":     "K-INT8/V-INT4",
 }
 
 MARKERS = {
-    "fp16":          "o",
-    "int8_baseline": "s",
-    "int8_ours":     "D",
-    "int4_baseline": "^",
-    "int4_fused":    "v",
-    "int4_ours":     "P",
-    "kivi_style":    "X",
+    "fp16":              "o",
+    "int8_baseline":     "s",
+    "int8_ours":         "D",
+    "int4_baseline":     "^",
+    "int4_fused":        "v",
+    "int4_ours":         "P",
+    "kivi_style":        "X",
+    "int4_kivi_aligned": "h",   # hexagon
+    "int4_mixed_kv":     "*",   # star
 }
 
 # Line styles: solid for "ours", dashed for baselines
 LINESTYLES = {
-    "fp16":          "-",
-    "int8_baseline": "--",
-    "int8_ours":     "-",
-    "int4_baseline": "--",
-    "int4_fused":    "-.",
-    "int4_ours":     "-",
-    "kivi_style":    ":",
+    "fp16":              "-",
+    "int8_baseline":     "--",
+    "int8_ours":         "-",
+    "int4_baseline":     "--",
+    "int4_fused":        "-.",
+    "int4_ours":         "-",
+    "kivi_style":        ":",
+    "int4_kivi_aligned": "-.",
+    "int4_mixed_kv":     ":",
 }
 
 # Mainline config per kv_mode: (group_size, clip_percentile)
 MAINLINE_CFG = {
-    "fp16":          (128, 99.9),
-    "int8_baseline": (16, 99.9),
-    "int8_ours":     (16, 99.5),
-    "int4_baseline": (32, 99.9),
-    "int4_fused":    (16, 99.5),
-    "int4_ours":     (16, 99.5),
-    "kivi_style":    (128, 99.9),
+    "fp16":              (128, 99.9),
+    "int8_baseline":     (16, 99.9),
+    "int8_ours":         (16, 99.5),
+    "int4_baseline":     (32, 99.9),
+    "int4_fused":        (16, 99.5),
+    "int4_ours":         (16, 99.5),
+    "kivi_style":        (128, 99.9),
+    "int4_kivi_aligned": (128, 99.9),
+    "int4_mixed_kv":     (128, 99.9),
 }
 
 # Canonical plot order

@@ -186,9 +186,10 @@ def load_calibration(
     outlier_rescue_ratio = 0.0
     mixed_rescue = False
 
-    if kv_mode not in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused"]:
+    if kv_mode not in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused", "int4_kivi_aligned"]:
         # PRF-009: calib_file is intentionally a no-op for kivi_style mode --
-        # KIVI uses its own internal calibration.
+        # KIVI uses its own internal calibration. int4_kivi_aligned passes through
+        # to load inv_tau from calibration file.
         return (
             static_k_scale,
             static_v_scale,
@@ -335,6 +336,22 @@ def build_kv_cache(
             num_layers=num_layers,
             device=model.device.type,
             quant_bits=kivi_quant_bits,
+        ), group_size, clip_percentile
+
+    if kv_mode == "int4_kivi_aligned":
+        return KIVIStyleKVCache(
+            num_layers=num_layers,
+            device=model.device.type,
+            quant_bits=4,
+            inv_tau=inv_tau,
+            use_attn_temperature=use_attn_temperature,
+        ), group_size, clip_percentile
+
+    if kv_mode == "int4_mixed_kv":
+        from src.cache.mixed_kv_cache import MixedKVCache
+        return MixedKVCache(
+            num_layers=num_layers,
+            device=model.device.type,
         ), group_size, clip_percentile
 
     if kv_mode in ["int8_fused", "int8_ours"]:
@@ -588,6 +605,8 @@ def main():
             "int4_ours",
             "int4_ours_mixed",
             "kivi_style",
+            "int4_kivi_aligned",
+            "int4_mixed_kv",
         ],
     )
     parser.add_argument("--group_size", type=int, default=128)

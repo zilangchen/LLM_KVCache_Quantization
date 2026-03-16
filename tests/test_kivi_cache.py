@@ -676,5 +676,68 @@ class TestKIVIAsymmetricScaleZP(unittest.TestCase):
         self.assertTrue(torch.isfinite(k_out).all())
 
 
+class TestKIVICacheInvTau(unittest.TestCase):
+    """Tests for inv_tau / use_attn_temperature support (Phase 1A)."""
+
+    def _make_cache(self, **kwargs):
+        defaults = dict(
+            num_layers=2,
+            device="cpu",
+            dtype=torch.float32,
+            max_seq_len=512,
+            quant_bits=4,
+        )
+        defaults.update(kwargs)
+        return KIVIStyleKVCache(**defaults)
+
+    def test_inv_tau_none_by_default(self):
+        """Without inv_tau, cache should have inv_tau=None."""
+        cache = self._make_cache()
+        self.assertIsNone(cache.inv_tau)
+        self.assertFalse(cache.use_attn_temperature)
+
+    def test_inv_tau_stored(self):
+        """inv_tau tensor should be stored on cache."""
+        inv_tau = torch.ones(2, 4)  # [num_layers, num_heads]
+        cache = self._make_cache(inv_tau=inv_tau, use_attn_temperature=True)
+        self.assertIsNotNone(cache.inv_tau)
+        self.assertTrue(cache.use_attn_temperature)
+        self.assertEqual(cache.inv_tau.shape, (2, 4))
+
+    def test_inv_tau_does_not_affect_quantization(self):
+        """inv_tau is for Q pre-scaling only; should not change K/V quantization."""
+        B, H, S, D = 1, 2, 8, 16
+        k = torch.randn(B, H, S, D)
+        v = torch.randn(B, H, S, D)
+
+        # Without inv_tau
+        cache1 = self._make_cache()
+        cache1.append(0, k.clone(), v.clone())
+        k1, v1 = cache1.get_kv(0)
+
+        # With inv_tau
+        inv_tau = torch.ones(2, 4) * 1.5
+        cache2 = self._make_cache(inv_tau=inv_tau, use_attn_temperature=True)
+        cache2.append(0, k.clone(), v.clone())
+        k2, v2 = cache2.get_kv(0)
+
+        # Quantized K/V should be identical (inv_tau only affects Q)
+        torch.testing.assert_close(k1, k2, rtol=0, atol=0)
+        torch.testing.assert_close(v1, v2, rtol=0, atol=0)
+
+    def test_v_percentile_override(self):
+        """External v_percentile should be usable for Phase 1B calibrated V."""
+        cache = self._make_cache(v_percentile=99.0)
+        self.assertEqual(cache.v_percentile, 99.0)
+
+        B, H, S, D = 1, 2, 8, 16
+        k = torch.randn(B, H, S, D) * 10
+        v = torch.randn(B, H, S, D) * 10
+        cache.append(0, k, v)
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.shape, (B, H, S, D))
+        self.assertTrue(torch.isfinite(v_out).all())
+
+
 if __name__ == "__main__":
     unittest.main()

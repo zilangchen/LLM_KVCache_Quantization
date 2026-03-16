@@ -667,6 +667,131 @@ def scales_from_absmax_samples(
     return scales
 
 
+def calibrate_v_path_percentile(
+    v_samples: list,
+    q_samples: list,
+    k_samples: list,
+    num_heads: int,
+    num_kv_heads: int,
+    head_dim: int,
+    percentile_candidates: list,
+    quant_bits: int = 4,
+) -> tuple:
+    """
+    Search optimal v_percentile for KIVI-style per-token V quantization.
+
+    Uses attention-weighted V reconstruction error as proxy for token-level CE.
+    For each candidate v_percentile:
+    1. Quantize/dequantize V with per-token asymmetric at that percentile
+    2. Compute attention weights A = softmax(Q K^T / sqrt(d))
+    3. Compute ||A * (V - V_q)||^2 as output perturbation proxy
+    4. Average over samples and layers
+
+    Args:
+        v_samples: [n_samples][n_layers] -> [kv_heads, seq, head_dim]
+        q_samples: [n_samples][n_layers] -> [num_heads, head_dim]
+        k_samples: [n_samples][n_layers] -> [kv_heads, seq, head_dim]
+        num_heads: Number of query heads
+        num_kv_heads: Number of KV heads
+        head_dim: Head dimension
+        percentile_candidates: List of v_percentile values to search
+        quant_bits: 4 or 8
+
+    Returns:
+        (best_percentile, results_dict) where results_dict has per-candidate metrics
+    """
+    from src.quant.asymmetric_quant import (
+        quantize_asymmetric_per_token,
+        dequantize_asymmetric_per_token,
+    )
+
+    n_rep = num_heads // num_kv_heads
+    n_samples = len(v_samples)
+    n_layers = len(v_samples[0]) if v_samples else 0
+    sm_scale = 1.0 / (head_dim ** 0.5)
+
+    results = {}
+    for pct in percentile_candidates:
+        total_weighted_mse = 0.0
+        total_v_sqnr = 0.0
+        count = 0
+
+        for s_idx in range(n_samples):
+            for l_idx in range(n_layers):
+                v = v_samples[s_idx][l_idx]  # [kv_heads, seq, head_dim]
+                if v.ndim != 3:
+                    continue
+
+                # Quantize V with per-token asymmetric at this percentile
+                v_4d = v.unsqueeze(0).float()  # [1, kv_heads, seq, head_dim]
+                q_v, v_scale, v_zp = quantize_asymmetric_per_token(
+                    v_4d, quant_bits=quant_bits, percentile=pct
+                )
+                v_deq = dequantize_asymmetric_per_token(q_v, v_scale, v_zp)
+                v_deq = v_deq.squeeze(0)  # [kv_heads, seq, head_dim]
+
+                # V reconstruction error (simple SQNR)
+                v_f = v.float()
+                v_d = v_deq.float()
+                noise = (v_f - v_d).pow(2).mean().item()
+                signal = v_f.pow(2).mean().item()
+                if noise > 1e-20:
+                    sqnr = 10.0 * torch.log10(torch.tensor(signal / noise)).item()
+                else:
+                    sqnr = 100.0
+                total_v_sqnr += sqnr
+
+                # Attention-weighted output perturbation (if Q/K available)
+                if q_samples and k_samples and s_idx < len(q_samples) and l_idx < len(q_samples[s_idx]):
+                    q = q_samples[s_idx][l_idx].float()  # [num_heads, head_dim]
+                    k = k_samples[s_idx][l_idx].float()  # [kv_heads, seq, head_dim]
+
+                    # GQA: repeat K/V to match Q heads
+                    if n_rep > 1:
+                        k_exp = k.repeat_interleave(n_rep, dim=0)  # [num_heads, seq, head_dim]
+                        v_f_exp = v_f.repeat_interleave(n_rep, dim=0)
+                        v_d_exp = v_d.repeat_interleave(n_rep, dim=0)
+                    else:
+                        k_exp = k
+                        v_f_exp = v_f
+                        v_d_exp = v_d
+
+                    # Compute attention weights: A = softmax(q @ k^T * sm_scale)
+                    # q: [num_heads, head_dim], k_exp: [num_heads, seq, head_dim]
+                    logits = torch.einsum("hd,hsd->hs", q, k_exp) * sm_scale
+                    attn_weights = torch.softmax(logits, dim=-1)  # [num_heads, seq]
+
+                    # Output perturbation: ||A * delta_V||
+                    delta_v = v_f_exp - v_d_exp  # [num_heads, seq, head_dim]
+                    # Weighted delta: attn_weights[:, :, None] * delta_v
+                    weighted_delta = attn_weights.unsqueeze(-1) * delta_v  # [num_heads, seq, head_dim]
+                    # Output perturbation = sum over seq
+                    output_perturb = weighted_delta.sum(dim=1).pow(2).mean().item()  # scalar
+                    total_weighted_mse += output_perturb
+
+                count += 1
+
+        avg_sqnr = total_v_sqnr / max(count, 1)
+        avg_weighted_mse = total_weighted_mse / max(count, 1)
+
+        results[pct] = {
+            "v_percentile": pct,
+            "avg_v_sqnr_db": round(avg_sqnr, 2),
+            "avg_weighted_output_mse": avg_weighted_mse,
+            "n_evaluations": count,
+        }
+
+    # Select best percentile by minimum weighted output MSE (or maximum SQNR as fallback)
+    best_pct = min(
+        percentile_candidates,
+        key=lambda p: results[p]["avg_weighted_output_mse"]
+        if results[p]["avg_weighted_output_mse"] > 0
+        else -results[p]["avg_v_sqnr_db"],
+    )
+
+    return best_pct, results
+
+
 def validate_group_size(head_dim: int, group_size: int, name: str) -> None:
     if group_size <= 0:
         raise ValueError(f"{name} must be > 0, got {group_size}.")
@@ -799,6 +924,24 @@ def main():
         "--inv_tau_candidates",
         type=str,
         default="0.5,0.7,0.85,1.0,1.2,1.5,2.0",
+    )
+    parser.add_argument(
+        "--v_calibration_mode",
+        type=str,
+        default="shared",
+        choices=["shared", "token_ce", "token_kl"],
+        help=(
+            "V-path calibration mode. 'shared' uses the same attention-KL objective "
+            "for K and V (default, current behavior). 'token_ce' independently "
+            "calibrates V using attention-weighted output perturbation as proxy for "
+            "next-token CE. 'token_kl' is reserved for future token-logits KL."
+        ),
+    )
+    parser.add_argument(
+        "--v_percentile_candidates",
+        type=str,
+        default="95.0,97.0,99.0,99.5,99.9,100.0",
+        help="V-path percentile candidates for token_ce/token_kl calibration.",
     )
     args = parser.parse_args()
     if args.int4_search:
@@ -1213,20 +1356,45 @@ def main():
         loss_function=args.loss_function,
     )
 
+    # V-path independent calibration (Phase 1B: KV-RoleAlign).
+    # When v_calibration_mode != "shared", search optimal v_percentile for KIVI-style
+    # per-token V quantization using attention-weighted output perturbation proxy.
+    v_calib_result = None
+    v_calib_best_pct = args.clip_percentile_v  # default: use current setting
+    if getattr(args, "v_calibration_mode", "shared") in ("token_ce", "token_kl"):
+        v_pct_candidates = [float(x) for x in args.v_percentile_candidates.split(",")]
+        print(f"\n--- V-path calibration (mode={args.v_calibration_mode}) ---")
+        print(f"Searching v_percentile in {v_pct_candidates}...")
+        v_calib_best_pct, v_calib_result = calibrate_v_path_percentile(
+            v_samples=v_samples,
+            q_samples=q_samples,
+            k_samples=k_samples,
+            num_heads=num_heads,
+            num_kv_heads=num_kv_heads,
+            head_dim=head_dim,
+            percentile_candidates=v_pct_candidates,
+            quant_bits=int(args.quant_bits),
+        )
+        print(f"Best v_percentile: {v_calib_best_pct}")
+        for pct, metrics in v_calib_result.items():
+            print(f"  v_pct={pct}: SQNR={metrics['avg_v_sqnr_db']:.2f}dB, "
+                  f"weighted_MSE={metrics['avg_weighted_output_mse']:.6f}")
+
     # Save calibration file.
     # CAL-008: loss_function is always included so downstream loaders
     # (e.g. generate_loop.py) can validate compatibility.
-    # The field value is always a lowercase string: "kl" or "mse".
     # CAL-033: version=2 indicates postfix-era format with provenance fields.
     #   version=1: original format (no MSE clamping, no provenance).
     #   version=2: adds model_revision, seed, dataset_source, n_samples,
     #              seq_len for audit trail and deterministic reproduction.
+    #   version=3: adds k_calibration / v_calibration split for KV-RoleAlign.
     # CAL-013: inv_tau shape is [num_layers, num_heads] and is explicitly
     # recorded so loaders can validate dimensions before use.
     # CAL-043: Provenance fields (dataset_source, seed, n_samples, seq_len)
     # enable downstream audit of calibration determinism.
+    use_v3 = getattr(args, "v_calibration_mode", "shared") != "shared"
     calib_payload = {
-        "version": 2,
+        "version": 3 if use_v3 else 2,
         "model_id": args.model_id,
         "model_revision": args.model_revision,
         "generated_at": datetime.now().isoformat(),
@@ -1253,6 +1421,18 @@ def main():
         "int4_outlier_ratio": float(args.int4_outlier_ratio),
         "int4_mixed_rescue": bool(args.int4_mixed_rescue),
     }
+    # v3 schema: split K-path and V-path calibration metadata
+    if use_v3:
+        calib_payload["k_calibration"] = {
+            "method": f"attention_{args.loss_function}",
+            "k_percentile": args.clip_percentile_k,
+            "inv_tau": inv_tau.tolist(),
+        }
+        calib_payload["v_calibration"] = {
+            "method": args.v_calibration_mode,
+            "v_percentile": v_calib_best_pct,
+            "search_results": v_calib_result,
+        }
     if selection is not None:
         calib_payload["selection"] = selection
 

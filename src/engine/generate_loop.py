@@ -172,6 +172,95 @@ class GenerationBatchOutput:
     kv_cache_seq_len: int = 0
 
 
+def _register_all_temperature_hooks(model, inv_tau: torch.Tensor):
+    """
+    Apply per-head temperature to ALL forward passes (both prefill and decode).
+
+    Used by int4_kivi_aligned mode where the decode path is torch_ref (not fused),
+    so inv_tau must be applied via hooks at decode time too.
+
+    Same mechanism as _register_prefill_temperature_hooks but without the
+    seq_len <= 1 early return guard.
+    """
+    handles = []
+    layers = getattr(getattr(model, "model", None), "layers", None)
+    if layers is None:
+        import warnings
+        warnings.warn(
+            "Cannot register temperature hooks: model.model.layers not found.",
+            UserWarning,
+        )
+        return handles
+
+    if not isinstance(inv_tau, torch.Tensor) or inv_tau.ndim != 2:
+        raise ValueError(f"inv_tau must be a 2D tensor [layers, heads], got {type(inv_tau)} {getattr(inv_tau, 'shape', None)}")
+
+    cfg = getattr(model, "config", None)
+    cfg_heads = getattr(cfg, "num_attention_heads", None)
+
+    for layer_idx, layer in enumerate(layers):
+        attn = getattr(layer, "self_attn", None)
+        if attn is None:
+            continue
+
+        num_heads = (
+            getattr(attn, "num_heads", None)
+            or getattr(attn, "_kv_num_attention_heads", None)
+            or cfg_heads
+        )
+        head_dim = getattr(attn, "head_dim", None)
+        if num_heads is None or head_dim is None:
+            continue
+
+        if layer_idx >= inv_tau.shape[0]:
+            raise ValueError(
+                f"inv_tau has {inv_tau.shape[0]} layers but model has layer_idx={layer_idx}."
+            )
+        if inv_tau.shape[1] != int(num_heads):
+            raise ValueError(
+                f"inv_tau head count mismatch at layer {layer_idx}: "
+                f"inv_tau.shape[1]={inv_tau.shape[1]} vs model.num_heads={num_heads}."
+            )
+
+        inv_tau_layer = inv_tau[layer_idx]  # [H]
+
+        if getattr(attn, "q_norm", None) is not None:
+            q_norm = attn.q_norm
+
+            def _q_norm_hook(module, inputs, output, _inv=inv_tau_layer, _h=int(num_heads)):
+                if not isinstance(output, torch.Tensor) or output.ndim != 4:
+                    return output
+                # Same layout detection as prefill hooks, but without seq_len guard.
+                if output.shape[1] == _h:
+                    scale = _inv.to(device=output.device, dtype=output.dtype)
+                    return output * scale.view(1, -1, 1, 1)
+                if output.shape[2] == _h:
+                    scale = _inv.to(device=output.device, dtype=output.dtype)
+                    return output * scale.view(1, 1, -1, 1)
+                return output
+
+            handles.append(q_norm.register_forward_hook(_q_norm_hook))
+        else:
+            q_proj = getattr(attn, "q_proj", None)
+            if q_proj is None:
+                continue
+
+            def _q_proj_hook(module, inputs, output, _inv=inv_tau_layer, _h=int(num_heads), _d=int(head_dim)):
+                if not isinstance(output, torch.Tensor) or output.ndim != 3:
+                    return output
+                # output: [B, S, H*D] — apply temperature regardless of seq_len.
+                if output.shape[2] != _h * _d:
+                    return output
+                scale = _inv.to(device=output.device, dtype=output.dtype)
+                bsz, seq_len, _ = output.shape
+                out = output.view(bsz, seq_len, _h, _d) * scale.view(1, 1, -1, 1)
+                return out.view(bsz, seq_len, _h * _d)
+
+            handles.append(q_proj.register_forward_hook(_q_proj_hook))
+
+    return handles
+
+
 def _register_prefill_temperature_hooks(model, inv_tau: torch.Tensor):
     """
     Apply per-head temperature to prefill by scaling query states.
@@ -336,12 +425,14 @@ def generate_from_ids(
         "int4_ours",
         "int4_ours_mixed",
         "kivi_style",
+        "int4_kivi_aligned",
+        "int4_mixed_kv",
     ]:
         raise ValueError(
             f"kv_mode='{kv_mode}' not supported. "
             "Choose from ['fp16', 'int8_baseline', 'int8_fused', 'int8_ours', "
             "'int4_baseline', 'int4_fused', 'int4_ours', 'int4_ours_mixed', "
-            "'kivi_style']."
+            "'kivi_style', 'int4_kivi_aligned', 'int4_mixed_kv']."
         )
 
     if decode_attn_impl not in ["triton_fused", "torch_ref"]:
@@ -396,6 +487,50 @@ def generate_from_ids(
         if decode_attn_impl != "torch_ref":
             warnings.warn(
                 f"kv_mode='kivi_style' forces decode_attn_impl='torch_ref' "
+                f"(got {decode_attn_impl!r}).",
+                UserWarning,
+            )
+            decode_attn_impl = "torch_ref"
+
+    elif kv_mode == "int4_kivi_aligned":
+        import warnings
+
+        # INT4 KIVI + attention-aligned calibration (K-path inv_tau).
+        # Uses KIVIStyleKVCache with INT4 + inv_tau Q pre-scaling.
+        quant_bits = 4
+
+        # int4_kivi_aligned REQUIRES calib_file for inv_tau; warn if missing.
+        if calib_file is None and use_attn_temperature:
+            warnings.warn(
+                "kv_mode='int4_kivi_aligned' with use_attn_temperature=True but "
+                "no calib_file — inv_tau will not be applied.",
+                UserWarning,
+            )
+
+        # Static scale / adaptive parameters are still ignored (KIVI skeleton).
+        if use_static_scales:
+            warnings.warn(
+                "kv_mode='int4_kivi_aligned' ignores use_static_scales (KIVI skeleton).",
+                UserWarning,
+            )
+
+        if decode_attn_impl != "torch_ref":
+            warnings.warn(
+                f"kv_mode='int4_kivi_aligned' forces decode_attn_impl='torch_ref' "
+                f"(got {decode_attn_impl!r}).",
+                UserWarning,
+            )
+            decode_attn_impl = "torch_ref"
+
+    elif kv_mode == "int4_mixed_kv":
+        import warnings
+
+        # K-INT8/V-INT4 hybrid mode — uses MixedKVCache.
+        quant_bits = 4  # Nominal; K uses INT8, V uses INT4.
+
+        if decode_attn_impl != "torch_ref":
+            warnings.warn(
+                f"kv_mode='int4_mixed_kv' forces decode_attn_impl='torch_ref' "
                 f"(got {decode_attn_impl!r}).",
                 UserWarning,
             )
@@ -691,6 +826,49 @@ def generate_from_ids(
             max_seq_len=max_cache_len,
             quant_bits=int(quant_bits),
         )
+    elif kv_mode == "int4_kivi_aligned":
+        # KIVI INT4 skeleton + attention-aligned calibration (K-path inv_tau).
+        # Uses KIVIStyleKVCache with inv_tau for Q pre-scaling in decode.
+        from src.cache import KIVIStyleKVCache
+
+        # Load calibration file for inv_tau (v3 schema supported).
+        kivi_inv_tau = None
+        kivi_v_percentile = 100.0
+        if calib_file is not None:
+            calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(str(project_root), calib_file)
+            if os.path.exists(calib_path):
+                with open(calib_path, "r") as f:
+                    calib_data = json.load(f)
+                # v3 schema: separate k_calibration / v_calibration
+                if "k_calibration" in calib_data and "inv_tau" in calib_data["k_calibration"]:
+                    raw_tau = calib_data["k_calibration"]["inv_tau"]
+                    kivi_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
+                elif "inv_tau" in calib_data:
+                    # v2 schema fallback
+                    raw_tau = calib_data["inv_tau"]
+                    kivi_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
+                # v3: v_calibration with optimized v_percentile
+                if "v_calibration" in calib_data and "v_percentile" in calib_data["v_calibration"]:
+                    kivi_v_percentile = float(calib_data["v_calibration"]["v_percentile"])
+
+        kv_cache = KIVIStyleKVCache(
+            num_layers=num_layers,
+            device=model.device.type,
+            max_seq_len=max_cache_len,
+            quant_bits=4,
+            v_percentile=kivi_v_percentile,
+            inv_tau=kivi_inv_tau,
+            use_attn_temperature=use_attn_temperature,
+        )
+    elif kv_mode == "int4_mixed_kv":
+        # K-INT8 symmetric + V-INT4 asymmetric per-token (hybrid mode).
+        from src.cache.mixed_kv_cache import MixedKVCache
+
+        kv_cache = MixedKVCache(
+            num_layers=num_layers,
+            device=model.device.type,
+            max_seq_len=max_cache_len,
+        )
     else:
         raise ValueError(f"Unsupported kv_mode: {kv_mode}")
 
@@ -709,9 +887,16 @@ def generate_from_ids(
     fp16_use_model_cache = False
 
     hook_handles = []
-    if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused"] and use_attn_temperature and inv_tau is not None:
-        # Apply per-head temperature during prefill by scaling Q per head.
-        # Decode already applies temperature inside the fused path.
+    if kv_mode == "int4_kivi_aligned" and use_attn_temperature:
+        # int4_kivi_aligned uses torch_ref decode (not fused), so inv_tau must
+        # be applied via hooks for BOTH prefill and decode.
+        _kivi_inv_tau = inv_tau
+        if _kivi_inv_tau is None and hasattr(kv_cache, "inv_tau"):
+            _kivi_inv_tau = kv_cache.inv_tau
+        if _kivi_inv_tau is not None:
+            hook_handles = _register_all_temperature_hooks(model, _kivi_inv_tau)
+    elif kv_mode in {"int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused"} and use_attn_temperature and inv_tau is not None:
+        # Fused modes: prefill hooks only; decode temperature handled by _fused_forward_impl.
         hook_handles = _register_prefill_temperature_hooks(model, inv_tau)
 
     # ========== PREFILL PHASE ==========
@@ -805,8 +990,10 @@ def generate_from_ids(
 
                 # ENG-033: INT8CacheWrapperContainer is reconstructed each decode step. This is intentional — wrappers are lightweight (no buffer copy), and caching them would require tracking cache mutations.
                 current_past_key_values = INT8CacheWrapperContainer(kv_cache, num_layers)
-            elif kv_mode in ["int8_baseline", "int4_baseline", "kivi_style"]:
-                # For baseline modes, we dequantize BEFORE attention
+            elif kv_mode in ["int8_baseline", "int4_baseline", "kivi_style", "int4_kivi_aligned", "int4_mixed_kv"]:
+                # For baseline / KIVI / mixed modes, we dequantize BEFORE attention.
+                # For int4_kivi_aligned, inv_tau Q pre-scaling is applied via
+                # prefill hooks (above) and decode hooks registered on model forward.
                 current_past_key_values = []
                 for i in range(num_layers):
                     k, v = kv_cache.get_kv(i)

@@ -60,6 +60,8 @@ class KIVIStyleKVCache:
         quant_bits: int = 8,
         k_percentile: float = 100.0,
         v_percentile: float = 100.0,
+        inv_tau: Optional[torch.Tensor] = None,
+        use_attn_temperature: bool = False,
     ):
         if num_layers <= 0:
             raise ValueError(f"num_layers must be > 0, got {num_layers}")
@@ -90,11 +92,11 @@ class KIVIStyleKVCache:
         # default) at the end of get_kv(), which is the intended precision point.
         self._scale_dtype = torch.float32
 
-        # Used by patch_model.py routing — KIVI always uses torch_ref.
+        # Used by patch_model.py routing — KIVI uses torch_ref by default.
+        # For int4_kivi_aligned mode, inv_tau enables Q pre-scaling in decode path.
         self.decode_attn_impl = "torch_ref"
-        # KIVI does not use temperature correction.
-        self.inv_tau = None
-        self.use_attn_temperature = False
+        self.inv_tau = inv_tau
+        self.use_attn_temperature = use_attn_temperature
 
         self._min_capacity = 256
 

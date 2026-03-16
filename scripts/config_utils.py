@@ -37,6 +37,8 @@ KV_MODE_ORDER: List[str] = [
     "int4_ours",
     "int4_ours_mixed",
     "kivi_style",
+    "int4_kivi_aligned",
+    "int4_mixed_kv",
 ]
 
 

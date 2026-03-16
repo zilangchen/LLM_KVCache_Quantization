@@ -80,6 +80,10 @@ def _pretty_kv_mode_name(mode: str) -> str:
         return "FP16"
     if mode == "kivi_style":
         return "KIVI-style"
+    if mode == "int4_kivi_aligned":
+        return "KV-RoleAlign (K)"
+    if mode == "int4_mixed_kv":
+        return "K-INT8/V-INT4"
     if mode.startswith("int") and "_" in mode:
         bit, suffix = mode.split("_", 1)
         return f"{bit.upper()}-{suffix.replace('_', '-')}"
