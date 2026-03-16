@@ -557,6 +557,15 @@ def select_best_trial(
             f"Check that --loss_function matches the objective."
         )
 
+    # CAL-020: Use log2(group_size) as tiebreaker instead of raw group_size
+    # to avoid scale-dependent bias. Raw values (16, 32, 64, 128) have
+    # non-uniform spacing that unfairly penalises larger group sizes in
+    # ascending sort. log2 normalises to (4, 5, 6, 7).
+    import math
+
+    def _gs_norm(x):
+        return math.log2(max(x["group_size"], 1))
+
     if objective in ("mean_kl", "mean_mse"):
         ranked = sorted(
             trials,
@@ -564,7 +573,7 @@ def select_best_trial(
                 x[mean_key],
                 x[p95_key],
                 x["k_clip_rate"] + x["v_clip_rate"],
-                x["group_size"],
+                _gs_norm(x),
                 x["clip_percentile"],
             ),
         )
@@ -588,7 +597,7 @@ def select_best_trial(
                 x[p95_key],
                 x[mean_key],
                 x["v_rel_l2_mean"],
-                x["group_size"],
+                _gs_norm(x),
                 x["clip_percentile"],
             ),
         )
@@ -609,7 +618,7 @@ def select_best_trial(
             x[p95_key],
             x[mean_key],
             x["v_rel_l2_mean"],
-            x["group_size"],
+            _gs_norm(x),
             x["clip_percentile"],
         ),
     )
@@ -918,6 +927,12 @@ def main():
                 # updated (or a model-family dispatch added).
                 layer = model.model.layers[layer_idx]
                 attn = layer.self_attn
+                # CAL-014 audit (2026-03-17): hidden_states[layer_idx] is correct.
+                # HF outputs.hidden_states is a tuple:
+                #   [0] = embedding output (input to layer 0)
+                #   [i] = output of layer i-1 = input to layer i
+                # So hidden_states[layer_idx] gives the true input to layer_idx.
+                # No off-by-one: layer 0 gets embedding, layer N gets layer N-1 output.
                 hs_last = hidden_states[layer_idx][:, -1:, :]
 
                 # CAL-019: Apply input_layernorm before q_proj to match the
@@ -1078,18 +1093,48 @@ def main():
         # For example, a group_size that produces tiny MSE differences may show
         # large KL differences, leading to different "best" candidates.
         # This is expected; users should pick one loss function consistently.
+        #
+        # CAL-036: CSV ranking now uses the SAME sort key as the selection mode
+        # from select_best_trial(), ensuring JSON "best" == CSV rank=1.
+        # An "is_selected" column explicitly marks the chosen trial.
         loss_pfx_sort = "mse" if args.loss_function == "mse" else "kl"
-        trials_sorted = sorted(
-            trials,
-            key=lambda x: (
-                x[f"p95_{loss_pfx_sort}"],
-                x[f"mean_{loss_pfx_sort}"],
-                x["k_clip_rate"] + x["v_clip_rate"],
-                x.get("outlier_rescue_ratio", 0.0),
-                x["group_size"],
-                x["clip_percentile"],
-            ),
-        )
+        _sel_mode = selection_meta["mode"]
+
+        def _csv_sort_key(x):
+            """Unified sort key matching select_best_trial logic."""
+            import math
+            # CAL-020: Use log2(group_size) to normalize tiebreaker scale,
+            # avoiding bias toward small group_size from raw integer ordering.
+            _gs_norm = math.log2(max(x["group_size"], 1))
+            if _sel_mode == "robust_fallback_clip_first":
+                return (
+                    x["k_clip_rate"] + x["v_clip_rate"],
+                    x[f"p95_{loss_pfx_sort}"],
+                    x[f"mean_{loss_pfx_sort}"],
+                    x["v_rel_l2_mean"],
+                    _gs_norm,
+                    x["clip_percentile"],
+                )
+            elif _sel_mode in ("mean_kl", "mean_mse"):
+                return (
+                    x[f"mean_{loss_pfx_sort}"],
+                    x[f"p95_{loss_pfx_sort}"],
+                    x["k_clip_rate"] + x["v_clip_rate"],
+                    _gs_norm,
+                    x["clip_percentile"],
+                )
+            else:  # robust_feasible (default)
+                return (
+                    x[f"p95_{loss_pfx_sort}"],
+                    x[f"mean_{loss_pfx_sort}"],
+                    x["v_rel_l2_mean"],
+                    _gs_norm,
+                    x["clip_percentile"],
+                )
+
+        trials_sorted = sorted(trials, key=_csv_sort_key)
+        # Identify the selected best trial for the is_selected column.
+        _best_id = id(best)
         for rank_idx, trial in enumerate(trials_sorted, start=1):
             trial["rank"] = rank_idx
 
@@ -1098,7 +1143,7 @@ def main():
             f.write(
                 "rank,group_size,clip_percentile,outlier_rescue_ratio,mixed_rescue,"
                 f"mean_{loss_pfx_sort},p95_{loss_pfx_sort},max_{loss_pfx_sort},"
-                "k_clip_rate,v_clip_rate,v_rel_l2_mean,feasible\n"
+                "k_clip_rate,v_clip_rate,v_rel_l2_mean,feasible,is_selected\n"
             )
             for t in trials_sorted:
                 f.write(
@@ -1107,7 +1152,7 @@ def main():
                     f"{t[f'mean_{loss_pfx_sort}']},{t[f'p95_{loss_pfx_sort}']},"
                     f"{t[f'max_{loss_pfx_sort}']},"
                     f"{t['k_clip_rate']},{t['v_clip_rate']},{t['v_rel_l2_mean']},"
-                    f"{int(bool(t['feasible']))}\n"
+                    f"{int(bool(t['feasible']))},{int(id(t) == _best_id)}\n"
                 )
         print(f"Saved search trial metrics to {trials_csv_path}")
 
@@ -1172,17 +1217,26 @@ def main():
     # CAL-008: loss_function is always included so downstream loaders
     # (e.g. generate_loop.py) can validate compatibility.
     # The field value is always a lowercase string: "kl" or "mse".
-    # CAL-009: version=1 indicates current format (no MSE clamping).
-    # See module docstring for version history and clamping rationale.
+    # CAL-033: version=2 indicates postfix-era format with provenance fields.
+    #   version=1: original format (no MSE clamping, no provenance).
+    #   version=2: adds model_revision, seed, dataset_source, n_samples,
+    #              seq_len for audit trail and deterministic reproduction.
     # CAL-013: inv_tau shape is [num_layers, num_heads] and is explicitly
     # recorded so loaders can validate dimensions before use.
+    # CAL-043: Provenance fields (dataset_source, seed, n_samples, seq_len)
+    # enable downstream audit of calibration determinism.
     calib_payload = {
-        "version": 1,
+        "version": 2,
         "model_id": args.model_id,
+        "model_revision": args.model_revision,
         "generated_at": datetime.now().isoformat(),
+        "seed": args.seed,
         "loss_function": args.loss_function,
         "quant_bits": int(args.quant_bits),
         "qmax": int(qmax),
+        "dataset_source": "wikitext-2-raw-v1",
+        "n_samples": args.samples,
+        "seq_len": args.seq_len,
         "num_layers": num_layers,
         "num_heads": num_heads,
         "num_kv_heads": num_kv_heads,

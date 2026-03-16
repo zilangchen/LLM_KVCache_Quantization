@@ -509,6 +509,18 @@ def generate_from_ids(
             try:
                 with open(calib_path, "r") as f:
                     calib = json.load(f)
+
+                # CAL-033: Version check — warn on legacy v1, fail-fast if
+                # postfix gate requires v2.
+                _calib_version = calib.get("version", 0)
+                if _calib_version < 2:
+                    warnings.warn(
+                        f"Calibration file '{calib_path}' has version={_calib_version} "
+                        f"(expected >=2). Legacy v1 calibration lacks provenance fields "
+                        f"(model_revision, seed, dataset_source). Results may not be "
+                        f"reproducible. Re-run calibrate_behavior.py to generate v2.",
+                        UserWarning,
+                    )
                 calib_group_k = calib.get("group_size_k", calib.get("group_size", group_size))
                 calib_group_v = calib.get("group_size_v", calib.get("group_size", group_size))
                 calib_clip_k = calib.get("clip_percentile_k", calib.get("clip_percentile", clip_percentile))

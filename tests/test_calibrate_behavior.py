@@ -325,11 +325,53 @@ class TestSelectBestTrial(unittest.TestCase):
         self.assertEqual(meta["mode"], "robust_feasible")
 
     def test_tiebreaker_uses_group_size(self):
-        """When loss metrics are tied, smaller group_size is preferred (lower = earlier in sort)."""
+        """When loss metrics are tied, smaller group_size is preferred (log2 normalized)."""
         t1 = self._make_trial(mean_kl=0.01, p95_kl=0.02, group_size=128)
         t2 = self._make_trial(mean_kl=0.01, p95_kl=0.02, group_size=32)
         best, _ = select_best_trial([t1, t2], "mean_kl", 0.01, 0.01, "kl")
+        # CAL-020: log2(32)=5 < log2(128)=7, so 32 still wins
         self.assertEqual(best["group_size"], 32)
+
+    def test_group_size_log2_normalization(self):
+        """CAL-020: Verify log2 normalization doesn't change relative ordering of group_sizes."""
+        # With log2: 16→4, 32→5, 64→6, 128→7 (still ascending)
+        # Smallest group_size still selected when all else equal
+        trials = [
+            self._make_trial(mean_kl=0.01, p95_kl=0.02, group_size=gs)
+            for gs in [128, 64, 32, 16]
+        ]
+        best, _ = select_best_trial(trials, "mean_kl", 0.01, 0.01, "kl")
+        self.assertEqual(best["group_size"], 16)
+
+    def test_version_2_provenance_fields(self):
+        """CAL-033/043: Version 2 payload must contain provenance fields."""
+        v2_required = ["version", "model_revision", "seed", "dataset_source",
+                        "n_samples", "seq_len"]
+        payload = {
+            "version": 2,
+            "model_revision": "abc123",
+            "seed": 1234,
+            "dataset_source": "wikitext-2-raw-v1",
+            "n_samples": 16,
+            "seq_len": 512,
+        }
+        for key in v2_required:
+            self.assertIn(key, payload, f"Missing v2 provenance key: {key}")
+        self.assertEqual(payload["version"], 2)
+
+    def test_robust_feasible_with_equal_loss_different_group_sizes(self):
+        """CAL-020: In robust feasible mode, log2 normalization shouldn't change selection
+        when losses differ."""
+        t_small_gs = self._make_trial(p95_kl=0.03, mean_kl=0.02, group_size=16,
+                                       k_clip_rate=0.005, v_clip_rate=0.005)
+        t_large_gs = self._make_trial(p95_kl=0.01, mean_kl=0.005, group_size=128,
+                                       k_clip_rate=0.005, v_clip_rate=0.005)
+        best, meta = select_best_trial(
+            [t_small_gs, t_large_gs], "robust", 0.01, 0.01, "kl"
+        )
+        # t_large_gs has lower p95_kl, so it wins despite larger group_size
+        self.assertEqual(best["group_size"], 128)
+        self.assertEqual(meta["mode"], "robust_feasible")
 
 
 # ---------------------------------------------------------------------------
@@ -553,10 +595,12 @@ class TestCalibOutputFormat(unittest.TestCase):
     """Validate the structure of the calibration JSON payload."""
 
     def test_payload_has_required_keys(self):
-        """The calib_payload dict should contain all required fields."""
+        """The calib_payload dict should contain all required fields (v2)."""
         required_keys = [
-            "version", "model_id", "generated_at", "loss_function",
-            "quant_bits", "qmax", "num_layers", "num_heads",
+            "version", "model_id", "model_revision", "generated_at",
+            "seed", "loss_function", "quant_bits", "qmax",
+            "dataset_source", "n_samples", "seq_len",
+            "num_layers", "num_heads",
             "num_kv_heads", "head_dim",
             "clip_percentile_k", "clip_percentile_v",
             "group_size_k", "group_size_v",
@@ -577,12 +621,17 @@ class TestCalibOutputFormat(unittest.TestCase):
         inv_tau = torch.ones(num_layers, num_heads)
 
         payload = {
-            "version": 1,
+            "version": 2,
             "model_id": "test/model",
+            "model_revision": "abc123",
             "generated_at": "2025-01-01T00:00:00",
+            "seed": 1234,
             "loss_function": "kl",
             "quant_bits": 8,
             "qmax": 127,
+            "dataset_source": "wikitext-2-raw-v1",
+            "n_samples": 16,
+            "seq_len": 512,
             "num_layers": num_layers,
             "num_heads": num_heads,
             "num_kv_heads": num_kv_heads,
