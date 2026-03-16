@@ -83,38 +83,40 @@ def capture_kv_tensors(
     """Run a single prefill pass and capture per-layer K and V tensors.
 
     Returns list of (k, v) tuples, one per layer. Shape: [1, num_kv_heads, seq_len, head_dim].
+
+    Uses model's past_key_values output directly (compatible with DynamicCache
+    in HF Transformers >= 4.36).
     """
     inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=max_length)
-    inputs = {k: v.to(model.device) for k, v in inputs.items()}
-
-    kv_pairs: List[Tuple[torch.Tensor, torch.Tensor]] = []
-    hooks = []
-
-    def make_hook(layer_idx):
-        def hook_fn(module, args, output):
-            # HF Transformers attention outputs: (attn_output, attn_weights, past_key_value)
-            # past_key_value is a tuple (key_states, value_states)
-            if isinstance(output, tuple) and len(output) >= 3:
-                past_kv = output[2]
-                if isinstance(past_kv, tuple) and len(past_kv) == 2:
-                    k, v = past_kv[0].detach().clone(), past_kv[1].detach().clone()
-                    while len(kv_pairs) <= layer_idx:
-                        kv_pairs.append(None)
-                    kv_pairs[layer_idx] = (k, v)
-        return hook_fn
-
-    # Register hooks on attention layers
-    for i, layer in enumerate(model.model.layers):
-        h = layer.self_attn.register_forward_hook(make_hook(i))
-        hooks.append(h)
+    inputs = {k_name: v_val.to(model.device) for k_name, v_val in inputs.items()}
 
     with torch.no_grad():
-        model(**inputs, use_cache=True)
+        outputs = model(**inputs, use_cache=True)
 
-    for h in hooks:
-        h.remove()
+    past_kv = outputs.past_key_values
+    kv_pairs: List[Tuple[torch.Tensor, torch.Tensor]] = []
 
-    return [p for p in kv_pairs if p is not None]
+    # Handle DynamicCache (modern HF) or tuple-of-tuples (legacy)
+    if hasattr(past_kv, "key_cache") and hasattr(past_kv, "value_cache"):
+        # DynamicCache: .key_cache[layer] = [B, H, S, D], .value_cache[layer] = [B, H, S, D]
+        for i in range(len(past_kv.key_cache)):
+            k = past_kv.key_cache[i].detach().clone()
+            v = past_kv.value_cache[i].detach().clone()
+            kv_pairs.append((k, v))
+    elif isinstance(past_kv, (tuple, list)):
+        for layer_kv in past_kv:
+            if isinstance(layer_kv, (tuple, list)) and len(layer_kv) == 2:
+                k = layer_kv[0].detach().clone()
+                v = layer_kv[1].detach().clone()
+                kv_pairs.append((k, v))
+            elif hasattr(layer_kv, "key_cache"):
+                k = layer_kv.key_cache.detach().clone()
+                v = layer_kv.value_cache.detach().clone()
+                kv_pairs.append((k, v))
+    else:
+        print(f"WARNING: Unknown past_key_values type: {type(past_kv)}")
+
+    return kv_pairs
 
 
 def run_diagnosis(model, tokenizer, text: str, seq_len: int) -> List[Dict]:

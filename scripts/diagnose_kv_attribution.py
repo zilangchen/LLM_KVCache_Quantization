@@ -239,14 +239,20 @@ def run_ppl_with_cache(model, tokenizer, cache, text: str, max_len: int = 4096) 
         # Also populate our custom cache from the model's KV
         past_kv = outputs.past_key_values
         cache.clear()
-        for i in range(min(num_layers, len(past_kv))):
-            if isinstance(past_kv[i], tuple):
-                k, v = past_kv[i]
-            else:
-                # DynamicCache-style
-                k = past_kv[i].key_cache if hasattr(past_kv[i], "key_cache") else past_kv[i][0]
-                v = past_kv[i].value_cache if hasattr(past_kv[i], "value_cache") else past_kv[i][1]
-            cache.append(i, k, v)
+        # Handle DynamicCache (modern HF) or tuple-of-tuples (legacy)
+        if hasattr(past_kv, "key_cache") and hasattr(past_kv, "value_cache"):
+            for i in range(min(num_layers, len(past_kv.key_cache))):
+                k = past_kv.key_cache[i].detach()
+                v = past_kv.value_cache[i].detach()
+                cache.append(i, k, v)
+        elif isinstance(past_kv, (tuple, list)):
+            for i in range(min(num_layers, len(past_kv))):
+                if isinstance(past_kv[i], (tuple, list)):
+                    k, v = past_kv[i][0].detach(), past_kv[i][1].detach()
+                else:
+                    k = past_kv[i].key_cache.detach()
+                    v = past_kv[i].value_cache.detach()
+                cache.append(i, k, v)
 
         # Now compute PPL with the cache's dequantized values
         # Reconstruct past_key_values from cache
