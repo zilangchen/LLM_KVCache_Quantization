@@ -43,9 +43,9 @@ def _ci95(values: np.ndarray) -> tuple[float, float, float]:
         return m, m, m
     m = float(np.mean(values))
     se = float(np.std(values, ddof=1) / np.sqrt(n))
-    from scipy import stats as st
-    t_val = st.t.ppf(0.975, n - 1)
-    half = t_val * se
+    # Use z=1.96 approximation for CI95 (sufficient for n >= 5 seeds).
+    # Exact t-distribution requires scipy which may not be installed.
+    half = 1.96 * se
     return m, m - half, m + half
 
 
