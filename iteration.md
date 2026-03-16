@@ -8,6 +8,20 @@ Canonical agent workflow directory is `.agents/`.
 
 > 经讨论并被用户认可的阶段性执行方案（与审查问题分开，审查问题见 `review_tracker.md`）。
 
+### Plan: INT8+INT4 双精度统一路线图（M0-M6, gate 驱动）
+- **批准日期**：2026-03-17
+- **前置条件**：Phase 6 完成, thesis-safe-v1 基线冻结
+- **状态**：🟡 M0+M1+M2-1 完成, M2-2/M2-3 需远端 GPU, M3 gate 待执行
+- **里程碑状态**：
+  - [x] M0: 冻结 thesis-safe 基线 (tag `thesis-safe-v1`, commit `9d7dbea`)
+  - [x] M1: 建立 legacy/postfix 双世界 (3 gate configs, commit `85f5baa`)
+  - [x] M2-1: Calibration 主链修复 CAL-033/014/017/020/036/043 (commit `1ad404a`)
+  - [ ] M2-2: 校准产物确定性审计（远端 GPU）
+  - [ ] M2-3: 重生 postfix 校准产物（远端 GPU, 1.5B/7B/8B INT4）
+  - [ ] M3: 最小 unified gate (36 task-runs + 2 INT8 sanity)
+  - [ ] M4: Gate PASS → 扩展完整证据链（条件性）
+  - [ ] M5: 补强（消融/probing/文献/eval triage）
+  - [ ] M6: 论文主线切换决策
 
 ### ~~Plan: EMNLP 2026 Phase 4 — MSE 校准 + 消融（仅 1.5B）~~ ✅ 完成 2026-02-23（详见 Timeline 归档）
 
