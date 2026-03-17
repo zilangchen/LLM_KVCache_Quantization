@@ -59,7 +59,7 @@ def compute_sqnr(original: torch.Tensor, reconstructed: torch.Tensor) -> float:
 def symmetric_int4_roundtrip(tensor: torch.Tensor, group_size: int = 32) -> torch.Tensor:
     """Symmetric INT4 quantize + dequantize (per-group)."""
     q, scale = quantize_symmetric_int4(tensor, percentile=99.9, group_size=group_size)
-    return dequantize_symmetric_int4(q, scale, group_size=group_size).to(tensor.dtype)
+    return dequantize_symmetric_int4(q, scale).to(tensor.dtype)
 
 
 def asymmetric_int4_per_channel_roundtrip(tensor: torch.Tensor) -> torch.Tensor:

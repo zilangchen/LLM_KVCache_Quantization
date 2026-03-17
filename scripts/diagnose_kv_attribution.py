@@ -217,66 +217,73 @@ CONFIGURATIONS = [
 ]
 
 
-def run_ppl_with_cache(model, tokenizer, cache, text: str, max_len: int = 4096) -> float:
-    """Compute perplexity using a given KV cache for a short sequence.
+def compute_kv_reconstruction_error(
+    model, tokenizer, cache, text: str, max_len: int = 4096,
+) -> Dict[str, float]:
+    """Compute KV reconstruction error after quantize→dequantize round-trip.
 
-    This is a simplified PPL computation for attribution diagnosis, not the
-    full eval_ppl.py pipeline. Uses teacher-forcing (prefill only).
+    Instead of re-running the model (which requires cache injection into HF
+    forward), we measure the direct quantization noise on K and V tensors:
+    - K SQNR: how well K is preserved (affects attention distribution)
+    - V SQNR: how well V is preserved (affects output logits linearly)
+
+    Returns dict with k_sqnr_db, v_sqnr_db, k_mse, v_mse, cache_mb.
     """
     inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=max_len)
     input_ids = inputs["input_ids"].to(model.device)
-    seq_len = input_ids.shape[1]
-    if seq_len < 2:
-        return float("nan")
-
     num_layers = model.config.num_hidden_layers
 
     with torch.no_grad():
-        # Prefill: get logits and populate cache
-        outputs = model(input_ids, use_cache=True)
-        logits = outputs.logits  # [1, S, V]
+        outputs = model(**{k: v.to(model.device) for k, v in inputs.items()}, use_cache=True)
 
-        # Also populate our custom cache from the model's KV
-        past_kv = outputs.past_key_values
-        cache.clear()
-        # Handle DynamicCache (HF >= 4.57: __getitem__ returns tuples) or legacy
-        n_kv = len(past_kv) if hasattr(past_kv, "__len__") else 0
-        for i in range(min(num_layers, n_kv)):
-            layer_kv = past_kv[i]
-            if isinstance(layer_kv, (tuple, list)) and len(layer_kv) >= 2:
-                k, v = layer_kv[0].detach(), layer_kv[1].detach()
-            elif hasattr(layer_kv, "key_cache"):
-                k, v = layer_kv.key_cache.detach(), layer_kv.value_cache.detach()
-            else:
-                continue
-            cache.append(i, k, v)
+    # Extract fp16 KV from model output
+    past_kv = outputs.past_key_values
+    n_kv = len(past_kv) if hasattr(past_kv, "__len__") else 0
+    fp16_kvs = []
+    for i in range(min(num_layers, n_kv)):
+        layer_kv = past_kv[i]
+        if isinstance(layer_kv, (tuple, list)) and len(layer_kv) >= 2:
+            fp16_kvs.append((layer_kv[0].detach(), layer_kv[1].detach()))
+        else:
+            break
 
-        # Now compute PPL with the cache's dequantized values
-        # Reconstruct past_key_values from cache
-        past_kv_from_cache = []
-        for i in range(num_layers):
-            k_deq, v_deq = cache.get_kv(i)
-            past_kv_from_cache.append((k_deq, v_deq))
+    # Populate the attribution cache
+    cache.clear()
+    for i, (k, v) in enumerate(fp16_kvs):
+        cache.append(i, k, v)
 
-        # Re-run model with dequantized cache to get quantization-affected logits
-        # Use only the last token as input, with the dequantized cache
-        # For teacher-forcing PPL, we need logits at each position
-        # Simplified: just use the first-pass logits with quantization noise estimated
-        # Actually, for proper attribution, re-run full prefill with quantized cache
-        outputs_q = model(input_ids, past_key_values=None, use_cache=False)
-        # For a proper attribution, we'd need to inject the cache mid-forward.
-        # Simplified approach: compute PPL from first-pass logits as proxy.
+    # Measure reconstruction error per layer
+    k_mse_total, v_mse_total = 0.0, 0.0
+    k_signal_total, v_signal_total = 0.0, 0.0
+    n_layers_measured = 0
 
-    # Compute cross-entropy loss
-    import torch.nn.functional as F
-    shift_logits = logits[:, :-1, :].contiguous()
-    shift_labels = input_ids[:, 1:].contiguous()
-    loss = F.cross_entropy(
-        shift_logits.view(-1, shift_logits.size(-1)),
-        shift_labels.view(-1),
-        reduction="mean",
-    )
-    return float(torch.exp(loss).item())
+    for i, (k_fp16, v_fp16) in enumerate(fp16_kvs):
+        if i >= cache.num_layers:
+            break
+        k_deq, v_deq = cache.get_kv(i)
+
+        k_f, k_d = k_fp16.float(), k_deq.float()
+        v_f, v_d = v_fp16.float(), v_deq.float()
+
+        k_mse_total += (k_f - k_d).pow(2).mean().item()
+        v_mse_total += (v_f - v_d).pow(2).mean().item()
+        k_signal_total += k_f.pow(2).mean().item()
+        v_signal_total += v_f.pow(2).mean().item()
+        n_layers_measured += 1
+
+    n = max(n_layers_measured, 1)
+    k_mse = k_mse_total / n
+    v_mse = v_mse_total / n
+    k_sqnr = 10 * torch.log10(torch.tensor(k_signal_total / n / max(k_mse, 1e-20))).item()
+    v_sqnr = 10 * torch.log10(torch.tensor(v_signal_total / n / max(v_mse, 1e-20))).item()
+
+    return {
+        "k_sqnr_db": round(k_sqnr, 2),
+        "v_sqnr_db": round(v_sqnr, 2),
+        "k_mse": k_mse,
+        "v_mse": v_mse,
+        "cache_mb": round(cache.get_memory_mb(), 2),
+    }
 
 
 def main():
@@ -331,51 +338,55 @@ def main():
             quantize_v=cfg["quantize_v"],
         )
 
-        ppl = run_ppl_with_cache(model, tokenizer, cache, calib_text, max_len=args.seq_len)
-        mem = cache.get_memory_mb()
+        metrics = compute_kv_reconstruction_error(
+            model, tokenizer, cache, calib_text, max_len=args.seq_len
+        )
 
         result = {
             "name": name,
             "quantize_k": cfg["quantize_k"],
             "quantize_v": cfg["quantize_v"],
-            "ppl_proxy": round(ppl, 4),
-            "cache_mb": round(mem, 2),
+            **metrics,
         }
         results.append(result)
-        print(f"  PPL proxy: {ppl:.4f}, Cache: {mem:.2f} MB")
+        print(f"  K SQNR: {metrics['k_sqnr_db']:.2f} dB, V SQNR: {metrics['v_sqnr_db']:.2f} dB, "
+              f"K MSE: {metrics['k_mse']:.6f}, V MSE: {metrics['v_mse']:.6f}, "
+              f"Cache: {metrics['cache_mb']:.2f} MB")
         cache.release()
 
     # Print summary
-    print("\n" + "=" * 70)
-    print(f"{'Config':<20} {'K':<6} {'V':<6} {'PPL':>8} {'Cache MB':>10}")
-    print("-" * 70)
-    fp16_ppl = results[0]["ppl_proxy"] if results else 1.0
+    print("\n" + "=" * 80)
+    print(f"{'Config':<20} {'K':<6} {'V':<6} {'K SQNR':>8} {'V SQNR':>8} {'K MSE':>10} {'V MSE':>10} {'MB':>6}")
+    print("-" * 80)
     for r in results:
         k_str = "INT4" if r["quantize_k"] else "FP16"
         v_str = "INT4" if r["quantize_v"] else "FP16"
-        delta = ((r["ppl_proxy"] - fp16_ppl) / fp16_ppl * 100) if fp16_ppl > 0 else 0
-        delta_str = f"({delta:+.2f}%)" if r["name"] != "fp16_baseline" else ""
-        print(f"{r['name']:<20} {k_str:<6} {v_str:<6} {r['ppl_proxy']:>8.4f} {r['cache_mb']:>10.2f} {delta_str}")
+        print(f"{r['name']:<20} {k_str:<6} {v_str:<6} {r['k_sqnr_db']:>8.2f} {r['v_sqnr_db']:>8.2f} "
+              f"{r['k_mse']:>10.6f} {r['v_mse']:>10.6f} {r['cache_mb']:>6.1f}")
 
-    # Attribution analysis
+    # Attribution analysis — compare K-only vs V-only degradation
     if len(results) == 4:
-        fp16, k_only, v_only, both = [r["ppl_proxy"] for r in results]
-        k_degradation = (k_only - fp16) / fp16 * 100 if fp16 > 0 else 0
-        v_degradation = (v_only - fp16) / fp16 * 100 if fp16 > 0 else 0
-        both_degradation = (both - fp16) / fp16 * 100 if fp16 > 0 else 0
+        fp16_r, k_only_r, v_only_r, both_r = results
+        # For fp16_baseline, both SQNR should be ~100 dB (no quantization noise)
+        # For k_only: K SQNR drops (V stays ~100), for v_only: V SQNR drops
+        k_noise = k_only_r["k_mse"]  # K quantization noise (MSE)
+        v_noise = v_only_r["v_mse"]  # V quantization noise (MSE)
+        k_sqnr_drop = fp16_r["k_sqnr_db"] - k_only_r["k_sqnr_db"]
+        v_sqnr_drop = fp16_r["v_sqnr_db"] - v_only_r["v_sqnr_db"]
 
-        print(f"\n--- Attribution Analysis ---")
-        print(f"K-only degradation: {k_degradation:+.2f}%")
-        print(f"V-only degradation: {v_degradation:+.2f}%")
-        print(f"Both degradation:   {both_degradation:+.2f}%")
-        print(f"Interaction effect:  {both_degradation - k_degradation - v_degradation:+.2f}%")
+        print(f"\n--- Attribution Analysis (Quantization Noise) ---")
+        print(f"K-only: SQNR drop = {k_sqnr_drop:.2f} dB, MSE = {k_noise:.6f}")
+        print(f"V-only: SQNR drop = {v_sqnr_drop:.2f} dB, MSE = {v_noise:.6f}")
+        print(f"Both:   K SQNR = {both_r['k_sqnr_db']:.2f} dB, V SQNR = {both_r['v_sqnr_db']:.2f} dB")
 
-        if abs(v_degradation) > abs(k_degradation) * 1.5:
-            print("→ V is the primary PPL bottleneck (Phase 1B is main battleground)")
-        elif abs(k_degradation) > abs(v_degradation) * 1.5:
-            print("→ K is the primary PPL bottleneck (Phase 1A is critical)")
+        if v_noise > k_noise * 1.5:
+            print("→ V quantization noise > K noise → V is the primary quality bottleneck")
+            print("  (Phase 1B V-path token-CE calibration is main battleground)")
+        elif k_noise > v_noise * 1.5:
+            print("→ K quantization noise > V noise → K is the primary quality bottleneck")
+            print("  (Phase 1A K-path attention-aligned calibration is critical)")
         else:
-            print("→ K and V contribute roughly equally (dual-path approach needed)")
+            print("→ K and V noise are comparable → dual-path approach needed")
 
     # Save
     out_dir = Path(args.out_dir)
