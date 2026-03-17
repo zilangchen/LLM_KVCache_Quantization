@@ -141,6 +141,8 @@ def main():
             "int4_ours",
             "int4_ours_mixed",
             "kivi_style",
+            "int4_kivi_aligned",
+            "int4_mixed_kv",
         ],
     )
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
@@ -168,6 +170,18 @@ def main():
         type=int,
         default=None,
         help="Override quant_bits for CSV output (needed for kivi_style which can be 4 or 8).",
+    )
+    parser.add_argument(
+        "--k_bits",
+        type=int,
+        default=None,
+        help="K cache bit-width for int4_mixed_kv mode (4/8/16). Default: 8.",
+    )
+    parser.add_argument(
+        "--v_bits",
+        type=int,
+        default=None,
+        help="V cache bit-width for int4_mixed_kv mode (4/8/16). Default: 4.",
     )
     parser.add_argument(
         "--use_attn_temperature",
@@ -308,6 +322,8 @@ def main():
         seed=args.seed,
         stop_on_eos=False,
         quant_bits=runtime_quant_bits,
+        k_bits=getattr(args, 'k_bits', None),
+        v_bits=getattr(args, 'v_bits', None),
     )
 
     hardware = get_hardware_info()
@@ -346,6 +362,8 @@ def main():
             seed=args.seed,
             stop_on_eos=False,
             quant_bits=runtime_quant_bits,
+            k_bits=getattr(args, 'k_bits', None),
+            v_bits=getattr(args, 'v_bits', None),
         )
     finally:
         monitor.stop()

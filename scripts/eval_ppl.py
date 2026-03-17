@@ -279,6 +279,8 @@ def build_kv_cache(
     adaptive_static_v: bool,
     decode_attn_impl: str | None,
     quant_bits: int | None = None,
+    k_bits: int | None = None,
+    v_bits: int | None = None,
 ):
     num_layers = getattr(model.config, "num_hidden_layers", 28)
     (
@@ -352,6 +354,8 @@ def build_kv_cache(
         return MixedKVCache(
             num_layers=num_layers,
             device=model.device.type,
+            k_bits=k_bits if k_bits is not None else 8,
+            v_bits=v_bits if v_bits is not None else 4,
         ), group_size, clip_percentile
 
     if kv_mode in ["int8_fused", "int8_ours"]:
@@ -541,6 +545,13 @@ def main():
         help="Optional model revision (commit hash/tag) for strict reproducibility.",
     )
     # PPL specific
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="wikitext2",
+        choices=["wikitext2", "c4"],
+        help="Dataset for PPL evaluation. wikitext2 (default) or c4 (allenai/c4 validation).",
+    )
     parser.add_argument("--stride", type=int, default=512)
     parser.add_argument(
         "--max_length",
@@ -623,6 +634,18 @@ def main():
         type=int,
         default=None,
         help="Override quant_bits for CSV output (needed for kivi_style which can be 4 or 8).",
+    )
+    parser.add_argument(
+        "--k_bits",
+        type=int,
+        default=None,
+        help="K cache bit-width for int4_mixed_kv mode (4/8/16). Default: 8.",
+    )
+    parser.add_argument(
+        "--v_bits",
+        type=int,
+        default=None,
+        help="V cache bit-width for int4_mixed_kv mode (4/8/16). Default: 4.",
     )
     parser.add_argument(
         "--use_attn_temperature",
@@ -754,14 +777,22 @@ def main():
     # FP16 Baseline PPL reference.
     # For INT8, we will eventually need to inject the Quantized Cache into the model.
 
-    print("Loading wikitext-2-raw-v1...")
-    try:
-        test = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
-    except Exception as e:
-        print(f"Failed to load dataset: {e}. Check network/proxy.")
-        # Fallback smoke test if network fails and we just want to verify script logic?
-        # No, objective demands robustness. Fail.
-        sys.exit(1)
+    dataset_name = getattr(args, "dataset", "wikitext2")
+    if dataset_name == "c4":
+        print("Loading allenai/c4 (en, validation)...")
+        try:
+            test = load_dataset("allenai/c4", "en", split="validation", streaming=True)
+            # Convert streaming dataset to iterable; iter_token_ids handles iteration.
+        except Exception as e:
+            print(f"Failed to load C4 dataset: {e}. Check network/proxy.")
+            sys.exit(1)
+    else:
+        print("Loading wikitext-2-raw-v1...")
+        try:
+            test = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
+        except Exception as e:
+            print(f"Failed to load dataset: {e}. Check network/proxy.")
+            sys.exit(1)
 
     max_length = args.max_length
     stride = args.stride
@@ -820,6 +851,8 @@ def main():
             args.adaptive_static_v,
             args.decode_attn_impl,
             quant_bits=args.quant_bits,
+            k_bits=getattr(args, "k_bits", None),
+            v_bits=getattr(args, "v_bits", None),
         )
         if (
             args.use_attn_temperature

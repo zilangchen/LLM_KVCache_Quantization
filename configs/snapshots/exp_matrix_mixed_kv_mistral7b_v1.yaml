@@ -1,0 +1,58 @@
+# MixedKV Extension — Mistral-7B-Instruct-v0.3
+# External validity: MixedKV + FP16 baseline + KIVI INT4 matched
+# Seeds: PPL=1, Needle=5 (1234-1238)
+# Created: 2026-03-17
+# NOTE: model_revision TBD — pin after first download on GPU server
+
+project:
+  name: kv-cache-quant-mixed-kv-mistral7b
+  model_id: mistralai/Mistral-7B-Instruct-v0.3
+  model_revision: null  # TBD: pin after download
+
+runtime:
+  seed: 1234
+  device: cuda
+  dtype: fp16
+  decoding:
+    temperature: 0.0
+    top_p: 1.0
+    top_k: 0
+  quant_defaults:
+    quant_bits: 4
+    calib_strategy: none
+    use_static_scales: false
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 100.0
+    group_size_k: 128
+    group_size_v: 128
+  kernel_defaults:
+    decode_attn_impl: torch_ref
+
+matrix:
+  # MixedKV main
+  - run_name: mixed_kv_long
+    kv_mode: int4_mixed_kv
+    quant_bits: 4
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # FP16 matched baseline
+  - run_name: fp16_matched_long
+    kv_mode: fp16
+    quant_bits: 16
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # KIVI INT4 matched baseline
+  - run_name: kivi_int4_matched_long
+    kv_mode: kivi_style
+    quant_bits: 4
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1

@@ -1391,6 +1391,13 @@ def main() -> int:
                         cmd.append("--no_adaptive_static_v")
                 if decode_attn_impl:
                     cmd.extend(["--decode_attn_impl", str(decode_attn_impl)])
+                # Pass k_bits/v_bits for int4_mixed_kv K/V ablation
+                run_k_bits = run_entry.get("k_bits")
+                run_v_bits = run_entry.get("v_bits")
+                if run_k_bits is not None:
+                    cmd.extend(["--k_bits", str(int(run_k_bits))])
+                if run_v_bits is not None:
+                    cmd.extend(["--v_bits", str(int(run_v_bits))])
 
                 if task == "eval_ppl":
                     max_length = min(seq_len, args.ppl_max_length)

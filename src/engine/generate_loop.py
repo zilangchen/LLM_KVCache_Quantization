@@ -396,6 +396,8 @@ def generate_from_ids(
     allow_missing_calib: bool = False,
     stop_on_eos: bool = True,
     quant_bits: Optional[int] = None,
+    k_bits: Optional[int] = None,
+    v_bits: Optional[int] = None,
 ) -> GenerationBatchOutput:
     """
     Batched generation loop using explicit prefill + token-by-token decode.
@@ -411,6 +413,7 @@ def generate_from_ids(
       attention_mask to be all ones (no padding).
     - kv_mode="kivi_style" supports quant_bits {4, 8} only and always runs
       torch_ref decode attention (non-fused path).
+    - kv_mode="int4_mixed_kv" supports k_bits/v_bits for K/V ablation.
     """
     # ENG-008: batch constraint validation is intentionally checked here even if partially
     # redundant with earlier checks, as a defense-in-depth measure.
@@ -862,12 +865,15 @@ def generate_from_ids(
         )
     elif kv_mode == "int4_mixed_kv":
         # K-INT8 symmetric + V-INT4 asymmetric per-token (hybrid mode).
+        # k_bits/v_bits allow K/V ablation (K-only, V-only, counterfactual).
         from src.cache.mixed_kv_cache import MixedKVCache
 
         kv_cache = MixedKVCache(
             num_layers=num_layers,
             device=model.device.type,
             max_seq_len=max_cache_len,
+            k_bits=k_bits if k_bits is not None else 8,
+            v_bits=v_bits if v_bits is not None else 4,
         )
     else:
         raise ValueError(f"Unsupported kv_mode: {kv_mode}")
@@ -1195,6 +1201,8 @@ def generate(
     allow_missing_calib: bool = False,
     stop_on_eos: bool = True,
     quant_bits: int = 8,
+    k_bits: Optional[int] = None,
+    v_bits: Optional[int] = None,
 ) -> GenerationOutput:
     """
     Custom generation loop with prefill + token-by-token decode.
@@ -1228,6 +1236,8 @@ def generate(
             - "torch_ref" (reference, correctness/ablation)
         allow_missing_calib: If True, int8_ours will warn+fallback when calib is missing.
         quant_bits: Quantization bits. Used by kv_mode='kivi_style' (must be 4 or 8).
+        k_bits: K cache bit-width for int4_mixed_kv mode (4/8/16). Default None → 8.
+        v_bits: V cache bit-width for int4_mixed_kv mode (4/8/16). Default None → 4.
 
     Returns:
         GenerationOutput with generated text and timing statistics
@@ -1259,6 +1269,8 @@ def generate(
         allow_missing_calib=allow_missing_calib,
         stop_on_eos=stop_on_eos,
         quant_bits=quant_bits,
+        k_bits=k_bits,
+        v_bits=v_bits,
     )
 
     generated_tokens = batch_out.generated_ids[0].tolist()
