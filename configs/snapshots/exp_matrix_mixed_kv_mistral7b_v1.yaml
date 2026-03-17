@@ -7,7 +7,7 @@
 project:
   name: kv-cache-quant-mixed-kv-mistral7b
   model_id: mistralai/Mistral-7B-Instruct-v0.3
-  model_revision: null  # TBD: pin after download
+  model_revision: c170c708c41dac9275d15a8fff4eca08d52bab71
 
 runtime:
   seed: 1234
