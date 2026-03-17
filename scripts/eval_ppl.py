@@ -37,7 +37,7 @@ except ImportError:
 from datasets import load_dataset
 from src.cache import FP16KVCache, INT8KVCache, INT4KVCache, KIVIStyleKVCache
 from src.engine.patch_model import apply_int8_fused_patch
-from src.engine.generate_loop import _register_prefill_temperature_hooks
+from src.engine.generate_loop import _register_prefill_temperature_hooks, _register_all_temperature_hooks
 from src.utils.hf import resolve_pretrained_path
 from src.utils.repro import (
     build_config_snapshot,
@@ -822,14 +822,16 @@ def main():
             quant_bits=args.quant_bits,
         )
         if (
-            args.kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused"]
-            and args.use_attn_temperature
+            args.use_attn_temperature
             and getattr(kv_cache, "inv_tau", None) is not None
         ):
-            # Apply temperature to q_len>1 (prefill / chunked) via hooks.
-            # Hooks explicitly no-op when seq_len<=1 to avoid double-scaling decode,
-            # since fused decode path scales Q internally.
-            hook_handles = _register_prefill_temperature_hooks(model, kv_cache.inv_tau)
+            if args.kv_mode == "int4_kivi_aligned":
+                # int4_kivi_aligned uses torch_ref decode (not fused), so inv_tau
+                # must be applied for ALL seq_len (both prefill chunks and decode).
+                hook_handles = _register_all_temperature_hooks(model, kv_cache.inv_tau)
+            elif args.kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused"]:
+                # Fused modes: prefill-only hooks; decode temperature handled by kernel.
+                hook_handles = _register_prefill_temperature_hooks(model, kv_cache.inv_tau)
 
     try:
         for ids in iter_token_ids(
