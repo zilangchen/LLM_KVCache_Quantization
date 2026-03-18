@@ -197,15 +197,19 @@ def _score_set_answer(prediction: str, answers: List[str]) -> Dict[str, float]:
     """Score for set-matching tasks (CWE).
 
     Extracts words from prediction, computes set overlap with expected answers.
+    EVL-075 FIX: Use set for recall (truth coverage) but count total predicted
+    words for precision denominator (penalizes repetition and noise).
     """
-    pred_words = set(w for w in _normalize_text(prediction).split() if w)
+    pred_tokens = [w for w in _normalize_text(prediction).split() if w]
+    pred_unique = set(pred_tokens)
     truth_words = set(_normalize_text(a) for a in answers if _normalize_text(a))
     if not truth_words:
         return {"exact_match": 0.0, "contains_match": 0.0, "f1": 0.0}
-    intersection = pred_words & truth_words
+    intersection = pred_unique & truth_words
     if not intersection:
         return {"exact_match": 0.0, "contains_match": 0.0, "f1": 0.0}
-    precision = len(intersection) / max(1, len(pred_words))
+    # Precision: fraction of predicted tokens that are in truth (penalizes noise/repetition)
+    precision = sum(1 for w in pred_tokens if w in truth_words) / max(1, len(pred_tokens))
     recall = len(intersection) / len(truth_words)
     f1 = (2.0 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
     # EVL-032: CWE exact_match checks recall==1.0 (all truth words in pred),
@@ -496,20 +500,29 @@ def _build_cwe_cases(
             distractor_words = available[num_cw:]
 
         # Build word list: target words appear freq_cw times, distractors
-        # appear 1-3 times (much less frequently)
+        # appear much less frequently.
+        # EVL-047 FIX: Padding uses target words (not distractors) to ensure
+        # target words remain the most frequent throughout.
         all_words: List[str] = []
         for w in target_words:
             all_words.extend([w] * freq_cw)
         for w in distractor_words:
             all_words.extend([w] * rng.randint(1, 3))
 
-        # Pad with more distractors if needed to fill context
+        # Pad to fill context — use a MIX that maintains target dominance.
+        # EVL-074 FIX: Use _count_tokens for accurate budget instead of // 2.
         words_text = " ".join(all_words)
         words_tokens = _count_tokens(tokenizer, words_text)
         extra_budget = max(0, context_len - words_tokens - 200)
         if extra_budget > 0:
-            extra_words_count = extra_budget // 2  # rough estimate
-            for _ in range(extra_words_count):
+            # Estimate tokens per word (~1.3 for BPE) with safety margin
+            extra_words_count = int(extra_budget / 1.5)
+            # Split padding: 70% target words (maintain dominance), 30% distractors
+            n_target_pad = int(extra_words_count * 0.7)
+            n_distractor_pad = extra_words_count - n_target_pad
+            for _ in range(n_target_pad):
+                all_words.append(rng.choice(target_words))
+            for _ in range(n_distractor_pad):
                 all_words.append(rng.choice(distractor_words))
 
         rng.shuffle(all_words)
