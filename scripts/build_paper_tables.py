@@ -225,7 +225,11 @@ def _load_summary(tables_dir: Path, name: str) -> pd.DataFrame:
 
 
 def _pick_seq(df: pd.DataFrame, preferred: int = 32704) -> Optional[int]:
-    """Pick a sequence length from the data, preferring the given value."""
+    """Pick a sequence length from the data, preferring the given value.
+
+    Falls back to the closest available value (not max) to avoid picking
+    anomalous seq_len entries from postfix data.
+    """
     if df.empty or "seq_len" not in df.columns:
         return None
     seq = pd.to_numeric(df["seq_len"], errors="coerce").dropna().unique()
@@ -233,7 +237,8 @@ def _pick_seq(df: pd.DataFrame, preferred: int = 32704) -> Optional[int]:
         return None
     if float(preferred) in seq:
         return preferred
-    return int(max(seq))
+    # Pick closest to preferred (e.g., 32768 when preferred=32704)
+    return int(min(seq, key=lambda x: abs(x - preferred)))
 
 
 def _filter_seq(df: pd.DataFrame, seq_len: Optional[int]) -> pd.DataFrame:
@@ -386,7 +391,7 @@ def build_table1(
             # Needle
             needle_m = _extract_metric(needle_at_seq, model_id, kv_mode, "needle_pass_rate_mean")
             row["needle_pct"] = needle_m
-            row["needle_display"] = _fmt_pct(needle_m if pd.isna(needle_m) else needle_m * 100.0)
+            row["needle_display"] = _fmt_pct(needle_m)  # already 0-100 in summary CSV
 
             # LongBench
             lb_m = _extract_metric(lb_at_seq, model_id, kv_mode, "longbench_score_mean")
@@ -525,7 +530,7 @@ def build_table2(
             row["ppl_std"] = ppl_s
             row["ppl_display"] = _fmt_mean_std(ppl_m, ppl_s)
             row["needle_pct"] = needle_m
-            row["needle_display"] = _fmt_pct(needle_m if pd.isna(needle_m) else needle_m * 100.0)
+            row["needle_display"] = _fmt_pct(needle_m)  # already 0-100 in summary CSV
             row["longbench_mean"] = lb_m
             row["longbench_std"] = lb_s
             row["longbench_display"] = _fmt_mean_std(lb_m, lb_s, decimals=3)
@@ -555,7 +560,7 @@ def build_table2(
             lambda x: (x - bl_ppl) if not pd.isna(x) and not pd.isna(bl_ppl) else None
         )
         df["delta_needle"] = df["needle_pct"].apply(
-            lambda x: ((x - bl_needle) * 100.0) if not pd.isna(x) and not pd.isna(bl_needle) else None
+            lambda x: (x - bl_needle) if not pd.isna(x) and not pd.isna(bl_needle) else None
         )
         df["delta_longbench"] = df["longbench_mean"].apply(
             lambda x: (x - bl_lb) if not pd.isna(x) and not pd.isna(bl_lb) else None
@@ -701,7 +706,7 @@ def build_table3(
             row["ppl_std"] = ppl_s
             row["ppl_display"] = _fmt_mean_std(ppl_m, ppl_s)
             row["needle_pct"] = needle_m
-            row["needle_display"] = _fmt_pct(needle_m if pd.isna(needle_m) else needle_m * 100.0)
+            row["needle_display"] = _fmt_pct(needle_m)  # already 0-100 in summary CSV
             row["longbench_mean"] = lb_m
             row["longbench_std"] = lb_s
             row["longbench_display"] = _fmt_mean_std(lb_m, lb_s, decimals=3)
