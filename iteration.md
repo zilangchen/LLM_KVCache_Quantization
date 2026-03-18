@@ -8,6 +8,23 @@ Canonical agent workflow directory is `.agents/`.
 
 > 经讨论并被用户认可的阶段性执行方案（与审查问题分开，审查问题见 `review_tracker.md`）。
 
+### Plan: Closure Pack + Expansion Pack 论文收口
+- **批准日期**：2026-03-18
+- **前置条件**：Phase 6 完成, INT4 unified FAIL, MixedKV Phase 2 PASS
+- **状态**：🟢 执行中 — GPU 双卡并行, 本地 A4/A5/A6 已完成
+- **Part A (Closure Pack, 必做)**:
+  - [~] A1: MixedKV LongBench (4 models × 5 seeds) — GPU 运行中
+  - [ ] A2: MixedKV RULER (4 models × 5 seeds) — 排队
+  - [ ] A3: C6 INT8 RULER CWE-fix 验证 (1.5B, 3 methods) — 排队
+  - [x] A4: B9 热力图 (1.5B+7B PDF 完成, 8B 待 GPU)
+  - [x] A5: B11 INT8 ours vs baseline 对比表 (CSV + LaTeX)
+  - [~] A6: 论文数据聚合 (框架完成, Table 3 等 MixedKV 数据)
+- **Part B (Expansion, 可选)**:
+  - [ ] E2: B10 校准灵敏度消融 (值得做, 3h GPU)
+  - [ ] E4: C4 PPL (条件做, 需网络)
+- **结果目录**: emnlp_postfix_v2/runs (A1/A2/A4), emnlp_c6_fix/runs (A3)
+- **脚本**: closure_gpu0.sh, closure_gpu1.sh, build_int8_comparison.py, build_paper_tables.py
+
 ### Plan: INT8+INT4 双精度统一路线图（M0-M6, gate 驱动）
 - **批准日期**：2026-03-17
 - **前置条件**：Phase 6 完成, thesis-safe-v1 基线冻结
