@@ -2,6 +2,7 @@
 # ═══════════════════════════════════════════════════════════════════════
 # Closure Pack — GPU 1 Task Chain
 # Tasks: A1(7B LB) → A1(Mistral LB) → A2(7B RULER) → A2(Mistral RULER) → A4(8B attn KL)
+# FIX: model-specific run_tags to avoid run_id collisions
 # ═══════════════════════════════════════════════════════════════════════
 set -euo pipefail
 
@@ -16,7 +17,6 @@ cd "$PROJ"
 
 SEEDS="1234,1235,1236,1237,1238"
 POST_OUT="results/emnlp_postfix_v2/runs"
-TAG="closure_v1"
 
 log() { echo "[GPU1 $(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
@@ -31,9 +31,9 @@ $PYTHON scripts/run_experiments.py \
   --run_names mixed_kv_long \
   --seeds $SEEDS \
   --out_dir "$POST_OUT" \
-  --run_tag "$TAG" \
+  --run_tag closure_7b \
   --skip_completed_success \
-  --task_timeout 7200 \
+  --subprocess_timeout 7200 \
   --longbench_source synthetic \
   --longbench_max_samples 32 \
   --longbench_max_new_tokens 64
@@ -48,9 +48,9 @@ $PYTHON scripts/run_experiments.py \
   --run_names mixed_kv_long,fp16_matched_long,kivi_int4_matched_long \
   --seeds $SEEDS \
   --out_dir "$POST_OUT" \
-  --run_tag "$TAG" \
+  --run_tag closure_mistral \
   --skip_completed_success \
-  --task_timeout 7200 \
+  --subprocess_timeout 7200 \
   --longbench_source synthetic \
   --longbench_max_samples 32 \
   --longbench_max_new_tokens 64
@@ -64,9 +64,10 @@ $PYTHON scripts/run_experiments.py \
   --run_names mixed_kv_long \
   --seeds $SEEDS \
   --out_dir "$POST_OUT" \
-  --run_tag "$TAG" \
+  --run_tag closure_7b \
+  --append \
   --skip_completed_success \
-  --task_timeout 7200 \
+  --subprocess_timeout 7200 \
   --ruler_num_cases 64
 log "A2: 7B MixedKV RULER DONE ✓"
 
@@ -78,9 +79,10 @@ $PYTHON scripts/run_experiments.py \
   --run_names mixed_kv_long,fp16_matched_long,kivi_int4_matched_long \
   --seeds $SEEDS \
   --out_dir "$POST_OUT" \
-  --run_tag "$TAG" \
+  --run_tag closure_mistral \
+  --append \
   --skip_completed_success \
-  --task_timeout 7200 \
+  --subprocess_timeout 7200 \
   --ruler_num_cases 64
 log "A2: Mistral-7B RULER DONE ✓"
 

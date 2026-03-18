@@ -2,6 +2,7 @@
 # ═══════════════════════════════════════════════════════════════════════
 # Closure Pack — GPU 0 Task Chain
 # Tasks: A1(1.5B/8B LongBench) → A3(C6 INT8 RULER) → A2(1.5B/8B RULER)
+# FIX: model-specific run_tags to avoid run_id collisions
 # ═══════════════════════════════════════════════════════════════════════
 set -euo pipefail
 
@@ -17,7 +18,6 @@ cd "$PROJ"
 SEEDS="1234,1235,1236,1237,1238"
 POST_OUT="results/emnlp_postfix_v2/runs"
 C6_OUT="results/emnlp_c6_fix/runs"
-TAG="closure_v1"
 
 log() { echo "[GPU0 $(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
@@ -32,9 +32,9 @@ $PYTHON scripts/run_experiments.py \
   --run_names mixed_kv_long \
   --seeds $SEEDS \
   --out_dir "$POST_OUT" \
-  --run_tag "$TAG" \
+  --run_tag closure_1p5b \
   --skip_completed_success \
-  --task_timeout 7200 \
+  --subprocess_timeout 7200 \
   --longbench_source synthetic \
   --longbench_max_samples 32 \
   --longbench_max_new_tokens 64
@@ -48,9 +48,9 @@ $PYTHON scripts/run_experiments.py \
   --run_names mixed_kv_long \
   --seeds $SEEDS \
   --out_dir "$POST_OUT" \
-  --run_tag "$TAG" \
+  --run_tag closure_8b \
   --skip_completed_success \
-  --task_timeout 7200 \
+  --subprocess_timeout 7200 \
   --longbench_source synthetic \
   --longbench_max_samples 32 \
   --longbench_max_new_tokens 64
@@ -58,6 +58,7 @@ log "A1: 8B MixedKV LongBench DONE ✓"
 
 # ─── A3: C6 INT8 RULER fix (1.5B, 3 methods, 5 seeds) ───────────────
 # Re-run RULER with CWE-fixed eval_ruler.py to verify C6 claim
+# NOTE: C6 is 1.5B-only, run_tag=c6fix_1p5b is unique (no collision)
 log "A3: C6 INT8 RULER verification starting..."
 $PYTHON scripts/run_experiments.py \
   --config configs/exp_matrix.yaml \
@@ -65,9 +66,9 @@ $PYTHON scripts/run_experiments.py \
   --run_names fp16_kv_long,int8_ours_long_no_static_no_temp_fused,int8_baseline_long_torch \
   --seeds $SEEDS \
   --out_dir "$C6_OUT" \
-  --run_tag c6fix \
+  --run_tag c6fix_1p5b \
   --skip_completed_success \
-  --task_timeout 7200 \
+  --subprocess_timeout 7200 \
   --ruler_num_cases 64
 log "A3: C6 INT8 RULER verification DONE ✓"
 
@@ -79,9 +80,10 @@ $PYTHON scripts/run_experiments.py \
   --run_names mixed_kv_long \
   --seeds $SEEDS \
   --out_dir "$POST_OUT" \
-  --run_tag "$TAG" \
+  --run_tag closure_1p5b \
+  --append \
   --skip_completed_success \
-  --task_timeout 7200 \
+  --subprocess_timeout 7200 \
   --ruler_num_cases 64
 log "A2: 1.5B MixedKV RULER DONE ✓"
 
@@ -93,9 +95,10 @@ $PYTHON scripts/run_experiments.py \
   --run_names mixed_kv_long \
   --seeds $SEEDS \
   --out_dir "$POST_OUT" \
-  --run_tag "$TAG" \
+  --run_tag closure_8b \
+  --append \
   --skip_completed_success \
-  --task_timeout 7200 \
+  --subprocess_timeout 7200 \
   --ruler_num_cases 64
 log "A2: 8B MixedKV RULER DONE ✓"
 
