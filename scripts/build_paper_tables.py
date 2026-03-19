@@ -678,21 +678,40 @@ def build_table3(
 
             row: Dict[str, object] = {"kv_mode": kv_mode}
 
+            # PPL: filter to model FIRST, then pick seq_len.
+            # postfix_v2 PPL has anomalous seq_len (tokens_evaluated, not context_len);
+            # use max seq_len to get the full-context PPL (the primary one).
             ppl_df = _filter_ppl_kvcache(source.get("ppl", pd.DataFrame()))
-            ppl_seq = _pick_seq(ppl_df, preferred_seq)
-            ppl_at_seq = _filter_seq(ppl_df, ppl_seq)
+            ppl_model = ppl_df[ppl_df["model_id"] == model_id] if (
+                not ppl_df.empty and "model_id" in ppl_df.columns
+            ) else ppl_df
+            if not ppl_model.empty and "seq_len" in ppl_model.columns:
+                ppl_seq = int(ppl_model["seq_len"].max())  # max = full-context eval
+            else:
+                ppl_seq = None
+            ppl_at_seq = _filter_seq(ppl_model, ppl_seq)
 
+            # Needle / LB / RULER: per-model filter + preferred seq_len (data is clean)
             needle_df = source.get("needle", pd.DataFrame())
-            needle_seq = _pick_seq(needle_df, preferred_seq)
-            needle_at_seq = _filter_seq(needle_df, needle_seq)
+            needle_model = needle_df[needle_df["model_id"] == model_id] if (
+                not needle_df.empty and "model_id" in needle_df.columns
+            ) else needle_df
+            needle_seq = _pick_seq(needle_model, preferred_seq)
+            needle_at_seq = _filter_seq(needle_model, needle_seq)
 
             lb_df = source.get("longbench", pd.DataFrame())
-            lb_seq = _pick_seq(lb_df, preferred_seq)
-            lb_at_seq = _filter_seq(lb_df, lb_seq)
+            lb_model = lb_df[lb_df["model_id"] == model_id] if (
+                not lb_df.empty and "model_id" in lb_df.columns
+            ) else lb_df
+            lb_seq = _pick_seq(lb_model, preferred_seq)
+            lb_at_seq = _filter_seq(lb_model, lb_seq)
 
             ruler_df = source.get("ruler", pd.DataFrame())
-            ruler_seq = _pick_seq(ruler_df, preferred_seq)
-            ruler_at_seq = _filter_seq(ruler_df, ruler_seq)
+            ruler_model = ruler_df[ruler_df["model_id"] == model_id] if (
+                not ruler_df.empty and "model_id" in ruler_df.columns
+            ) else ruler_df
+            ruler_seq = _pick_seq(ruler_model, preferred_seq)
+            ruler_at_seq = _filter_seq(ruler_model, ruler_seq)
 
             ppl_m = _extract_metric(ppl_at_seq, model_id, kv_mode, "perplexity_mean")
             ppl_s = _extract_metric(ppl_at_seq, model_id, kv_mode, "perplexity_std")
@@ -961,6 +980,39 @@ def _load_pool(tables_dir: Path) -> Dict[str, pd.DataFrame]:
     return pool
 
 
+def _load_pool_per_model(tables_dir: Path) -> Dict[str, pd.DataFrame]:
+    """Load summary CSVs from per_model/ subdirectories and merge.
+
+    This is more reliable than top-level summaries for postfix_v2
+    because the top-level needle_summary may be incomplete (only 1.5B)
+    and top-level ppl_summary has aggregation artifacts.
+    """
+    per_model_dir = tables_dir / "per_model"
+    if not per_model_dir.is_dir():
+        logger.warning("per_model/ not found in %s, falling back to top-level", tables_dir)
+        return _load_pool(tables_dir)
+
+    pool: Dict[str, pd.DataFrame] = {}
+    for name in ["ppl", "needle", "longbench", "ruler", "latency", "memory"]:
+        frames = []
+        for model_dir in sorted(per_model_dir.iterdir()):
+            if not model_dir.is_dir():
+                continue
+            csv_path = model_dir / f"{name}_summary.csv"
+            if csv_path.exists():
+                df = pd.read_csv(csv_path)
+                frames.append(df)
+        if frames:
+            merged = pd.concat(frames, ignore_index=True)
+            logger.info("Loaded %s from per_model: %d rows (%d models)",
+                        name, len(merged), len(frames))
+            pool[name] = merged
+        else:
+            # Fallback to top-level
+            pool[name] = _load_summary(tables_dir, name)
+    return pool
+
+
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
@@ -1071,7 +1123,9 @@ def main() -> int:
     logger.info("Loading data from both pools...")
     merged_data = load_merged_data(mainline_dir, mixedkv_dir)
     mainline_pool = _load_pool(mainline_dir)
-    mixedkv_pool = _load_pool(mixedkv_dir) if mixedkv_dir.is_dir() else {}
+    # Use per-model loading for mixedkv: top-level summaries have incomplete
+    # needle data (only 1.5B) and anomalous PPL seq_len values.
+    mixedkv_pool = _load_pool_per_model(mixedkv_dir) if mixedkv_dir.is_dir() else {}
 
     build_tables = set(args.tables)
     if "all" in build_tables:
