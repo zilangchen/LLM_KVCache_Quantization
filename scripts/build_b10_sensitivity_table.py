@@ -45,13 +45,18 @@ MAINLINE_CALIB_SAMPLES = 128
 
 
 def _find_csvs(runs_dir: Path, run_tag: str, run_name: str, task_prefix: str) -> List[Path]:
-    """Find all CSVs matching a run_tag/run_name/task pattern."""
-    pattern = f"**/{run_name}/**/profile_{task_prefix}_*.csv"
-    # Also check flat structure
+    """Find all CSVs matching a run_tag/run_name/task pattern.
+
+    Run directories follow the naming convention:
+        {run_name}_s{seed}_{run_tag}
+    e.g. int8_ours_b10_s16_long_s1234_exp_b10_1p5b
+    """
+    # Primary: match {run_name}_s{seed}_{run_tag} directory structure
+    pattern = f"{run_name}_*_{run_tag}/profile_{task_prefix}_*.csv"
     candidates = list(runs_dir.glob(pattern))
     if not candidates:
-        # Try run_tag prefix
-        pattern2 = f"*{run_tag}*/{run_name}/**/profile_{task_prefix}_*.csv"
+        # Fallback: broader match without run_tag constraint
+        pattern2 = f"{run_name}_*/profile_{task_prefix}_*.csv"
         candidates = list(runs_dir.glob(pattern2))
     return candidates
 
@@ -81,7 +86,7 @@ def _read_needle(csvs: List[Path]) -> Optional[float]:
                 vals.extend(df["needle_pass_rate"].dropna().tolist())
         except Exception:
             continue
-    return sum(vals) / len(vals) * 100 if vals else None  # Convert to %
+    return sum(vals) / len(vals) if vals else None  # Already in percentage
 
 
 def _read_longbench(csvs: List[Path]) -> Optional[float]:

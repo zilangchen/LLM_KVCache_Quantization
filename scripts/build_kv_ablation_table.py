@@ -67,10 +67,24 @@ REFERENCE_METHODS = [
 ]
 
 
-def _find_csvs(runs_dir: Path, run_name: str, task_prefix: str) -> List[Path]:
-    """Find result CSVs matching run_name and task."""
-    pattern = f"**/{run_name}/**/profile_{task_prefix}_*.csv"
-    return list(runs_dir.glob(pattern))
+def _find_csvs(runs_dir: Path, run_name: str, task_prefix: str,
+               run_tag: str = "") -> List[Path]:
+    """Find result CSVs matching run_name, task, and optionally run_tag.
+
+    Run directories follow the naming convention:
+        {run_name}_s{seed}_{run_tag}
+    e.g. k_only_int8_long_s1234_exp_1p5b
+
+    When run_tag is provided, results are filtered to a specific model,
+    preventing cross-model contamination in per-model metrics.
+    """
+    if run_tag:
+        pattern = f"{run_name}_*_{run_tag}/profile_{task_prefix}_*.csv"
+        candidates = list(runs_dir.glob(pattern))
+        if candidates:
+            return candidates
+    # Fallback: no run_tag filter
+    return list(runs_dir.glob(f"{run_name}_*/profile_{task_prefix}_*.csv"))
 
 
 def _read_metric(csvs: List[Path], metric_col: str) -> Optional[float]:
@@ -125,7 +139,8 @@ def build_ablation_table(
         label = model_info["label"]
 
         for method in ABLATION_METHODS:
-            csvs = _find_csvs(runs_dir, method["run_name"], task_prefix)
+            csvs = _find_csvs(runs_dir, method["run_name"], task_prefix,
+                              run_tag=model_info["run_tag"])
             mean_val = _read_metric(csvs, metric_col)
             std_val = _read_metric_std(csvs, metric_col)
 
@@ -269,7 +284,7 @@ def main() -> int:
     build_ablation_table(
         args.runs_dir, args.out_dir,
         task="longbench",
-        metric_col="score",
+        metric_col="longbench_score",
         metric_name="LongBench",
         higher_is_better=True,
     )
@@ -279,7 +294,7 @@ def main() -> int:
     build_ablation_table(
         args.runs_dir, args.out_dir,
         task="ruler",
-        metric_col="pass_rate",
+        metric_col="ruler_pass_rate",
         metric_name="RULER",
         higher_is_better=True,
     )
