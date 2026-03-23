@@ -1,0 +1,120 @@
+# Role-Aware Asymmetric + Behavior Alignment experiment config
+# Plan v5.2 — ours_asym / ours_asym_ba evaluation
+# Model: Qwen2.5-1.5B-Instruct (primary), expandable to 7B
+# Seeds: 1234, 1235, 1236 (3 seeds for gate experiments)
+# Eval: Needle(32K) + LongBench(32K) + PPL(32K, conditional)
+# Created: 2026-03-24
+
+project:
+  name: kv-cache-quant-rolealign-1p5b
+  model_id: Qwen/Qwen2.5-1.5B-Instruct
+  model_revision: 989aa7980e4cf806f80c7fef2b1adb7bc71aa306
+
+runtime:
+  seed: 1234
+  device: cuda
+  dtype: fp16
+  decoding:
+    temperature: 0.0
+    top_p: 1.0
+    top_k: 0
+  quant_defaults:
+    quant_bits: 4
+    calib_strategy: kl_attn
+    use_static_scales: false
+    use_attn_temperature: false
+    clip_percentile_k: 100.0
+    clip_percentile_v: 100.0
+    group_size_k: 128
+    group_size_v: 128
+  kernel_defaults:
+    decode_attn_impl: torch_ref
+
+results_dir: results/emnlp_rolealign_v1
+
+matrix:
+  # =========================================================================
+  # Reference: int4_ours (symmetric per-group + BA, existing method)
+  # This is the baseline we're trying to improve upon.
+  # =========================================================================
+  - run_name: int4_ours_sym_ref
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_file: artifacts/kv_calib_kl_selected_v3_quick.json
+    use_attn_temperature: true
+    use_static_scales: true
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # Gate 4A: ours_asym (asymmetric, BA-calibrated percentiles, no inv_tau)
+  # Tests whether asymmetric format alone improves over symmetric.
+  # =========================================================================
+  - run_name: int4_ours_asym_long
+    kv_mode: int4_ours_asym
+    quant_bits: 4
+    calib_file: artifacts/kv_calib_rolealign_1p5b.json
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # Gate 4B: ours_asym_ba (asymmetric + inv_tau, full new method)
+  # Tests whether BA (inv_tau) provides incremental gain on top of asymmetric.
+  # =========================================================================
+  - run_name: int4_ours_asym_ba_long
+    kv_mode: int4_ours_asym_ba
+    quant_bits: 4
+    calib_file: artifacts/kv_calib_rolealign_1p5b.json
+    use_attn_temperature: true
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # Baseline: KIVI INT4 plain (for Gate 4C head-to-head)
+  # =========================================================================
+  - run_name: kivi_style_int4_ref
+    kv_mode: kivi_style
+    quant_bits: 4
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # Baseline: int4_kivi_aligned (KIVI + inv_tau only, transition method)
+  # For the mandatory comparison: ours_asym_ba vs int4_kivi_aligned
+  # =========================================================================
+  - run_name: int4_kivi_aligned_ref
+    kv_mode: int4_kivi_aligned
+    quant_bits: 4
+    calib_file: artifacts/kv_calib_kl_kivi_aligned_v3.json
+    use_attn_temperature: true
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+seeds:
+  - 1234
+  - 1235
+  - 1236
+
+eval_tasks:
+  - task: needle
+    seq_lengths: [4096, 8192, 16384, 32704]
+    n_depth_levels: 20
+  - task: longbench
+    subtasks: [narrativeqa, hotpotqa, gov_report, trec, lcc, dureader, vcsum]
+  # PPL added conditionally after Gate 4A pass
+  # - task: ppl
+  #   chunk_size: 128
+  #   stride: 512
+  #   max_length: 1024

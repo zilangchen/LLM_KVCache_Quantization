@@ -801,6 +801,99 @@ def validate_group_size(head_dim: int, group_size: int, name: str) -> None:
         )
 
 
+def calibrate_k_path_percentile_asymmetric(
+    q_samples: list,
+    k_samples: list,
+    num_heads: int,
+    num_kv_heads: int,
+    head_dim: int,
+    percentile_candidates: list,
+    quant_bits: int = 4,
+) -> tuple:
+    """
+    Search optimal k_percentile for per-channel asymmetric K quantization.
+
+    Uses attention KL divergence as objective:
+    For each candidate k_percentile:
+    1. Quantize/dequantize K with per-channel asymmetric at that percentile
+    2. Compute attention weights with quantized K
+    3. Compute KL(p_ref || p_quant)
+    4. Average over samples, layers, and heads
+
+    Args:
+        q_samples: [n_samples][n_layers] -> [num_heads, head_dim]
+        k_samples: [n_samples][n_layers] -> [kv_heads, seq, head_dim]
+        num_heads: Number of query heads
+        num_kv_heads: Number of KV heads
+        head_dim: Head dimension
+        percentile_candidates: List of k_percentile values to search
+        quant_bits: 4 or 8
+
+    Returns:
+        (best_percentile, results_dict)
+    """
+    from src.quant.asymmetric_quant import (
+        quantize_asymmetric_per_channel,
+        dequantize_asymmetric_per_channel,
+    )
+
+    n_rep = num_heads // num_kv_heads
+    n_samples = len(q_samples)
+    n_layers = len(q_samples[0]) if q_samples else 0
+    sm_scale = 1.0 / (head_dim ** 0.5)
+    eps = 1e-6
+
+    results = {}
+    for pct in percentile_candidates:
+        total_kl = 0.0
+        count = 0
+
+        for s_idx in range(n_samples):
+            for l_idx in range(n_layers):
+                q = q_samples[s_idx][l_idx].float()  # [num_heads, head_dim]
+                k = k_samples[s_idx][l_idx].float()  # [kv_heads, seq, head_dim]
+                if q.ndim != 2 or k.ndim != 3:
+                    continue
+
+                # Quantize K with per-channel asymmetric
+                k_4d = k.unsqueeze(0)  # [1, kv_heads, seq, head_dim]
+                q_k, k_scale, k_zp = quantize_asymmetric_per_channel(
+                    k_4d, quant_bits=quant_bits, percentile=pct
+                )
+                k_deq = dequantize_asymmetric_per_channel(q_k, k_scale, k_zp)
+                k_deq = k_deq.squeeze(0)  # [kv_heads, seq, head_dim]
+
+                # GQA expansion
+                if n_rep > 1:
+                    k_ref = k.repeat_interleave(n_rep, dim=0)
+                    k_q = k_deq.repeat_interleave(n_rep, dim=0)
+                else:
+                    k_ref = k
+                    k_q = k_deq
+
+                # Compute attention distributions
+                logits_ref = torch.einsum("hd,hsd->hs", q, k_ref) * sm_scale
+                logits_quant = torch.einsum("hd,hsd->hs", q, k_q) * sm_scale
+                p_ref = torch.softmax(logits_ref, dim=-1).clamp(min=eps)
+                p_quant = torch.softmax(logits_quant, dim=-1).clamp(min=eps)
+
+                # KL divergence
+                kl = (p_ref * (p_ref.log() - p_quant.log())).sum(dim=-1).mean().item()
+                total_kl += kl
+                count += 1
+
+        avg_kl = total_kl / max(count, 1)
+        results[pct] = {
+            "k_percentile": pct,
+            "avg_kl": avg_kl,
+            "n_evaluations": count,
+        }
+
+    # Select best percentile by minimum KL
+    best_pct = min(percentile_candidates, key=lambda p: results[p]["avg_kl"])
+    return best_pct, results
+
+
 def main():
     parser = argparse.ArgumentParser(description="Behavior-aligned calibration for KV cache quantization")
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
@@ -943,9 +1036,32 @@ def main():
         default="95.0,97.0,99.0,99.5,99.9,100.0",
         help="V-path percentile candidates for token_ce/token_kl calibration.",
     )
+    parser.add_argument(
+        "--role_aware_axes",
+        action="store_true",
+        default=False,
+        help=(
+            "Role-aware asymmetric calibration mode. "
+            "Searches k_percentile and v_percentile on per-channel K / per-token V "
+            "asymmetric axes (KIVI-style format), then searches inv_tau on the "
+            "asymmetric-quantized K. Implies --quant_bits 4. "
+            "Output JSON has 'role_aware' section with k_percentile, v_percentile, inv_tau."
+        ),
+    )
+    parser.add_argument(
+        "--role_aware_k_percentile_candidates",
+        type=str,
+        default="95.0,97.0,99.0,99.5,99.9,100.0",
+        help="K-path percentile candidates for role_aware_axes mode.",
+    )
     args = parser.parse_args()
     if args.int4_search:
         args.quant_bits = 4
+    if args.role_aware_axes:
+        args.quant_bits = 4
+        # Force v_calibration_mode to token_ce for role-aware V percentile search
+        if args.v_calibration_mode == "shared":
+            args.v_calibration_mode = "token_ce"
 
     if args.config and args.run_name:
         cfg = load_config(args.config)
@@ -1356,6 +1472,26 @@ def main():
         loss_function=args.loss_function,
     )
 
+    # Role-aware K-path calibration: search k_percentile on per-channel asymmetric axes.
+    ra_k_calib_result = None
+    ra_k_best_pct = args.clip_percentile_k
+    if getattr(args, "role_aware_axes", False):
+        ra_k_pct_candidates = [float(x) for x in args.role_aware_k_percentile_candidates.split(",")]
+        print(f"\n--- Role-Aware K-path calibration (per-channel asymmetric) ---")
+        print(f"Searching k_percentile in {ra_k_pct_candidates}...")
+        ra_k_best_pct, ra_k_calib_result = calibrate_k_path_percentile_asymmetric(
+            q_samples=q_samples,
+            k_samples=k_samples,
+            num_heads=num_heads,
+            num_kv_heads=num_kv_heads,
+            head_dim=head_dim,
+            percentile_candidates=ra_k_pct_candidates,
+            quant_bits=int(args.quant_bits),
+        )
+        print(f"Best k_percentile (asymmetric): {ra_k_best_pct}")
+        for pct, metrics in ra_k_calib_result.items():
+            print(f"  k_pct={pct}: KL={metrics['avg_kl']:.6f}")
+
     # V-path independent calibration (Phase 1B: KV-RoleAlign).
     # When v_calibration_mode != "shared", search optimal v_percentile for KIVI-style
     # per-token V quantization using attention-weighted output perturbation proxy.
@@ -1435,6 +1571,21 @@ def main():
         }
     if selection is not None:
         calib_payload["selection"] = selection
+
+    # Role-aware section: consolidated k_percentile + v_percentile + inv_tau
+    # for ours_asym / ours_asym_ba modes. This is the primary section read by
+    # generate_loop.py when kv_mode in {int4_ours_asym, int4_ours_asym_ba}.
+    if getattr(args, "role_aware_axes", False):
+        calib_payload["version"] = 4  # v4: role_aware schema
+        calib_payload["role_aware"] = {
+            "quantization_axes": "per_channel_k_per_token_v",
+            "k_percentile": ra_k_best_pct,
+            "v_percentile": v_calib_best_pct,
+            "inv_tau": inv_tau.tolist(),
+            "inv_tau_shape": list(inv_tau.shape),
+            "k_search_results": ra_k_calib_result,
+            "v_search_results": v_calib_result,
+        }
 
     with open(calib_out_path, "w") as f:
         json.dump(calib_payload, f, indent=2)

@@ -430,12 +430,15 @@ def generate_from_ids(
         "kivi_style",
         "int4_kivi_aligned",
         "int4_mixed_kv",
+        "int4_ours_asym",
+        "int4_ours_asym_ba",
     ]:
         raise ValueError(
             f"kv_mode='{kv_mode}' not supported. "
             "Choose from ['fp16', 'int8_baseline', 'int8_fused', 'int8_ours', "
             "'int4_baseline', 'int4_fused', 'int4_ours', 'int4_ours_mixed', "
-            "'kivi_style', 'int4_kivi_aligned', 'int4_mixed_kv']."
+            "'kivi_style', 'int4_kivi_aligned', 'int4_mixed_kv', "
+            "'int4_ours_asym', 'int4_ours_asym_ba']."
         )
 
     if decode_attn_impl not in ["triton_fused", "torch_ref"]:
@@ -863,6 +866,64 @@ def generate_from_ids(
             inv_tau=kivi_inv_tau,
             use_attn_temperature=use_attn_temperature,
         )
+    elif kv_mode in ("int4_ours_asym", "int4_ours_asym_ba"):
+        # Role-Aware Asymmetric: per-channel K + per-token V with BA calibration.
+        # ours_asym: BA-calibrated percentiles only (no inv_tau)
+        # ours_asym_ba: BA-calibrated percentiles + inv_tau (full method)
+        from src.cache.role_aware_asym_cache import RoleAwareAsymKVCache
+
+        ra_k_percentile = 100.0
+        ra_v_percentile = 100.0
+        ra_inv_tau = None
+
+        if calib_file is not None:
+            calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(str(project_root), calib_file)
+            if os.path.exists(calib_path):
+                with open(calib_path, "r") as f:
+                    calib_data = json.load(f)
+                # Role-aware schema: k_percentile, v_percentile at top level or under role_aware
+                if "role_aware" in calib_data:
+                    ra_section = calib_data["role_aware"]
+                    ra_k_percentile = float(ra_section.get("k_percentile", 100.0))
+                    ra_v_percentile = float(ra_section.get("v_percentile", 100.0))
+                elif "k_calibration" in calib_data:
+                    # Fallback: v3 schema from int4_kivi_aligned calibration
+                    ra_k_percentile = float(calib_data.get("k_percentile", 100.0))
+                    if "v_calibration" in calib_data:
+                        ra_v_percentile = float(calib_data["v_calibration"].get("v_percentile", 100.0))
+                # inv_tau: only for ours_asym_ba
+                if kv_mode == "int4_ours_asym_ba":
+                    if "role_aware" in calib_data and "inv_tau" in calib_data["role_aware"]:
+                        raw_tau = calib_data["role_aware"]["inv_tau"]
+                        ra_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
+                    elif "k_calibration" in calib_data and "inv_tau" in calib_data["k_calibration"]:
+                        raw_tau = calib_data["k_calibration"]["inv_tau"]
+                        ra_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
+                    elif "inv_tau" in calib_data:
+                        raw_tau = calib_data["inv_tau"]
+                        ra_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
+
+        use_temp = use_attn_temperature and (kv_mode == "int4_ours_asym_ba")
+        framework_tag = "ours_asym_ba" if kv_mode == "int4_ours_asym_ba" else "ours_asym"
+
+        kv_cache = RoleAwareAsymKVCache(
+            num_layers=num_layers,
+            device=model.device.type,
+            max_seq_len=max_cache_len,
+            quant_bits=4,
+            k_percentile=ra_k_percentile,
+            v_percentile=ra_v_percentile,
+            inv_tau=ra_inv_tau,
+            use_attn_temperature=use_temp,
+            framework=framework_tag,
+        )
+        if decode_attn_impl != "torch_ref":
+            import warnings
+            warnings.warn(
+                f"kv_mode='{kv_mode}' forces decode_attn_impl='torch_ref' "
+                f"(requested '{decode_attn_impl}'). RoleAwareAsym uses torch_ref only.",
+                UserWarning,
+            )
     elif kv_mode == "int4_mixed_kv":
         # K-INT8 symmetric + V-INT4 asymmetric per-token (hybrid mode).
         # k_bits/v_bits allow K/V ablation (K-only, V-only, counterfactual).
@@ -901,6 +962,14 @@ def generate_from_ids(
             _kivi_inv_tau = kv_cache.inv_tau
         if _kivi_inv_tau is not None:
             hook_handles = _register_all_temperature_hooks(model, _kivi_inv_tau)
+    elif kv_mode == "int4_ours_asym_ba" and use_attn_temperature:
+        # ours_asym_ba uses torch_ref decode (not fused), so inv_tau must
+        # be applied via hooks for BOTH prefill and decode (same as int4_kivi_aligned).
+        _ra_inv_tau = inv_tau
+        if _ra_inv_tau is None and hasattr(kv_cache, "inv_tau"):
+            _ra_inv_tau = kv_cache.inv_tau
+        if _ra_inv_tau is not None:
+            hook_handles = _register_all_temperature_hooks(model, _ra_inv_tau)
     elif kv_mode in {"int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused"} and use_attn_temperature and inv_tau is not None:
         # Fused modes: prefill hooks only; decode temperature handled by _fused_forward_impl.
         hook_handles = _register_prefill_temperature_hooks(model, inv_tau)
@@ -996,10 +1065,10 @@ def generate_from_ids(
 
                 # ENG-033: INT8CacheWrapperContainer is reconstructed each decode step. This is intentional — wrappers are lightweight (no buffer copy), and caching them would require tracking cache mutations.
                 current_past_key_values = INT8CacheWrapperContainer(kv_cache, num_layers)
-            elif kv_mode in ["int8_baseline", "int4_baseline", "kivi_style", "int4_kivi_aligned", "int4_mixed_kv"]:
-                # For baseline / KIVI / mixed modes, we dequantize BEFORE attention.
-                # For int4_kivi_aligned, inv_tau Q pre-scaling is applied via
-                # prefill hooks (above) and decode hooks registered on model forward.
+            elif kv_mode in ["int8_baseline", "int4_baseline", "kivi_style", "int4_kivi_aligned", "int4_mixed_kv", "int4_ours_asym", "int4_ours_asym_ba"]:
+                # For baseline / KIVI / mixed / role-aware-asym modes, we dequantize BEFORE attention.
+                # For int4_kivi_aligned and int4_ours_asym_ba, inv_tau Q pre-scaling is applied via
+                # hooks registered on model forward (both prefill and decode).
                 current_past_key_values = []
                 for i in range(num_layers):
                     k, v = kv_cache.get_kv(i)

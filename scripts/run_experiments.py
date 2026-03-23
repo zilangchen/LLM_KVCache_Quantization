@@ -63,6 +63,8 @@ SUPPORTED_KV_MODES = {
     "kivi_style",
     "int4_kivi_aligned",
     "int4_mixed_kv",
+    "int4_ours_asym",
+    "int4_ours_asym_ba",
 }
 
 
@@ -1220,7 +1222,7 @@ def main() -> int:
 
         # RUN-050: include kivi_style in calib_file pre-validation so misconfigured
         # calib_file for kivi_style is caught early rather than silently ignored.
-        if not args.dry_run and kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused", "kivi_style"]:
+        if not args.dry_run and kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused", "kivi_style", "int4_ours_asym", "int4_ours_asym_ba"]:
             needs_calib = (
                 calib_params.get("calib_strategy") == "kl_attn"
                 or calib_params.get("use_attn_temperature") is True
@@ -1364,7 +1366,7 @@ def main() -> int:
                 if kv_mode != "fp16":
                     if run_quant_bits is not None:
                         cmd.extend(["--quant_bits", str(run_quant_bits)])
-                    if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused"] and calib_file_path:
+                    if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused", "int4_ours_asym", "int4_ours_asym_ba"] and calib_file_path:
                         cmd.extend(["--calib_file", str(calib_file_path)])
                     if calib_params.get("calib_strategy"):
                         cmd.extend(["--calib_strategy", str(calib_params["calib_strategy"])])
