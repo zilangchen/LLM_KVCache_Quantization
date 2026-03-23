@@ -1175,6 +1175,92 @@ GQA 头数越多，量化噪声稀释效应越强，
 
 
 % ============================================================
+\section{角色感知非对称量化}
+\label{sec:exp-rolealign}
+% ============================================================
+
+前述第~\ref{sec:exp-int4}~节和第~\ref{sec:exp-kv-sensitivity}~节的分析
+共同揭示了对称 per-group INT4 量化的系统性失效模式：
+Qwen2.5-1.5B 上 Needle 通过率降至 0\%，PPL 退化超过 15\%。
+同时，K/V 消融实验确认 Key 量化是退化的主导因素。
+这些诊断发现促使我们吸收 KIVI~\cite{liu2024kivi} 的非对称量化轴设计思想，
+将 Key 和 Value 的量化轴从统一的 per-group 对称
+升级为角色感知的 per-channel K + per-token V 非对称。
+
+\subsection{设计动机与差异}
+\label{subsec:exp-rolealign-design}
+
+本节提出的 \textbf{INT4-RoleAlign}（代码名 \texttt{int4\_ours\_asym}）
+与 KIVI-style INT4 共享相同的量化格式（per-channel K + per-token V 非对称），
+但在参数确定范式上存在本质差异：
+
+\begin{itemize}[leftmargin=2em, itemsep=2pt]
+  \item \textbf{校准范式}：KIVI-style 的量化参数完全由运行时数据的统计量
+    （absmax/min）即时决定，属于无校准（calibration-free）方案；
+    INT4-RoleAlign 的 K percentile 和 V percentile 通过离线 KL/attention-weighted
+    搜索确定，属于校准引导（calibration-guided）方案。
+  \item \textbf{设计动机}：KIVI-style 的非对称设计源于 K/V 统计特性的经验观察；
+    INT4-RoleAlign 源于行为对齐框架的诊断发现——
+    先通过 KL 分析定位对称 INT4 的行为失效模式，
+    再通过受控消融确认 Key 是主导因素，
+    最后吸收非对称轴策略作为解决方案。
+  \item \textbf{参数求解}：KIVI-style 无搜索过程；
+    INT4-RoleAlign 通过统一的 behavior-aligned 离线搜索确定
+    role-aware 超参数（K percentile、V percentile），
+    纳入 ours 框架的校准 pipeline。
+\end{itemize}
+
+\subsection{实验结果}
+\label{subsec:exp-rolealign-results}
+
+表~\ref{tab:rolealign-results} 汇总了 Qwen2.5-1.5B-Instruct 上
+INT4-RoleAlign 与对照方法在 PPL、Needle 和 LongBench 上的对比。
+
+\begin{table}[htbp]
+  \centering
+  \caption{INT4-RoleAlign 对比结果（Qwen2.5-1.5B-Instruct，3 seeds）}
+  \label{tab:rolealign-results}
+  \small
+  \begin{threeparttable}
+  \begin{tabular}{lcccc}
+    \toprule
+    量化模式 & PPL$\downarrow$ & Needle(\%)$\uparrow$ & LB(\%)$\uparrow$ & 量化轴 \\
+    \midrule
+    fp16            & 9.31 & 100.0 & ---   & ---  \\
+    int4\_ours (对称)  & 19--22\tnote{a} & 0.0\tnote{b} & --- & per-group 对称 \\
+    kivi\_style INT4  & 10.43 & 100.0 & 4.84 & \makecell{K: per-channel\\V: per-token} \\
+    \textbf{int4\_ours\_asym} & \textbf{9.42} & \textbf{100.0} & \textbf{4.93} & \makecell{K: per-channel\\V: per-token} \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \small
+    \item[a] 对称 INT4 的 PPL 值来自此前 thesis-safe-v1 基线。
+    \item[b] Needle 在 32K 上下文下 3 seeds 均为 0\%。
+    \item 注：int4\_ours\_asym 使用离线 BA 校准搜索得到的 k\_percentile=100.0、
+    v\_percentile=99.9。Needle 和 LongBench 为 3 seeds（1234--1236）宏平均，
+    PPL 为 seed=1234。
+  \end{tablenotes}
+  \end{threeparttable}
+\end{table}
+
+\textbf{核心发现。}
+（1）量化格式的升级是 INT4 Needle 恢复的决定性因素：
+从 per-group 对称切换到 per-channel/per-token 非对称后，
+Needle 通过率从 0\% 恢复至 100\%（3 seeds 一致），
+这表明对称 INT4 的失效并非校准策略不足，
+而是量化格式无法捕捉 Key 通道间的数值异质性。
+（2）在相同量化格式下，BA percentile 校准相比无校准的 KIVI-style
+在 PPL 上获得了显著改善（9.42 vs 10.43，退化从 12.04\% 降至 1.19\%），
+在 LongBench 上也有 +1.9\% 的增益。
+（3）基于 INT8 对称校准搜索得到的温度校正因子 $\tau^{-1}$
+在 INT4 非对称量化上\emph{无增益}
+（Needle 从 20/20 退化至 19/20，LongBench 下降 15\%），
+这是因为 per-channel K 量化的通道级 scale 已足够精确，
+原先为补偿 per-group 量化噪声设计的温度校正在此场景下过度补偿。
+因此，INT4-RoleAlign 的最终配置不包含 $\tau^{-1}$。
+
+
+% ============================================================
 \section{结果讨论}
 \label{sec:exp-discussion}
 % ============================================================

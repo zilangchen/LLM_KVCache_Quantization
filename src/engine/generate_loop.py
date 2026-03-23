@@ -841,7 +841,7 @@ def generate_from_ids(
         kivi_inv_tau = None
         kivi_v_percentile = 100.0
         if calib_file is not None:
-            calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(str(project_root), calib_file)
+            calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(os.getcwd(), calib_file)
             if os.path.exists(calib_path):
                 with open(calib_path, "r") as f:
                     calib_data = json.load(f)
@@ -877,7 +877,7 @@ def generate_from_ids(
         ra_inv_tau = None
 
         if calib_file is not None:
-            calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(str(project_root), calib_file)
+            calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(os.getcwd(), calib_file)
             if os.path.exists(calib_path):
                 with open(calib_path, "r") as f:
                     calib_data = json.load(f)
