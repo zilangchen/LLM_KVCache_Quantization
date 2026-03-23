@@ -21,6 +21,28 @@
 本文提出的行为对齐量化框架采用"离线校准——在线推理"的两阶段设计范式。
 其核心思想是：在离线阶段通过少量校准数据搜索能够最大程度保持注意力行为一致性的量化参数，
 然后在在线推理阶段以极低的额外开销使用这些参数执行高效的量化推理。
+值得指出的是，本框架在校准时为每层 Key 和 Value 分别独立计算 KL 散度
+并搜索最优 Scale（第~\ref{subsec:ch3-two-stage}~节），
+为 K/V 量化敏感性提供了统一的度量基础。
+当 Key 和 Value 设置不同量化位宽时（如 K@INT8+V@INT4），
+校准参数仍可通过同一流程独立获取。
+第~\ref{sec:exp-kv-sensitivity}~节的消融实验利用该特性
+定量分析了 K/V 精度的独立敏感性。
+
+\paragraph{量化格式与校准目标的正交性}
+\label{para:ch3-orthogonality}
+在讨论本框架时，需要区分两个独立的设计维度：
+\textbf{量化格式}（对称 per-group vs 非对称 per-channel/per-token）
+和\textbf{校准目标}（MSE/percentile vs KL 行为对齐）。
+本文当前已验证的实验结果（第四章 INT8/INT4 主线）
+基于对称 per-group 量化格式（第~\ref{sec:ch3-static-scale}~节），
+与 KIVI~\cite{liu2024kivi} 的 K/V 异质量化轴非对称方案在格式上有本质区别。
+当前结果的核心改进在\emph{校准目标}维度——
+以 KL 散度替代 MSE/percentile 作为校准准则，
+配合逐头 $\tau^{-1}$ 温度校正补偿量化导致的注意力分布偏移。
+量化格式的升级（如引入 K/V 角色感知的非对称轴策略）
+与行为对齐校准在理论上具有互补增益潜力，
+这一方向留作未来工作探索。
 该设计将计算密集的参数搜索过程从推理关键路径中分离出来，
 确保了在线阶段的推理延迟不因行为对齐校准而增加。
 图~\ref{fig:ch3-framework} 展示了框架的总体架构。
@@ -93,7 +115,16 @@
     使用 FP16 精度的参考模型在校准数据集（如 WikiText-103~\cite{merity2016wikitext} 的子集）上执行前向传播，
     逐层提取 Query 向量 $\bQ$、Key 矩阵 $\bK$ 和 Value 矩阵 $\bV$。
     其中，Query 向量需经过输入层归一化（input layer normalization）和旋转位置编码（Rotary Position Embedding, RoPE）~\cite{su2024rope} 处理，
-    以确保校准时的 $\bQ \bK^T$ 点积与实际推理时一致\footnote{本文当前使用的 1.5B 校准产物（v3\_quick）在生成时尚未完整实现此预处理流程，后续版本已修正。实验表明该产物对 INT8 量化的影响有限（PPL 退化 $-$0.18\%，Needle 100\%），完整预处理后的重校准对比列为未来工作（详见附录~\ref{sec:app-calib-provenance}）。}。
+    以确保校准时的 $\bQ \bK^T$ 点积与实际推理时一致。
+
+    \textbf{校准产物版本说明。}
+    本文 1.5B 主模型的实验使用校准产物 v3\_quick，
+    该版本在生成时 Q 向量的预处理流程尚未包含 input\_layernorm 和 RoPE 变换，
+    后续版本已修正。
+    实验结果（第四章）表明该产物对 INT8 量化的影响有限
+    （PPL 退化 $-$0.20\%，Needle 100\%），
+    但完整预处理后的重校准对比验证尚未完成，列为未来工作。
+    校准产物的完整版本信息和已知局限详见附录~\ref{sec:app-calib-provenance}。
   \item \textbf{Scale 搜索}：
     在候选 clip percentile 和 group size 的网格上，
     通过量化——反量化——计算 KL 散度的流程评估每组参数的行为偏差，
@@ -188,8 +219,11 @@ FP16 精度下的注意力权重分布定义为：
   \label{eq:ch3-kl-approx}
 \end{equation}
 其中 $\tilde{p} = \max(p, \epsilon)$。
-由于 softmax 输出的主要概率质量远大于 $\epsilon$，
-截断引入的近似偏差在实际中可以忽略不计。
+由于 softmax 输出的主要概率质量远大于 $\epsilon$
+（对于 32K 序列，均匀分布下的单 token 概率约 $3 \times 10^{-5}$，
+远高于 $\epsilon = 10^{-6}$），
+截断仅在极端尾部生效，对 KL 值的相对影响 $<$0.1\%，
+在实际中可以忽略不计。
 
 
 \subsection{两阶段搜索策略}
@@ -384,7 +418,7 @@ Group size 则保持 Key 和 Value 一致。
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.7\textwidth]{figures/ch3_invtau_heatmap.png}
+  \includegraphics[width=0.72\textwidth]{figures/ch3_invtau_heatmap.pdf}
   \caption{Qwen2.5-1.5B-Instruct 模型校准得到的逐层逐头 $\tau^{-1}$ 分布。
     绝大多数注意力头的 $\tau^{-1}=1.0$（无需校正），仅第 0--1 层的 5 个头
     需要温度校正（$\tau^{-1} \in \{0.50, 0.70, 0.85\}$），
@@ -434,6 +468,49 @@ $q_{\max} = 127$（INT8）或 $q_{\max} = 7$（INT4）。
 Scale 张量始终以 float32 精度存储，不随输入张量的 dtype 变化，
 以避免 float16 精度下极小 Scale 值退化为零导致的数值不稳定。
 
+\paragraph{量化超参数总表}
+
+表~\ref{tab:ch3-quant-hyperparams} 汇总了本框架对称量化路径的核心超参数配置。
+
+\begin{table}[htbp]
+  \centering
+  \caption{对称 per-group 量化超参数配置}
+  \label{tab:ch3-quant-hyperparams}
+  \small
+  \begin{tabular}{lcc}
+    \toprule
+    超参数 & INT8 & INT4 \\
+    \midrule
+    位宽 $n$ & 8 & 4 \\
+    量化范围 $[-q_{\max}, q_{\max}]$ & $[-127, 127]$ & $[-7, 7]$ \\
+    Group size $g$ & 128 & 128 \\
+    Clip percentile $p_c$ & 99.5（校准搜索） & 99.5（校准搜索） \\
+    Scale 精度 & float32 & float32 \\
+    Scale 类型 & 对称（无 zero-point） & 对称（无 zero-point） \\
+    Scale 形状 & $[B, H, S, D/g]$ & $[B, H, S, D/g]$ \\
+    量化轴 & per-group（沿 $d_k$ 分组） & per-group（沿 $d_k$ 分组） \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{量化时间语义}
+\label{para:ch3-quant-timing}
+
+在推理过程中，量化操作发生在 KV Cache 的 \texttt{append} 步骤：
+每当新的 Key/Value 张量被追加至缓存时，
+使用对应的静态 Scale 即时执行量化，
+将浮点张量转换为 INT8/INT4 格式后写入缓存。
+\textbf{一旦写入，已存储的量化值不再更新}——
+历史 token 的量化表示在后续 decode 步骤中保持不变，
+反量化时使用各位置自身的 Scale 独立还原：
+\begin{equation}
+  \hat{x}_{b,h,t,j} = x^q_{b,h,t,j} \cdot s_{b,h,t,j}
+  \quad \forall\, t = 1, \dots, T
+  \label{eq:ch3-per-position-deq}
+\end{equation}
+其中 $t$ 为序列位置索引，$j$ 为组索引。
+这一"写入即冻结"语义确保了缓存的流式积累不引入跨 token 的量化参数耦合。
+
 然而，静态 Scale 的有效性前提是校准数据能够充分代表推理时的输入分布。
 当实际推理中出现校准未覆盖的激活值范围时，
 静态 Scale 可能导致过度裁剪（clipping），引起显著的精度退化。
@@ -464,6 +541,17 @@ $m \geq 1$ 为保护裕度（protection margin），默认值为 $1.0$。
         自动切换为动态 Scale，避免大量裁剪；
   \item 保护裕度 $m$ 可根据应用场景调节：$m > 1$ 提供更宽松的保护，$m = 1$ 则为最严格模式。
 \end{itemize}
+
+\textbf{自适应保护对历史缓存的影响。}
+当自适应机制在某个 token 步触发（$s_{\text{dynamic}} > s_{\text{static}}$）时，
+\emph{仅当前 token 的 Scale 受影响}，
+已存储在缓存中的历史 token 保持其原始量化值和 Scale 不变。
+这是因为量化操作遵循"写入即冻结"语义
+（第~\ref{para:ch3-quant-timing}~段）：
+每个位置的 Scale 在 \texttt{append} 时确定并永久存储，
+后续 token 的自适应 Scale 调整不会回溯修改历史缓存。
+因此，自适应保护是一种\emph{前向保护}机制，
+其局部性确保了缓存的流式积累不引入跨 token 的 Scale 耦合。
 
 此外，本框架在量化后对裁剪率进行实时监控：
 当某层的裁剪率超过预设阈值（默认 5\%）时，发出运行时警告，
