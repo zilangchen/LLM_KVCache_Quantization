@@ -414,7 +414,7 @@ INT4 量化模式进一步压缩至约 $1/4$（对于使用 bit-packing 的 int4
 随着上下文长度进一步增长，KV Cache 在总显存中的占比将持续升高，
 量化的显存节省优势将更加显著。
 
-\noindent\textbf{本节小结：}INT8 行为对齐量化在质量、显存和延迟三个维度上实现了全面的正向权衡——PPL 退化 $<$0.3\%，Needle 100\%，显存节省 44\%，延迟降低 8\%--38\%。
+\noindent\textbf{本节小结：}INT8 行为对齐量化在质量（PPL/Needle/LongBench）、显存和延迟三个维度上实现了有利的权衡（RULER 退化见第~\ref{para:c6-fail}~段）——PPL 退化 $<$0.3\%，Needle 100\%，显存节省 44\%，延迟降低 8\%--38\%。
 
 
 % ============================================================
@@ -685,10 +685,10 @@ Mistral-7B 的 PPL 和 RULER 指标均接近 FP16 基线
 不具备与其他模型的可比性，
 详见第~\ref{sec:exp-kv-sensitivity}~节和附录~\ref{sec:app-kv-ablation-full}。
 
-\noindent\textbf{本节小结：}行为对齐校准在当前 4 个模型（3 个模型族：Qwen、LLaMA、Mistral）上均展现一致的性能模式，表现出跨模型适用性。
+\noindent\textbf{本节小结：}行为对齐校准在当前 4 个模型（3 个模型族：Qwen、LLaMA、Mistral）上均展现一致的性能模式，表现出跨模型适用性（RULER 除外，见第~\ref{para:c6-fail}~段）。
 
 \medskip
-以上三节（主线结果、敏感性分析、跨模型泛化性）完成了 INT8 行为对齐量化的全面验证。
+以上三节（主线结果、敏感性分析、跨模型泛化性）完成了 INT8 行为对齐量化在当前实验条件下的系统验证。
 下一节将目光转向更具挑战性的 INT4 低比特场景，
 通过 KL 诊断透镜分析对称量化的系统性失效模式。
 
@@ -927,7 +927,7 @@ K4V8 则构造了一个``Key 激进、Value 保守''的极端对比，
 表~\ref{tab:kv-ablation-ruler} 和表~\ref{tab:kv-ablation-longbench} 的结果揭示了
 一个清晰而一致的模式：
 
-\textbf{K@INT8 几乎无损。}
+\textbf{K@INT8 退化极小。}
 K-only 配置（K@INT8, V@FP16）在三个模型上的 RULER 通过率
 均接近各自的 FP16 基线
 （1.5B: 24.61 vs 24.38, 7B: 25.39 vs 24.92, 8B: 29.82 vs 31.48），
@@ -1181,7 +1181,7 @@ INT4-RoleAlign 与对照方法在 PPL、Needle 和 LongBench 上的对比，
   \end{tabular}
   \begin{tablenotes}
     \small
-    \item 注：``退化缩减''列为 KIVI PPL 退化率 / RoleAlign PPL 退化率，
+    \item 注：``退化缩减''列为 KIVI PPL 退化率 / INT4-RoleAlign PPL 退化率，
     量化 BA percentile 校准相比无校准方案的 PPL 改善幅度。
     int4\_ours\_asym 使用离线 BA 校准搜索得到的 k\_percentile 和 v\_percentile。
     Needle 为 3 seeds 在 20 个 depth 级别上的通过率。
@@ -1192,6 +1192,16 @@ INT4-RoleAlign 与对照方法在 PPL、Needle 和 LongBench 上的对比，
   \end{threeparttable}
 \end{table}
 
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{figures/rolealign_summary.pdf}
+  \caption{INT4-RoleAlign 与 KIVI-style INT4 的跨模型性能对比。
+  （a）PPL 退化（\%）：INT4-RoleAlign 在三个模型上均大幅降低困惑度退化；
+  （b）LongBench F1：两种方法质量接近，8B 上持平。
+  Needle 通过率两者均为 100\%（未绘出）。}
+  \label{fig:rolealign-summary}
+\end{figure}
+
 \textbf{核心发现。}
 （1）\emph{量化格式升级是 Needle 恢复的决定性因素}：
 在全部三个模型上，从 per-group 对称切换到 per-channel/per-token 非对称后，
@@ -1200,13 +1210,13 @@ Needle 通过率均为 100\%（3 seeds 一致），
 这表明对称 INT4 的失效并非校准策略不足，
 而是量化格式无法捕捉 Key 通道间的数值异质性。
 
-（2）\emph{BA percentile 校准显著降低 PPL 退化}：
+（2）\emph{BA percentile 校准有效降低 PPL 退化}：
 在相同量化格式下，INT4-RoleAlign 相比无校准的 KIVI-style
 在三个模型上均实现了 PPL 退化的大幅缩减：
 Qwen2.5-1.5B 从 12.0\% 降至 1.2\%（10$\times$），
 Qwen2.5-7B 从 5.5\% 降至 1.0\%（5.5$\times$），
 LLaMA-3.1-8B 从 2.4\% 降至 0.3\%（8$\times$）。
-跨模型的一致改善表明 BA-guided percentile 校准不依赖特定架构假设。
+跨模型的一致改善表明 BA-guided percentile 校准在当前评测的架构范围内具有一定的通用性。
 
 （3）\emph{GQA 架构依赖的收益边界}：
 LLaMA-3.1-8B（$H_{kv}=8$）的 LongBench 分数与 KIVI-style 持平
@@ -1236,7 +1246,7 @@ LongBench 综合评分下降约 15\%。
 截至本文定稿，INT4-RoleAlign 已完成 Needle、LongBench、PPL
 三类质量评测的多模型验证（3 模型 $\times$ 3 seeds）。
 RULER 合成推理评测、推理延迟（TPOT）和 KV Cache 显存占用的系统效率评测
-尚未在 RoleAlign 配置上完成。
+尚未在 INT4-RoleAlign 配置上完成。
 因此，本节的 claim 仅覆盖质量维度，不覆盖系统效率维度。
 INT4-RoleAlign 共享 KIVI-style 的 \texttt{torch\_ref} 解码路径，
 系统效率预期与 KIVI-style 对标一致。
@@ -1503,6 +1513,16 @@ INT4-RoleAlign 对 chunk\_size 变化表现出显著鲁棒性，
 （尤其是 $H_{kv}$ 不同的模型）仍需系统性的跨模型验证。
 
 
+\paragraph{证据边界声明。}
+本章实验结果的证据成熟度分为两个层次：
+（1）\emph{完整验证}：INT8 行为对齐量化经过 5 个种子 × 4 个模型 × 4 项基准的系统评测，
+统计检验（Bootstrap CI + 排列检验 + BH-FDR 校正）全部完成，
+构成本文的规范主证据；
+（2）\emph{扩展验证}：INT4-RoleAlign 和 MixedKV 的跨模型结果基于 3 个种子 × 3 个模型，
+PPL/Needle/LongBench 三项评测已完成聚合，
+RULER 尚未在 INT4-RoleAlign 配置上评测（见第~\ref{sec:conclusion-limitations}~节）。
+后续引用时将明确区分两者的证据等级。
+
 % ============================================================
 \section{结果讨论}
 \label{sec:exp-discussion}
@@ -1580,7 +1600,7 @@ INT8-ours 均展现了与主模型一致的性能模式——
 其优化目标（attention 分布的 KL 散度）不依赖于特定的架构假设，
 只需在目标模型上运行校准脚本即可获得有效参数。
 
-\textbf{发现四：INT4 对称量化瓶颈已被 RoleAlign 部分解决。}
+\textbf{发现四：INT4 对称量化瓶颈已被 INT4-RoleAlign 部分解决。}
 对称 per-group INT4 在 32K 长上下文下面临系统性失效
 （Needle 0\%，PPL 退化 $>$15\%），
 揭示了均匀对称量化在极低比特下的根本性限制。
@@ -1590,7 +1610,7 @@ INT8-ours 均展现了与主模型一致的性能模式——
 三个模型上 Needle 均恢复至 100\%，
 PPL 退化从 KIVI-style 的 2.4\%--12\% 降至 0.3\%--1.2\%。
 LLaMA-3.1-8B 的 GQA 架构（$H_{kv}=8$）提供了更强的量化噪声稀释效应，
-使得 INT4 RoleAlign 与 KIVI-style 在 LongBench 上持平——
+使得 INT4-RoleAlign 与 KIVI-style 在 LongBench 上持平——
 该``收益递减''现象并非方法局限，而是反映了架构感知的收益边界，
 进一步佐证了 $H_{kv}$ 是低比特量化容忍度的关键架构因素。
 
@@ -1724,7 +1744,7 @@ $\tau^{-1}$ 是 behavior-aligned framework 的候选增强机制之一，
     E11 & 跨模型泛化（7B + 8B LongBench）      & \textbf{达标} & 中等  & 表~\ref{tab:cross-model} \\
     E12 & MixedKV RULER 远优于均匀 INT4           & \textbf{达标} & 强\tnote{d}    & 表~\ref{tab:mixedkv-cross-model} \\
     E13 & 校准样本 16--256 PPL 变化极小    & \textbf{达标} & 中等\tnote{e}  & 表~\ref{tab:b10-sensitivity} \\
-    E14 & RoleAlign PPL 优于 KIVI（3 模型）       & \textbf{达标} & 中→强\tnote{f} & 表~\ref{tab:rolealign-results} \\
+    E14 & INT4-RoleAlign PPL 优于 KIVI（3 模型）       & \textbf{达标} & 中→强\tnote{f} & 表~\ref{tab:rolealign-results} \\
     E15 & chunk\_size=1 鲁棒性（1.5B）          & \textbf{达标} & 中\tnote{g}   & 表~\ref{tab:chunksize-results} \\
     E16 & inv\_tau 在非对称 INT4 不可迁移      & \textbf{达标} & 中等  & 表~\ref{tab:kivi-int4-threeway} \\
     \bottomrule
