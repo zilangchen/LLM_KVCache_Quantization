@@ -421,7 +421,7 @@ INT4 量化模式进一步压缩至约 $1/4$（对于使用 bit-packing 的 int4
 随着上下文长度进一步增长，KV Cache 在总显存中的占比将持续升高，
 量化的显存节省优势将更加显著。
 
-\noindent\textbf{本节小结：}INT8 行为对齐量化在质量（PPL/Needle/LongBench）、显存和延迟三个维度上实现了有利的权衡（RULER 退化见第~\ref{para:c6-fail}~段）——PPL 退化 $<$0.3\%，Needle 100\%，显存节省 44\%，延迟降低 8\%--38\%。
+\noindent\textbf{本节小结：}INT8 行为对齐量化在质量（PPL/Needle/LongBench-style 合成评测）、显存和延迟三个维度上实现了有利的权衡（RULER 退化见第~\ref{para:c6-fail}~段）——PPL 退化 $<$0.3\%，Needle 100\%，显存节省 44\%，延迟降低 8\%--38\%。
 
 
 % ============================================================
@@ -1171,18 +1171,18 @@ INT4-RoleAlign 与对照方法在 PPL、Needle 和 LongBench 上的对比，
     \textbf{Needle}$\uparrow$ & \textbf{LB}$\uparrow$ \\
     \midrule
     \multirow{3}{*}{\makecell[l]{Qwen2.5\\-1.5B}}
-      & fp16                      & 9.31  & ---       & ---       & ---              & 100/100 & --- \\
-      & kivi\_style INT4          & 10.43 & +12.0\%   & ---       & ---              & 100/100 & 4.83 \\
+      & fp16                      & 9.31  & ---       & ---       & ---              & 100\% & --- \\
+      & kivi\_style INT4          & 10.43 & +12.0\%   & ---       & ---              & 100\% & 4.83 \\
       & \textbf{int4\_ours\_asym} & \textbf{9.42} & \textbf{+1.2\%} & +12.0\% & \textbf{10$\times$} & \textbf{100/100} & \textbf{4.92} \\
     \midrule
     \multirow{3}{*}{\makecell[l]{Qwen2.5\\-7B}}
-      & fp16                      & 7.14  & ---       & ---       & ---              & 100/100 & --- \\
-      & kivi\_style INT4          & 7.53  & +5.5\%    & ---       & ---              & 100/100 & 3.87 \\
+      & fp16                      & 7.14  & ---       & ---       & ---              & 100\% & --- \\
+      & kivi\_style INT4          & 7.53  & +5.5\%    & ---       & ---              & 100\% & 3.87 \\
       & \textbf{int4\_ours\_asym} & \textbf{7.21} & \textbf{+1.0\%} & +5.5\%  & \textbf{5.5$\times$} & \textbf{100/100} & \textbf{3.93} \\
     \midrule
     \multirow{3}{*}{\makecell[l]{LLaMA-3.1\\-8B}}
-      & fp16                      & 6.73  & ---       & ---       & ---              & 100/100 & --- \\
-      & kivi\_style INT4          & 6.90  & +2.4\%    & ---       & ---              & 100/100 & 6.31 \\
+      & fp16                      & 6.73  & ---       & ---       & ---              & 100\% & --- \\
+      & kivi\_style INT4          & 6.90  & +2.4\%    & ---       & ---              & 100\% & 6.31 \\
       & \textbf{int4\_ours\_asym} & \textbf{6.75} & \textbf{+0.3\%} & +2.4\%  & \textbf{8$\times$} & \textbf{100/100} & \textbf{6.31} \\
     \bottomrule
   \end{tabular}
@@ -1637,7 +1637,7 @@ MK-NIAH 是\textbf{多目标并发检索}任务——
 \textbf{发现六：INT8-ours 在效率--质量空间中占据较优权衡点。}
 综合质量指标和效率指标，INT8-ours 是当前实验矩阵中
 唯一同时满足以下条件的量化方案：
-（1）PPL、Needle、LongBench 三项质量基准无统计显著退化；
+（1）PPL、Needle、LongBench-style 合成评测三项质量基准无统计显著退化；
 （2）KV Cache 显存节省超过 40\%；
 （3）解码延迟低于 INT8 动态量化基线。
 相比之下，INT8-baseline 虽然质量相当，但 TPOT 高于 FP16；
