@@ -118,6 +118,7 @@ GPU 峰值显存（单位 MB）。
   \caption{KV Cache 量化模式对比}
   \label{tab:kv-modes}
   \begin{threeparttable}
+  \small
   \begin{tabular}{llcccc}
     \toprule
     量化模式 & 校准策略 & 比特宽度 & 温度校正 & Decode Kernel & 量化轴 \\
@@ -608,9 +609,11 @@ Needle 通过率的决定性因素；
 \label{sec:exp-generalization}
 % ============================================================
 
+\begin{sloppypar}
 本节验证行为对齐量化框架的跨模型适用性，
 通过在 Qwen2.5-7B-Instruct 和 LLaMA-3.1-8B-Instruct 上复现关键实验，
 考察同一套校准方法论在不同参数规模和模型架构下的有效性。
+\end{sloppypar}
 
 此处验证的是校准\emph{算法}的适用性：
 同一校准流程（KL 散度目标 + per-head $\tau^{-1}$ 搜索）
@@ -1399,12 +1402,14 @@ LongBench 综合评分从 4.83 提升至 4.92。
 这表明离线 KL 搜索确定的 percentile 参数
 优于 KIVI-style 的运行时即时统计量。
 
-\textbf{int4\_kivi\_aligned → INT4-RoleAlign：设计差异。}
+\begin{sloppypar}
+\textbf{int4\_kivi\_aligned → INT4-RoleAlign：设计差异。}\enspace
 INT4-RoleAlign 不是 int4\_kivi\_aligned 的换皮版本，
-而是 role-aware asymmetric 格式 + BA-guided percentile 校准的组合设计。
-两者的关键差异在于参数确定范式：
-int4\_kivi\_aligned 在无校准基础上叠加预设 $\tau^{-1}$，
-INT4-RoleAlign 则通过离线 KL 搜索直接优化 percentile 参数。
+而是 role-aware asymmetric 格式与 BA-guided percentile 校准的组合设计。
+两者的关键差异在于参数确定范式：int4\_kivi\_aligned
+在无校准基础上叠加预设~$\tau^{-1}$，
+而 INT4-RoleAlign 通过离线 KL 搜索直接优化 percentile 参数。
+\end{sloppypar}
 
 \noindent\textbf{本节小结：}三方对比表明，BA-guided percentile 校准是 INT4-RoleAlign 优势的核心来源，$\tau^{-1}$ 在非对称格式下不可迁移。
 
@@ -1484,12 +1489,13 @@ KIVI-style 的 PPL 从 cs=128 的 10.43 急剧退化至 cs=1 的 9442
 \subsection{结论}
 \label{subsec:exp-chunksize-conclusion}
 
+\begin{sloppypar}
 在 Qwen2.5-1.5B 的 fully quantized PPL 协议下，
 INT4-RoleAlign 对 chunk\_size 变化表现出显著鲁棒性，
 而 KIVI-style 出现灾难性退化。
-该结果表明 BA-guided percentile 校准的优势
-在更严格的全量化评估协议下得到放大，
+该结果表明 BA-guided percentile 校准的优势在更严格的全量化评估协议下得到放大，
 为实际部署中的 streaming decode 场景提供了方法选择依据。
+\end{sloppypar}
 
 需要指出的是，上述观察仅在 Qwen2.5-1.5B 单模型、
 单种子（seed=1234）条件下验证。

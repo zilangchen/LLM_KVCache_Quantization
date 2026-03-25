@@ -560,8 +560,9 @@ $m \geq 1$ 为保护裕度（protection margin），默认值为 $1.0$。
   \item 保护裕度 $m$ 可根据应用场景调节：$m > 1$ 提供更宽松的保护，$m = 1$ 则为最严格模式。
 \end{itemize}
 
-\textbf{自适应保护对历史缓存的影响。}
-当自适应机制在某个 token 步触发（$s_{\text{dynamic}} > s_{\text{static}}$）时，
+\textbf{自适应保护对历史缓存的影响。}\enspace
+当自适应机制在某个 token 步触发
+（$s_{\text{dynamic}} > s_{\text{static}}$）时，
 \emph{仅当前 token 的 Scale 受影响}，
 已存储在缓存中的历史 token 保持其原始量化值和 Scale 不变。
 这是因为量化操作遵循"写入即冻结"语义
