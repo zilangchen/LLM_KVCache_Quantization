@@ -14,7 +14,7 @@
 % ------------------------------------------------------------
 
 \textbf{INT8 行为对齐量化的基础验证。}
-如第四章实验所示，INT8 行为对齐量化在 PPL、Needle、LongBench 三个核心质量基准上
+如第四章实验所示，INT8 行为对齐量化在 PPL、Needle、LongBench-style 合成评测三个核心质量基准上
 与 FP16 保持统计不可区分的水平，同时 Triton 融合核函数实现了 8\%--38\% 的解码延迟降低，
 KV Cache 显存节省约 44\%。
 同一校准算法在 Qwen2.5-7B、LLaMA-3.1-8B 和 Mistral-7B 上复现了一致的性能模式，
@@ -58,14 +58,14 @@ INT4 对称量化 3 项预期全部未达标——
 \label{sec:conclusion-limitations}
 % ------------------------------------------------------------
 
-尽管本文提出的行为对齐量化框架在 INT8 的 PPL、Needle、LongBench 三项核心质量基准上维持了与 FP16 统计不可区分的水平（RULER 的退化集中于检索类子任务，详见第~\ref{para:c6-fail}~段分析），
+尽管本文提出的行为对齐量化框架在 INT8 的 PPL、Needle、LongBench-style 合成评测三项核心质量基准上维持了与 FP16 统计不可区分的水平（RULER 的退化集中于检索类子任务，详见第~\ref{para:c6-fail}~段分析），
 但当前工作仍存在以下局限：
 
 \textbf{INT4 量化的质量瓶颈。}
 实验结果表明，INT4 量化在 32K 长上下文场景下存在系统性的质量退化：
 Needle 通过率在 1.5B 模型上从 100\%（FP16）降至 0\%，
 PPL 退化达 $-$15.9\%，
-LongBench 综合评分在 1.5B 和 7B 模型上大幅下降。
+LongBench-style 合成评测综合评分在 1.5B 和 7B 模型上大幅下降。
 第~\ref{subsec:exp-int4-limitations}~节的定量分析表明，
 INT4 的 SQNR 仅 25.8~dB（INT8 为 49.9~dB），
 逐元素量化噪声功率约为 INT8 的 289 倍，
@@ -124,6 +124,8 @@ Mistral-7B-Instruct-v0.3 作为第四验证模型，
 （详见附录~\ref{sec:app-kv-ablation-full}）。
 Mistral-7B 在 PPL、Needle 和 RULER 上的评测均正常有效。
 
+需要指出，本文所有 LongBench 结果均基于合成数据源而非官方数据集（详见第四章实验设置），因此相关结论仅适用于量化方法之间的相对比较。
+
 \textbf{K/V 消融实验的评测覆盖范围。}
 第~\ref{sec:exp-kv-sensitivity}~节的 K/V 精度消融实验
 仅评测了 RULER 和 LongBench 两个长上下文基准，
@@ -159,7 +161,7 @@ Mistral-7B 在 PPL、Needle 和 RULER 上的评测均正常有效。
 本文的实验结果对 LLM 推理系统的工程实践具有以下参考价值：
 
 \textbf{INT8 量化在单 GPU 推理场景下已展现明确的部署可行性。}
-INT8 行为对齐量化在 PPL、Needle、LongBench 三项核心质量基准上
+INT8 行为对齐量化在 PPL、Needle、LongBench-style 合成评测三项核心质量基准上
 均未引入统计显著退化（RULER 的退化集中于检索类子任务且受配置聚合效应放大，详见第~\ref{para:c6-fail}~段），
 同时实现了 44\% 的 KV Cache 显存节省和 8\%--38\% 的解码延迟降低。
 对于 PPL 和检索准确率是核心指标的在线推理服务，

@@ -230,7 +230,7 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
   \centering
   \includegraphics[width=0.87\textwidth]{figures/longbench_score_vs_context.pdf}
   \caption{各量化模式的 LongBench 综合评分随上下文长度的变化（Qwen2.5-1.5B-Instruct）。
-  综合评分为 7 类子任务官方指标的宏平均。}
+  综合评分为 7 类子任务对应指标的宏平均。}
   \label{fig:app-longbench-vs-context}
 \end{figure}
 
@@ -419,7 +419,7 @@ INT4 量化模式在所有子任务上均完全失败（通过率 0\%），
     E9  & LongBench 不劣于 KIVI     & 达标 & $\geq$$-$1\%  & +1.37\%   & 0.144 & 中    & 7B \\
     E10 & Needle 不劣于 KIVI        & 达标 & $\geq$$-$1\%  & 0.0\%     & 1.000 & 中    & 8B \\
     E11 & 跨模型 LongBench 不劣于   & 达标 & $\geq$$-$1\%  & +0.05\%   & 0.955 & 中    & 7B+8B \\
-    E12 & MixedKV RULER 优于均匀 INT4 & 达标 & $>$0\%        & +24.87\%\tnote{f} & ---   & 强    & 1.5B/7B \\
+    E12 & MixedKV RULER 优于均匀 INT4 & 达标 & $>$0\%        & +24.87\%\tnote{f} & ---   & 中    & 1.5B/7B \\
     E13 & 校准样本鲁棒性 PPL 变化极小 & 达标 & $\leq$0.02  & 0.02      & ---   & 中    & 1.5B/7B \\
     \bottomrule
   \end{tabular}

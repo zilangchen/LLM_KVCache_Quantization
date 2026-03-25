@@ -77,16 +77,23 @@ Transformers 库和 Triton 编译器。
 要求模型在生成时准确检索并复述该信息。
 通过率（pass rate）定义为通过精确匹配（exact match）的测试用例占比。
 
-\textbf{（3）LongBench~\cite{bai2024longbench}。}
-评测长上下文理解能力，选取 7 个代表性任务覆盖中英文、多种任务类型：
+\textbf{（3）LongBench-style 合成评测。}
+借鉴 LongBench~\cite{bai2024longbench} 的任务分类体系，
+本文自行实现了确定性合成 QA 生成器，
+覆盖 7 个代表性任务类别：
 单文档问答（narrativeqa、dureader）、
 多文档问答（hotpotqa）、
 摘要生成（gov\_report、vcsum）、
 少样本分类（trec）和
 代码补全（lcc）。
-各任务使用其官方评测指标：QA 类为 token-F1，
+合成样本通过在固定噪声上下文中植入锚点答案来构造，
+确保完全离线可复现且与自定义推理管线集成。
+各任务沿用 LongBench 对应指标类型：QA 类为 token-F1，
 摘要类和中文 QA 为 Rouge-L，分类类为 Accuracy，代码类为 Edit Similarity。
-主表汇总分数（\texttt{longbench\_score}）定义为 7 个任务官方指标的宏平均。
+主表汇总分数（\texttt{longbench\_score}）定义为 7 个任务指标的宏平均。
+\emph{注意}：由于使用合成数据而非 LongBench 原始数据集，
+绝对分数不可与 LongBench 官方排行榜直接对比，
+但量化方法之间的相对差异仍可反映长上下文处理能力的保持程度。
 
 \textbf{（4）RULER~\cite{hsieh2024ruler}。}
 合成检索与推理能力的压力测试，包含 4 个子任务：
@@ -253,7 +260,7 @@ BH-FDR 控制的是假发现率（而非族错误率 FWER），
     \small
     \item 注：$\pm$ 后为 Bootstrap 95\% CI 半宽（10\,000 次重采样，5 seeds）。
     PPL 和 TPOT 越低越好（$\downarrow$），其余指标越高越好（$\uparrow$）。
-    LongBench score 为 7 个任务官方指标宏平均（$\times$100 显示）。
+    LongBench score 为 7 个任务对应指标宏平均（$\times$100 显示；合成数据源，见基准描述）。
     KV Mem 为 KV Cache 的显存占用。int8\_ours 质量指标取自 mainline
     配置（\texttt{static\_v3\_no\_temp\_adaptive\_fused}）。
     kivi\_style 使用 torch\_ref 核函数（非 Triton 融合）。
@@ -292,7 +299,7 @@ Bootstrap CI 和符号翻转检验均确认无统计显著差异
 （$p=0.091$，$q=0.097$，BH-FDR 校正后不显著）。
 三个模型的 PPL 退化幅度均在 $-$0.09\% 至 $-$0.26\% 范围内，
 表明行为对齐量化在语言建模质量上不引入实质性退化。
-在 LongBench 长文档理解任务上，
+在 LongBench-style 合成长上下文评测上，
 表~\ref{tab:main-results} 中 INT8-ours mainline 配置的综合评分为 5.00（$\times$100），
 与 INT8-baseline（4.78）和 FP16（4.82）可比。
 附录表~\ref{tab:app-sig-quality} 基于所有配置变体的混合均值
@@ -1185,7 +1192,7 @@ INT4-RoleAlign 与对照方法在 PPL、Needle 和 LongBench 上的对比，
     量化 BA percentile 校准相比无校准方案的 PPL 改善幅度。
     int4\_ours\_asym 使用离线 BA 校准搜索得到的 k\_percentile 和 v\_percentile。
     Needle 为 3 seeds 在 20 个 depth 级别上的通过率。
-    LB 为 LongBench 官方指标宏平均（$\times$100）。
+    LB 为 LongBench-style 合成评测指标宏平均（$\times$100）。
     LLaMA-3.1-8B LongBench 中 ours\_asym 与 kivi 持平（6.31），
     与该模型 8 个 KV 头的 GQA 噪声稀释效应一致（见下文分析）。
   \end{tablenotes}
@@ -1742,7 +1749,7 @@ $\tau^{-1}$ 是 behavior-aligned framework 的候选增强机制之一，
     E9  & INT8-ours LongBench 不劣于 KIVI-style & \textbf{达标} & 中等  & 表~\ref{tab:kivi-comparison} \\
     E10 & INT8-ours Needle 不劣于 KIVI-style    & \textbf{达标} & 中等  & 第~\ref{sec:exp-kivi}~节 \\
     E11 & 跨模型泛化（7B + 8B LongBench）      & \textbf{达标} & 中等  & 表~\ref{tab:cross-model} \\
-    E12 & MixedKV RULER 远优于均匀 INT4           & \textbf{达标} & 强\tnote{d}    & 表~\ref{tab:mixedkv-cross-model} \\
+    E12 & MixedKV RULER 远优于均匀 INT4           & \textbf{达标} & 中等\tnote{d}    & 表~\ref{tab:mixedkv-cross-model} \\
     E13 & 校准样本 16--256 PPL 变化极小    & \textbf{达标} & 中等\tnote{e}  & 表~\ref{tab:b10-sensitivity} \\
     E14 & INT4-RoleAlign PPL 优于 KIVI（3 模型）       & \textbf{达标} & 中→强\tnote{f} & 表~\ref{tab:rolealign-results} \\
     E15 & chunk\_size=1 鲁棒性（1.5B）          & \textbf{达标} & 中\tnote{g}   & 表~\ref{tab:chunksize-results} \\
@@ -1807,7 +1814,13 @@ KV Cache 分片与跨设备通信可能与量化产生额外交互，
 与 RULER 官方框架在干扰词频率、token/word 映射策略上存在差异
 （干扰词频约 90 倍于目标频率，高于设计目标的 30 倍），
 这可能影响 CWE 子任务得分的绝对值及其与官方基准的可比性。
-（c）Mistral-7B 的 LongBench 评测使用合成数据源（所有方法得分为 1.0），
-该 artifact 不影响量化方法的有效性，但限制了 Mistral-7B 在 LongBench 维度上的跨模型可比性（详见附录~\ref{sec:app-kv-ablation-full}）。
+（c）所有模型的 LongBench 评测均使用合成数据源（见第~\ref{sec:exp-setup}~节基准描述），
+而非 THUDM/LongBench 官方数据集。
+合成样本通过在噪声上下文中植入锚点答案构造，
+本质上测量的是量化后长上下文信息保持能力，而非真实文档理解能力。
+因此，本文的 LongBench 相关结论仅适用于量化方法之间的\emph{相对}比较，
+绝对分数不可与官方排行榜对比。
+此外，Mistral-7B 上合成评测出现退化 artifact（所有方法得分为 1.0），
+进一步限制了该模型在此维度上的跨模型可比性（详见附录~\ref{sec:app-kv-ablation-full}）。
 （d）K/V 精度消融实验（第~\ref{sec:exp-kv-sensitivity}~节）仅评测了 RULER 和 LongBench 两个长上下文基准，
 未覆盖 PPL 指标，因此 K/V 差异化量化对语言建模质量的影响尚需补充验证。
