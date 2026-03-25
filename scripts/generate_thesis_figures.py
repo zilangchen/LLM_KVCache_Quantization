@@ -100,6 +100,15 @@ PLOT_ORDER = [
 # INT8-focus and INT4-focus subsets for dual-panel figures
 INT8_MODES = ["fp16", "int8_baseline", "int8_ours", "kivi_style"]
 INT4_MODES = ["fp16", "int4_baseline", "int4_fused", "int4_ours", "kivi_style"]
+QUALITY_DASHBOARD_MODES = ["fp16", "int8_baseline", "int8_ours", "kivi_style", "int4_ours"]
+EFFICIENCY_DASHBOARD_MODES = ["fp16", "int8_baseline", "int8_ours", "kivi_style", "int4_fused"]
+
+KV_ABLATION_COLORS = {
+    "K-only": "#27AE60",
+    "V-only": "#3498DB",
+    "K4V8": "#E74C3C",
+    "MixedKV": "#8E5A2B",
+}
 
 PRIMARY_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
 PRIMARY_MODEL_DIR = "Qwen__Qwen2.5-1.5B-Instruct"
@@ -128,8 +137,10 @@ def setup_style():
         "grid.linewidth": 0.5,
         "axes.spines.top": False,
         "axes.spines.right": False,
+        "axes.linewidth": 0.8,
         "lines.linewidth": 1.8,
         "lines.markersize": 5,
+        "legend.fancybox": False,
         "axes.unicode_minus": False,  # Fix minus sign rendering with CJK fonts
     })
 
@@ -190,6 +201,56 @@ def save_fig(fig, out_path):
     print(f"  -> {out_path.name} ({out_path.stat().st_size // 1024} KB)")
 
 
+def place_panel_tag(ax, tag, title):
+    """Add a panel tag in a consistent style."""
+    text = f"{tag} {title}".strip()
+    ax.set_title(text, fontsize=10, loc="left", pad=8, fontweight="bold")
+
+
+def annotate_last_point(ax, x, y, text, color, dx=0.04, dy=0.0):
+    """Directly annotate the last point of a line."""
+    if len(x) == 0 or len(y) == 0:
+        return
+    ax.annotate(
+        text,
+        xy=(x[-1], y[-1]),
+        xytext=(x[-1] + dx * (x[-1] if x[-1] else 1), y[-1] + dy),
+        textcoords="data",
+        fontsize=7.5,
+        color=color,
+        ha="left",
+        va="center",
+        bbox=dict(boxstyle="round,pad=0.2", fc="white", ec=color, lw=0.6, alpha=0.9),
+        arrowprops=dict(arrowstyle="-", color=color, lw=0.8),
+        zorder=6,
+    )
+
+
+def style_axis(ax, ylabel=None, xlabel=None):
+    """Apply common axis styling."""
+    if ylabel:
+        ax.set_ylabel(ylabel)
+    if xlabel:
+        ax.set_xlabel(xlabel)
+    ax.grid(axis="y", alpha=0.25)
+    ax.grid(axis="x", alpha=0.08)
+
+
+def add_shared_legend(fig, handles, labels, ncol=5, y=0.01):
+    """Add a shared legend below the figure."""
+    fig.legend(
+        handles,
+        labels,
+        loc="lower center",
+        bbox_to_anchor=(0.5, y),
+        ncol=ncol,
+        frameon=True,
+        fontsize=8,
+        columnspacing=1.2,
+        handlelength=2.0,
+    )
+
+
 # ═══════════════════════════════════════════════════════════════
 # LINE CHART HELPER
 # ═══════════════════════════════════════════════════════════════
@@ -206,6 +267,447 @@ def plot_line_with_band(ax, x, y_mean, y_ci_half, mode, label=None):
     ax.fill_between(x, y_lo, y_hi, alpha=0.15, color=color, linewidth=0)
     ax.plot(x, y_mean, color=color, marker=marker, linestyle=ls,
             label=lbl, markersize=5, markeredgecolor="white", markeredgewidth=0.5)
+
+
+def _subset_modes(df, modes):
+    """Keep only requested modes that exist in the dataframe."""
+    present = [m for m in modes if m in set(df["kv_mode"].unique())]
+    return df[df["kv_mode"].isin(present)], present
+
+
+def _load_primary_table(tables_dir, csv_name):
+    return pd.read_csv(tables_dir / "per_model" / PRIMARY_MODEL_DIR / csv_name)
+
+
+def _project_root():
+    """Repository root inferred from this script location."""
+    return Path(__file__).resolve().parent.parent
+
+
+def _shared_mode_handles(modes):
+    handles = []
+    labels = []
+    for mode in modes:
+        handles.append(plt.Line2D(
+            [0], [0],
+            color=COLORS.get(mode, "#999999"),
+            marker=MARKERS.get(mode, "o"),
+            linestyle=LINESTYLES.get(mode, "-"),
+            linewidth=1.8,
+            markersize=5,
+        ))
+        labels.append(LABELS.get(mode, mode))
+    return handles, labels
+
+
+def fig_main_quality_dashboard(tables_dir, out_dir):
+    """Create a 2x2 dashboard for core quality metrics."""
+    print("Fig: main_quality_dashboard")
+
+    needle = _load_primary_table(tables_dir, "needle_summary.csv")
+    longbench = filter_mainline(_load_primary_table(tables_dir, "longbench_summary.csv"))
+    ruler = filter_mainline(_load_primary_table(tables_dir, "ruler_summary.csv"))
+    ppl = filter_mainline(_load_primary_table(tables_dir, "ppl_summary.csv"))
+
+    needle, modes = _subset_modes(needle, QUALITY_DASHBOARD_MODES)
+    longbench, _ = _subset_modes(longbench, modes)
+    ruler, _ = _subset_modes(ruler, modes)
+
+    seq_lens = sorted(set(needle["seq_len"].unique()))
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    ax_ppl, ax_needle, ax_longbench, ax_ruler = axes.flat
+
+    # (a) PPL point / lollipop chart at 32K
+    ppl32 = ppl[ppl["seq_len"] >= 30000].copy()
+    ppl32, ppl_modes = _subset_modes(ppl32, modes)
+    ppl32["mode_rank"] = ppl32["kv_mode"].map({m: i for i, m in enumerate(ppl_modes)})
+    ppl32 = ppl32.sort_values("mode_rank", ascending=False)
+    y_pos = np.arange(len(ppl32))
+    ax_ppl.hlines(y_pos, ppl32["perplexity_mean"].min() - 0.2, ppl32["perplexity_mean"], color="#D7DEE5", linewidth=1.0)
+    ax_ppl.errorbar(
+        ppl32["perplexity_mean"], y_pos,
+        xerr=ppl32["perplexity_ci95_half"],
+        fmt="none", ecolor="#333333", elinewidth=1, capsize=3, zorder=3
+    )
+    for i, row in enumerate(ppl32.itertuples()):
+        mode = row.kv_mode
+        ax_ppl.scatter(
+            row.perplexity_mean, y_pos[i],
+            s=70 if mode == "int8_ours" else 45,
+            color=COLORS.get(mode, "#999999"),
+            edgecolors="white",
+            linewidths=0.8,
+            zorder=4,
+        )
+        ax_ppl.text(
+            row.perplexity_mean + 0.06, y_pos[i],
+            f"{row.perplexity_mean:.2f}",
+            va="center", ha="left", fontsize=7.5, color="#333333"
+        )
+    ax_ppl.set_yticks(y_pos)
+    ax_ppl.set_yticklabels([LABELS.get(m, m) for m in ppl32["kv_mode"]])
+    style_axis(ax_ppl, xlabel="Perplexity at 32K")
+    place_panel_tag(ax_ppl, "(a)", "PPL 主结果对比")
+
+    # (b) Needle vs context
+    for mode in modes:
+        sub = needle[needle["kv_mode"] == mode].sort_values("seq_len")
+        if sub.empty:
+            continue
+        plot_line_with_band(
+            ax_needle,
+            sub["seq_len"].values,
+            sub["needle_pass_rate_mean"].values,
+            sub["needle_pass_rate_ci95_half"].values,
+            mode,
+        )
+        if mode in ("fp16", "int8_ours", "int4_ours"):
+            annotate_last_point(
+                ax_needle,
+                sub["seq_len"].values,
+                sub["needle_pass_rate_mean"].values,
+                LABELS.get(mode, mode),
+                COLORS.get(mode, "#333333"),
+                dx=0.015,
+                dy=0.0 if mode != "fp16" else -2.5,
+            )
+    ax_needle.set_xticks(seq_lens)
+    ax_needle.set_xticklabels([format_seq_len(s) for s in seq_lens])
+    ax_needle.set_ylim(-5, 108)
+    style_axis(ax_needle, ylabel="Needle Pass Rate (%)", xlabel="Context Length")
+    place_panel_tag(ax_needle, "(b)", "Needle 通过率随上下文长度变化")
+
+    # (c) LongBench vs context
+    for mode in modes:
+        sub = longbench[longbench["kv_mode"] == mode].sort_values("seq_len")
+        if sub.empty:
+            continue
+        y_col = "longbench_score_mean" if "longbench_score_mean" in sub.columns else "longbench_official_macro_mean"
+        ci_col = "longbench_score_ci95_half" if "longbench_score_ci95_half" in sub.columns else "longbench_official_macro_ci95_half"
+        y = sub[y_col].values * 100
+        ci = sub[ci_col].values * 100 if ci_col in sub.columns else np.zeros_like(y)
+        plot_line_with_band(ax_longbench, sub["seq_len"].values, y, ci, mode)
+        if mode in ("fp16", "int8_ours"):
+            annotate_last_point(
+                ax_longbench, sub["seq_len"].values, y,
+                LABELS.get(mode, mode), COLORS.get(mode, "#333333"),
+                dx=0.015, dy=0.0 if mode == "int8_ours" else -0.18,
+            )
+    ax_longbench.set_xticks(seq_lens)
+    ax_longbench.set_xticklabels([format_seq_len(s) for s in seq_lens])
+    style_axis(ax_longbench, ylabel="LongBench Score (×100)", xlabel="Context Length")
+    place_panel_tag(ax_longbench, "(c)", "LongBench 综合评分随上下文长度变化")
+
+    # (d) RULER vs context
+    for mode in modes:
+        sub = ruler[ruler["kv_mode"] == mode].sort_values("seq_len")
+        if sub.empty:
+            continue
+        plot_line_with_band(
+            ax_ruler,
+            sub["seq_len"].values,
+            sub["ruler_pass_rate_mean"].values,
+            sub["ruler_pass_rate_ci95_half"].values,
+            mode,
+        )
+        if mode in ("fp16", "int8_ours", "int4_ours"):
+            annotate_last_point(
+                ax_ruler,
+                sub["seq_len"].values,
+                sub["ruler_pass_rate_mean"].values,
+                LABELS.get(mode, mode),
+                COLORS.get(mode, "#333333"),
+                dx=0.015,
+                dy=0.0 if mode != "fp16" else -1.4,
+            )
+    ax_ruler.set_xticks(seq_lens)
+    ax_ruler.set_xticklabels([format_seq_len(s) for s in seq_lens])
+    style_axis(ax_ruler, ylabel="RULER Pass Rate (%)", xlabel="Context Length")
+    place_panel_tag(ax_ruler, "(d)", "RULER 通过率随上下文长度变化")
+
+    handles, labels = _shared_mode_handles(modes)
+    fig.tight_layout(rect=(0, 0.06, 1, 1))
+    add_shared_legend(fig, handles, labels, ncol=min(5, len(labels)), y=0.005)
+    save_fig(fig, out_dir / "main_quality_dashboard.pdf")
+
+
+def fig_main_efficiency_dashboard(tables_dir, out_dir):
+    """Create a 1x3 dashboard for efficiency and memory metrics."""
+    print("Fig: main_efficiency_dashboard")
+
+    latency = filter_mainline(_load_primary_table(tables_dir, "latency_summary.csv"))
+    memory = filter_mainline(_load_primary_table(tables_dir, "memory_summary.csv"))
+
+    latency = latency[(latency["batch"] == 1) & (latency["gen_len"] == 64)]
+    memory = memory[memory["batch"] == 1]
+    latency, modes = _subset_modes(latency, EFFICIENCY_DASHBOARD_MODES)
+    memory, _ = _subset_modes(memory, modes)
+    seq_lens = sorted(latency["seq_len"].unique())
+
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4.1))
+    ax_tpot, ax_kv, ax_peak = axes
+
+    for mode in modes:
+        sub = latency[latency["kv_mode"] == mode].sort_values("seq_len")
+        if sub.empty:
+            continue
+        plot_line_with_band(ax_tpot, sub["seq_len"].values, sub["tpot_ms_mean"].values, sub["tpot_ms_ci95_half"].values, mode)
+        if mode in ("fp16", "int8_ours"):
+            annotate_last_point(
+                ax_tpot, sub["seq_len"].values, sub["tpot_ms_mean"].values,
+                LABELS.get(mode, mode), COLORS.get(mode, "#333333"),
+                dx=0.015, dy=-1.2 if mode == "fp16" else 0.0,
+            )
+    ax_tpot.set_xticks(seq_lens)
+    ax_tpot.set_xticklabels([format_seq_len(s) for s in seq_lens])
+    style_axis(ax_tpot, ylabel="TPOT (ms)", xlabel="Context Length")
+    place_panel_tag(ax_tpot, "(a)", "解码延迟")
+
+    base32 = latency[(latency["kv_mode"] == "int8_baseline") & (latency["seq_len"] == max(seq_lens))]
+    ours32 = latency[(latency["kv_mode"] == "int8_ours") & (latency["seq_len"] == max(seq_lens))]
+    if not base32.empty and not ours32.empty:
+        gain = (base32["tpot_ms_mean"].iloc[0] - ours32["tpot_ms_mean"].iloc[0]) / base32["tpot_ms_mean"].iloc[0] * 100
+        ax_tpot.text(
+            0.02, 0.06,
+            f"32K: INT8-Ours vs INT8-Baseline = +{gain:.1f}% faster",
+            transform=ax_tpot.transAxes, fontsize=7.5, color=COLORS["int8_ours"],
+            bbox=dict(boxstyle="round,pad=0.25", fc="white", ec=COLORS["int8_ours"], lw=0.7),
+        )
+
+    for mode in modes:
+        sub = memory[memory["kv_mode"] == mode].sort_values("seq_len")
+        if sub.empty:
+            continue
+        plot_line_with_band(ax_kv, sub["seq_len"].values, sub["kv_cache_mem_mb_mean"].values, sub["kv_cache_mem_mb_ci95_half"].values, mode)
+        if mode in ("fp16", "int8_ours"):
+            annotate_last_point(
+                ax_kv, sub["seq_len"].values, sub["kv_cache_mem_mb_mean"].values,
+                LABELS.get(mode, mode), COLORS.get(mode, "#333333"),
+                dx=0.015, dy=-18 if mode == "fp16" else 14,
+            )
+    ax_kv.set_xticks(seq_lens)
+    ax_kv.set_xticklabels([format_seq_len(s) for s in seq_lens])
+    style_axis(ax_kv, ylabel="KV Cache Memory (MB)", xlabel="Context Length")
+    place_panel_tag(ax_kv, "(b)", "KV Cache 显存")
+
+    fp16_mem = memory[(memory["kv_mode"] == "fp16") & (memory["seq_len"] == max(seq_lens))]
+    int8_mem = memory[(memory["kv_mode"] == "int8_ours") & (memory["seq_len"] == max(seq_lens))]
+    if not fp16_mem.empty and not int8_mem.empty:
+        gain = (fp16_mem["kv_cache_mem_mb_mean"].iloc[0] - int8_mem["kv_cache_mem_mb_mean"].iloc[0]) / fp16_mem["kv_cache_mem_mb_mean"].iloc[0] * 100
+        ax_kv.text(
+            0.02, 0.92,
+            f"32K memory reduction: {gain:.1f}%",
+            transform=ax_kv.transAxes, fontsize=7.5, color=COLORS["int8_ours"],
+            bbox=dict(boxstyle="round,pad=0.25", fc="white", ec=COLORS["int8_ours"], lw=0.7),
+        )
+
+    for mode in modes:
+        sub = memory[memory["kv_mode"] == mode].sort_values("seq_len")
+        if sub.empty:
+            continue
+        plot_line_with_band(ax_peak, sub["seq_len"].values, sub["gpu_mem_peak_mb_mean"].values, sub["gpu_mem_peak_mb_ci95_half"].values, mode)
+        if mode in ("fp16", "int8_ours"):
+            annotate_last_point(
+                ax_peak, sub["seq_len"].values, sub["gpu_mem_peak_mb_mean"].values,
+                LABELS.get(mode, mode), COLORS.get(mode, "#333333"),
+                dx=0.015, dy=-60 if mode == "fp16" else 45,
+            )
+    ax_peak.set_xticks(seq_lens)
+    ax_peak.set_xticklabels([format_seq_len(s) for s in seq_lens])
+    style_axis(ax_peak, ylabel="Peak GPU Memory (MB)", xlabel="Context Length")
+    place_panel_tag(ax_peak, "(c)", "总峰值显存")
+
+    handles, labels = _shared_mode_handles(modes)
+    fig.tight_layout(rect=(0, 0.09, 1, 1))
+    add_shared_legend(fig, handles, labels, ncol=min(5, len(labels)), y=0.01)
+    save_fig(fig, out_dir / "main_efficiency_dashboard.pdf")
+
+
+def fig_needle_depth_grid(tables_dir, out_dir):
+    """2x2 dashboard for Needle depth heatmaps."""
+    print("Fig: needle_depth_grid")
+    csv_path = tables_dir / "needle_curve_by_depth.csv"
+    if not csv_path.exists():
+        print(f"  SKIP: {csv_path} not found")
+        return
+
+    df = pd.read_csv(csv_path)
+    context_lens = sorted(df["context_len"].unique())
+    modes = sort_modes(df["kv_mode"].unique())
+    depths = sorted(df["depth"].unique())
+    fig, axes = plt.subplots(2, 2, figsize=(12, 6.8), sharex=True, sharey=True)
+    ims = []
+
+    for ax, ctx, tag in zip(axes.flat, context_lens, ["(a)", "(b)", "(c)", "(d)"]):
+        sub = df[df["context_len"] == ctx]
+        matrix = np.full((len(modes), len(depths)), np.nan)
+        for i, mode in enumerate(modes):
+            for j, depth in enumerate(depths):
+                cell = sub[(sub["kv_mode"] == mode) & (np.isclose(sub["depth"], depth))]
+                if not cell.empty:
+                    matrix[i, j] = cell["pass_rate"].iloc[0] * 100
+        im = ax.imshow(matrix, aspect="auto", cmap="RdYlGn", vmin=0, vmax=100, interpolation="nearest")
+        ims.append(im)
+        ax.set_yticks(range(len(modes)))
+        ax.set_yticklabels([LABELS.get(m, m) for m in modes], fontsize=7.5)
+        step = max(1, len(depths) // 8)
+        ax.set_xticks(range(0, len(depths), step))
+        ax.set_xticklabels([f"{depths[i]:.0f}%" for i in range(0, len(depths), step)], fontsize=7)
+        place_panel_tag(ax, tag, f"Context = {format_seq_len(int(ctx))}")
+        if ax in axes[1]:
+            ax.set_xlabel("Needle Depth (%)")
+        if ax in (axes[0, 0], axes[1, 0]):
+            ax.set_ylabel("Quantization Mode")
+        for i in range(len(modes)):
+            for j in range(len(depths)):
+                val = matrix[i, j]
+                if not np.isnan(val) and val < 99.5:
+                    ax.text(j, i, f"{val:.0f}", ha="center", va="center", fontsize=5.5,
+                            color="white" if val < 45 else "black", fontweight="bold")
+
+    cbar = fig.colorbar(ims[-1], ax=axes.ravel().tolist(), shrink=0.96, pad=0.02)
+    cbar.set_label("Pass Rate (%)", fontsize=9)
+    fig.subplots_adjust(left=0.08, right=0.92, bottom=0.10, top=0.94, wspace=0.18, hspace=0.20)
+    save_fig(fig, out_dir / "needle_depth_grid.pdf")
+
+
+def fig_appendix_throughput_dashboard(tables_dir, out_dir):
+    """1x3 appendix dashboard for batch throughput scaling."""
+    print("Fig: appendix_throughput_dashboard")
+    df = pd.read_csv(tables_dir / "per_model" / PRIMARY_MODEL_DIR / "throughput_by_batch.csv")
+    df = filter_mainline(df)
+    seq_len_counts = df["seq_len"].value_counts()
+    target_seq = seq_len_counts.index[0]
+    df = df[df["seq_len"] == target_seq]
+    df_plot = df[df["point_status"] == "measured"] if "point_status" in df.columns else df
+    df_plot, modes = _subset_modes(df_plot, EFFICIENCY_DASHBOARD_MODES)
+
+    panels = [
+        ("tok_per_s_mean", "tok_per_s_ci95_half", "总吞吐量 (tokens/s)", "(a) 总吞吐量"),
+        ("tok_per_s_per_seq_mean", "tok_per_s_per_seq_ci95_half", "单序列吞吐量 (tokens/s/seq)", "(b) 单序列吞吐量"),
+        ("prefill_tok_per_s_mean", "prefill_tok_per_s_ci95_half", "Prefill 吞吐量 (tokens/s)", "(c) Prefill 吞吐量"),
+    ]
+
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4.2), sharex=True)
+    batches = sorted(df_plot["batch"].unique())
+    for ax, (y_col, ci_col, ylabel, title) in zip(axes, panels):
+        for mode in modes:
+            sub = df_plot[df_plot["kv_mode"] == mode].sort_values("batch")
+            if sub.empty or y_col not in sub.columns:
+                continue
+            plot_line_with_band(ax, sub["batch"].values, sub[y_col].values, sub[ci_col].values, mode)
+            if mode in ("fp16", "int8_ours"):
+                annotate_last_point(ax, sub["batch"].values, sub[y_col].values, LABELS.get(mode, mode), COLORS.get(mode, "#333333"), dx=0.15, dy=0.0)
+        ax.set_xticks(batches)
+        ax.set_xticklabels([str(int(b)) for b in batches])
+        style_axis(ax, ylabel=ylabel, xlabel="Batch Size")
+        place_panel_tag(ax, title.split()[0], " ".join(title.split()[1:]))
+    handles, labels = _shared_mode_handles(modes)
+    fig.tight_layout(rect=(0, 0.09, 1, 1))
+    add_shared_legend(fig, handles, labels, ncol=min(5, len(labels)), y=0.01)
+    save_fig(fig, out_dir / "appendix_throughput_dashboard.pdf")
+
+
+def fig_appendix_memory_dashboard(tables_dir, out_dir):
+    """1x2 appendix dashboard for batch memory scaling."""
+    print("Fig: appendix_memory_dashboard")
+    df = pd.read_csv(tables_dir / "per_model" / PRIMARY_MODEL_DIR / "throughput_by_batch.csv")
+    df = filter_mainline(df)
+    seq_len_counts = df["seq_len"].value_counts()
+    target_seq = seq_len_counts.index[0]
+    df = df[df["seq_len"] == target_seq]
+    df_plot = df[df["point_status"] == "measured"] if "point_status" in df.columns else df
+    df_plot, modes = _subset_modes(df_plot, EFFICIENCY_DASHBOARD_MODES)
+
+    panels = [
+        ("kv_cache_mem_mb_mean", "kv_cache_mem_mb_ci95_half", "KV Cache 显存 (MB)", "(a) KV Cache 显存"),
+        ("gpu_mem_peak_mb_mean", "gpu_mem_peak_mb_ci95_half", "总峰值显存 (MB)", "(b) 总峰值显存"),
+    ]
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.1), sharex=True)
+    batches = sorted(df_plot["batch"].unique())
+    for ax, (y_col, ci_col, ylabel, title) in zip(axes, panels):
+        for mode in modes:
+            sub = df_plot[df_plot["kv_mode"] == mode].sort_values("batch")
+            if sub.empty or y_col not in sub.columns:
+                continue
+            plot_line_with_band(ax, sub["batch"].values, sub[y_col].values, sub[ci_col].values, mode)
+            if mode in ("fp16", "int8_ours"):
+                annotate_last_point(ax, sub["batch"].values, sub[y_col].values, LABELS.get(mode, mode), COLORS.get(mode, "#333333"), dx=0.15, dy=0.0)
+        ax.set_xticks(batches)
+        ax.set_xticklabels([str(int(b)) for b in batches])
+        style_axis(ax, ylabel=ylabel, xlabel="Batch Size")
+        place_panel_tag(ax, title.split()[0], " ".join(title.split()[1:]))
+    handles, labels = _shared_mode_handles(modes)
+    fig.tight_layout(rect=(0, 0.11, 1, 1))
+    add_shared_legend(fig, handles, labels, ncol=min(5, len(labels)), y=0.01)
+    save_fig(fig, out_dir / "appendix_memory_dashboard.pdf")
+
+
+def fig_kv_ablation_summary_ruler(project_root, out_dir):
+    """Grouped bar chart summarizing K/V sensitivity with MixedKV."""
+    print("Fig: kv_ablation_summary_ruler")
+    ruler_path = project_root / "results" / "emnlp_expansion_v1" / "tables" / "kv_ablation_ruler.csv"
+    if not ruler_path.exists():
+        print(f"  SKIP: {ruler_path} not found")
+        return
+
+    ruler = pd.read_csv(ruler_path)
+    model_rows = [
+        ("Qwen2.5-1.5B", "1p5b", project_root / "results" / "paper_tables" / "table3_mixedkv_qwen25_1p5b.csv"),
+        ("Qwen2.5-7B", "7b", project_root / "results" / "paper_tables" / "table3_mixedkv_qwen25_7b.csv"),
+        ("LLaMA-3.1-8B", "8b", project_root / "results" / "paper_tables" / "table3_mixedkv_llama31_8b.csv"),
+    ]
+    methods = ["K-only", "V-only", "K4V8", "MixedKV"]
+    values = {m: [] for m in methods}
+
+    for model_label, model_key, mixedkv_csv in model_rows:
+        sub = ruler[ruler["model_key"] == model_key]
+        values["K-only"].append(float(sub[sub["method"] == "K-only"]["mean"].iloc[0]))
+        values["V-only"].append(float(sub[sub["method"] == "V-only"]["mean"].iloc[0]))
+        values["K4V8"].append(float(sub[sub["method"] == "K4V8"]["mean"].iloc[0]))
+        mixed_df = pd.read_csv(mixedkv_csv)
+        mixed_val = float(mixed_df[mixed_df["kv_mode"] == "int4_mixed_kv"]["ruler_mean"].iloc[0])
+        values["MixedKV"].append(mixed_val)
+
+    fig, ax = plt.subplots(figsize=(8.8, 4.6))
+    x = np.arange(len(model_rows))
+    width = 0.18
+    for i, method in enumerate(methods):
+        offset = (i - 1.5) * width
+        bars = ax.bar(
+            x + offset,
+            values[method],
+            width=width,
+            color=KV_ABLATION_COLORS[method],
+            edgecolor="white",
+            linewidth=0.5,
+            label=method,
+            zorder=3,
+        )
+        for bar, val in zip(bars, values[method]):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                val + 0.55,
+                f"{val:.1f}",
+                ha="center",
+                va="bottom",
+                fontsize=7.2,
+                color="#333333",
+            )
+    ax.set_xticks(x)
+    ax.set_xticklabels([row[0].replace("Qwen2.5-", "Qwen\n").replace("LLaMA-3.1-", "LLaMA\n") for row in model_rows])
+    style_axis(ax, ylabel="RULER Pass Rate (%)")
+    place_panel_tag(ax, "", "K/V 敏感性总结（RULER, 32K）")
+    ax.legend(ncol=4, loc="upper center", bbox_to_anchor=(0.5, 1.14), frameon=True, fontsize=8)
+    ax.text(
+        0.02, 0.03,
+        "K4V8 在 Qwen 上完全崩溃，而 MixedKV 保留了可用质量。",
+        transform=ax.transAxes, fontsize=7.6, color="#333333",
+        bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="#CCCCCC", lw=0.7),
+    )
+    fig.tight_layout()
+    save_fig(fig, out_dir / "kv_ablation_summary_ruler.pdf")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -293,8 +795,8 @@ def fig_ppl_bar(tables_dir, out_dir):
             ax_inset.axhline(y=fp16_val, color=COLORS["fp16"], linestyle="--",
                              linewidth=0.6, alpha=0.5)
 
-    fig.tight_layout()
-    save_fig(fig, out_dir / "ppl_vs_tokens.png")
+    fig.subplots_adjust(left=0.10, right=0.98, bottom=0.20, top=0.92)
+    save_fig(fig, out_dir / "ppl_vs_tokens.pdf")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -333,7 +835,7 @@ def fig_needle_dual_panel(tables_dir, out_dir):
 
     ax1.set_ylabel("Needle Pass Rate (%)")
     fig.tight_layout(w_pad=2)
-    save_fig(fig, out_dir / "needle_pass_rate_vs_context.png")
+    save_fig(fig, out_dir / "needle_pass_rate_vs_context.pdf")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -378,19 +880,19 @@ def _plot_metric_vs_seq(tables_dir, out_dir, filename, y_col, y_ci_col,
 
 
 def fig_tpot_vs_seq(tables_dir, out_dir):
-    _plot_metric_vs_seq(tables_dir, out_dir, "latency_tpot_vs_seq.png",
+    _plot_metric_vs_seq(tables_dir, out_dir, "latency_tpot_vs_seq.pdf",
                         "tpot_ms_mean", "tpot_ms_ci95_half",
                         "TPOT (ms)", "解码延迟 (TPOT) 随序列长度的变化 (batch=1)")
 
 
 def fig_memory_kv_vs_seq(tables_dir, out_dir):
-    _plot_metric_vs_seq(tables_dir, out_dir, "memory_kv_cache_vs_seq.png",
+    _plot_metric_vs_seq(tables_dir, out_dir, "memory_kv_cache_vs_seq.pdf",
                         "kv_cache_mem_mb_mean", "kv_cache_mem_mb_ci95_half",
                         "KV Cache Memory (MB)", "KV Cache 显存随序列长度的变化 (batch=1)")
 
 
 def fig_memory_peak_vs_seq(tables_dir, out_dir):
-    _plot_metric_vs_seq(tables_dir, out_dir, "memory_peak_vs_seq.png",
+    _plot_metric_vs_seq(tables_dir, out_dir, "memory_peak_vs_seq.pdf",
                         "gpu_mem_peak_mb_mean", "gpu_mem_peak_mb_ci95_half",
                         "Peak GPU Memory (MB)", "总峰值显存随序列长度的变化 (batch=1)")
 
@@ -445,7 +947,7 @@ def fig_invtau_heatmap(tables_dir, out_dir):
                         fontsize=5.5, color="white" if val < 0.7 else "black")
 
     fig.tight_layout()
-    save_fig(fig, out_dir / "ch3_invtau_heatmap.png")
+    save_fig(fig, out_dir / "ch3_invtau_heatmap.pdf")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -478,7 +980,7 @@ def fig_ruler_vs_context(tables_dir, out_dir):
     ax.set_xticklabels([format_seq_len(s) for s in seq_lens])
     ax.legend(fontsize=7.5, ncol=2)
     fig.tight_layout()
-    save_fig(fig, out_dir / "ruler_pass_rate_vs_context.png")
+    save_fig(fig, out_dir / "ruler_pass_rate_vs_context.pdf")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -516,7 +1018,7 @@ def fig_longbench_vs_context(tables_dir, out_dir):
     ax.set_xticklabels([format_seq_len(s) for s in seq_lens])
     ax.legend(fontsize=7.5, ncol=2)
     fig.tight_layout()
-    save_fig(fig, out_dir / "longbench_score_vs_context.png")
+    save_fig(fig, out_dir / "longbench_score_vs_context.pdf")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -535,7 +1037,7 @@ def fig_needle_depth_heatmaps(tables_dir, out_dir):
     context_lens = sorted(df["context_len"].unique())
 
     for ctx in context_lens:
-        fname = f"needle_curve_depth_ctx{int(ctx)}.png"
+        fname = f"needle_curve_depth_ctx{int(ctx)}.pdf"
         print(f"  Sub-fig: {fname}")
         sub = df[df["context_len"] == ctx]
 
@@ -612,7 +1114,7 @@ def fig_needle_exact_match(tables_dir, out_dir):
     ax.set_ylim(-5, 108)
     ax.legend(fontsize=7.5, ncol=2)
     fig.tight_layout()
-    save_fig(fig, out_dir / "needle_exact_match_vs_context.png")
+    save_fig(fig, out_dir / "needle_exact_match_vs_context.pdf")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -674,7 +1176,7 @@ def fig_tpot_gain(tables_dir, out_dir):
     ax.grid(axis="y", alpha=0.3)
     ax.grid(axis="x", visible=False)
     fig.tight_layout()
-    save_fig(fig, out_dir / "latency_tpot_gain_vs_fp16.png")
+    save_fig(fig, out_dir / "latency_tpot_gain_vs_fp16.pdf")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -771,7 +1273,7 @@ def _plot_metric_vs_batch(tables_dir, out_dir, filename, y_col, y_ci_col,
 
 def fig_throughput_vs_batch(tables_dir, out_dir):
     _plot_metric_vs_batch(
-        tables_dir, out_dir, "throughput_tok_per_s_vs_batch.png",
+        tables_dir, out_dir, "throughput_tok_per_s_vs_batch.pdf",
         "tok_per_s_mean", "tok_per_s_ci95_half",
         "Throughput (tokens/s)", "吞吐量随 Batch Size 的扩展曲线",
         use_throughput_csv=True)
@@ -779,7 +1281,7 @@ def fig_throughput_vs_batch(tables_dir, out_dir):
 
 def fig_throughput_per_seq_vs_batch(tables_dir, out_dir):
     _plot_metric_vs_batch(
-        tables_dir, out_dir, "throughput_tok_per_s_per_seq_vs_batch.png",
+        tables_dir, out_dir, "throughput_tok_per_s_per_seq_vs_batch.pdf",
         "tok_per_s_per_seq_mean", "tok_per_s_per_seq_ci95_half",
         "Throughput per Sequence (tokens/s/seq)",
         "单序列吞吐量随 Batch Size 的变化",
@@ -788,7 +1290,7 @@ def fig_throughput_per_seq_vs_batch(tables_dir, out_dir):
 
 def fig_memory_kv_vs_batch(tables_dir, out_dir):
     _plot_metric_vs_batch(
-        tables_dir, out_dir, "memory_kv_cache_vs_batch.png",
+        tables_dir, out_dir, "memory_kv_cache_vs_batch.pdf",
         "kv_cache_mem_mb_mean", "kv_cache_mem_mb_ci95_half",
         "KV Cache Memory (MB)", "KV Cache 显存随 Batch Size 的变化",
         use_throughput_csv=True, add_oom=False)
@@ -796,7 +1298,7 @@ def fig_memory_kv_vs_batch(tables_dir, out_dir):
 
 def fig_memory_peak_vs_batch(tables_dir, out_dir):
     _plot_metric_vs_batch(
-        tables_dir, out_dir, "memory_peak_vs_batch.png",
+        tables_dir, out_dir, "memory_peak_vs_batch.pdf",
         "gpu_mem_peak_mb_mean", "gpu_mem_peak_mb_ci95_half",
         "Peak GPU Memory (MB)", "总峰值显存随 Batch Size 的变化",
         use_throughput_csv=True, add_oom=False)
@@ -804,7 +1306,7 @@ def fig_memory_peak_vs_batch(tables_dir, out_dir):
 
 def fig_prefill_vs_batch(tables_dir, out_dir):
     _plot_metric_vs_batch(
-        tables_dir, out_dir, "prefill_tok_per_s_vs_batch.png",
+        tables_dir, out_dir, "prefill_tok_per_s_vs_batch.pdf",
         "prefill_tok_per_s_mean", "prefill_tok_per_s_ci95_half",
         "Prefill Throughput (tokens/s)", "Prefill 阶段吞吐量随 Batch Size 的变化",
         use_throughput_csv=True, add_oom=False)
@@ -841,6 +1343,8 @@ def main():
 
     # All figure generators
     generators = {
+        "main_quality":     lambda: fig_main_quality_dashboard(tables_dir, out_dir),
+        "main_efficiency":  lambda: fig_main_efficiency_dashboard(tables_dir, out_dir),
         "ppl":              lambda: fig_ppl_bar(tables_dir, out_dir),
         "needle":           lambda: fig_needle_dual_panel(tables_dir, out_dir),
         "tpot_seq":         lambda: fig_tpot_vs_seq(tables_dir, out_dir),
@@ -850,6 +1354,7 @@ def main():
         "ruler":            lambda: fig_ruler_vs_context(tables_dir, out_dir),
         "longbench":        lambda: fig_longbench_vs_context(tables_dir, out_dir),
         "needle_depth":     lambda: fig_needle_depth_heatmaps(tables_dir, out_dir),
+        "needle_depth_grid": lambda: fig_needle_depth_grid(tables_dir, out_dir),
         "needle_exact":     lambda: fig_needle_exact_match(tables_dir, out_dir),
         "tpot_gain":        lambda: fig_tpot_gain(tables_dir, out_dir),
         "throughput_batch":     lambda: fig_throughput_vs_batch(tables_dir, out_dir),
@@ -857,6 +1362,9 @@ def main():
         "mem_kv_batch":     lambda: fig_memory_kv_vs_batch(tables_dir, out_dir),
         "mem_peak_batch":   lambda: fig_memory_peak_vs_batch(tables_dir, out_dir),
         "prefill":          lambda: fig_prefill_vs_batch(tables_dir, out_dir),
+        "throughput_dashboard": lambda: fig_appendix_throughput_dashboard(tables_dir, out_dir),
+        "memory_dashboard": lambda: fig_appendix_memory_dashboard(tables_dir, out_dir),
+        "kv_ablation_summary": lambda: fig_kv_ablation_summary_ruler(_project_root(), out_dir),
     }
 
     if args.only:
