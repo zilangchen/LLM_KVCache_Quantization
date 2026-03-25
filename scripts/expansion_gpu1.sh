@@ -9,6 +9,10 @@
 
 set -euo pipefail
 
+export HF_HOME=/root/autodl-tmp/hf_cache
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+
 PYTHON="${PYTHON:-python3}"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"

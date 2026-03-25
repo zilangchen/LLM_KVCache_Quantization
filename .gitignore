@@ -30,6 +30,7 @@ logs/
 
 # Thesis compiled outputs (keep source tracked)
 thesis/*.pdf
+thesis/*.docx
 thesis/*.aux
 thesis/*.bbl
 thesis/*.blg
