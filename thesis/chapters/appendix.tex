@@ -220,7 +220,7 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.85\textwidth]{figures/ruler_pass_rate_vs_context.png}
+  \includegraphics[width=0.87\textwidth]{figures/ruler_pass_rate_vs_context.pdf}
   \caption{各量化模式的 RULER 通过率随上下文长度的变化（Qwen2.5-1.5B-Instruct）。
   RULER 评估覆盖 4 个子任务：S-NIAH、MK-NIAH、VT 和 CWE。}
   \label{fig:app-ruler-vs-context}
@@ -228,7 +228,7 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.85\textwidth]{figures/longbench_score_vs_context.png}
+  \includegraphics[width=0.87\textwidth]{figures/longbench_score_vs_context.pdf}
   \caption{各量化模式的 LongBench 综合评分随上下文长度的变化（Qwen2.5-1.5B-Instruct）。
   综合评分为 7 类子任务官方指标的宏平均。}
   \label{fig:app-longbench-vs-context}
@@ -239,49 +239,28 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
 \label{sec:app-needle-heatmaps}
 % ============================================================
 
-图~\ref{fig:app-needle-4k}--\ref{fig:app-needle-32k} 展示了各量化模式在
-4 种上下文长度下 Needle 通过率关于插入深度的详细分布。
-其中图~\ref{fig:app-needle-8k}（8K）和图~\ref{fig:app-needle-16k}（16K）
-呈现了从短上下文到长上下文过渡过程中 INT4 退化的渐进特征。
+图~\ref{fig:app-needle-depth-grid} 将 4K、8K、16K 和 32K 的 Needle 深度热力图
+合并为一个共享色标的 2$\times$2 大图，
+便于直接观察 INT4 系列模式从短上下文到长上下文的渐进退化。
 图~\ref{fig:app-needle-exact} 进一步以精确匹配（exact match）这一更严格标准
 展示了各模式随上下文长度的通过率变化。
 热力图横轴为 needle 在 haystack 中的相对位置（深度百分比），
-每列对应一种量化模式。
+纵轴对应量化模式，颜色表示通过率。
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.9\textwidth]{figures/needle_curve_depth_ctx4096.png}
-  \caption{Needle-in-a-Haystack 深度-位置分布（上下文长度 4K）}
-  \label{fig:app-needle-4k}
-\end{figure}
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=0.9\textwidth]{figures/needle_curve_depth_ctx8192.png}
-  \caption{Needle-in-a-Haystack 深度-位置分布（上下文长度 8K）}
-  \label{fig:app-needle-8k}
-\end{figure}
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=0.9\textwidth]{figures/needle_curve_depth_ctx16384.png}
-  \caption{Needle-in-a-Haystack 深度-位置分布（上下文长度 16K）}
-  \label{fig:app-needle-16k}
-\end{figure}
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=0.9\textwidth]{figures/needle_curve_depth_ctx32704.png}
-  \caption{Needle-in-a-Haystack 深度-位置分布（上下文长度 32K）。
+  \includegraphics[width=0.95\textwidth]{figures/needle_depth_grid.pdf}
+  \caption{Needle-in-a-Haystack 深度-位置热力图总览。
+  四个面板分别对应 4K、8K、16K 和 32K 上下文长度，并共享同一色标。
   INT4 系列量化模式在 32K 长上下文下出现显著的通过率退化，
   尤其在 haystack 深层位置（60\%--90\% 区间），
   说明量化噪声对远距离注意力检索的影响更为严重。}
-  \label{fig:app-needle-32k}
+  \label{fig:app-needle-depth-grid}
 \end{figure}
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.85\textwidth]{figures/needle_exact_match_vs_context.png}
+  \includegraphics[width=0.87\textwidth]{figures/needle_exact_match_vs_context.pdf}
   \caption{Needle-in-a-Haystack 精确匹配率随上下文长度的变化。
   精确匹配（exact match）采用比通过率更严格的评判标准。}
   \label{fig:app-needle-exact}
@@ -294,15 +273,14 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
 
 本节提供推理延迟、吞吐量和显存的补充可视化。
 图~\ref{fig:app-tpot-gain} 展示了各量化模式相对 FP16 的 TPOT 变化，
-图~\ref{fig:app-throughput-batch} 和图~\ref{fig:app-throughput-per-seq}
-分别展示了总吞吐量和单序列吞吐量随 batch size 的扩展曲线，
-图~\ref{fig:app-kvmem-batch} 和图~\ref{fig:app-mempeak-batch}
-分别展示了 KV Cache 显存和总峰值显存随 batch size 的变化，
-图~\ref{fig:app-prefill-batch} 展示了 prefill 阶段吞吐量的对比。
+图~\ref{fig:app-throughput-dashboard} 将总吞吐量、单序列吞吐量与 prefill 吞吐量
+压缩为统一的吞吐 dashboard，
+图~\ref{fig:app-memory-dashboard} 则合并展示 KV Cache 显存和总峰值显存
+随 batch size 的变化，以减少重复图例和页面跳转。
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.85\textwidth]{figures/latency_tpot_gain_vs_fp16.png}
+  \includegraphics[width=0.87\textwidth]{figures/latency_tpot_gain_vs_fp16.pdf}
   \caption{各量化模式相对 FP16 基线的 TPOT 变化（Qwen2.5-1.5B-Instruct，batch=1）。
   正值表示加速（TPOT 降低），负值表示减速。
   在 batch=1 的单序列解码场景下，量化操作的计算开销尚未被批处理摊薄，
@@ -314,46 +292,20 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.85\textwidth]{figures/throughput_tok_per_s_vs_batch.png}
-  \caption{吞吐量（tokens/s）随 batch size 的扩展曲线（Qwen2.5-1.5B-Instruct，seq\_len=8192）。
-  随着 batch size 增大，量化模式的显存节省转化为更高的并发能力。}
-  \label{fig:app-throughput-batch}
+  \includegraphics[width=0.95\textwidth]{figures/appendix_throughput_dashboard.pdf}
+  \caption{吞吐扩展性 dashboard（Qwen2.5-1.5B-Instruct）。
+  面板（a）展示总吞吐量，面板（b）展示单序列吞吐量，
+  面板（c）展示 prefill 吞吐量。统一图例和坐标轴便于比较量化模式在 batch 扩展中的并发收益与单序列代价。}
+  \label{fig:app-throughput-dashboard}
 \end{figure}
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.85\textwidth]{figures/throughput_tok_per_s_per_seq_vs_batch.png}
-  \caption{单序列吞吐量（tokens/s/seq）随 batch size 的变化。
-  当 batch size 增大时，单序列吞吐量下降，
-  但量化模式的下降速率慢于 FP16，体现了更高的显存效率。}
-  \label{fig:app-throughput-per-seq}
-\end{figure}
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=0.85\textwidth]{figures/memory_kv_cache_vs_batch.png}
-  \caption{KV Cache 显存随 batch size 的变化（Qwen2.5-1.5B-Instruct，seq\_len=4096）。
-  KV Cache 显存与 batch size 严格线性增长，
-  INT8 和 INT4 量化分别实现约 2$\times$ 和 4$\times$ 的显存压缩。}
-  \label{fig:app-kvmem-batch}
-\end{figure}
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=0.85\textwidth]{figures/memory_peak_vs_batch.png}
-  \caption{总峰值显存随 batch size 的变化（Qwen2.5-1.5B-Instruct，seq\_len=4096）。
-  随着 batch size 增大，KV Cache 在总显存中的占比升高，
-  量化的显存节省优势更加显著。}
-  \label{fig:app-mempeak-batch}
-\end{figure}
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=0.85\textwidth]{figures/prefill_tok_per_s_vs_batch.png}
-  \caption{Prefill 阶段吞吐量随 batch size 的变化（Qwen2.5-1.5B-Instruct）。
-  Prefill 阶段为计算密集型，量化对其影响较小，
-  各模式的 prefill 吞吐量差异主要来自 KV Cache 写入开销。}
-  \label{fig:app-prefill-batch}
+  \includegraphics[width=0.92\textwidth]{figures/appendix_memory_dashboard.pdf}
+  \caption{显存扩展性 dashboard（Qwen2.5-1.5B-Instruct）。
+  面板（a）展示 KV Cache 显存随 batch size 的线性增长，
+  面板（b）展示总峰值显存；两者共同说明量化的显存节省会随着并发度提升而持续转化为更高的可容纳 batch。}
+  \label{fig:app-memory-dashboard}
 \end{figure}
 
 % ============================================================
@@ -443,12 +395,12 @@ INT4 量化模式在所有子任务上均完全失败（通过率 0\%），
 \label{sec:app-claim-detail}
 % ============================================================
 
-表~\ref{tab:app-claim-summary} 汇总了全部 11 项实验预期的验证结果，
+表~\ref{tab:app-claim-summary} 汇总了全部 13 项实验预期的验证结果，
 包括实际观测增益、阈值、统计检验结果和证据强度。
 
 \begin{table}[htbp]
   \centering
-  \caption{实验预期验证详细汇总（11 项）}
+  \caption{实验预期验证详细汇总（13 项）}
   \label{tab:app-claim-summary}
   \zihao{5}
   \setlength{\tabcolsep}{3pt}
@@ -459,7 +411,7 @@ INT4 量化模式在所有子任务上均完全失败（通过率 0\%），
     E1  & TPOT 显著降低             & 达标 & $\geq$5\%    & +17.3\%   & 0.016 & 强    & 7B \\
     E2  & KV 显存优势               & 达标 & $\geq$20\%   & +43.7\%   & ---   & 中    & 8B \\
     E3  & Needle 不劣于 baseline    & 达标 & $\geq$$-$1\%  & 0.0\%     & 1.000 & 中    & 7B \\
-    E4  & PPL 不劣于 baseline       & 达标 & $\geq$$-$0.5\% & $-$0.18\% & 0.097 & 中    & 1.5B \\
+    E4  & PPL 不劣于 baseline       & 达标 & $\geq$$-$0.5\% & $-$0.20\% & 0.097 & 中    & 1.5B \\
     E5  & LongBench 不劣于 baseline & 达标 & $\geq$$-$1\%  & +0.16\%   & 0.144 & 中    & 7B \\
     E6  & RULER 不劣于 baseline     & 未达标 & $\geq$$-$1\%  & $-$2.64\% & 0.727 & 无    & 1.5B \\
     E7  & INT4 Needle 不劣于        & 未达标 & $\geq$$-$1\%  & $-$2.0\%  & 1.000 & 无    & 8B \\
@@ -467,13 +419,17 @@ INT4 量化模式在所有子任务上均完全失败（通过率 0\%），
     E9  & LongBench 不劣于 KIVI     & 达标 & $\geq$$-$1\%  & +1.37\%   & 0.144 & 中    & 7B \\
     E10 & Needle 不劣于 KIVI        & 达标 & $\geq$$-$1\%  & 0.0\%     & 1.000 & 中    & 8B \\
     E11 & 跨模型 LongBench 不劣于   & 达标 & $\geq$$-$1\%  & +0.05\%   & 0.955 & 中    & 7B+8B \\
+    E12 & MixedKV RULER 优于均匀 INT4 & 达标 & $>$0\%        & +24.87\%\tnote{f} & ---   & 强    & 1.5B/7B \\
+    E13 & 校准样本鲁棒性 PPL 变化极小 & 达标 & $\leq$0.02  & 0.02      & ---   & 中    & 1.5B/7B \\
     \bottomrule
   \end{tabular}
   \begin{tablenotes}
     \footnotesize
-    \item 注：E1--E5、E9--E11 为 INT8 相关预期，E6 为 INT8 RULER 预期，E7--E8 为 INT4 预期。
+    \item 注：E1--E5、E9--E11 为 INT8 相关预期，E6 为 INT8 RULER 预期，E7--E8 为 INT4 预期，E12--E13 为新增预期。
     ``阈值''为非劣性/优效性的最小增益要求。``$q$值''为 BH-FDR 校正后的调整 $p$ 值。
     ``---'' 表示该项不要求统计检验（直接比较确定性指标）。
+    \item[f] E12 观测值为 Qwen 1.5B 的 MixedKV RULER（24.87\%）相对均匀 INT4（0\%）的增益。
+    LLaMA-8B 的均匀 INT4 RULER 为 27.05\%（非 0\%），MixedKV（33.28\%）与之保持竞争力。
     三项未达标（E6、E7、E8）的共性分析见正文第~\ref{sec:exp-discussion}~节。
   \end{tablenotes}
 \end{table}
@@ -500,7 +456,7 @@ INT4 量化模式在所有子任务上均完全失败（通过率 0\%），
 尚未包含 input\_layernorm 和 RoPE 位置编码变换，
 后续版本已优化了该预处理流程。
 1.5B 模型的 INT8 量化在实验中展现了与 FP16
-几乎一致的质量（PPL 退化 $-$0.18\%，Needle 100\%），
+几乎一致的质量（PPL 退化 $-$0.20\%，Needle 100\%），
 表明当前校准产物对 1.5B 模型 INT8 量化的影响有限。
 使用完善后的预处理流程进行重校准对比验证
 列为未来工作（第~\ref{sec:conclusion-future}~节）。
@@ -553,3 +509,82 @@ INT4 量化模式在所有子任务上均完全失败（通过率 0\%），
 （3）Qwen2.5-1.5B 和 LLaMA-3.1-8B 的 PPL 中 ours 仍略逊于 baseline，
 表明 KL 校准在 INT4 下的收益不具备跨模型一致性，
 进一步确认了第~\ref{subsec:exp-int4-limitations}~节关于 INT4 量化局限性的分析。
+
+% ============================================================
+\section{K/V 精度消融与 MixedKV 完整数据}
+\label{sec:app-kv-ablation-full}
+% ============================================================
+
+本节补充正文第~\ref{sec:exp-kv-sensitivity}~节中因数据可比性限制
+而未在主表中展示的完整数据。
+
+\textbf{Mistral-7B LongBench 数据说明。}
+Mistral-7B-Instruct-v0.3 的 LongBench 评测结果在所有量化配置下均为 1.0，
+包括 K/V 消融的三种配置（K-only, V-only, K4V8）
+和 MixedKV 对比的三种方法（FP16, KIVI-style, MixedKV）。
+该结果源于 Mistral 模型的 LongBench 评测管线使用了合成数据源，
+评分不反映模型的实际长文本理解能力，
+因此在正文的跨模型 LongBench 对比中排除了 Mistral 的数据。
+需强调的是，这一 artifact 影响的仅是 LongBench 评测本身，
+而非量化方法——Mistral-7B 在 PPL、Needle 和 RULER 上的评测均正常有效。
+
+表~\ref{tab:app-kv-ablation-longbench-full} 列出了包含 Mistral-7B 在内的
+四个模型的 K/V 消融 LongBench 完整结果。
+
+\begin{table}[htbp]
+  \centering
+  \caption{K/V 精度消融——LongBench 完整数据（$\times$100，32K，3 seeds，含 Mistral-7B）}
+  \label{tab:app-kv-ablation-longbench-full}
+  \small
+  \begin{threeparttable}
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{模型} & \textbf{K-only (K@INT8)} & \textbf{V-only (V@INT4)} & \textbf{K4V8 (K@INT4)} \\
+    \midrule
+    Qwen2.5-1.5B & $4.57 \pm 0.01$ & $4.54 \pm 0.04$ & $2.58 \pm 0.08$ \\
+    Qwen2.5-7B   & $4.10 \pm 0.11$ & $3.85 \pm 0.02$ & $0.80 \pm 0.05$ \\
+    LLaMA-3.1-8B & $7.31 \pm 0.43$ & $6.21 \pm 0.66$ & $8.92 \pm 0.79$ \\
+    Mistral-7B\tnote{*} & $100.0 \pm 0.0$ & $100.0 \pm 0.0$ & $100.0 \pm 0.0$ \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \small
+    \item[*] Mistral-7B 的 LongBench 使用合成数据源（synthetic data），
+    所有消融配置得分均为 1.0（$\times$100 显示为 100.0），
+    不反映模型实际长文本理解能力。
+  \end{tablenotes}
+  \end{threeparttable}
+\end{table}
+
+% ============================================================
+\section{INT4 量化噪声与序列长度交互效应的形式化推导}
+\label{sec:app-sqnr-derivation}
+% ============================================================
+
+本节提供正文第~\ref{subsec:exp-int4-limitations}~节中量化步长与序列长度交互效应的完整推导。
+
+Needle-in-a-Haystack 任务的检索成功条件可形式化为：
+目标位置 $t$ 的 attention logit 与最强干扰位置的差值
+$\delta = z_t - \max_{i \neq t} z_i$
+（其中 $z_i = \bq^\top \bk_i / \sqrt{d_k}$）
+需在量化后仍保持正值，使 softmax 将最大概率分配给目标位置。
+
+当 Key 矩阵经 INT4 量化后，每个 logit $z_i$ 受到量化噪声扰动 $\epsilon_i$，
+其方差约为：
+\begin{equation}
+  \text{Var}(\epsilon_i) \approx \|\bq\|^2 \cdot \sigma_{q,4}^2 / d_k
+\end{equation}
+其中 $\sigma_{q,4}^2 = \Delta_4^2 / 12$ 为 INT4 量化的逐元素噪声方差。
+
+随序列长度 $n$ 增大，$\max_{i \neq t} (z_i + \epsilon_i)$ 的期望值
+以 $O(\sqrt{2 \ln n} \cdot \sigma_\epsilon)$ 的速率增长（极值统计理论），
+而目标信号 $\delta$ 不随 $n$ 增大。
+因此存在临界序列长度 $n^*$，满足：
+\begin{equation}
+  \delta \approx \sqrt{2 \ln n^*} \cdot \sigma_\epsilon
+\end{equation}
+当 $n > n^*$ 时，量化噪声以高概率淹没目标信号，检索失败。
+
+由于 INT4 的逐元素噪声方差 $\sigma_{q,4}^2 / \sigma_{q,8}^2 = (255/15)^2 = 289$，
+INT4 的 $n^*$ 远小于 INT8，从理论上解释了 INT4 在 1.5B 模型上
+从短上下文到 32K 的 Needle 通过率急剧下降趋势。

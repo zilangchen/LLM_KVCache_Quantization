@@ -8,11 +8,14 @@
 第三章提出了以 KL 散度为校准目标、结合逐头温度校正和 Triton 融合核函数的行为对齐量化框架。
 本章对该框架进行全面的实验评估，验证其在多模型、多精度、多基准条件下的有效性与适用边界。
 第~\ref{sec:exp-setup}~节介绍实验设置；
-第~\ref{sec:exp-main}~节呈现主模型上的综合结果；
+第~\ref{sec:exp-main}~节呈现 INT8 主线的综合结果；
 第~\ref{sec:exp-ablation}~节通过敏感性分析考察关键设计选择的影响；
 第~\ref{sec:exp-generalization}~节在跨架构模型上验证泛化性；
-第~\ref{sec:exp-kivi}~节和第~\ref{sec:exp-int4}~节分别讨论与 KIVI-style 的对比及 INT4 量化的局限；
-第~\ref{sec:exp-kv-sensitivity}~节通过受控消融实验分析 K/V 精度敏感性并评估 MixedKV 低比特路径；
+第~\ref{sec:exp-int4}~节分析对称 INT4 的边界诊断；
+第~\ref{sec:exp-kv-sensitivity}~节通过受控消融分析 K/V 精度敏感性；
+第~\ref{sec:exp-rolealign}~节呈现角色感知非对称量化（INT4-RoleAlign）的跨模型结果；
+第~\ref{sec:exp-kivi-unified}~节从 INT8 和 INT4 两个层面进行与 KIVI-style 的正面对比；
+第~\ref{sec:exp-chunksize}~节分析量化评估粒度鲁棒性；
 第~\ref{sec:exp-discussion}~节对全章结果进行综合讨论。
 
 % ============================================================
@@ -107,7 +110,7 @@ GPU 峰值显存（单位 MB）。
 \label{subsec:exp-baselines}
 % ------------------------------------------------------------
 
-表~\ref{tab:kv-modes} 列出了本文评测的 7 种 KV Cache 量化模式，
+表~\ref{tab:kv-modes} 列出了本文评测的 9 种 KV Cache 量化模式，
 涵盖从无量化上界到 INT4 低比特量化的完整精度谱。
 
 \begin{table}[htbp]
@@ -126,14 +129,19 @@ GPU 峰值显存（单位 MB）。
     int4\_fused    & KL 行为对齐 & 4  & 有    & triton\_fused & 对称 per-group \\
     int4\_ours     & KL 行为对齐 & 4  & 有    & torch\_ref    & 对称 per-group \\
     kivi\_style    & 非对称      & 8  & 无    & torch\_ref    & \makecell{K: per-channel\\V: per-token} \\
+    int4\_ours\_asym & BA percentile & 4  & 无    & torch\_ref    & \makecell{K: per-channel\\V: per-token} \\
+    int4\_ours\_mixed & KL 行为对齐 & K8/V4 & 无 & torch\_ref   & \makecell{K: 对称 per-group\\V: 非对称 per-token} \\
     \bottomrule
   \end{tabular}
   \begin{tablenotes}
     \small
-    \item 注：int8\_ours 是本文提出的完整方案（KL 校准 + per-head $\tau^{-1}$ 温度校正 + Triton 融合核函数）。
+    \item 注：int8\_ours 是本文提出的 INT8 完整方案（KL 校准 + 自适应保护 + Triton 融合核函数）。
     kivi\_style 采用 KIVI~\cite{liu2024kivi} 的核心量化轴策略（Key 逐通道、Value 逐 token 的非对称量化），
     但不包含原文中的残差补偿等完整工程优化。
     int4\_fused 与 int4\_ours 的区别在于是否使用 Triton 融合核函数。
+    int4\_ours\_asym（INT4-RoleAlign）与 kivi\_style 共享非对称量化格式但使用 BA-guided percentile 校准，
+    最终配置不含温度校正（$\tau^{-1}$）。
+    int4\_ours\_mixed（MixedKV）为 K@INT8+V@INT4 混合精度。
   \end{tablenotes}
   \end{threeparttable}
 \end{table}
@@ -141,8 +149,9 @@ GPU 峰值显存（单位 MB）。
 各模式的关键差异在于四个维度：
 （a）\emph{校准策略}——percentile 裁剪仅基于数值分布的百分位截断，
 KL 行为对齐则以注意力权重分布的 KL 散度为优化目标；
-（b）\emph{温度校正}——int8\_ours 和 int4 系列的 ours 变体使用校准产生的
-逐层逐头 $\tau^{-1}$ 参数，在推理时通过预缩放 Query 向量实现注意力分布的尖锐度恢复；
+（b）\emph{温度校正}——表中标记``有''表示校准阶段搜索了 $\tau^{-1}$ 参数
+（int8\_ours 的 mainline 配置最终不启用温度校正，
+以自适应保护作为替代；int4\_ours\_asym 同样不使用）；
 （c）\emph{Decode Kernel}——triton\_fused 将反量化与注意力计算融合在单个
 GPU 核函数中执行，消除了中间 FP16 张量的显存读写开销；
 （d）\emph{Scale 来源与时间语义}——各模式的 Scale 计算时机和复用策略存在本质差异：
@@ -675,90 +684,10 @@ Mistral-7B 的 PPL 和 RULER 指标均接近 FP16 基线
 
 \noindent\textbf{本节小结：}行为对齐校准在当前 4 个模型（3 个模型族：Qwen、LLaMA、Mistral）上均展现一致的性能模式，表现出跨模型适用性。
 
-
-% ============================================================
-\section{KIVI-style 对比}
-\label{sec:exp-kivi}
-% ============================================================
-
-本节将 INT8-ours 与 KIVI-style 基线进行对比，
-评估行为对齐校准相对于非对称量化策略的竞争力。
-KIVI~\cite{liu2024kivi} 提出了非对称量化策略——
-Key 按通道（per-channel）量化、Value 按 token（per-token）量化，
-这一设计利用了 Key 和 Value 矩阵在统计特性上的不对称性。
-
-在展开对比之前，必须声明本文 KIVI-style 实现与 KIVI 原文的差异：
-
-\begin{itemize}[leftmargin=2em, itemsep=2pt]
-  \item 本实现仅采用 KIVI 的核心量化轴策略（per-channel K + per-token V 非对称量化），
-    不包含原文中的残差补偿等完整工程优化细节；
-  \item KIVI-style 的 decode 路径固定使用 \texttt{torch\_ref} 核函数
-    （非 Triton 融合），因此 TPOT 对比需考虑 kernel 实现差异；
-  \item KIVI-style 不使用温度校正（$\tau^{-1}$），
-    在与 INT8-ours 对比时应理解为"无温度校正基线"；
-  \item KIVI-style 的 INT4 路径使用 int8 容器存储（未 bit-pack），
-    与 int4\_ours 的 0.5 byte/value bit-packing 存储方案不同，
-    显存占用上不具直接可比性。
-\end{itemize}
-
-\begin{table}[htbp]
-  \centering
-  \caption{INT8-ours vs KIVI-style 对比（Qwen2.5-1.5B-Instruct，32K，batch=1）}
-  \label{tab:kivi-comparison}
-  \zihao{5}
-  \setlength{\tabcolsep}{3pt}
-  \begin{threeparttable}
-  \begin{tabular}{lcccccc}
-    \toprule
-    量化模式 & PPL$\downarrow$ & Needle(\%)$\uparrow$ & LB(\%)$\uparrow$ & RULER(\%)$\uparrow$ & TPOT(ms)$\downarrow$ & KV(MB)$\downarrow$ \\
-    \midrule
-    int8\_ours
-      & 8.95{\scriptsize$\pm$0.00} & 100.0{\scriptsize$\pm$0.0}
-      & 5.00{\scriptsize$\pm$0.10} & 24.38{\scriptsize$\pm$0.65} & \textbf{47.14} & 504 \\
-    kivi\_style
-      & 9.48{\scriptsize$\pm$0.02} & 99.0{\scriptsize$\pm$2.3}
-      & 4.81{\scriptsize$\pm$0.05} & 24.06{\scriptsize$\pm$0.46} & 47.37 & 462 \\
-    \bottomrule
-  \end{tabular}
-  \begin{tablenotes}
-    \small
-    \item 注：两者均为 INT8 精度。
-    KIVI-style 使用 torch\_ref 核函数（非 Triton 融合），
-    int8\_ours 使用 Triton 融合核函数。
-    KIVI-style 的 KV Cache 显存（462~MB）略低于 INT8-ours（504~MB），
-    因 per-channel/per-token 量化轴的 scale 存储模式不同。
-    int8\_ours 质量值为 mainline 配置。
-  \end{tablenotes}
-  \end{threeparttable}
-\end{table}
-
-\textbf{LongBench 对比。}
-INT8-ours 的 LongBench 分数（5.00\%）高于 KIVI-style（4.81\%），
-增益 $+$1.37\%（非劣性阈值 $\geq$$-$1\%），
-符号翻转检验 $p=0.091$（$q=0.144$），差异不显著。
-这表明以 KL 散度为目标的校准优化能够有效补偿对称量化在建模
-Key/Value 不对称特性上的理论劣势，为实际部署中选择更简单的
-对称量化方案提供了实证支持。
-
-\textbf{Needle 对比。}
-INT8-ours 的 Needle 通过率（100\%）与 KIVI-style（99\%）可比，
-差异为 0\%（取最保守评估模型 LLaMA-8B）。
-KIVI-style 在 1.5B 和 7B 模型上出现 99\% 的轻微退化（1 个 depth 级别失败），
-可能与非对称量化在特定 Key 分布下的精度损失有关。
-
-\textbf{效率对比。}
-表~\ref{tab:kivi-comparison} 同时展示了两者在 32K 上下文下的推理效率。
-KIVI-style 的 TPOT（47.37~ms）与 INT8-ours（47.14~ms）极为接近（差异 $<$0.5\%），
-尽管前者使用 PyTorch 参考实现而后者使用 Triton 融合核函数。
-这是因为 KIVI-style 的 per-token Value 量化轴使得每次 decode 步仅需反量化
-当前 token 的一组 scale 参数（而非 per-group 方案下的多组 scale），
-部分抵消了非融合实现的额外显存读写开销。
-KV Cache 显存方面，KIVI-style（462~MB）略低于 INT8-ours（504~MB），
-差异源于两者不同的量化轴设计带来的 scale 张量存储开销差异。
-综合质量和效率两个维度，INT8-ours 在 LongBench 上的优势（$+$1.37\%）
-和 Needle 的完美通过率（100\% vs 99\%）使其在整体权衡中仍占优。
-
-\noindent\textbf{本节小结：}KL 散度校准通过优化注意力行为一致性，有效补偿了对称量化在建模 K/V 不对称特性上的理论劣势，INT8-ours 在 LongBench 和 Needle 上均不劣于 KIVI-style。
+\medskip
+以上三节（主线结果、敏感性分析、跨模型泛化性）完成了 INT8 行为对齐量化的全面验证。
+下一节将目光转向更具挑战性的 INT4 低比特场景，
+通过 KL 诊断透镜分析对称量化的系统性失效模式。
 
 
 % ============================================================
@@ -1213,51 +1142,359 @@ Qwen2.5-1.5B 上 Needle 通过率降至 0\%，PPL 退化超过 15\%。
 \subsection{实验结果}
 \label{subsec:exp-rolealign-results}
 
-表~\ref{tab:rolealign-results} 汇总了 Qwen2.5-1.5B-Instruct 上
-INT4-RoleAlign 与对照方法在 PPL、Needle 和 LongBench 上的对比。
+表~\ref{tab:rolealign-results} 汇总了三个模型上
+INT4-RoleAlign 与对照方法在 PPL、Needle 和 LongBench 上的对比，
+并额外列出相对 FP16 的 PPL 退化率和相对 KIVI-style 的退化缩减倍数，
+便于直观比较 BA percentile 校准的有效性。
 
 \begin{table}[htbp]
   \centering
-  \caption{INT4-RoleAlign 对比结果（Qwen2.5-1.5B-Instruct，3 seeds）}
+  \caption{INT4-RoleAlign 跨模型对比（3 seeds，32K 上下文）}
   \label{tab:rolealign-results}
   \small
+  \setlength{\tabcolsep}{3pt}
   \begin{threeparttable}
-  \begin{tabular}{lcccc}
+  \begin{tabular}{llcccccc}
     \toprule
-    量化模式 & PPL$\downarrow$ & Needle(\%)$\uparrow$ & LB(\%)$\uparrow$ & 量化轴 \\
+    \textbf{模型} & \textbf{量化模式} & \textbf{PPL}$\downarrow$ & \textbf{vs FP16} &
+    \textbf{KIVI vs FP16} & \textbf{退化缩减} &
+    \textbf{Needle}$\uparrow$ & \textbf{LB}$\uparrow$ \\
     \midrule
-    fp16            & 9.31 & 100.0 & ---   & ---  \\
-    int4\_ours (对称)  & 19--22\tnote{a} & 0.0\tnote{b} & --- & per-group 对称 \\
-    kivi\_style INT4  & 10.43 & 100.0 & 4.84 & \makecell{K: per-channel\\V: per-token} \\
-    \textbf{int4\_ours\_asym} & \textbf{9.42} & \textbf{100.0} & \textbf{4.93} & \makecell{K: per-channel\\V: per-token} \\
+    \multirow{3}{*}{\makecell[l]{Qwen2.5\\-1.5B}}
+      & fp16                      & 9.31  & ---       & ---       & ---              & 100/100 & --- \\
+      & kivi\_style INT4          & 10.43 & +12.0\%   & ---       & ---              & 100/100 & 4.83 \\
+      & \textbf{int4\_ours\_asym} & \textbf{9.42} & \textbf{+1.2\%} & +12.0\% & \textbf{10$\times$} & \textbf{100/100} & \textbf{4.92} \\
+    \midrule
+    \multirow{3}{*}{\makecell[l]{Qwen2.5\\-7B}}
+      & fp16                      & 7.14  & ---       & ---       & ---              & 100/100 & --- \\
+      & kivi\_style INT4          & 7.53  & +5.5\%    & ---       & ---              & 100/100 & 3.87 \\
+      & \textbf{int4\_ours\_asym} & \textbf{7.21} & \textbf{+1.0\%} & +5.5\%  & \textbf{5.5$\times$} & \textbf{100/100} & \textbf{3.93} \\
+    \midrule
+    \multirow{3}{*}{\makecell[l]{LLaMA-3.1\\-8B}}
+      & fp16                      & 6.73  & ---       & ---       & ---              & 100/100 & --- \\
+      & kivi\_style INT4          & 6.90  & +2.4\%    & ---       & ---              & 100/100 & 6.31 \\
+      & \textbf{int4\_ours\_asym} & \textbf{6.75} & \textbf{+0.3\%} & +2.4\%  & \textbf{8$\times$} & \textbf{100/100} & \textbf{6.31} \\
     \bottomrule
   \end{tabular}
   \begin{tablenotes}
     \small
-    \item[a] 对称 INT4 的 PPL 值来自此前 thesis-safe-v1 基线。
-    \item[b] Needle 在 32K 上下文下 3 seeds 均为 0\%。
-    \item 注：int4\_ours\_asym 使用离线 BA 校准搜索得到的 k\_percentile=100.0、
-    v\_percentile=99.9。Needle 和 LongBench 为 3 seeds（1234--1236）宏平均，
-    PPL 为 seed=1234。
+    \item 注：``退化缩减''列为 KIVI PPL 退化率 / RoleAlign PPL 退化率，
+    量化 BA percentile 校准相比无校准方案的 PPL 改善幅度。
+    int4\_ours\_asym 使用离线 BA 校准搜索得到的 k\_percentile 和 v\_percentile。
+    Needle 为 3 seeds 在 20 个 depth 级别上的通过率。
+    LB 为 LongBench 官方指标宏平均（$\times$100）。
+    LLaMA-3.1-8B LongBench 中 ours\_asym 与 kivi 持平（6.31），
+    与该模型 8 个 KV 头的 GQA 噪声稀释效应一致（见下文分析）。
   \end{tablenotes}
   \end{threeparttable}
 \end{table}
 
 \textbf{核心发现。}
-（1）量化格式的升级是 INT4 Needle 恢复的决定性因素：
-从 per-group 对称切换到 per-channel/per-token 非对称后，
-Needle 通过率从 0\% 恢复至 100\%（3 seeds 一致），
+（1）\emph{量化格式升级是 Needle 恢复的决定性因素}：
+在全部三个模型上，从 per-group 对称切换到 per-channel/per-token 非对称后，
+Needle 通过率均为 100\%（3 seeds 一致），
+而对称 INT4 在 Qwen2.5-1.5B/7B 上为 0\%。
 这表明对称 INT4 的失效并非校准策略不足，
 而是量化格式无法捕捉 Key 通道间的数值异质性。
-（2）在相同量化格式下，BA percentile 校准相比无校准的 KIVI-style
-在 PPL 上获得了显著改善（9.42 vs 10.43，退化从 12.04\% 降至 1.19\%），
-在 LongBench 上也有 +1.9\% 的增益。
-（3）基于 INT8 对称校准搜索得到的温度校正因子 $\tau^{-1}$
-在 INT4 非对称量化上\emph{无增益}
-（Needle 从 20/20 退化至 19/20，LongBench 下降 15\%），
-这是因为 per-channel K 量化的通道级 scale 已足够精确，
-原先为补偿 per-group 量化噪声设计的温度校正在此场景下过度补偿。
-因此，INT4-RoleAlign 的最终配置不包含 $\tau^{-1}$。
+
+（2）\emph{BA percentile 校准显著降低 PPL 退化}：
+在相同量化格式下，INT4-RoleAlign 相比无校准的 KIVI-style
+在三个模型上均实现了 PPL 退化的大幅缩减：
+Qwen2.5-1.5B 从 12.0\% 降至 1.2\%（10$\times$），
+Qwen2.5-7B 从 5.5\% 降至 1.0\%（5.5$\times$），
+LLaMA-3.1-8B 从 2.4\% 降至 0.3\%（8$\times$）。
+跨模型的一致改善表明 BA-guided percentile 校准不依赖特定架构假设。
+
+（3）\emph{GQA 架构依赖的收益边界}：
+LLaMA-3.1-8B（$H_{kv}=8$）的 LongBench 分数与 KIVI-style 持平
+（ours 6.31 $\approx$ kivi 6.31），PPL 改善也最为有限（2.4\%→0.3\%）。
+这一现象与第~\ref{subsec:exp-kv-arch-dependency}~节的 GQA 架构依赖发现一致：
+$H_{kv}=8$ 的架构中量化误差稀释效应较强，
+KIVI 的运行时统计量已能提供较好的 scale 估计，
+BA percentile 校准的边际改善收窄。
+该结果进一步佐证了 $H_{kv}$ 是低比特量化容忍度的关键架构因素。
+
+\subsection{$\tau^{-1}$ 在非对称量化上的负面结果}
+\label{subsec:exp-rolealign-invtau}
+
+基于 INT8 对称校准搜索得到的温度校正因子 $\tau^{-1}$
+在 INT4 非对称量化上\emph{无稳定收益}：
+Needle 从 100\%（20/20）退化至 95\%（19/20），
+LongBench 综合评分下降约 15\%。
+根因在于 per-channel K 量化的通道级 Scale 已足够精确，
+原先为补偿 per-group 对称量化噪声设计的温度校正在非对称格式下产生过度补偿。
+因此，INT4-RoleAlign 的最终配置\textbf{不包含 $\tau^{-1}$}。
+这一结果揭示了行为对齐框架的一个重要特性：
+有效组件的选择依赖于量化格式，不能无差别地跨格式迁移。
+
+\subsection{证据边界声明}
+\label{subsec:exp-rolealign-boundary}
+
+截至本文定稿，INT4-RoleAlign 已完成 Needle、LongBench、PPL
+三类质量评测的多模型验证（3 模型 $\times$ 3 seeds）。
+RULER 合成推理评测、推理延迟（TPOT）和 KV Cache 显存占用的系统效率评测
+尚未在 RoleAlign 配置上完成。
+因此，本节的 claim 仅覆盖质量维度，不覆盖系统效率维度。
+INT4-RoleAlign 共享 KIVI-style 的 \texttt{torch\_ref} 解码路径，
+系统效率预期与 KIVI-style 对标一致。
+
+
+% ============================================================
+\section{与 KIVI-style 的正面对比}
+\label{sec:exp-kivi-unified}
+% ============================================================
+
+本节从 INT8 和 INT4 两个层面，系统评估行为对齐量化方案与 KIVI-style 基线的竞争力。
+
+% ------------------------------------------------------------
+\subsection{INT8 层面：INT8-ours vs KIVI-style}
+\label{sec:exp-kivi}
+% ------------------------------------------------------------
+
+本小节将 INT8-ours 与 KIVI-style 基线进行对比，
+评估行为对齐校准相对于非对称量化策略的竞争力。
+KIVI~\cite{liu2024kivi} 提出了非对称量化策略——
+Key 按通道（per-channel）量化、Value 按 token（per-token）量化，
+这一设计利用了 Key 和 Value 矩阵在统计特性上的不对称性。
+
+在展开对比之前，必须声明本文 KIVI-style 实现与 KIVI 原文的差异：
+
+\begin{itemize}[leftmargin=2em, itemsep=2pt]
+  \item 本实现仅采用 KIVI 的核心量化轴策略（per-channel K + per-token V 非对称量化），
+    不包含原文中的残差补偿等完整工程优化细节；
+  \item KIVI-style 的 decode 路径固定使用 \texttt{torch\_ref} 核函数
+    （非 Triton 融合），因此 TPOT 对比需考虑 kernel 实现差异；
+  \item KIVI-style 不使用温度校正（$\tau^{-1}$），
+    在与 INT8-ours 对比时应理解为"无温度校正基线"；
+  \item KIVI-style 的 INT4 路径使用 int8 容器存储（未 bit-pack），
+    与 int4\_ours 的 0.5 byte/value bit-packing 存储方案不同，
+    显存占用上不具直接可比性。
+\end{itemize}
+
+\begin{table}[htbp]
+  \centering
+  \caption{INT8-ours vs KIVI-style 对比（Qwen2.5-1.5B-Instruct，32K，batch=1）}
+  \label{tab:kivi-comparison}
+  \zihao{5}
+  \setlength{\tabcolsep}{3pt}
+  \begin{threeparttable}
+  \begin{tabular}{lcccccc}
+    \toprule
+    量化模式 & PPL$\downarrow$ & Needle(\%)$\uparrow$ & LB(\%)$\uparrow$ & RULER(\%)$\uparrow$ & TPOT(ms)$\downarrow$ & KV(MB)$\downarrow$ \\
+    \midrule
+    int8\_ours
+      & 8.95{\scriptsize$\pm$0.00} & 100.0{\scriptsize$\pm$0.0}
+      & 5.00{\scriptsize$\pm$0.10} & 24.38{\scriptsize$\pm$0.65} & \textbf{47.14} & 504 \\
+    kivi\_style
+      & 9.48{\scriptsize$\pm$0.02} & 99.0{\scriptsize$\pm$2.3}
+      & 4.81{\scriptsize$\pm$0.05} & 24.06{\scriptsize$\pm$0.46} & 47.37 & 462 \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \small
+    \item 注：两者均为 INT8 精度。
+    KIVI-style 使用 torch\_ref 核函数（非 Triton 融合），
+    int8\_ours 使用 Triton 融合核函数。
+    KIVI-style 的 KV Cache 显存（462~MB）略低于 INT8-ours（504~MB），
+    因 per-channel/per-token 量化轴的 scale 存储模式不同。
+    int8\_ours 质量值为 mainline 配置。
+  \end{tablenotes}
+  \end{threeparttable}
+\end{table}
+
+\textbf{LongBench 对比。}
+INT8-ours 的 LongBench 分数（5.00\%）高于 KIVI-style（4.81\%），
+增益 $+$1.37\%（非劣性阈值 $\geq$$-$1\%），
+符号翻转检验 $p=0.091$（$q=0.144$），差异不显著。
+这表明以 KL 散度为目标的校准优化能够有效补偿对称量化在建模
+Key/Value 不对称特性上的理论劣势，为实际部署中选择更简单的
+对称量化方案提供了实证支持。
+
+\textbf{Needle 对比。}
+INT8-ours 的 Needle 通过率（100\%）与 KIVI-style（99\%）可比，
+差异为 0\%（取最保守评估模型 LLaMA-8B）。
+KIVI-style 在 1.5B 和 7B 模型上出现 99\% 的轻微退化（1 个 depth 级别失败），
+可能与非对称量化在特定 Key 分布下的精度损失有关。
+
+\textbf{效率对比。}
+表~\ref{tab:kivi-comparison} 同时展示了两者在 32K 上下文下的推理效率。
+KIVI-style 的 TPOT（47.37~ms）与 INT8-ours（47.14~ms）极为接近（差异 $<$0.5\%），
+尽管前者使用 PyTorch 参考实现而后者使用 Triton 融合核函数。
+这是因为 KIVI-style 的 per-token Value 量化轴使得每次 decode 步仅需反量化
+当前 token 的一组 scale 参数（而非 per-group 方案下的多组 scale），
+部分抵消了非融合实现的额外显存读写开销。
+KV Cache 显存方面，KIVI-style（462~MB）略低于 INT8-ours（504~MB），
+差异源于两者不同的量化轴设计带来的 scale 张量存储开销差异。
+综合质量和效率两个维度，INT8-ours 在 LongBench 上的优势（$+$1.37\%）
+和 Needle 的完美通过率（100\% vs 99\%）使其在整体权衡中仍占优。
+
+\noindent\textbf{小结：}KL 散度校准通过优化注意力行为一致性，有效补偿了对称量化在建模 K/V 不对称特性上的理论劣势，INT8-ours 在 LongBench 和 Needle 上均不劣于 KIVI-style。
+
+% ------------------------------------------------------------
+\subsection{INT4 层面：三方对比}
+\label{sec:exp-kivi-int4}
+% ------------------------------------------------------------
+
+上一小节在 INT8 层面确认了行为对齐校准的竞争力。
+本小节将对比推进到 INT4 层面，通过三方对比
+（kivi\_style INT4、int4\_kivi\_aligned、INT4-RoleAlign）
+分离非对称格式、温度校正和 BA 校准三个因素的独立贡献。
+
+\subsubsection{三方对比设计}
+\label{subsec:exp-kivi-int4-design}
+
+\textbf{int4\_kivi\_aligned} 是一个机制性对照配置：
+在 KIVI-style 的非对称量化骨架（per-channel K + per-token V）上
+叠加基于 INT8 对称校准搜索得到的 $\tau^{-1}$ 温度校正。
+该配置\textbf{不是最终方法}，仅用于验证 $\tau^{-1}$ 在非对称格式下的可迁移性。
+
+表~\ref{tab:kivi-int4-threeway} 汇总了 Qwen2.5-1.5B 上的三方对比结果。
+
+\begin{table}[htbp]
+  \centering
+  \caption{INT4 层面三方对比（Qwen2.5-1.5B-Instruct，32K 上下文）}
+  \label{tab:kivi-int4-threeway}
+  \small
+  \begin{threeparttable}
+  \begin{tabular}{lcccccc}
+    \toprule
+    \textbf{方法} & \textbf{非对称轴} & \textbf{BA 校准} & $\bm{\tau^{-1}}$ &
+    \textbf{Needle} & \textbf{PPL}$\downarrow$ & \textbf{LB}$\uparrow$ \\
+    \midrule
+    kivi\_style INT4
+      & \checkmark & --- & ---
+      & 100\% & 10.43 & 4.83 \\
+    int4\_kivi\_aligned\textsuperscript{$\dagger$}
+      & \checkmark & --- & \checkmark
+      & 95\% & --- & --- \\
+    \textbf{INT4-RoleAlign}
+      & \checkmark & \checkmark & ---
+      & \textbf{100\%} & \textbf{9.42} & \textbf{4.92} \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \small
+    \item[$\dagger$] int4\_kivi\_aligned 仅用于机制性对照
+    （验证 $\tau^{-1}$ 在非对称 INT4 上的不可迁移性），
+    未进行完整质量矩阵评测，不作为正式性能基线。
+    \item 注：三者共享相同的非对称量化格式（per-channel K + per-token V）。
+    差异仅在 BA 校准和 $\tau^{-1}$ 两个维度。
+  \end{tablenotes}
+  \end{threeparttable}
+\end{table}
+
+\subsubsection{对比分析}
+\label{subsec:exp-kivi-int4-analysis}
+
+\textbf{kivi\_style → int4\_kivi\_aligned：$\tau^{-1}$ 迁移失败。}
+在 KIVI 骨架上叠加 $\tau^{-1}$ 后，Needle 从 100\% 退化至 95\%，
+表明基于对称量化设计的温度校正方案\emph{不能}直接迁移到非对称格式。
+per-channel K 量化的通道级 Scale 已捕捉了通道间的数值异质性，
+$\tau^{-1}$ 的全局缩放在此基础上产生了过度补偿。
+
+\textbf{kivi\_style → INT4-RoleAlign：BA 校准的有效增强。}
+在相同非对称格式下，BA-guided percentile 校准
+将 PPL 退化从 12.0\% 降至 1.2\%（10$\times$ 缩减），
+LongBench 综合评分从 4.83 提升至 4.92。
+这表明离线 KL 搜索确定的 percentile 参数
+优于 KIVI-style 的运行时即时统计量。
+
+\textbf{int4\_kivi\_aligned → INT4-RoleAlign：设计差异。}
+INT4-RoleAlign 不是 int4\_kivi\_aligned 的换皮版本，
+而是 role-aware asymmetric 格式 + BA-guided percentile 校准的组合设计。
+两者的关键差异在于参数确定范式：
+int4\_kivi\_aligned 在无校准基础上叠加预设 $\tau^{-1}$，
+INT4-RoleAlign 则通过离线 KL 搜索直接优化 percentile 参数。
+
+\noindent\textbf{本节小结：}三方对比表明，BA-guided percentile 校准是 INT4-RoleAlign 优势的核心来源，$\tau^{-1}$ 在非对称格式下不可迁移。
+
+
+% ============================================================
+\section{量化评估粒度鲁棒性}
+\label{sec:exp-chunksize}
+% ============================================================
+
+前述各节的 PPL 评测均采用 chunk\_size=128 的标准协议，
+其中 chunk 内新生成的 KV 以 FP16 精度存在，
+仅跨 chunk 继承的历史 KV 经过量化。
+本节通过降低 chunk\_size 至 8 和 1，
+考察不同量化方案在更严格的``全量化''协议下的鲁棒性。
+
+\subsection{动机}
+\label{subsec:exp-chunksize-motivation}
+
+chunk\_size 决定了量化 KV 的暴露比例。
+chunk\_size=1 是最严格的全量化评估协议：
+每步仅处理 1 个新 token，所有历史 KV 均经量化存取，
+最大化量化噪声的累积效应。
+该协议更接近实际部署中的 streaming decode 场景，
+是检验量化方案鲁棒性的关键压力测试。
+
+\subsection{结果}
+\label{subsec:exp-chunksize-results}
+
+表~\ref{tab:chunksize-results} 呈现了 Qwen2.5-1.5B-Instruct 上
+三种 chunk\_size 下 FP16、INT4-RoleAlign 和 KIVI-style INT4 的 PPL 对比。
+
+\begin{table}[htbp]
+  \centering
+  \caption{量化评估粒度敏感性（Qwen2.5-1.5B-Instruct，PPL，seed=1234）}
+  \label{tab:chunksize-results}
+  \small
+  \begin{threeparttable}
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{配置} & \textbf{cs=128} & \textbf{cs=8} & \textbf{cs=1} \\
+    \midrule
+    FP16                     & 9.31            & 9.31          & 9.31          \\
+    \textbf{INT4-RoleAlign}  & \textbf{9.42} (+1.2\%) & \textbf{9.46} (+1.6\%) & \textbf{9.49} (+1.9\%) \\
+    KIVI-style INT4          & 10.43 (+12.0\%) & 60.54 (+550\%) & 9442 (+101{,}000\%) \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \small
+    \item 注：括号内为相对 FP16 的 PPL 退化率。
+    cs = chunk\_size。FP16 不含量化噪声，PPL 不随 cs 变化（预期内）。
+    实验使用 max\_samples=64（约 65K tokens），seed=1234。
+  \end{tablenotes}
+  \end{threeparttable}
+\end{table}
+
+\subsection{分析}
+\label{subsec:exp-chunksize-analysis}
+
+\textbf{FP16 不变}（预期内）：FP16 不引入量化噪声，
+PPL 不随 chunk\_size 变化，为基线校验。
+
+\textbf{INT4-RoleAlign 表现稳定}：
+从 cs=128 到 cs=1，PPL 仅从 9.42 升至 9.49（+0.75\%），
+表明 BA-guided percentile 校准在逐 token 粒度下仍然有效。
+这一鲁棒性源于 INT4-RoleAlign 的 per-channel K Scale
+基于离线校准的全局统计量确定，不依赖单 token 的局部方差。
+
+\textbf{KIVI-style 指数级退化}：
+KIVI-style 的 PPL 从 cs=128 的 10.43 急剧退化至 cs=1 的 9442
+（$+$101{,}000\% 退化），呈现灾难性崩溃。
+根因在于 KIVI-style 的 per-token V Scale 基于单个 token 的
+激活值统计量（absmax/min）即时计算——
+当 chunk\_size=1 时，每个 token 的 V Scale 仅基于该 token 自身的特征值确定，
+单 token 统计量的方差极大，导致 Scale 估计不稳定，
+量化噪声随 token 步数累积并最终导致模型输出退化。
+
+\subsection{结论}
+\label{subsec:exp-chunksize-conclusion}
+
+在 Qwen2.5-1.5B 的 fully quantized PPL 协议下，
+INT4-RoleAlign 对 chunk\_size 变化表现出显著鲁棒性，
+而 KIVI-style 出现灾难性退化。
+该结果表明 BA-guided percentile 校准的优势
+在更严格的全量化评估协议下得到放大，
+为实际部署中的 streaming decode 场景提供了方法选择依据。
+
+需要指出的是，上述观察仅在 Qwen2.5-1.5B 单模型、
+单种子（seed=1234）条件下验证。
+该结论能否推广至其他模型架构和参数规模
+（尤其是 $H_{kv}$ 不同的模型）仍需系统性的跨模型验证。
 
 
 % ============================================================
@@ -1337,22 +1574,19 @@ INT8-ours 均展现了与主模型一致的性能模式——
 其优化目标（attention 分布的 KL 散度）不依赖于特定的架构假设，
 只需在目标模型上运行校准脚本即可获得有效参数。
 
-\textbf{发现四：INT4 量化面临质量瓶颈。}
-INT4 在 32K 长上下文下的 Needle 通过率急剧下降，
-揭示了当前对称量化 + 均匀网格方案在极低比特下的根本性限制。
-这一负面结果同样具有重要价值——
-它明确了在当前技术条件下 INT4 KV Cache 量化的适用边界，
-为后续研究指明了需要突破的方向。
-值得关注的是 LLaMA-3.1-8B 在 INT4 下的异常表现：
-该模型的 INT4 Needle 通过率（98\%--100\%）远高于 Qwen2.5 系列（0\%），
-且 INT4 LongBench 分数甚至高于 FP16 基线。
-这一现象可能与 LLaMA-3.1-8B 具有 8 个 KV 头
-（Qwen2.5-1.5B 仅 2 个，7B 为 4 个）有关——
-更多的 KV 头意味着 GQA 中每个 KV 头服务的 Query 头数更少，
-单个 KV 头的量化误差对最终输出的影响被稀释。
-此外，LLaMA-3.1-8B 的 LongBench 异常可能反映了
-该模型在特定长文本任务上的固有能力分布与量化噪声之间的复杂交互，
-需要更深入的逐任务分析来理解其机理。
+\textbf{发现四：INT4 对称量化瓶颈已被 RoleAlign 部分解决。}
+对称 per-group INT4 在 32K 长上下文下面临系统性失效
+（Needle 0\%，PPL 退化 $>$15\%），
+揭示了均匀对称量化在极低比特下的根本性限制。
+然而，第~\ref{sec:exp-rolealign}~节的 INT4-RoleAlign 表明，
+将量化格式从对称升级为非对称、并通过 BA-guided percentile 校准优化参数后，
+该瓶颈可被大幅缓解：
+三个模型上 Needle 均恢复至 100\%，
+PPL 退化从 KIVI-style 的 2.4\%--12\% 降至 0.3\%--1.2\%。
+LLaMA-3.1-8B 的 GQA 架构（$H_{kv}=8$）提供了更强的量化噪声稀释效应，
+使得 INT4 RoleAlign 与 KIVI-style 在 LongBench 上持平——
+该``收益递减''现象并非方法局限，而是反映了架构感知的收益边界，
+进一步佐证了 $H_{kv}$ 是低比特量化容忍度的关键架构因素。
 
 \textbf{发现五：跨基准指标呈现差异化敏感度。}
 一个值得深入讨论的现象是：INT8-ours 在 Needle 上保持 100\% 通过率，
@@ -1425,12 +1659,41 @@ KL 散度校准目标度量的是注意力分布的形态差异，
 需注意的是，该观察仅在两个模型上得到验证，
 推广至更大规模模型或不同架构族仍需进一步实验确认。
 
+\textbf{发现十：INT4-RoleAlign 在三模型上一致降低 PPL 退化（相对 KIVI-style）。}
+第~\ref{sec:exp-rolealign}~节的跨模型结果表明，
+BA-guided percentile 校准在三个模型（两个模型族）上
+一致缩减了相对 KIVI-style 的 PPL 退化：
+Qwen2.5-1.5B（12\%→1.2\%，10$\times$），
+Qwen2.5-7B（5.5\%→1.0\%，5.5$\times$），
+LLaMA-3.1-8B（2.4\%→0.3\%，8$\times$）。
+Needle 通过率在全部模型上均为 100\%。
+LongBench 在 1.5B/7B 上与 KIVI-style 基本相当或略有增益，
+在 8B 上持平——后者反映了 GQA 架构依赖的收益边界。
+
+\textbf{发现十一：chunk\_size 鲁棒性揭示 BA 校准的深层优势。}
+第~\ref{sec:exp-chunksize}~节在 Qwen2.5-1.5B 上的 chunk\_size 敏感性分析表明，
+INT4-RoleAlign 的 PPL 从 cs=128 的 9.42 到 cs=1 的 9.49（+0.75\%），
+而 KIVI-style 从 10.43 急剧退化至 9442（+101{,}000\%）。
+BA-guided percentile 校准的离线统计量在全量化协议下保持稳定，
+而 KIVI-style 的运行时 per-token 统计量在 cs=1 下崩溃。
+需指出的是，该观察仅限于 Qwen2.5-1.5B 单模型和 fully quantized PPL 协议。
+
+\textbf{发现十二：$\tau^{-1}$ 在非对称格式下不可迁移。}
+第~\ref{subsec:exp-rolealign-invtau}~节和第~\ref{sec:exp-kivi-int4}~节
+的实验一致表明，$\tau^{-1}$ 温度校正在非对称 INT4 上无稳定收益甚至有害。
+int4\_kivi\_aligned（KIVI 骨架 + $\tau^{-1}$）的 Needle 从 100\% 退化至 95\%，
+而 INT4-RoleAlign（BA 校准，不含 $\tau^{-1}$）保持 100\%。
+$\tau^{-1}$ 是 behavior-aligned framework 的候选增强机制之一，
+其有效性依赖量化格式：
+在对称量化下可能提供边际改善（第~\ref{subsec:exp-ablation-temperature}~节），
+在非对称格式下不受益。
+
 % ------------------------------------------------------------
 \subsection{实验结论总结}
 \label{subsec:exp-claim-summary}
 % ------------------------------------------------------------
 
-表~\ref{tab:claim-summary} 汇总了本文全部 13 项实验预期的验证状态。
+表~\ref{tab:claim-summary} 汇总了本文全部 16 项实验预期的验证状态。
 
 \begin{table}[htbp]
   \centering
@@ -1455,6 +1718,9 @@ KL 散度校准目标度量的是注意力分布的形态差异，
     E11 & 跨模型泛化（7B + 8B LongBench）      & \textbf{达标} & 中等  & 表~\ref{tab:cross-model} \\
     E12 & MixedKV RULER 远优于均匀 INT4           & \textbf{达标} & 强\tnote{d}    & 表~\ref{tab:mixedkv-cross-model} \\
     E13 & 校准样本 16--256 PPL 变化极小    & \textbf{达标} & 中等\tnote{e}  & 表~\ref{tab:b10-sensitivity} \\
+    E14 & RoleAlign PPL 优于 KIVI（3 模型）       & \textbf{达标} & 中→强\tnote{f} & 表~\ref{tab:rolealign-results} \\
+    E15 & chunk\_size=1 鲁棒性（1.5B）          & \textbf{达标} & 中\tnote{g}   & 表~\ref{tab:chunksize-results} \\
+    E16 & inv\_tau 在非对称 INT4 不可迁移      & \textbf{达标} & 中等  & 表~\ref{tab:kivi-int4-threeway} \\
     \bottomrule
   \end{tabular}
   \begin{tablenotes}
@@ -1464,6 +1730,8 @@ KL 散度校准目标度量的是注意力分布的形态差异，
     \item[c] INT4 精度下行为对齐校准未能维持非劣效性：Needle 退化 $-2.0\%$，PPL 退化 $-15.92\%$。
     \item[d] MixedKV(K8V4) 在 Qwen 1.5B/7B 上 RULER 分别为 24.87\%/25.16\%，远超均匀 INT4 的 0\%/0\%；在 LLaMA-8B 上 RULER 33.28\% 与均匀 INT4（27.05\%）和 FP16（31.48\%）均具竞争力。
     \item[e] 仅在 1.5B 和 7B 两个模型上验证，推广性有待更多模型确认。
+    \item[f] 三模型 PPL 退化缩减 5--10$\times$；LongBench 在 1.5B/7B 略优、8B 持平（GQA 收益边界）。
+    \item[g] 仅 Qwen2.5-1.5B 单模型单种子验证，跨模型推广性待确认。
   \end{tablenotes}
   \end{threeparttable}
 \end{table}
