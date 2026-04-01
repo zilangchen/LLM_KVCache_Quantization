@@ -358,6 +358,51 @@ def build_kv_cache(
             v_bits=v_bits if v_bits is not None else 4,
         ), group_size, clip_percentile
 
+    if kv_mode in ("int4_ours_asym", "int4_ours_asym_ba"):
+        # Mirrors generate_loop.py L869-919 exactly.
+        from src.cache.role_aware_asym_cache import RoleAwareAsymKVCache
+        ra_k_percentile = 100.0
+        ra_v_percentile = 100.0
+        ra_inv_tau = None
+        if calib_file is not None:
+            calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(os.getcwd(), calib_file)
+            if os.path.exists(calib_path):
+                with open(calib_path, "r") as f:
+                    calib_data = json.load(f)
+                # Role-aware schema: k_percentile, v_percentile at top level or under role_aware
+                if "role_aware" in calib_data:
+                    ra_section = calib_data["role_aware"]
+                    ra_k_percentile = float(ra_section.get("k_percentile", 100.0))
+                    ra_v_percentile = float(ra_section.get("v_percentile", 100.0))
+                elif "k_calibration" in calib_data:
+                    # Fallback: v3 schema from int4_kivi_aligned calibration
+                    ra_k_percentile = float(calib_data.get("k_percentile", 100.0))
+                    if "v_calibration" in calib_data:
+                        ra_v_percentile = float(calib_data["v_calibration"].get("v_percentile", 100.0))
+                # inv_tau: only for ours_asym_ba
+                if kv_mode == "int4_ours_asym_ba":
+                    raw_tau = None
+                    if "role_aware" in calib_data and "inv_tau" in calib_data["role_aware"]:
+                        raw_tau = calib_data["role_aware"]["inv_tau"]
+                    elif "k_calibration" in calib_data and "inv_tau" in calib_data["k_calibration"]:
+                        raw_tau = calib_data["k_calibration"]["inv_tau"]
+                    elif "inv_tau" in calib_data:
+                        raw_tau = calib_data["inv_tau"]
+                    if raw_tau is not None:
+                        ra_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
+        use_temp = use_attn_temperature and (kv_mode == "int4_ours_asym_ba")
+        framework_tag = "ours_asym_ba" if kv_mode == "int4_ours_asym_ba" else "ours_asym"
+        return RoleAwareAsymKVCache(
+            num_layers=num_layers,
+            device=model.device.type,
+            quant_bits=4,
+            k_percentile=ra_k_percentile,
+            v_percentile=ra_v_percentile,
+            inv_tau=ra_inv_tau,
+            use_attn_temperature=use_temp,
+            framework=framework_tag,
+        ), group_size, clip_percentile
+
     if kv_mode in ["int8_fused", "int8_ours"]:
         apply_int8_fused_patch(model)
 
@@ -860,9 +905,9 @@ def main():
             args.use_attn_temperature
             and getattr(kv_cache, "inv_tau", None) is not None
         ):
-            if args.kv_mode == "int4_kivi_aligned":
-                # int4_kivi_aligned uses torch_ref decode (not fused), so inv_tau
-                # must be applied for ALL seq_len (both prefill chunks and decode).
+            if args.kv_mode in ("int4_kivi_aligned", "int4_ours_asym_ba"):
+                # torch_ref decode modes: inv_tau must be applied for ALL seq_len
+                # (both prefill chunks and decode).
                 hook_handles = _register_all_temperature_hooks(model, kv_cache.inv_tau)
             elif args.kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused"]:
                 # Fused modes: prefill-only hooks; decode temperature handled by kernel.

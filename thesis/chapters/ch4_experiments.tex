@@ -274,7 +274,7 @@ INT8 的 256 个量化级别为检验 KL 校准效果提供了理想的受控设
     LongBench score 为 7 个任务对应指标宏平均（$\times$100 显示；合成数据源，见基准描述）。
     KV Mem 为 KV Cache 的显存占用。int8\_ours 质量指标取自 mainline
     配置（\texttt{static\_v3\_no\_temp\_adaptive\_fused}）。
-    kivi\_style 使用 torch\_ref 核函数（非 Triton 融合）。
+    kivi\_style 此处为 INT8 精度，使用 torch\_ref 核函数（非 Triton 融合）。
   \end{tablenotes}
   \end{threeparttable}
 \end{table}
@@ -333,20 +333,21 @@ RULER 是 INT8 唯一未达非劣性阈值的指标：
 \label{subsec:exp-main-ppl}
 % ------------------------------------------------------------
 
-图~\ref{fig:main-quality-dashboard} 汇总了主模型在质量维度上的四类核心证据：
+图~\ref{fig:main-quality-dashboard} 将 Claim~1 的质量证据压缩为三个主面板：
 面板（a）给出 32K 上下文下的 PPL 主结果对比，
 面板（b）展示 Needle 通过率随上下文长度的变化，
-面板（c）展示 LongBench 综合评分，
-面板（d）展示 RULER 通过率。
+面板（c）展示 LongBench-style 合成综合评分随上下文长度的变化。
+RULER 不再并入主图，而作为附录中的补充质量证据单独展示。
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.94\textwidth]{figures/main_quality_dashboard.pdf}
+  \includegraphics[width=\textwidth]{figures/main_quality_dashboard.pdf}
   \caption{主模型质量保持总览（Qwen2.5-1.5B-Instruct）。
-  面板（a）为 32K 上下文下各量化模式的 PPL 点图；
-  面板（b）--（d）分别展示 Needle 通过率、LongBench 综合评分和 RULER 通过率随上下文长度的变化。
-  图中统一突出 FP16、INT8-baseline、INT8-ours、KIVI-style 与代表性 INT4 模式，
-  以便在同一图板中直接比较质量保持与退化边界。}
+  面板（a）为 32K 上下文下的 PPL 比较，用于突出 INT8-Canonical 与 FP16 的接近程度；
+  面板（b）展示 Needle 通过率随上下文长度的变化；
+  面板（c）展示 LongBench-style 合成综合评分随上下文长度的变化。
+  主图只保留 FP16、INT8-Baseline、INT8-Canonical、KIVI-style 与一个对称 INT4 失败锚点，
+  使其服务于``attention-KL 是正确对象，INT8 给出 canonical validated instance''这一主结论。}
   \label{fig:main-quality-dashboard}
 \end{figure}
 
@@ -366,18 +367,18 @@ INT4 系列在 32K 急剧退化（详见第~\ref{sec:exp-int4}~节）。
 \label{subsec:exp-main-efficiency}
 % ------------------------------------------------------------
 
-图~\ref{fig:main-efficiency-dashboard} 将效率与显存结果组织为一个统一的
-dashboard：面板（a）展示 TPOT 随序列长度的变化，
-面板（b）展示 KV Cache 显存，
-面板（c）展示包含模型参数在内的总峰值显存。
+图~\ref{fig:main-efficiency-dashboard} 将部署级证据收敛为两个主面板：
+面板（a）展示解码延迟随上下文长度的变化，
+面板（b）展示 KV Cache 显存随上下文长度的变化。
+总峰值显存被移至附录，以避免主文重新退回 dashboard 式陈列。
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.94\textwidth]{figures/main_efficiency_dashboard.pdf}
+  \includegraphics[width=\textwidth]{figures/main_efficiency_dashboard.pdf}
   \caption{主模型效率与显存总览（Qwen2.5-1.5B-Instruct，batch=1）。
-  面板（a）比较解码延迟 TPOT，面板（b）比较 KV Cache 显存，面板（c）比较总峰值显存。
-  图中直接标注了 32K 点的关键差异，用于突出 INT8-ours 相对 INT8-baseline 的速度收益，
-  以及相对 FP16 的显存节省幅度。}
+  面板（a）比较解码延迟 TPOT，面板（b）比较 KV Cache 显存。
+  图中在 32K 位置直接标注 INT8-Canonical 相对 INT8-Baseline 的速度收益，
+  以及相对 FP16 的 KV 显存节省幅度，使该图只承担 deployability support 的职责。}
   \label{fig:main-efficiency-dashboard}
 \end{figure}
 
@@ -1008,18 +1009,20 @@ V-only 仅出现轻微下降，而 K4V8 在 Qwen 系列上完全崩溃；
   \label{fig:kv-ablation-summary-ruler}
 \end{figure}
 
-图~\ref{fig:attn-kl-heatmap-pair} 则从 attention/KV 误差分布角度对比
-Qwen2.5-1.5B 与 LLaMA-3.1-8B 在 MixedKV 配置下的逐层逐头误差结构。
+图~\ref{fig:attn-kl-heatmap-pair} 则从逐层逐头的\emph{重建误差}角度补充展示
+Qwen2.5-1.5B 与 LLaMA-3.1-8B 在 MixedKV 配置下的误差结构。
 配对图使用统一色标，右侧附带逐层 K/V 平均误差曲线，
 便于直接观察两个模型族在高误差层段上的差异。
+需要强调的是，该图是支持性误差分布图，而非 Claim~1 中 attention-KL 主指标的替代图。
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.96\textwidth]{figures/kv_error_heatmap_pair_int4_mixed_kv.pdf}
-  \caption{Qwen2.5-1.5B 与 LLaMA-3.1-8B 的配对 K/V 误差热力图（MixedKV，K@INT8+V@INT4，32K 上下文）。
+  \caption{Qwen2.5-1.5B 与 LLaMA-3.1-8B 的配对 K/V 重建误差热力图（MixedKV，K@INT8+V@INT4，32K 上下文）。
   上排为 Qwen2.5-1.5B，下排为 LLaMA-3.1-8B；左两列分别为 Key 与 Value 的逐层逐头重建误差，
   右列为逐层平均误差曲线。统一色标显示：相比 Qwen2.5-1.5B，
-  LLaMA-3.1-8B 的高误差层段更集中、整体误差更低，与其更强的噪声稀释能力一致。}
+  LLaMA-3.1-8B 的高误差层段更集中、整体误差更低，与其更强的噪声稀释能力一致。
+  本图用于补充说明误差结构，主文对 behavior-aligned principle 的论证仍以 attention-KL 和下游质量指标为准。}
   \label{fig:attn-kl-heatmap-pair}
 \end{figure}
 
@@ -1187,9 +1190,10 @@ INT4-RoleAlign 与对照方法在 PPL、Needle 和 LongBench 上的对比，
   \centering
   \includegraphics[width=\textwidth]{figures/rolealign_summary.pdf}
   \caption{INT4-RoleAlign 与 KIVI-style INT4 的跨模型性能对比。
-  （a）PPL 退化（\%）：INT4-RoleAlign 在三个模型上均大幅降低困惑度退化；
-  （b）LongBench F1：两种方法质量接近，8B 上持平。
-  Needle 通过率两者均为 100\%（未绘出）。}
+  顶部 summary ribbon 直接突出本文主结果：三模型 Needle 100\%、PPL 退化 0.3\%--1.2\%、KV Cache 压缩 75\%。
+  面板（a）展示相对 FP16 的 PPL 退化，
+  面板（b）展示 LongBench-style 合成质量。
+  该图作为全文的 hero figure，强调 INT4-RoleAlign 在 hardest low-bit setting 下将诊断结论转化为稳定、可复用的主结果。}
   \label{fig:rolealign-summary}
 \end{figure}
 

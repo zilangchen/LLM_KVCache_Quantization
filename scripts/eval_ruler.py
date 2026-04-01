@@ -670,6 +670,8 @@ def main() -> None:
             "kivi_style",
             "int4_kivi_aligned",
             "int4_mixed_kv",
+            "int4_ours_asym",
+            "int4_ours_asym_ba",
         ],
     )
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
