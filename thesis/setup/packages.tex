@@ -24,6 +24,13 @@
 \usepackage{xcolor}
 \usepackage{listings}
 
+% --- 框架图统一配色 (离线=冷色, 在线=暖色, 产物=中性) ---
+\definecolor{offlineA}{HTML}{D6E4F0}   % 浅钢蓝 (数据/前向/采样)
+\definecolor{offlineB}{HTML}{B8D4E3}   % 中钢蓝 (Scale/τ搜索)
+\definecolor{artifact}{HTML}{FFF3CD}   % 暖奶油色 (JSON 产物)
+\definecolor{onlineA}{HTML}{FFE0B2}    % 浅琥珀色 (加载/缩放/存储)
+\definecolor{onlineB}{HTML}{FFCCBC}    % 浅珊瑚色 (Triton/输出)
+
 % --- 算法 ---
 \usepackage{algorithm}
 \usepackage{algpseudocode}

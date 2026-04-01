@@ -588,3 +588,26 @@ $\delta = z_t - \max_{i \neq t} z_i$
 由于 INT4 的逐元素噪声方差 $\sigma_{q,4}^2 / \sigma_{q,8}^2 = (255/15)^2 = 289$，
 INT4 的 $n^*$ 远小于 INT8，从理论上解释了 INT4 在 1.5B 模型上
 从短上下文到 32K 的 Needle 通过率急剧下降趋势。
+
+
+% ============================================================
+\section{第四章补充材料}
+\label{sec:app-ch4-supp}
+% ============================================================
+
+\subsection{MixedKV 跨模型逐模型详细分析}
+\label{subsec:app-mixedkv-detail}
+
+表~\ref{tab:mixedkv-cross-model}（第四章）的 MixedKV 结果在各模型上呈现差异化模式，以下给出逐模型详细分析。
+
+\textbf{LLaMA-3.1-8B（$H_{kv}=8$）：}
+MixedKV 全指标不劣于 FP16——PPL 6.75（甚至低于 FP16 的 6.92），Needle 100\%，RULER 33.28\%（高于 FP16 的 31.48\%），LongBench 7.42\%（接近 FP16 的 7.92\%）。这是 GQA 噪声稀释效应最显著的模型：8 个 KV 头的独立量化噪声经统计平均后有效降低了整体误差。
+
+\textbf{Qwen2.5-1.5B（$H_{kv}=2$）：}
+PPL 退化 4.9\%（9.37 vs 8.93），超出非劣性阈值，但 Needle 保持 100\%，RULER 24.87\% 与 FP16 可比。仅 2 个 KV 头提供的噪声稀释有限，但长上下文检索指标的保持表明 MixedKV 仍具实用性。
+
+\textbf{Qwen2.5-7B（$H_{kv}=4$）：}
+Needle 退化至 72.4\%（FP16 为 100\%），是四个模型中唯一出现 Needle 退化的情况。4 个 KV 头的中等噪声稀释可能在特定 Key 通道分布下不足以抑制 INT4 量化噪声对注意力排序的破坏。
+
+\textbf{Mistral-7B-Instruct-v0.3（$H_{kv}=8$）：}
+PPL 5.20（vs FP16 5.19）和 RULER 53.67\%（vs 53.98\%）均接近 FP16 基线，进一步验证了高 GQA 头数模型对 MixedKV 方案的良好适配性。Mistral-7B 的 RULER 整体通过率（53.98\%）显著高于其他模型（24\%--31\%），可能与其更大的原生上下文窗口有关。

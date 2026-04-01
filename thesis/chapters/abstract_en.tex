@@ -4,12 +4,52 @@
 
 \begin{abstracten}
 
-As large language models are increasingly deployed in long-context question answering, document understanding, and complex reasoning tasks, the memory cost of the key-value (KV) cache during inference has become a major obstacle to efficient deployment. Existing quantization methods are usually calibrated with numerical reconstruction objectives such as mean squared error or percentile-based clipping, which do not directly capture how quantization noise affects attention behavior after the softmax nonlinearity.
+As large language model context windows scale from thousands
+to hundreds of thousands of tokens,
+key-value (KV) cache memory grows linearly with sequence length
+and has become the primary bottleneck for long-context inference deployment.
+Low-bit quantization offers the most attractive compression---INT4 can
+theoretically reduce KV cache to 1/4 of its original size---yet existing
+methods calibrated with numerical reconstruction objectives
+cannot explain the catastrophic failure of symmetric INT4 at long contexts:
+Needle retrieval drops from 100\% to 0\% and perplexity degrades by over 15\%.
 
-To address this issue, we propose a behavior-aligned quantization framework that uses the KL divergence between full-precision and quantized attention distributions as both a calibration objective and a diagnostic lens. At the INT8 level, the framework combines adaptive scale protection with fused Triton decode-attention kernels, achieving no statistically significant degradation in PPL, Needle, or LongBench-style synthetic evaluation across four models from three model families (with moderate RULER retrieval-subtask degradation of $-2.64\%$ discussed in Chapter~4), together with approximately 44\% KV-cache memory savings and 8\%--38\% decode latency reduction. At the INT4 level, the KL diagnostic lens reveals the systematic failure mode of symmetric per-group quantization, and controlled K/V ablations identify Key quantization as the dominant source of degradation. Guided by this diagnosis, we further propose INT4-RoleAlign: adopting per-channel Key and per-token Value asymmetric quantization axes, with BA-guided percentile calibration to search for optimal K/V percentile parameters.
+Our key insight is that KV cache quantization should preserve
+attention behavior rather than minimize numerical reconstruction error.
+We propose attention-KL as a unified calibration objective
+and diagnostic lens:
+as a calibration objective, it searches for quantization parameters
+that minimize attention behavior deviation;
+as a diagnostic lens, it reveals failure modes and structural root causes
+across quantization configurations.
 
-Experiments show that INT4-RoleAlign restores the Needle pass rate from 0\% to 100\% on Qwen2.5-1.5B, reducing PPL degradation from 12\% (KIVI-style) to 1.2\%, and demonstrates competitiveness against KIVI-style INT4 across three models (two model families). Under the fully quantized evaluation protocol (chunk\_size=1) on Qwen2.5-1.5B, KIVI-style PPL degrades catastrophically to 9{,}442 while INT4-RoleAlign remains at 9.49, exhibiting robustness to quantization evaluation granularity on the evaluated model. This work contributes not only a calibration criterion better aligned with model behavior, but also demonstrates attention-KL as a diagnostic lens guiding quantization design evolution from symmetric to asymmetric formats and from INT8 to INT4.
+This principle ultimately yields the core contribution of this work---INT4-RoleAlign,
+a diagnosis-derived role-aware low-bit design employing
+differentiated asymmetric quantization axes
+(per-channel Key + per-token Value)
+with behavior-aligned percentile calibration.
+INT4-RoleAlign restores Needle from 0\% to 100\%
+across three models (Qwen2.5-1.5B/7B and LLaMA-3.1-8B),
+reduces PPL degradation from 2.4\%--12\% (KIVI-style) to 0.3\%--1.2\%,
+achieving the above quality retention at 75\% KV cache compression.
 
-\keywordsen{Large Language Model; Key-Value Cache; Quantization; Attention Mechanism; Behavior-Aligned Calibration; Asymmetric Quantization}
+The design of INT4-RoleAlign follows a complete evidence chain.
+The principle is first validated on INT8---behavior-aligned calibration
+preserves quality while reducing KV cache memory by approximately 44\%
+and decode latency by 8--38\% across three model families,
+establishing the reference baseline for low-bit diagnosis.
+The same diagnostic lens then reveals the structural root cause
+of symmetric INT4 failure---controlled K/V ablation consistently identifies
+Key quantization as the dominant quality loss factor
+with pronounced GQA architecture dependence---directly
+motivating the role-aware design of INT4-RoleAlign.
+
+Our results demonstrate that behavior-aligned calibration
+is not only a better quantization objective,
+but also reveals failure root causes and derives
+role-aware low-bit designs,
+completing the principle-to-diagnosis-to-design closed loop.
+
+\keywordsen{Large Language Model; Key-Value Cache; Quantization; Behavior-Aligned Calibration; Asymmetric Quantization}
 
 \end{abstracten}
