@@ -125,38 +125,23 @@ skills:
 
 **触发条件**：任务分类为"短期"或"长期"时必须执行。"即时"任务跳过此步。
 
-**Round 1 — Supervisor 发送方案 + 请求反馈**：
+**自动流程**（使用 Codex Plugin，无需手动干预）：
 
-```
-mcp__codex__codex(
-  prompt: "<按 developer.md Plan Debate 模板：目标 + 初步方案 + objective 摘要 + 当前 approved plans>",
-  sandbox: "read-only",
-  cwd: "/Users/chenzilang/Desktop/LLM_KVCache_Quantization"
-)
-```
+**Step 1 — 对抗性审查**：
 
-Codex 返回：盲点分析、替代方案、实现难度评估、风险预判。
+Supervisor 草拟方案后，自动调用 `/codex:adversarial-review`，将方案作为待审查内容提交。
+Codex 以严苛模式挑战方案：盲点分析、替代方案、实现难度评估、风险预判。
 
-**Round 2 — Supervisor 修订并确认**：
+**Step 2 — Supervisor 修订定稿**：
 
-Supervisor 综合 Codex 反馈修订方案后，发回确认：
-
-```
-codex-reply(threadId, prompt="""
-我综合你的反馈，修订方案如下：
-<修订后的方案>
-
-请确认：
-1. 修订是否解决了你指出的盲点
-2. 是否还有遗漏的关键风险
-3. 推荐的验证策略
-""")
-```
+Supervisor 综合 Codex 反馈修订方案。插件内部自动处理多轮对话，无需手动管理 threadId。
 
 **收敛条件**（最多 3 轮）：
 - Codex 无新增重大风险点 → 定稿，进入 Phase 3
 - Codex 提出有效新风险 → Supervisor 再修订一轮
 - 第 3 轮仍无法收敛 → Supervisor 以当前最优版本定稿，在 iteration.md 记录分歧
+
+**回退**：插件不可用时，回退到 MCP 工具 `mcp__codex__codex`（read-only），按旧流程手动管理 threadId。
 
 **输出**：定稿方案（含 Codex 贡献的关键改进点标注）
 
@@ -336,102 +321,49 @@ Supervisor 根据任务复杂度和当前模式选择执行方式：
 | 远程实验配置/启动 | Supervisor 直接执行 | 直接在 main | 需要 remote-server skill |
 | Codex 失败/不可用 | Supervisor 自己修复或降级处理 | 直接在 main | 回退保底 |
 
-### Codex Developer 调用流程（两阶段）
+### Codex Developer 调用流程（两阶段，使用 Codex Plugin）
 
-参考 `.claude/agents/developer.md` 中的 prompt 模板和项目约束。
+参考 `.claude/agents/developer.md` 中的项目约束和审查要点。
 
-#### 阶段 1: 讨论修复策略（read-only，安全）
+#### 阶段 1: 分析 + 方案评估（自动，read-only）
 
-1. **调用 Codex 分析 bug**：
-   ```
-   mcp__codex__codex(
-     prompt: "<按 developer.md Bug 分析模板：issue 描述 + 涉及文件 + 现象 + 期望>",
-     sandbox: "read-only",
-     cwd: "/Users/chenzilang/Desktop/LLM_KVCache_Quantization"
-   )
-   ```
+1. **调用 `/codex:review`**：将 bug 描述、涉及文件、现象、期望作为审查内容提交
+   - Codex 返回：根因分析 + 修复策略建议
+   - 插件自动处理多轮对话，无需手动管理 threadId
 
-2. **Codex 返回** `{ threadId, content }`：根因分析 + 修复策略建议
-
-3. **Supervisor 评估**：
+2. **Supervisor 评估**：
    - 方案合理 → 采纳或微调
-   - 需要澄清 → `codex-reply(threadId, prompt="关于 X 点，...")` 继续讨论（不限轮次）
+   - 需要深入挑战 → 追加调用 `/codex:adversarial-review` 对方案做对抗性评估
    - 方案不靠谱 → Supervisor 自行制定策略
 
-#### 阶段 1.5: Codex 计划评估（read-only，必须）
+3. **风险评估（自动）**：Supervisor 确定修复策略后，自动通过 `/codex:adversarial-review` 评估可行性和风险
 
-Supervisor 确定最终修复策略后，**必须**发回给 Codex 做风险评估：
+#### 阶段 2: 执行修复（自动，可读写）
 
-3.5. **发送计划给 Codex 评估**：
-   ```
-   codex-reply(threadId, prompt="""
-   我计划按以下策略修复，请评估可行性和风险：
+4. **调用 `/codex:rescue`**：将确定的修复策略 + 项目约束 + 验证命令交给 Codex 执行
+   - Codex 直接在工作目录中修改代码、运行测试
+   - 插件内部处理迭代，直到测试通过或判断无法修复
 
-   ## 修复策略
-   <Supervisor 确定的方案：改哪些文件、具体逻辑>
-
-   ## 预期影响
-   <涉及的模块、可能的副作用范围>
-
-   请评估：
-   1. 方案是否有逻辑漏洞或遗漏的边界情况
-   2. 可能引入的新风险（数值精度、性能、兼容性）
-   3. 是否有更简洁或更安全的替代方案
-   4. 修复后需要重点验证的测试场景
-   """)
-   ```
-
-3.6. **Codex 返回** 风险评估 + 改进建议
-
-3.7. **Supervisor 综合判断**：
-   - 无重大风险 → 进入阶段 2
-   - 发现有效风险点 → 调整策略后进入阶段 2
-   - 发现根本性问题 → 回到阶段 1 重新讨论
-
-#### 阶段 2: 执行修复（danger-full-access）
-
-4. **调用 Codex 执行修复**（新会话，full access）：
-   ```
-   mcp__codex__codex(
-     prompt: "<按 developer.md Bug 修复模板：基于阶段 1 讨论的策略 + 项目约束 + 验证命令>",
-     sandbox: "danger-full-access",
-     cwd: "/Users/chenzilang/Desktop/LLM_KVCache_Quantization"
-   )
-   ```
-
-5. **Codex 返回** `{ threadId, content }`：修改摘要 + 测试结果
-
-6. **Supervisor 审核**：
+5. **Supervisor 审核**：
    - 运行 `git diff` 查看 Codex 的修改
    - 运行 `pytest tests/ -v` 验证
    - 检查修改是否符合项目约束
 
-7. **迭代（不限轮次）**：
-   - 测试失败 → `codex-reply(threadId, prompt="测试失败日志：..., 请修复")`
-   - 修改不合理 → `codex-reply` 给出具体反馈
-   - 持续迭代直到通过或 Supervisor 判断无法自动修复
+6. **Review Gate 自动审查**：已启用 review-gate，Claude 输出代码时 Codex 自动审查一遍，发现问题阻止提交
 
-8. **落地**（Supervisor 执行，Codex 不提交）：
+7. **落地**（Supervisor 执行，Codex 不提交）：
    - Supervisor 追加 iteration.md Timeline
    - Supervisor 编辑 review_tracker.md 标记修复
    - Supervisor `git add` + `commit`（标注 `codex-assisted`）
 
 #### 回退
 
-- Codex 调用失败（超时/认证过期）→ Supervisor 自行修复
+- 插件调用失败 → 回退到 MCP 工具 `mcp__codex__codex`（按 developer.md 旧模板）
 - Codex 反复迭代无果 → Supervisor 自行处理或上报用户
 
 ### Codex 咨询模式（可选，仅分析不修改）
 
-对于简单 bug 或需要快速第二意见的场景，可直接使用 read-only 咨询而不进入阶段 2：
-
-```
-mcp__codex__codex(
-  prompt: "分析并建议修复方案：\n## Bug 描述\n<issue ID + 描述>\n## 涉及文件\n<文件列表>\n...",
-  sandbox: "read-only",
-  cwd: "/Users/chenzilang/Desktop/LLM_KVCache_Quantization"
-)
-```
+对于简单 bug 或需要快速第二意见的场景，直接调用 `/codex:review`：
 
 **使用时机**：
 - Bug 根因不明确，需要第二意见
@@ -477,7 +409,7 @@ Codex 建议仅作为**参考**，最终决策权在 Supervisor。
 
 ## 沟通机制
 
-- 与 Codex Developer 通过 MCP 工具调用/响应直接通信
+- 与 Codex Developer 通过 Codex Plugin 命令（`/codex:review`、`/codex:rescue` 等）通信，插件不可用时回退到 MCP 工具
 - 与审查 Agent（Review-Coord、D1-D7）通过 iteration.md（Approved Plans/Timeline）和 review_tracker.md 间接沟通
 - 任务分配写入 iteration.md Approved Plans，审查问题追踪见 review_tracker.md
 - 定期读取 review_tracker.md 和 iteration.md 检查其他 Agent 的进展和发现

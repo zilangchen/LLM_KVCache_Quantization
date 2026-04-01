@@ -52,57 +52,58 @@ Triton 融合核函数提供\textbf{部署级系统支撑}
 
 \begin{figure}[htbp]
   \centering
-  \resizebox{0.95\textwidth}{!}{%
+  \resizebox{0.98\textwidth}{!}{%
   \begin{tikzpicture}[
-    box/.style={rectangle, draw, rounded corners=2pt, minimum width=2.6cm,
-                minimum height=0.6cm, text centered, font=\small},
-    arr/.style={-{Stealth[length=2.5mm]}, semithick},
-    phase/.style={draw, dashed, rounded corners=6pt, inner sep=8pt, gray},
+    box/.style={rectangle, draw, rounded corners=4pt, minimum width=4.0cm,
+                minimum height=1.0cm, text centered, font=\small, text width=3.9cm,
+                inner sep=5pt},
+    main/.style={box, fill=blue!7, line width=1.0pt, draw=blue!45},
+    strong/.style={box, fill=teal!10, line width=1.2pt, draw=teal!60!black},
+    support/.style={box, fill=gray!8, draw=gray!55},
+    optional/.style={box, fill=gray!4, dashed, draw=gray!60},
+    arr/.style={-{Stealth[length=2.7mm]}, semithick, draw=gray!72},
+    darr/.style={-{Stealth[length=2.7mm]}, semithick, dashed, draw=gray!68},
+    note/.style={font=\scriptsize, text=gray!80, fill=white, inner sep=1.1pt},
   ]
-  % === 离线校准阶段 ===
-  \node[box, fill=offlineA]  (data)   at (0, 5)      {校准数据集};
-  \node[box, fill=offlineA]  (fwd)    at (0, 4)      {FP16 前向传播};
-  \node[box, fill=offlineA]  (qkv)    at (0, 3)      {逐层 QKV 采样};
-  \node[box, fill=offlineB]  (scale)  at (-1.4, 1.8) {Scale 搜索};
-  \node[box, fill=offlineB]  (invtau) at ( 1.4, 1.8) {$\tau^{-1}$ 优化};
-  \node[box, fill=artifact, minimum width=3.6cm, font=\small\ttfamily]
-                              (json)   at (0, 0.5)    {校准产物 JSON};
+  \node[main, minimum width=4.8cm, text width=4.8cm]
+    (principle) at (-5.2, 0.2)
+    {\textbf{行为对齐原则}\\[-2pt]
+     \scriptsize Attention-KL：既是校准目标，也是诊断透镜};
 
-  % === 在线推理阶段 ===
-  \node[box, fill=onlineA]   (load)   at (7.5, 5)   {加载校准产物};
-  \node[box, fill=onlineA]   (pscale) at (7.5, 4)   {Q 预缩放（$\tau^{-1}$）};
-  \node[box, fill=onlineA]   (kvs)    at (7.5, 3)   {INT8/4 KV 存储};
-  \node[box, fill=onlineB]   (fused)  at (7.5, 1.8) {Triton 融合解码};
-  \node[box, fill=onlineB]   (out)    at (7.5, 0.5) {生成输出};
+  \node[box, fill=orange!10, draw=orange!55!black]
+    (int8) at (-0.7, 1.45)
+    {\textbf{INT8 对称路径}\\[-2pt]
+     \scriptsize KL 校准 + 自适应保护，用来做规范验证};
 
-  % === 阶段边框与标签 ===
-  \node[phase, fit=(data)(fwd)(qkv)(scale)(invtau)(json),
-        label={[font=\heiti\small]above:离线校准阶段}] {};
-  \node[phase, fit=(load)(pscale)(kvs)(fused)(out),
-        label={[font=\heiti\small]above:在线推理阶段}] {};
+  \node[optional]
+    (invtau) at (-0.7, -1.1)
+    {\textbf{$\tau^{-1}$ 可选增强}\\[-2pt]
+     \scriptsize 仅在部分格式与模型上带来额外收益};
 
-  % === 离线箭头 ===
-  \draw[arr] (data) -- (fwd);
-  \draw[arr] (fwd)  -- (qkv);
-  \draw[arr] (qkv.south) -- ++(0,-0.3) -| (scale.north);
-  \draw[arr] (qkv.south) -- ++(0,-0.3) -| (invtau.north);
-  \draw[arr] (scale.south)  |- (json.west);
-  \draw[arr] (invtau.south) |- (json.east);
+  \node[box, fill=yellow!12, draw=yellow!45!black]
+    (diag) at (3.9, 1.45)
+    {\textbf{低比特结构诊断}\\[-2pt]
+     \scriptsize K/V 消融定位失效来源，确认 Key 主导退化};
 
-  % === 在线箭头 ===
-  \draw[arr] (load)   -- (pscale);
-  \draw[arr] (pscale) -- (kvs);
-  \draw[arr] (kvs)    -- (fused);
-  \draw[arr] (fused)  -- (out);
+  \node[strong]
+    (rolealign) at (3.9, -1.1)
+    {\textbf{INT4-RoleAlign 主方法}\\[-2pt]
+     \scriptsize 根据诊断采用角色感知非对称量化};
 
-  % === 跨阶段连接 ===
-  \draw[arr, dashed, thick, red!70!black]
-    (json.east) -- ++(1.2,0) -| (load.west)
-    node[pos=0.15, above, font=\footnotesize, text=black]
-      {per-layer scales $+$ per-head $\tau^{-1}$};
+  \node[support, minimum width=4.3cm, text width=4.1cm]
+    (deploy) at (8.4, 0.2)
+    {\textbf{部署级实现支撑}\\[-2pt]
+     \scriptsize Triton 融合解码 + 校准产物 JSON，避免额外写回};
+
+  \draw[arr] (principle) -- node[note, above] {用于校准} (int8);
+  \draw[darr] (principle) -- node[note, below] {可选增强} (invtau);
+  \draw[arr] (principle) -- node[note, above] {用于诊断} (diag);
+  \draw[arr] (diag) -- node[note, right] {导出角色感知设计} (rolealign);
+  \draw[arr] (int8.east) -- ++(0.9,0) |- node[note, near start, right] {输出 scales / 保护参数} (deploy.north west);
+  \draw[arr] (rolealign.east) -- node[note, below] {融合为部署路径} (deploy.south west);
   \end{tikzpicture}%
   }% end resizebox
-  \caption{行为对齐量化框架总体架构}
+  \caption{行为对齐量化框架的层级结构。左侧首先给出统一原则 Attention-KL，并从中分出两条主线：其一是用于 INT8 规范验证的对称路径，其二是用于解释低比特失败的结构诊断路径；在诊断确认 Key 主导退化后，进一步导出 INT4-RoleAlign 主方法。$\tau^{-1}$ 仅作为可选增强保留，Triton 融合解码与校准产物 JSON 则承担部署级实现支撑。}
   \label{fig:ch3-framework}
 \end{figure}
 
@@ -432,10 +433,7 @@ $\tau^{-1}$ 仅提供边际改善且其收益具有格式依赖性——
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.72\textwidth]{figures/ch3_invtau_heatmap.pdf}
-  \caption{Qwen2.5-1.5B-Instruct 模型校准得到的逐层逐头 $\tau^{-1}$ 分布。
-    绝大多数注意力头的 $\tau^{-1}=1.0$（无需校正），仅第 0、1、15 层的 8 个头
-    需要温度校正（$\tau^{-1} \in \{0.50, 0.70, 0.85\}$），
-    表明校准具有高度稀疏性（仅 2.4\% 的头需要校正）}
+  \caption{Qwen2.5-1.5B-Instruct 校准得到的逐层逐头 $\tau^{-1}$ 稀疏分布。图中仅少数注意力头偏离 1.0，说明温度校正是一个可选、稀疏且格式依赖的增强分支，而非主方法的必需组成。主文保留该图用于说明 $\tau^{-1}$ 的稀疏性，详细收益边界见第~\ref{subsec:exp-ablation-temperature}~节与第~\ref{subsec:exp-rolealign-invtau}~节。}
   \label{fig:ch3-invtau-heatmap}
 \end{figure}
 

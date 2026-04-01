@@ -2,15 +2,30 @@
 
 ## 概述
 
-Developer 角色由 Codex (GPT-5.4) 执行，通过 MCP 工具 `mcp__codex__codex` / `mcp__codex__codex-reply` 调用。
+Developer 角色由 Codex (GPT-5.4) 执行，**首选通过 Codex Plugin 命令调用**：
+- `/codex:review` — 分析/审查（read-only）
+- `/codex:adversarial-review` — 对抗性审查（read-only）
+- `/codex:rescue` — 接手执行（可读写）
+
 Codex 直接在 main 工作目录中修复代码、运行测试，完成后向 Supervisor 汇报。
 **Codex 不提交代码**——提交由 Supervisor 审核后执行。
 
-本文件是 Supervisor 调用 Codex 时的**参考规范和 prompt 模板库**，不再作为 Claude Code 子 Agent 被 `Task()` 加载。
+本文件是 Supervisor 调用 Codex 时的**参考规范和约束清单**。
 
 ---
 
 ## 调用方式
+
+### 首选：Codex Plugin（自动，无需管理 threadId）
+
+| 命令 | 对应旧 MCP 模式 | 用途 |
+|------|----------------|------|
+| `/codex:review` | `mcp__codex__codex(sandbox: "read-only")` | Bug 分析、方案审查、第二意见 |
+| `/codex:adversarial-review` | Plan Debate 自定义 prompt | 方案挑战、风险评估、架构决策验证 |
+| `/codex:rescue` | `mcp__codex__codex(sandbox: "danger-full-access")` | Bug 修复执行、任务委托 |
+| `/codex:review --background` | — | 后台异步审查 |
+
+### 回退：MCP 工具（仅当插件不可用时）
 
 ```
 mcp__codex__codex(
@@ -19,9 +34,6 @@ mcp__codex__codex(
   cwd: "/Users/chenzilang/Desktop/LLM_KVCache_Quantization"
 )
 ```
-
-- **read-only**：阶段 1 讨论/分析，安全无副作用
-- **danger-full-access**：阶段 2 执行修复 + 跑测试（直接在 main 工作目录中写文件/运行命令）
 
 ---
 
@@ -200,9 +212,11 @@ pytest tests/<相关测试文件> -v
 
 ## 多轮迭代协议
 
-- **阶段 1（讨论）**：`codex-reply(threadId)` 不限轮次，直到 Supervisor 对修复策略满意
-- **阶段 2（执行）**：`codex-reply(threadId)` 不限轮次，直到测试通过或 Supervisor 判断无法自动修复
+- **阶段 1（讨论）**：通过 `/codex:review` 或 `/codex:adversarial-review` 交互，插件自动处理多轮对话
+- **阶段 2（执行）**：通过 `/codex:rescue` 委托执行，Codex 自动迭代直到测试通过
+- **Review Gate**：已启用自动审查门控，Claude 输出代码时 Codex 自动拦截审查
 - Supervisor 每轮提供具体反馈（测试日志、审核意见）帮助 Codex 修正
+- **回退**：插件不可用时，使用 `mcp__codex__codex-reply(threadId)` 手动管理多轮对话
 
 ---
 

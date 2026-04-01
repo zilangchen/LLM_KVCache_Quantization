@@ -216,21 +216,21 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
 
 本节提供主线质量评测指标的可视化补充。
 图~\ref{fig:app-ruler-vs-context} 展示了 RULER 通过率随上下文长度的变化趋势，
-图~\ref{fig:app-longbench-vs-context} 展示了 LongBench 综合评分的对应趋势。
+图~\ref{fig:app-longbench-vs-context} 展示了 LongBench-style 合成综合评分的对应趋势。
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.87\textwidth]{figures/ruler_pass_rate_vs_context.pdf}
   \caption{各量化模式的 RULER 通过率随上下文长度的变化（Qwen2.5-1.5B-Instruct）。
-  RULER 评估覆盖 4 个子任务：S-NIAH、MK-NIAH、VT 和 CWE。}
+  该图作为补充质量证据保留在附录中，展示 S-NIAH、MK-NIAH、VT 和 CWE 四个子任务聚合后的整体趋势。}
   \label{fig:app-ruler-vs-context}
 \end{figure}
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.87\textwidth]{figures/longbench_score_vs_context.pdf}
-  \caption{各量化模式的 LongBench 综合评分随上下文长度的变化（Qwen2.5-1.5B-Instruct）。
-  综合评分为 7 类子任务对应指标的宏平均。}
+  \caption{各量化模式的 LongBench-style 合成综合评分随上下文长度的变化（Qwen2.5-1.5B-Instruct）。
+  综合评分为 7 类合成长上下文子任务对应指标的宏平均。}
   \label{fig:app-longbench-vs-context}
 \end{figure}
 
@@ -293,7 +293,7 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.95\textwidth]{figures/appendix_throughput_dashboard.pdf}
-  \caption{吞吐扩展性 dashboard（Qwen2.5-1.5B-Instruct）。
+  \caption{吞吐扩展性三联图（Qwen2.5-1.5B-Instruct）。
   面板（a）展示总吞吐量，面板（b）展示单序列吞吐量，
   面板（c）展示 prefill 吞吐量。统一图例和坐标轴便于比较量化模式在 batch 扩展中的并发收益与单序列代价。}
   \label{fig:app-throughput-dashboard}
@@ -302,9 +302,9 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.92\textwidth]{figures/appendix_memory_dashboard.pdf}
-  \caption{显存扩展性 dashboard（Qwen2.5-1.5B-Instruct）。
+  \caption{显存扩展性双联图（Qwen2.5-1.5B-Instruct）。
   面板（a）展示 KV Cache 显存随 batch size 的线性增长，
-  面板（b）展示总峰值显存；两者共同说明量化的显存节省会随着并发度提升而持续转化为更高的可容纳 batch。}
+  面板（b）展示总峰值显存；两者共同说明量化节省会随着并发度提升而持续转化为更高的可容纳 batch。}
   \label{fig:app-memory-dashboard}
 \end{figure}
 
