@@ -375,8 +375,16 @@ def build_kv_cache(
                     ra_k_percentile = float(ra_section.get("k_percentile", 100.0))
                     ra_v_percentile = float(ra_section.get("v_percentile", 100.0))
                 elif "k_calibration" in calib_data:
-                    # Fallback: v3 schema from int4_kivi_aligned calibration
-                    ra_k_percentile = float(calib_data.get("k_percentile", 100.0))
+                    # Fallback: v3 schema from int4_kivi_aligned calibration.
+                    # Look inside k_calibration first, then top-level.
+                    import warnings
+                    warnings.warn(
+                        f"RoleAlign mode '{kv_mode}' using k_calibration fallback schema; "
+                        "consider re-generating calibration with role_aware schema.",
+                        UserWarning,
+                    )
+                    k_cal = calib_data["k_calibration"]
+                    ra_k_percentile = float(k_cal.get("k_percentile", calib_data.get("k_percentile", 100.0)))
                     if "v_calibration" in calib_data:
                         ra_v_percentile = float(calib_data["v_calibration"].get("v_percentile", 100.0))
                 # inv_tau: only for ours_asym_ba
