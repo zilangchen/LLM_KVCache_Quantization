@@ -1207,6 +1207,17 @@ INT4-RoleAlign 与对照方法在 PPL、Needle 和 LongBench 上的对比，
 \end{figure}
 \clearpage
 
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.78\textwidth]{figures/ppl_degradation_vs_scale.pdf}
+  \caption{模型规模与 PPL 退化的结构性关系。
+  三个模型的 PPL 退化率随 GQA 头数 $H_{kv}$ 递减
+  （1.5B: 13.7\%，7B: 6.1\%，8B: 2.4\%），
+  但 Needle 检索通过率在三模型上均保持 100\%——
+  揭示了局部检索能力与全局语言建模质量对 INT4 量化噪声的差异化鲁棒性。}
+  \label{fig:ppl-vs-scale}
+\end{figure}
+
 \textbf{核心发现。}
 （1）\emph{量化格式升级是 Needle 恢复的决定性因素}：
 在全部三个模型上，从 per-group 对称切换到 per-channel/per-token 非对称后，
@@ -1469,6 +1480,21 @@ INT4 的 15 级对几乎所有长上下文任务构成挑战。
 \textbf{发现五：$\tau^{-1}$ 格式依赖。}
 $\tau^{-1}$ 在非对称 INT4 上无收益甚至有害，
 增强机制不可跨格式迁移。
+
+图~\ref{fig:pareto-quality-efficiency} 从质量-压缩率的 Pareto 视角
+汇总了各量化方法的综合定位。
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.82\textwidth]{figures/pareto_quality_efficiency.pdf}
+  \caption{质量-效率 Pareto 视图（Qwen2.5-1.5B-Instruct）。
+  纵轴为 Needle 检索通过率，横轴为 KV Cache 压缩率。
+  INT4-baseline（对称）以 72\% 压缩率达到 Needle 0\%（灾难性失效），
+  而 INT4-RoleAlign 在相同压缩率下将 Needle 恢复至 100\%，
+  独占右上角的``理想区域''。
+  蓝色虚线箭头标注了 RoleAlign 的检索恢复效果。}
+  \label{fig:pareto-quality-efficiency}
+\end{figure}
 
 % ------------------------------------------------------------
 \subsection{实验结论总结}

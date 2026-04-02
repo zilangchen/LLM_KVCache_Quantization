@@ -116,7 +116,67 @@ Triton 融合核函数提供\textbf{部署级系统支撑}
 以及可选的逐头温度校正因子 $\tau^{-1}$（inverse temperature），
 作为框架的候选增强机制之一。
 
-具体而言，离线校准阶段执行以下流程：
+图~\ref{fig:ch3-calib-pipeline} 给出了离线校准阶段的完整流程。
+具体而言，该阶段执行以下步骤：
+
+\begin{figure}[htbp]
+  \centering
+  \begin{tikzpicture}[
+    box/.style={rectangle, draw, rounded corners=3pt, minimum height=1.1cm,
+                text centered, font=\small, inner sep=5pt, line width=0.8pt},
+    data/.style={box, fill=gray!8, draw=gray!50, text width=2.4cm},
+    proc/.style={box, fill=blue!6, draw=blue!40, text width=2.8cm},
+    search/.style={box, fill=teal!8, draw=teal!50, text width=3.0cm, minimum height=1.4cm},
+    out/.style={box, fill=orange!8, draw=orange!50, text width=2.6cm},
+    arr/.style={-{Stealth[length=2.5mm]}, semithick, draw=gray!65},
+    note/.style={font=\scriptsize, text=black!55},
+  ]
+  % Row 1: Input
+  \node[data] (wiki) at (0, 0) {校准数据\\[-2pt]\scriptsize WikiText-103};
+  \node[proc] (fwd) at (3.5, 0) {FP16 前向传播\\[-2pt]\scriptsize 提取 Q/K/V};
+
+  % Row 2: Search (two paths)
+  \node[search] (s1) at (-0.5, -2.2) {
+    \textbf{阶段 1: Scale 搜索}\\[-1pt]
+    \scriptsize $(p_c, g) \to \min D_{\text{KL}}$\\[-1pt]
+    \scriptsize per-group 对称量化
+  };
+  \node[search] (s2) at (3.5, -2.2) {
+    \textbf{阶段 2: $\tau^{-1}$ 搜索}\\[-1pt]
+    \scriptsize 逐头温度校正\\[-1pt]
+    \scriptsize （可选，格式依赖）
+  };
+  \node[search, fill=teal!14, draw=teal!65, line width=1pt] (sra) at (7.5, -2.2) {
+    \textbf{RoleAlign 路径}\\[-1pt]
+    \scriptsize $(p_K, p_V) \to \min D_{\text{KL}}$\\[-1pt]
+    \scriptsize per-ch K + per-tok V
+  };
+
+  % Row 3: Output
+  \node[out] (json) at (3.5, -4.2) {校准产物 JSON\\[-2pt]\scriptsize scales + $\tau^{-1}$ ($<$10 KB)};
+
+  % Arrows
+  \draw[arr] (wiki) -- (fwd);
+  \draw[arr] (fwd) -- (s1);
+  \draw[arr] (fwd) -- (s2);
+  \draw[arr] (fwd) -- (sra);
+  \draw[arr] (s1) -- (json);
+  \draw[arr] (s2) -- (json);
+  \draw[arr] (sra) -- (json);
+
+  % Labels
+  \node[note, anchor=west] at (5.6, -0.1) {\textit{Q 需经 layernorm + RoPE}};
+  \node[note] at (-0.5, -3.6) {INT8 路径};
+  \node[note] at (7.5, -3.6) {INT4-RoleAlign};
+  \end{tikzpicture}
+  \caption{行为对齐离线校准流程。
+  INT8 路径采用两阶段分离搜索：先在 $(p_c, g)$ 网格上最小化 KL 散度确定 Scale，
+  再逐头搜索 $\tau^{-1}$ 温度校正。
+  INT4-RoleAlign 路径在 per-channel K + per-token V 非对称格式上搜索 $(p_K, p_V)$，
+  不使用 $\tau^{-1}$（第~\ref{subsec:exp-rolealign-results}~节实验表明其在非对称格式下无稳定收益）。
+  两条路径共享同一校准框架和 KL 散度目标函数。}
+  \label{fig:ch3-calib-pipeline}
+\end{figure}
 \begin{enumerate}[label=(\arabic*)]
   \item \textbf{校准数据采集}：
     使用 FP16 精度的参考模型在校准数据集（如 WikiText-103~\cite{merity2016wikitext} 的子集）上执行前向传播，
