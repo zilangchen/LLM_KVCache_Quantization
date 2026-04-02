@@ -53,3 +53,10 @@ task_plan.md
 docs/autodl_server.md
 
 tmp/
+
+# Temp test figures
+thesis/figures/test_fig*
+thesis/figures/preview_concepts.html
+.playwright-mcp/
+.claude/launch.json
+THESIS_DEFENSE_ANALYSIS.md

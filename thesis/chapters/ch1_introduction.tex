@@ -169,54 +169,54 @@ INT4-RoleAlign 完成``原则$\to$诊断$\to$设计$\to$边界''的闭环，
 \begin{figure}[htbp]
   \centering
   \begin{tikzpicture}[
-    stage/.style={rectangle, draw, rounded corners=4pt, minimum width=2.48cm,
-                  minimum height=1.82cm, text centered, font=\small, text width=2.24cm,
-                  inner sep=4.2pt, line width=0.9pt},
-    hero/.style={stage, fill=teal!10, draw=teal!60!black, line width=1.2pt},
-    arr/.style={-{Stealth[length=3.0mm]}, semithick, draw=gray!72},
-    steplabel/.style={font=\scriptsize\bfseries, text=black!70, fill=white, inner sep=1.2pt},
+    stage/.style={rectangle, draw, rounded corners=5pt, minimum width=2.62cm,
+                  minimum height=2.08cm, text centered, font=\small, text width=2.36cm,
+                  inner sep=4.8pt, line width=0.9pt},
+    hero/.style={stage, fill=teal!7, draw=teal!45!black, line width=1.15pt},
+    arr/.style={-{Stealth[length=3.0mm]}, semithick, draw=black!42},
+    steplabel/.style={font=\scriptsize\bfseries, text=black!68, fill=white, inner sep=1.3pt},
   ]
-  \node[stage, fill=red!6, draw=red!45]
-    (problem) at (-5.8, 0)
-    {\textbf{步骤 1：问题}\\
+  \node[stage, fill=red!3, draw=red!30]
+    (problem) at (-5.9, 0)
+    {\textbf{问题：代理失配}\\
      \scriptsize 只看数值误差\\[-1pt]
-     \scriptsize 解释不了 INT4 崩溃};
+     \scriptsize 解释不了低比特失效};
 
-  \node[stage, fill=blue!7, draw=blue!45]
-    (principle) at (-2.9, 0)
-    {\textbf{步骤 2：原则}\\
-     \scriptsize 用 Attention-KL\\[-1pt]
-     \scriptsize 同时做校准与诊断};
+  \node[stage, fill=blue!4, draw=blue!28]
+    (principle) at (-2.95, 0)
+    {\textbf{原则：Attention-KL}\\
+     \scriptsize 统一校准目标\\[-1pt]
+     \scriptsize 与诊断透镜};
 
-  \node[stage, fill=orange!10, draw=orange!55!black]
+  \node[stage, fill=green!4!yellow!8, draw=green!35!black]
     (int8) at (0, 0)
-    {\textbf{步骤 3：验证}\\
-     \scriptsize 先在 INT8 上\\[-1pt]
-     \scriptsize 证明原则成立};
+    {\textbf{INT8 规范实例}\\
+     \scriptsize 先在稳定精度下\\[-1pt]
+     \scriptsize 验证原则成立};
 
-  \node[stage, fill=yellow!12, draw=yellow!45!black]
-    (diagnosis) at (2.9, 0)
-    {\textbf{步骤 4：诊断}\\
-     \scriptsize 再定位 Key 主导\\[-1pt]
-     \scriptsize 的低比特退化};
+  \node[stage, fill=orange!6, draw=orange!34!black]
+    (diagnosis) at (2.95, 0)
+    {\textbf{低比特结构诊断}\\
+     \scriptsize 识别 Key 主导\\[-1pt]
+     \scriptsize 的退化来源};
 
   \node[hero]
-    (rolealign) at (5.8, 0)
-    {\textbf{步骤 5：主结果}\\
-     \scriptsize 导出 INT4-RoleAlign\\[-1pt]
-     \scriptsize 并界定能力边界};
+    (rolealign) at (5.9, 0)
+    {\textbf{INT4-RoleAlign}\\
+     \scriptsize 恢复检索行为\\[-1pt]
+     \scriptsize 并保留能力边界};
 
   \draw[arr] (problem) -- (principle);
   \draw[arr] (principle) -- (int8);
   \draw[arr] (int8) -- (diagnosis);
   \draw[arr] (diagnosis) -- (rolealign);
 
-  \node[steplabel] at (-4.35, 1.12) {改优化对象};
-  \node[steplabel] at (-1.45, 1.12) {先做验证};
-  \node[steplabel] at (1.45, 1.12) {再做诊断};
-  \node[steplabel] at (4.35, 1.12) {导出设计};
+  \node[steplabel] at (-4.42, 1.28) {纠正优化对象};
+  \node[steplabel] at (-1.48, 1.28) {先做规范验证};
+  \node[steplabel] at (1.48, 1.28) {再做结构诊断};
+  \node[steplabel] at (4.42, 1.28) {导出扩展并识别边界};
   \end{tikzpicture}
-  \caption{本文论证层级总览。我们首先指出仅依赖数值重建误差的校准代理无法解释对称 INT4 在长上下文下的失败；随后提出行为对齐原则，用 Attention-KL 同时承担校准目标与诊断透镜；该原则先通过 INT8 规范实例得到验证，再进一步揭示低比特退化的 Key 主导根因，最终导出 INT4-RoleAlign 并界定其能力边界。}
+  \caption{本文论证层级总览。全文从“数值代理失配”这一问题出发，提出以 Attention-KL 为核心的行为对齐原则；该原则先通过 INT8 规范实例得到验证，再进一步揭示低比特退化的 Key 主导根因，最终导出恢复检索行为但仍保留语言建模与运行时边界的 INT4-RoleAlign 扩展。}
   \label{fig:ch1-pipeline}
 \end{figure}
 

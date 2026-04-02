@@ -53,58 +53,62 @@ Triton 融合核函数提供\textbf{部署级系统支撑}
 \begin{figure}[htbp]
   \centering
   \begin{tikzpicture}[
-    box/.style={rectangle, draw, rounded corners=4pt, minimum width=4.12cm,
-                minimum height=1.38cm, text centered, font=\small, text width=3.82cm,
-                inner sep=4.8pt},
-    main/.style={box, fill=blue!7, line width=1.0pt, draw=blue!45},
-    strong/.style={box, fill=teal!10, line width=1.2pt, draw=teal!60!black},
-    support/.style={box, fill=gray!8, draw=gray!55},
-    optional/.style={box, fill=gray!4, dashed, draw=gray!60},
-    arr/.style={-{Stealth[length=2.9mm]}, semithick, draw=gray!72},
-    darr/.style={-{Stealth[length=2.9mm]}, semithick, dashed, draw=gray!68},
+    stage/.style={rectangle, draw, rounded corners=5pt, minimum width=4.05cm,
+                  minimum height=1.58cm, text centered, font=\small,
+                  text width=3.72cm, inner sep=5.0pt, line width=0.9pt},
+    principle/.style={stage, fill=blue!4, draw=blue!28},
+    pathbox/.style={stage, fill=green!4!yellow!8, draw=green!34!black},
+    diagnosis/.style={stage, fill=orange!6, draw=orange!34!black},
+    rolebox/.style={stage, fill=teal!7, draw=teal!42!black, line width=1.1pt},
+    weakbox/.style={stage, fill=gray!4, draw=gray!35, minimum width=3.35cm,
+                    minimum height=1.16cm, text width=3.02cm},
+    optional/.style={weakbox, dashed, draw=gray!48},
+    arr/.style={-{Stealth[length=2.9mm]}, semithick, draw=black!42},
+    weakarr/.style={-{Stealth[length=2.6mm]}, thin, dashed, draw=black!33},
+    note/.style={font=\scriptsize\bfseries, text=black!66, fill=white, inner sep=1.4pt},
   ]
-  \node[main, minimum width=5.25cm, text width=4.95cm]
-    (principle) at (0, 2.35)
+  \node[principle, minimum width=5.55cm, text width=5.18cm]
+    (principle) at (0, 3.0)
     {\textbf{行为对齐原则}\\[-2pt]
-     \scriptsize Attention-KL：既是校准目标，也是诊断透镜};
+     \scriptsize Attention-KL：统一校准目标与诊断透镜};
 
-  \node[box, fill=orange!10, draw=orange!55!black]
-    (int8) at (-4.55, 0.45)
-    {\textbf{INT8 对称路径}\\[-2pt]
-     \scriptsize KL 校准 + 自适应保护\\[-1pt]
-     \scriptsize 给出规范验证实例};
+  \node[pathbox]
+    (int8) at (-4.35, 0.95)
+    {\textbf{INT8 规范路径}\\[-2pt]
+     \scriptsize 在稳定精度下验证原则成立};
+
+  \node[diagnosis]
+    (diag) at (0.35, 0.95)
+    {\textbf{低比特结构诊断}\\[-2pt]
+     \scriptsize 识别 Key 主导的退化来源};
+
+  \node[rolebox]
+    (rolealign) at (0.35, -1.55)
+    {\textbf{INT4-RoleAlign 扩展}\\[-2pt]
+     \scriptsize 恢复检索行为并保留能力边界};
 
   \node[optional]
-    (invtau) at (-4.55, -2.0)
+    (invtau) at (-4.35, -2.0)
     {\textbf{$\tau^{-1}$ 可选增强}\\[-2pt]
-     \scriptsize 仅在部分模型上带来额外收益};
+     \scriptsize 仅在部分模型上额外获益};
 
-  \node[box, fill=yellow!12, draw=yellow!45!black]
-    (diag) at (0, 0.45)
-    {\textbf{低比特结构诊断}\\[-2pt]
-     \scriptsize K/V 消融 + GQA 依赖\\[-1pt]
-     \scriptsize 用于解释对称 INT4 为何失败};
-
-  \node[strong]
-    (rolealign) at (0, -2.0)
-    {\textbf{INT4-RoleAlign 主方法}\\[-2pt]
-     \scriptsize 根据诊断采用角色感知非对称量化\\[-1pt]
-     \scriptsize 将解释结果转成可用低比特设计};
-
-  \node[support, minimum width=4.3cm, text width=4.1cm]
-    (deploy) at (4.55, 0.45)
+  \node[weakbox]
+    (deploy) at (5.25, 0.05)
     {\textbf{部署级实现支撑}\\[-2pt]
-     \scriptsize Triton 融合解码 + 校准产物 JSON\\[-1pt]
-     \scriptsize 在线阶段不再额外引入反量化写回};
+     \scriptsize Triton + JSON，服务主线落地};
 
   \draw[arr] (principle.south west) |- (int8.north);
   \draw[arr] (principle) -- (diag);
-  \draw[darr] (int8) -- (invtau);
   \draw[arr] (diag) -- (rolealign);
-  \draw[arr] (int8.east) -- (deploy.west);
-  \draw[arr] (rolealign.east) -| (deploy.south);
+  \draw[weakarr] (int8) -- (invtau);
+  \draw[weakarr] (int8.east) -- ++(0.55,0) |- (deploy.west);
+  \draw[weakarr] (rolealign.east) -- ++(0.7,0) |- (deploy.south);
+
+  \node[note] at (-2.35, 2.18) {规范验证};
+  \node[note] at (1.10, 2.18) {解释低比特失效};
+  \node[note] at (1.35, -0.35) {诊断导出扩展};
   \end{tikzpicture}%
-  \caption{行为对齐量化框架的层级结构。左侧首先给出统一原则 Attention-KL，并从中分出两条主线：其一是用于 INT8 规范验证的对称路径，其二是用于解释低比特失败的结构诊断路径；在诊断确认 Key 主导退化后，进一步导出 INT4-RoleAlign 主方法。$\tau^{-1}$ 仅作为可选增强保留，Triton 融合解码与校准产物 JSON 则承担部署级实现支撑。}
+  \caption{行为对齐量化框架的层级结构。顶层给出统一原则 Attention-KL；其一向左派生出 INT8 规范路径，用于在稳定精度 regime 下验证该原则，其二向下导出低比特结构诊断，用于解释对称 INT4 的失败来源。基于该诊断，进一步得到 INT4-RoleAlign 扩展。$\tau^{-1}$ 仅作为可选增强保留，Triton 融合解码与校准产物 JSON 只承担部署级实现支撑，不与主方法平级。}
   \label{fig:ch3-framework}
 \end{figure}
 
