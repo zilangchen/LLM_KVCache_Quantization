@@ -54,6 +54,13 @@ docs/autodl_server.md
 
 tmp/
 
+# Thesis figure PNG exports (PDF is source of truth)
+thesis/figures/*.png
+thesis/figures/*.jpeg
+
+# Pandoc temp
+thesis/_pandoc_tmp/
+
 # Temp test figures
 thesis/figures/test_fig*
 thesis/figures/preview_concepts.html
