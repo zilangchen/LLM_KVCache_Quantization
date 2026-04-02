@@ -932,6 +932,7 @@ def generate_from_ids(
                 f"(requested '{decode_attn_impl}'). RoleAwareAsym uses torch_ref only.",
                 UserWarning,
             )
+            decode_attn_impl = "torch_ref"
     elif kv_mode == "int4_mixed_kv":
         # K-INT8 symmetric + V-INT4 asymmetric per-token (hybrid mode).
         # k_bits/v_bits allow K/V ablation (K-only, V-only, counterfactual).

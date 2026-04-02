@@ -145,8 +145,10 @@ INT4-RoleAlign 采用 per-channel Key + per-token Value
 非对称量化轴与行为对齐 percentile 校准。
 在 Qwen2.5-1.5B、Qwen2.5-7B、LLaMA-3.1-8B 三个模型上
 Needle 从 0\%$\to$100\%，
-PPL 退化从 KIVI-style 的 2.4\%--12\%$\to$0.3\%--1.2\%，
-在 75\% KV Cache 压缩率下实现上述质量保持。
+RULER 检索能力在 4K--32K 全范围保持近乎完整（s\_niah $\geq$99\%），
+在 73\% KV Cache 压缩率下实现上述检索能力保持。
+PPL 退化因模型规模而异（8B: 2.4\%，7B: 6.1\%，1.5B: 13.7\%），
+揭示了局部检索对 INT4 量化噪声的鲁棒性远高于全局语言建模质量。
 INT4-RoleAlign 完成``原则$\to$诊断$\to$设计$\to$验证''的闭环，
 构成本文的核心方法贡献。
 
@@ -160,48 +162,58 @@ INT4-RoleAlign 完成``原则$\to$诊断$\to$设计$\to$验证''的闭环，
 首先通过 INT8 规范验证实例证明其有效性，
 进而揭示低比特退化的 Key 主导根因，
 最终导出本文的核心方法贡献——INT4-RoleAlign，
-以 75\% KV Cache 压缩率实现三模型 Needle 100\%、PPL 退化 $<$1.2\%。
+以 73\% KV Cache 压缩率实现三模型 Needle 100\%、RULER 检索 $\geq$99\%。
 图~\ref{fig:ch1-pipeline} 展示了本文的论证结构。
 
 \begin{figure}[htbp]
   \centering
   \begin{tikzpicture}[
-    stage/.style={rectangle, draw, rounded corners=4pt, minimum width=4.3cm,
-                  minimum height=1.25cm, text centered, font=\small, text width=4.05cm,
-                  inner sep=5pt, line width=0.9pt},
+    stage/.style={rectangle, draw, rounded corners=4pt, minimum width=2.48cm,
+                  minimum height=1.82cm, text centered, font=\small, text width=2.24cm,
+                  inner sep=4.2pt, line width=0.9pt},
     hero/.style={stage, fill=teal!10, draw=teal!60!black, line width=1.2pt},
-    arr/.style={-{Stealth[length=3mm]}, semithick, draw=gray!70},
-    note/.style={font=\scriptsize, text=gray!80, fill=white, inner sep=1.2pt},
+    arr/.style={-{Stealth[length=3.0mm]}, semithick, draw=gray!72},
+    steplabel/.style={font=\scriptsize\bfseries, text=black!70, fill=white, inner sep=1.2pt},
   ]
   \node[stage, fill=red!6, draw=red!45]
-    (problem) at (-5.0, 0)
-    {\textbf{错误代理：只看数值重建}\\
-     \scriptsize MSE / percentile 难以解释 INT4 在 32K 的崩溃};
+    (problem) at (-5.8, 0)
+    {\textbf{步骤 1：问题}\\
+     \scriptsize 只看数值误差\\[-1pt]
+     \scriptsize 解释不了 INT4 崩溃};
 
   \node[stage, fill=blue!7, draw=blue!45]
-    (principle) at (0, 0)
-    {\textbf{行为对齐原则}\\
-     \scriptsize 用 Attention-KL 统一校准目标与诊断透镜};
+    (principle) at (-2.9, 0)
+    {\textbf{步骤 2：原则}\\
+     \scriptsize 用 Attention-KL\\[-1pt]
+     \scriptsize 同时做校准与诊断};
 
   \node[stage, fill=orange!10, draw=orange!55!black]
-    (int8) at (5.0, 0)
-    {\textbf{INT8 规范验证实例}\\
-     \scriptsize 先在稳定 setting 证明原则可用，KV 显存下降约 44\%};
+    (int8) at (0, 0)
+    {\textbf{步骤 3：验证}\\
+     \scriptsize 先在 INT8 上\\[-1pt]
+     \scriptsize 证明原则成立};
 
   \node[stage, fill=yellow!12, draw=yellow!45!black]
-    (diagnosis) at (-2.5, -2.8)
-    {\textbf{低比特结构诊断}\\
-     \scriptsize 同一透镜揭示 Key 更敏感，并受 GQA / 架构影响};
+    (diagnosis) at (2.9, 0)
+    {\textbf{步骤 4：诊断}\\
+     \scriptsize 再定位 Key 主导\\[-1pt]
+     \scriptsize 的低比特退化};
 
   \node[hero]
-    (rolealign) at (2.8, -2.8)
-    {\textbf{INT4-RoleAlign 主结果}\\
-     \scriptsize 75\% 压缩；Needle 0\%$\to$100\%；PPL 退化 $<$1.2\%};
+    (rolealign) at (5.8, 0)
+    {\textbf{步骤 5：主结果}\\
+     \scriptsize 导出 INT4-RoleAlign\\[-1pt]
+     \scriptsize 并实现稳定低比特压缩};
 
-  \draw[arr] (problem) -- node[note, above] {纠正优化对象} (principle);
-  \draw[arr] (principle) -- node[note, above] {先做高比特验证} (int8);
-  \draw[arr] (principle) -- node[note, left] {再做低比特诊断} (diagnosis);
-  \draw[arr] (diagnosis) -- node[note, above] {诊断直接导出设计} (rolealign);
+  \draw[arr] (problem) -- (principle);
+  \draw[arr] (principle) -- (int8);
+  \draw[arr] (int8) -- (diagnosis);
+  \draw[arr] (diagnosis) -- (rolealign);
+
+  \node[steplabel] at (-4.35, 1.12) {改优化对象};
+  \node[steplabel] at (-1.45, 1.12) {先做验证};
+  \node[steplabel] at (1.45, 1.12) {再做诊断};
+  \node[steplabel] at (4.35, 1.12) {导出设计};
   \end{tikzpicture}
   \caption{本文论证层级总览。我们首先指出仅依赖数值重建误差的校准代理无法解释对称 INT4 在长上下文下的失败；随后提出行为对齐原则，用 Attention-KL 同时承担校准目标与诊断透镜；该原则先通过 INT8 规范实例得到验证，再进一步揭示低比特退化的 Key 主导根因，最终导出本文的核心方法 INT4-RoleAlign。}
   \label{fig:ch1-pipeline}

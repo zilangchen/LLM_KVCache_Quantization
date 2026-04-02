@@ -36,8 +36,10 @@ Key 决定注意力的``看哪里''，
 \textbf{诊断导出了什么？}
 INT4-RoleAlign——诊断驱动的角色感知低比特设计。
 在三个模型上 Needle 从 0\%$\to$100\%，
-PPL 退化从 2.4\%--12\%$\to$0.3\%--1.2\%，
-实现 75\% KV Cache 压缩。
+RULER 检索在 4K--32K 全范围保持 $\geq$99\%，
+实现 73\% KV Cache 压缩。
+PPL 退化因模型规模而异（8B: 2.4\%，7B: 6.1\%，1.5B: 13.7\%），
+揭示了局部检索对量化噪声的鲁棒性远高于全局语言建模质量。
 从原则到诊断到设计的闭环构成本文的核心贡献。
 
 % ------------------------------------------------------------
@@ -70,7 +72,9 @@ INT8 结果构成行为对齐原则的 canonical validated instance：
 基于上述诊断，INT4-RoleAlign 吸收 per-channel K + per-token V 非对称量化轴，
 通过 BA-guided percentile 校准搜索最优参数。
 在三个模型上 Needle 从 0\% 恢复至 100\%，
-PPL 退化从 KIVI-style 的 2.4\%--12\% 降至 0.3\%--1.2\%。
+RULER 检索在 4K--32K 全范围保持 $\geq$99\%。
+PPL 退化随模型规模递减（8B: 2.4\%，7B: 6.1\%，1.5B: 13.7\%），
+KV Cache 显存节省 73\%。
 chunk\_size=1 全量化压力测试（Qwen2.5-1.5B）中 KIVI-style PPL 退化至 9442，
 而 INT4-RoleAlign 仅为 9.49。
 这一从诊断到设计的闭环构成本文的核心方法贡献，
@@ -93,9 +97,11 @@ Attention-KL 作为统一的校准与诊断原则，
 当前工作存在以下局限：
 
 \textbf{INT4-RoleAlign 的验证范围。}
-INT4-RoleAlign 已在三个模型上通过 PPL、Needle、LongBench 三类质量评测验证
-（PPL 退化 0.3\%--1.2\%，Needle 100\%），
-但 RULER 合成推理评测和系统效率评测（TPOT、显存）尚未完成。
+INT4-RoleAlign 已在三个模型上通过 PPL、Needle、LongBench、RULER 四类质量评测
+以及 TPOT 和 KV Cache 显存两类系统效率评测验证。
+检索能力保持近乎完整（Needle 100\%，RULER s\_niah $\geq$99\%），
+但 PPL 退化显著（8B: 2.4\%，7B: 6.1\%，1.5B: 13.7\%），
+且解码延迟因缺少 Triton 融合核函数增加约 2--2.5$\times$。
 chunk\_size=1 全量化压力测试仅在 Qwen2.5-1.5B 单模型、单种子条件下验证，
 跨模型推广仍需后续实验。
 
@@ -130,9 +136,10 @@ INT8 行为对齐量化在质量无损的前提下将可服务 batch 倍增至 2
 （附录表~\ref{tab:app-batch-capacity}），
 但 Triton 融合核函数是效率收益的前提——
 仅做量化而不融合计算路径反而可能增加延迟。
-INT4-RoleAlign 以 75\% 压缩率在 PPL、Needle、LongBench 评测上保持质量，
-为显存受限场景的低比特推理提供了有竞争力的质量基线
-（系统效率评测尚待补充，见第~\ref{sec:conclusion-limitations}~节）。
+INT4-RoleAlign 以 73\% 压缩率在 Needle、RULER、LongBench 评测上保持检索质量，
+同时 KV Cache 显存降低约 3.7$\times$。
+解码延迟因 \texttt{torch\_ref} 路径（无 Triton 融合核函数）比 FP16 增加约 2--2.5$\times$，
+当前定位为``检索保持 + 显存优化方案''。
 校准为一次性离线过程（1.5B 约 15 分钟，7B/8B 约 30--50 分钟），
 产出 $<$10~KB 的 JSON 参数文件，部署成本极低。
 
@@ -215,7 +222,7 @@ Attention-KL 作为统一的校准目标与诊断透镜，
 首先在 INT8 上得到验证，
 进而揭示低比特退化的 Key 主导根因与 GQA 架构依赖，
 最终导出 INT4-RoleAlign——
-以 75\% 的 KV Cache 压缩率、三模型 Needle 100\%、
-PPL 退化 $<$1.2\% 的成绩，
+以 73\% 的 KV Cache 压缩率、三模型 Needle 100\%、
+RULER 检索 $\geq$99\% 的成绩，
 证明行为对齐原则不仅是更优的量化目标，
 更提供了一条从原则到诊断到设计的完整方法论路径。
