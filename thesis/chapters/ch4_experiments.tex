@@ -6,10 +6,11 @@
 \label{chap:experiments}
 
 第三章提出了以 attention-KL 为核心的行为对齐量化框架。
-本章通过三个核心 claims 验证该框架的有效性与设计范式：
+本章通过四个核心 claims 验证该框架的有效性与设计范式：
 行为对齐校准在 INT8 下产出可部署实例（Claim~1），
 同一诊断透镜揭示低比特失效的结构性根因（Claim~2），
-以及诊断直接导出 INT4-RoleAlign 设计（Claim~3）。
+诊断直接导出 INT4-RoleAlign 恢复检索能力（Claim~3），
+以及 INT4-RoleAlign 在 PPL 与延迟上的明确能力边界（Claim~4）。
 
 % ============================================================
 \section{实验设置}
@@ -195,17 +196,18 @@ BH-FDR 控制的是假发现率（而非族错误率 FWER），
 
 
 \medskip
-\noindent\textit{本章的实验证据围绕三个核心 claims 组织，
+\noindent\textit{本章的实验证据围绕四个核心 claims 组织，
 而非按量化位宽罗列结果。
 Claim~1（第~\ref{sec:exp-main}--\ref{sec:exp-generalization}~节）
 验证行为对齐校准在 INT8 下产出可部署的操作点；
 Claim~2（第~\ref{sec:exp-int4}--\ref{sec:exp-kv-sensitivity}~节）
 通过诊断透镜揭示对称 INT4 失效的结构性根因；
 Claim~3（第~\ref{sec:exp-rolealign}~节）
-展示诊断直接导出的 INT4-RoleAlign 在三个模型上的成功，
-构成本文的实验高潮。
+展示诊断直接导出的 INT4-RoleAlign 在三个模型上恢复检索能力；
+Claim~4（第~\ref{subsec:exp-int4-boundary}~节）
+界定 INT4-RoleAlign 在 PPL 与延迟上的能力边界。
 第~\ref{sec:exp-kivi-unified}--\ref{sec:exp-discussion}~节
-提供基线对比、鲁棒性验证与综合讨论。}
+提供基线对比与综合讨论。}
 
 % ============================================================
 \section{行为对齐原则验证：attention-KL 作为正确校准对象}
@@ -1103,19 +1105,20 @@ MixedKV(K8V4)以约 6-bit 有效宽度在多模型上远优于均匀 INT4。
 \label{sec:exp-rolealign}
 % ============================================================
 
-\noindent\textbf{本节呈现论文的核心实验结论：诊断直接导出有效的低比特设计。}
+\noindent\textbf{本节呈现论文的核心实验结论：诊断直接导出有效的低比特检索恢复设计。}
 前两节的诊断链条——
 对称 INT4 系统性失效（第~\ref{sec:exp-int4}~节）$\to$
 Key 量化主导退化 + GQA 架构依赖（第~\ref{sec:exp-kv-sensitivity}~节）——
 直接指向角色感知的格式升级。
 INT4-RoleAlign 在三个模型上将 Needle 从 0\% 恢复至 100\%，
-并在 4K--32K 全上下文范围保持近乎完整的检索能力
-（RULER s\_niah contains $\geq$99\%、mk\_niah pass $\geq$93\%）。
-PPL 退化因模型规模而异（8B: 2.4\%，7B: 6.1\%，1.5B: 13.7\%），
-实现 73\% KV Cache 压缩，
-完成``原则$\to$诊断$\to$设计$\to$验证''的闭环。
-这一结果揭示了 INT4 量化的一个重要特性：
-\emph{局部信息检索能力对量化噪声的鲁棒性远高于全局语言建模质量}。
+实现 73\% KV Cache 压缩。
+RULER 评测提供进一步支持性证据
+（s\_niah $\geq$99\%、mk\_niah $\geq$93\%，4K--32K 上下文范围）。
+然而，PPL 退化因模型规模而异（8B: 2.4\%，7B: 6.1\%，1.5B: 13.7\%），
+解码延迟因缺少 Triton 融合核函数增加约 2--2.5$\times$，
+揭示了检索恢复与语言建模保真之间的明确能力边界（Claim~4，
+第~\ref{subsec:exp-int4-boundary}~节）。
+这一``原则$\to$诊断$\to$设计$\to$边界''的完整链条构成本文的核心方法贡献。
 
 \subsection{设计动机与差异}
 \label{subsec:exp-rolealign-design}
@@ -1348,70 +1351,69 @@ INT4-RoleAlign 不是 int4\_kivi\_aligned 的换皮版本，
 
 
 % ============================================================
-\subsection{量化评估粒度鲁棒性}
-\label{sec:exp-chunksize}
+\subsection{INT4 量化的能力边界}
+\label{subsec:exp-int4-boundary}
 % ============================================================
 
-\noindent\textbf{本节验证：BA 校准优势在全量化协议下是否仍成立？}
-\label{subsec:exp-chunksize-motivation}%
-前述各节采用 chunk\_size=128 协议（chunk 内 KV 为 FP16，仅历史 KV 量化）。
-chunk\_size=1 是最严格的全量化协议——每步所有历史 KV 均经量化存取，
-更接近实际部署的 streaming decode 场景。
-\label{subsec:exp-chunksize-results}%
+\noindent\textbf{Claim 4：INT4-RoleAlign 在 PPL 与延迟上存在明确能力边界。}
+Claim~3 表明 INT4-RoleAlign 成功将 Needle 从 0\% 恢复至 100\%，
+但 INT4 量化的代价不应被掩盖。
+本节从语言建模质量与系统效率两个维度界定能力边界，
+为部署决策提供定量依据。
 
-表~\ref{tab:chunksize-results} 呈现了 Qwen2.5-1.5B-Instruct 上
-三种 chunk\_size 下 FP16、INT4-RoleAlign 和 KIVI-style INT4 的 PPL 对比。
+\paragraph{PPL 退化：可控但不可忽略。}
+第~\ref{subsec:exp-rolealign-results}~节的分析
+已揭示 INT4-RoleAlign 的 PPL 退化呈模型规模依赖性
+（8B: 2.4\%，7B: 6.1\%，1.5B: 13.7\%）。
+此处进一步指出两个结构性特征。
+\textbf{其一}，INT4-RoleAlign 在 Qwen2.5-1.5B 和 Qwen2.5-7B 上的 PPL 退化
+略高于 KIVI-style（13.7\% vs 12.0\%、6.1\% vs 5.5\%），
+仅在 LLaMA-3.1-8B（$H_{kv}=8$）上持平（2.4\% vs 2.4\%）。
+这表明 BA percentile 校准的核心优势在于\emph{检索能力恢复}
+而非 PPL 缩减——在小 $H_{kv}$ 模型上，
+离线搜索的 percentile 参数
+倾向于保护对检索至关重要的注意力聚焦模式，
+而非全局概率分布的均匀保真。
+\textbf{其二}，尽管 PPL 退化显著，三模型的 Needle 通过率均为 100\%。
+这一``PPL 退化 vs 检索保持''的解耦现象构成本文的关键发现之一：
+\emph{局部信息检索仅依赖少数关键位置的注意力聚焦，
+对量化噪声的容忍度远高于需要全局概率保真的语言建模}。
+该发现在实际部署中意味着，
+对检索密集型应用（如 RAG、事实问答），
+INT4 量化的实际影响远小于 PPL 数字所暗示的退化。
 
-\begin{table}[htbp]
-  \centering
-  \caption{量化评估粒度敏感性（Qwen2.5-1.5B-Instruct，PPL，seed=1234）}
-  \label{tab:chunksize-results}
-  \small
-  \begin{threeparttable}
-  \begin{tabular}{lccc}
-    \toprule
-    \textbf{配置} & \textbf{cs=128} & \textbf{cs=8} & \textbf{cs=1} \\
-    \midrule
-    FP16                     & 9.31            & 9.31          & 9.31          \\
-    \textbf{INT4-RoleAlign}\textsuperscript{$\star$}  & \textbf{9.42} (+1.2\%) & \textbf{9.46} (+1.6\%) & \textbf{9.49} (+1.9\%) \\
-    KIVI-style INT4          & 10.43 (+12.0\%) & 60.54 (+550\%) & 9442 (+101{,}000\%) \\
-    \bottomrule
-  \end{tabular}
-  \begin{tablenotes}
-    \small
-    \item[$\star$] INT4-RoleAlign 行的 PPL 值使用 max\_samples=64（约 65K tokens）评测，
-    与表~\ref{tab:rolealign-results}（完整 wikitext-2 约 302K tokens）的评测条件不同，
-    绝对值不直接可比。本表的核心发现在于 KIVI-style 在 cs$=$1 下的灾难性退化
-    与 INT4-RoleAlign 的稳定性对比。
-    \item 注：括号内为相对 FP16 的 PPL 退化率。
-    cs = chunk\_size。FP16 不含量化噪声，PPL 不随 cs 变化（预期内）。
-  \end{tablenotes}
-  \end{threeparttable}
-\end{table}
+\paragraph{系统效率：显存收益已兑现，延迟收益待融合核函数。}
+KV Cache 显存节省约 73\%（与理论 4$\times$ 压缩一致），
+这一收益在当前实现中已完全兑现，
+使得相同硬件预算下可支持约 3.7$\times$ 的上下文长度或并发批次。
+然而，解码延迟（TPOT）因当前使用 \texttt{torch\_ref} 路径
+（PyTorch 原生反量化 + 标准注意力计算）
+比 FP16 增加约 2--2.5$\times$。
+作为参照，INT8 路径通过 Triton 融合核函数
+（第~\ref{sec:ch3-triton}~节）
+实现了 8--38\% 的 TPOT 降低，
+表明融合核函数是延迟收益的关键使能技术。
+INT4 Triton 融合核函数的适配将是
+INT4-RoleAlign 从``显存优化方案''升级为``全栈高效方案''的关键路径。
 
-\paragraph{结果分析。}
-\label{subsec:exp-chunksize-analysis}
+\paragraph{边界小结。}
+INT4-RoleAlign 的能力呈现清晰的分层结构：
+\emph{检索能力完整恢复}（Needle 100\%，RULER s\_niah $\geq$99\%），
+\emph{显存压缩显著}（73\% KV Cache 节省），
+但\emph{语言建模退化不可忽略}（PPL +2.4--13.7\%）
+且\emph{延迟优势尚未兑现}（TPOT +2--2.5$\times$）。
+上述边界的显式界定是行为对齐框架诊断能力的直接体现——
+相较于仅报告最佳结果的传统做法，
+诊断驱动的评估范式使我们能够精确识别能力的边界条件，
+为后续优化（Triton INT4 融合核函数、
+基于 $H_{kv}$ 的自适应比特分配）
+指明方向而非留下盲区。
 
-\textbf{INT4-RoleAlign 表现稳定}：
-从 cs=128 到 cs=1，PPL 仅从 9.42 升至 9.49（+0.75\%），
-表明 BA-guided percentile 校准在逐 token 粒度下仍然有效。
-这一鲁棒性源于 INT4-RoleAlign 的 per-channel K Scale
-基于离线校准的全局统计量确定，不依赖单 token 的局部方差。
+量化评估粒度（chunk\_size）的鲁棒性分析
+见附录~\ref{sec:app-chunksize}。
 
-\textbf{KIVI-style 指数级退化}：
-KIVI-style 的 PPL 从 cs=128 的 10.43 急剧退化至 cs=1 的 9442
-（$+$101{,}000\% 退化），呈现灾难性崩溃。
-根因在于 KIVI-style 的 per-token V Scale 基于单个 token 的
-激活值统计量（absmax/min）即时计算——
-当 chunk\_size=1 时，每个 token 的 V Scale 仅基于该 token 自身的特征值确定，
-单 token 统计量的方差极大，导致 Scale 估计不稳定，
-量化噪声随 token 步数累积并最终导致模型输出退化。
-\label{subsec:exp-chunksize-conclusion}%
-综上，BA-guided percentile 校准优势在全量化协议下不仅成立且被放大，
-为 streaming decode 场景的方法选择提供了依据。
-上述观察仅在 Qwen2.5-1.5B 单模型、单种子条件下验证，
-跨模型推广仍需后续实验
-（见第~\ref{sec:conclusion-limitations}~节）。
+
+% [chunk_size 鲁棒性分析已移至附录 \ref{sec:app-chunksize}]
 
 
 \paragraph{证据边界声明。}
@@ -1420,16 +1422,18 @@ KIVI-style 的 PPL 从 cs=128 的 10.43 急剧退化至 cs=1 的 9442
 统计检验（Bootstrap CI + 排列检验 + BH-FDR 校正）全部完成，
 构成本文的规范主证据；
 （2）\emph{扩展验证}：INT4-RoleAlign 和 MixedKV 的跨模型结果基于 3 个种子 × 3 个模型，
-PPL/Needle/LongBench 三项评测已完成聚合，
-RULER 尚未在 INT4-RoleAlign 配置上评测（见第~\ref{sec:conclusion-limitations}~节）。
-后续引用时将明确区分两者的证据等级。
+PPL/Needle/LongBench/RULER 四项评测已完成聚合。
+RULER 数据来自修正 \texttt{seq\_len} 参数后的补跑
+（原始脚本因缺少 \texttt{--seq\_len} 参数导致 ctx$>$4K 被截断至 4096），
+s\_niah $\geq$99\%、mk\_niah $\geq$93\%。
+后续引用时将明确区分完整验证与扩展验证的证据等级。
 
 % ============================================================
 \section{综合讨论}
 \label{sec:exp-discussion}
 % ============================================================
 
-本节回顾三个核心 claims 的验证状态，
+本节回顾四个核心 claims 的验证状态，
 提炼跨 claim 的交叉发现，并分析证据边界。
 
 % ------------------------------------------------------------
@@ -1448,12 +1452,14 @@ Triton 融合核函数是效率收益的关键。
 $H_{kv}$ 越大，量化噪声稀释越强——
 GQA 头数应作为比模型参数量更重要的量化策略考量因素。
 
-\textbf{发现三：INT4-RoleAlign 恢复低比特检索可行性——诊断驱动的设计闭环。}
-Needle 全部恢复至 100\%，RULER 检索在 4K--32K 全范围保持 $\geq$99\%。
+\textbf{发现三：INT4-RoleAlign 恢复低比特检索——诊断驱动的设计闭环。}
+Needle 全部恢复至 100\%（RULER 检索提供支持性证据，
+s\_niah $\geq$99\%，4K--32K）。
 PPL 退化因模型规模而异（8B: 2.4\%，7B: 6.1\%，1.5B: 13.7\%），
 \emph{局部检索能力对 INT4 量化噪声的鲁棒性远高于全局语言建模质量}。
-chunk\_size=1 压力测试中 KIVI-style PPL 退化至 9442（+101{,}000\%），
-INT4-RoleAlign 仅 9.49（+0.75\%）。
+KV Cache 显存节省 73\%，但 TPOT 增加约 2--2.5$\times$，
+构成检索恢复与系统效率之间的明确能力边界
+（第~\ref{subsec:exp-int4-boundary}~节）。
 
 \textbf{发现四：跨基准差异化敏感度。}
 Needle（单点检索）在 INT8 下完美保持，
@@ -1494,8 +1500,8 @@ $\tau^{-1}$ 在非对称 INT4 上无收益甚至有害，
     E11 & 跨模型泛化（7B + 8B LongBench）      & \textbf{达标} & 中等  & 表~\ref{tab:cross-model} \\
     E12 & MixedKV RULER 远优于均匀 INT4           & \textbf{达标} & 中等\tnote{d}    & 表~\ref{tab:mixedkv-cross-model} \\
     E13 & 校准样本 16--256 PPL 变化极小    & \textbf{达标} & 中等\tnote{e}  & 表~\ref{tab:b10-sensitivity} \\
-    E14 & INT4-RoleAlign PPL 优于 KIVI（3 模型）       & \textbf{达标} & 中→强\tnote{f} & 表~\ref{tab:rolealign-results} \\
-    E15 & chunk\_size=1 鲁棒性（1.5B）          & \textbf{达标} & 中\tnote{g}   & 表~\ref{tab:chunksize-results} \\
+    E14 & INT4-RoleAlign 检索恢复（3 模型 Needle 100\%）  & \textbf{达标} & 中等\tnote{f} & 表~\ref{tab:rolealign-results} \\
+    E15 & chunk\_size=1 鲁棒性（1.5B）          & \textbf{达标} & 中\tnote{g}   & 附录表~\ref{tab:chunksize-results} \\
     E16 & inv\_tau 在非对称 INT4 不可迁移      & \textbf{达标} & 中等  & 表~\ref{tab:kivi-int4-threeway} \\
     \bottomrule
   \end{tabular}
@@ -1506,7 +1512,7 @@ $\tau^{-1}$ 在非对称 INT4 上无收益甚至有害，
     \item[c] INT4 精度下行为对齐校准未能维持非劣效性：Needle 退化 $-2.0\%$，PPL 退化 $-15.92\%$。
     \item[d] MixedKV(K8V4) 在 Qwen 1.5B/7B 上 RULER 分别为 24.87\%/25.16\%，远超均匀 INT4 的 0\%/0\%；在 LLaMA-8B 上 RULER 33.28\% 与均匀 INT4（27.05\%）和 FP16（31.48\%）均具竞争力。
     \item[e] 仅在 1.5B 和 7B 两个模型上验证，推广性有待更多模型确认。
-    \item[f] 三模型 PPL 退化缩减 5--10$\times$；LongBench 在 1.5B/7B 略优、8B 持平（GQA 收益边界）。
+    \item[f] 三模型 Needle 从 0\%$\to$100\% 恢复；PPL 退化 2.4--13.7\%（与 KIVI-style 相当或略高），LongBench 在 1.5B/7B 略优、8B 持平。
     \item[g] 仅 Qwen2.5-1.5B 单模型单种子验证，跨模型推广性待确认。
   \end{tablenotes}
   \end{threeparttable}

@@ -218,21 +218,23 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
 图~\ref{fig:app-ruler-vs-context} 展示了 RULER 通过率随上下文长度的变化趋势，
 图~\ref{fig:app-longbench-vs-context} 展示了 LongBench-style 合成综合评分的对应趋势。
 
-\begin{figure}[htbp]
+\begin{figure}[p]
   \centering
-  \includegraphics[width=0.87\textwidth]{figures/ruler_pass_rate_vs_context.pdf}
+  \includegraphics[width=0.95\textwidth]{figures/ruler_pass_rate_vs_context.pdf}
   \caption{各量化模式的 RULER 通过率随上下文长度的变化（Qwen2.5-1.5B-Instruct）。
   该图作为补充质量证据保留在附录中，展示 S-NIAH、MK-NIAH、VT 和 CWE 四个子任务聚合后的整体趋势。}
   \label{fig:app-ruler-vs-context}
 \end{figure}
+\clearpage
 
-\begin{figure}[htbp]
+\begin{figure}[p]
   \centering
-  \includegraphics[width=0.87\textwidth]{figures/longbench_score_vs_context.pdf}
+  \includegraphics[width=0.95\textwidth]{figures/longbench_score_vs_context.pdf}
   \caption{各量化模式的 LongBench-style 合成综合评分随上下文长度的变化（Qwen2.5-1.5B-Instruct）。
   综合评分为 7 类合成长上下文子任务对应指标的宏平均。}
   \label{fig:app-longbench-vs-context}
 \end{figure}
+\clearpage
 
 % ============================================================
 \section{Needle-in-a-Haystack 深度-位置热力图}
@@ -247,9 +249,9 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
 热力图横轴为 needle 在 haystack 中的相对位置（深度百分比），
 纵轴对应量化模式，颜色表示通过率。
 
-\begin{figure}[htbp]
+\begin{figure}[p]
   \centering
-  \includegraphics[width=0.95\textwidth]{figures/needle_depth_grid.pdf}
+  \includegraphics[width=\textwidth]{figures/needle_depth_grid.pdf}
   \caption{Needle-in-a-Haystack 深度-位置热力图总览。
   四个面板分别对应 4K、8K、16K 和 32K 上下文长度，并共享同一色标。
   INT4 系列量化模式在 32K 长上下文下出现显著的通过率退化，
@@ -257,14 +259,16 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
   说明量化噪声对远距离注意力检索的影响更为严重。}
   \label{fig:app-needle-depth-grid}
 \end{figure}
+\clearpage
 
-\begin{figure}[htbp]
+\begin{figure}[p]
   \centering
-  \includegraphics[width=0.87\textwidth]{figures/needle_exact_match_vs_context.pdf}
+  \includegraphics[width=0.95\textwidth]{figures/needle_exact_match_vs_context.pdf}
   \caption{Needle-in-a-Haystack 精确匹配率随上下文长度的变化。
   精确匹配（exact match）采用比通过率更严格的评判标准。}
   \label{fig:app-needle-exact}
 \end{figure}
+\clearpage
 
 % ============================================================
 \section{推理效率与扩展性补充图表}
@@ -278,9 +282,9 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
 图~\ref{fig:app-memory-dashboard} 则合并展示 KV Cache 显存和总峰值显存
 随 batch size 的变化，以减少重复图例和页面跳转。
 
-\begin{figure}[htbp]
+\begin{figure}[p]
   \centering
-  \includegraphics[width=0.87\textwidth]{figures/latency_tpot_gain_vs_fp16.pdf}
+  \includegraphics[width=0.95\textwidth]{figures/latency_tpot_gain_vs_fp16.pdf}
   \caption{各量化模式相对 FP16 基线的 TPOT 变化（Qwen2.5-1.5B-Instruct，batch=1）。
   正值表示加速（TPOT 降低），负值表示减速。
   在 batch=1 的单序列解码场景下，量化操作的计算开销尚未被批处理摊薄，
@@ -289,24 +293,27 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
   体现了融合核函数对反量化开销的缓解作用。}
   \label{fig:app-tpot-gain}
 \end{figure}
+\clearpage
 
-\begin{figure}[htbp]
+\begin{figure}[p]
   \centering
-  \includegraphics[width=0.95\textwidth]{figures/appendix_throughput_dashboard.pdf}
+  \includegraphics[width=\textwidth]{figures/appendix_throughput_dashboard.pdf}
   \caption{吞吐扩展性三联图（Qwen2.5-1.5B-Instruct）。
   面板（a）展示总吞吐量，面板（b）展示单序列吞吐量，
   面板（c）展示 prefill 吞吐量。统一图例和坐标轴便于比较量化模式在 batch 扩展中的并发收益与单序列代价。}
   \label{fig:app-throughput-dashboard}
 \end{figure}
+\clearpage
 
-\begin{figure}[htbp]
+\begin{figure}[p]
   \centering
-  \includegraphics[width=0.92\textwidth]{figures/appendix_memory_dashboard.pdf}
+  \includegraphics[width=\textwidth]{figures/appendix_memory_dashboard.pdf}
   \caption{显存扩展性双联图（Qwen2.5-1.5B-Instruct）。
   面板（a）展示 KV Cache 显存随 batch size 的线性增长，
   面板（b）展示总峰值显存；两者共同说明量化节省会随着并发度提升而持续转化为更高的可容纳 batch。}
   \label{fig:app-memory-dashboard}
 \end{figure}
+\clearpage
 
 % ============================================================
 \section{RULER 子任务分解}
@@ -611,3 +618,67 @@ Needle 退化至 72.4\%（FP16 为 100\%），是四个模型中唯一出现 Nee
 
 \textbf{Mistral-7B-Instruct-v0.3（$H_{kv}=8$）：}
 PPL 5.20（vs FP16 5.19）和 RULER 53.67\%（vs 53.98\%）均接近 FP16 基线，进一步验证了高 GQA 头数模型对 MixedKV 方案的良好适配性。Mistral-7B 的 RULER 整体通过率（53.98\%）显著高于其他模型（24\%--31\%），可能与其更大的原生上下文窗口有关。
+
+
+% ============================================================
+\section{量化评估粒度鲁棒性}
+\label{sec:app-chunksize}
+% ============================================================
+
+本节验证 BA 校准优势在全量化协议下是否仍然成立。
+前述各节采用 chunk\_size=128 协议（chunk 内 KV 为 FP16，仅历史 KV 量化）。
+chunk\_size=1 是最严格的全量化协议——每步所有历史 KV 均经量化存取，
+更接近实际部署的 streaming decode 场景。
+
+表~\ref{tab:chunksize-results} 呈现了 Qwen2.5-1.5B-Instruct 上
+三种 chunk\_size 下 FP16、INT4-RoleAlign 和 KIVI-style INT4 的 PPL 对比。
+
+\begin{table}[htbp]
+  \centering
+  \caption{量化评估粒度敏感性（Qwen2.5-1.5B-Instruct，PPL，seed=1234）}
+  \label{tab:chunksize-results}
+  \small
+  \begin{threeparttable}
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{配置} & \textbf{cs=128} & \textbf{cs=8} & \textbf{cs=1} \\
+    \midrule
+    FP16                     & 9.31            & 9.31          & 9.31          \\
+    \textbf{INT4-RoleAlign}\textsuperscript{$\star$}  & \textbf{9.42} (+1.2\%) & \textbf{9.46} (+1.6\%) & \textbf{9.49} (+1.9\%) \\
+    KIVI-style INT4          & 10.43 (+12.0\%) & 60.54 (+550\%) & 9442 (+101{,}000\%) \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \small
+    \item[$\star$] INT4-RoleAlign 行的 PPL 值使用 max\_samples=64（约 65K tokens）评测，
+    与表~\ref{tab:rolealign-results}（完整 wikitext-2 约 302K tokens）的评测条件不同，
+    绝对值不直接可比。本表的核心发现在于 KIVI-style 在 cs$=$1 下的灾难性退化
+    与 INT4-RoleAlign 的稳定性对比。
+    \item 注：括号内为相对 FP16 的 PPL 退化率。
+    cs = chunk\_size。FP16 不含量化噪声，PPL 不随 cs 变化（预期内）。
+  \end{tablenotes}
+  \end{threeparttable}
+\end{table}
+
+\paragraph{结果分析。}
+
+\textbf{INT4-RoleAlign 表现稳定}：
+从 cs=128 到 cs=1，PPL 仅从 9.42 升至 9.49（+0.75\%），
+表明 BA-guided percentile 校准在逐 token 粒度下仍然有效。
+这一鲁棒性源于 INT4-RoleAlign 的 per-channel K Scale
+基于离线校准的全局统计量确定，不依赖单 token 的局部方差。
+
+\textbf{KIVI-style 指数级退化}：
+KIVI-style 的 PPL 从 cs=128 的 10.43 急剧退化至 cs=1 的 9442
+（$+$101{,}000\% 退化），呈现灾难性崩溃。
+根因在于 KIVI-style 的 per-token V Scale 基于单个 token 的
+激活值统计量（absmax/min）即时计算——
+当 chunk\_size=1 时，每个 token 的 V Scale 仅基于该 token 自身的特征值确定，
+单 token 统计量的方差极大，导致 Scale 估计不稳定，
+量化噪声随 token 步数累积并最终导致模型输出退化。
+
+综上，BA-guided percentile 校准优势在全量化协议下不仅成立且被放大，
+为 streaming decode 场景的方法选择提供了依据。
+上述观察仅在 Qwen2.5-1.5B 单模型、单种子条件下验证，
+跨模型推广仍需后续实验
+（见第~\ref{sec:conclusion-limitations}~节）。

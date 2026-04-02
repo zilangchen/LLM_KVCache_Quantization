@@ -40,7 +40,7 @@ for SEED in 1234 1235 1236; do
     echo ">>> ${TAG} RULER seed=${SEED} ctx=${CTX}"
     python3 scripts/eval_ruler.py \
       --model_id "$MODEL_ID" --kv_mode int4_ours_asym --quant_bits 4 \
-      --calib_file "$CALIB" --ruler_context_len "$CTX" --seed "$SEED" \
+      --calib_file "$CALIB" --seq_len "$CTX" --ruler_context_len "$CTX" --seed "$SEED" \
       --save_csv --out_dir "$RD/runs/ruler_ours_asym_${TAG}_ctx${CTX}_s${SEED}" \
       2>&1 | tee -a "$RD/logs/ruler_${TAG}.log"
   done
