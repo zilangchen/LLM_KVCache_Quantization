@@ -29,10 +29,10 @@ Triton 融合核函数提供\textbf{部署级系统支撑}
 
 \subsection{系统架构概述}
 
-本文提出的行为对齐量化框架采用"离线校准——在线推理"的两阶段设计范式。
-其核心思想是：在离线阶段通过少量校准数据搜索能够最大程度保持注意力行为一致性的量化参数，
-然后在在线推理阶段以极低的额外开销使用这些参数执行高效的量化推理。
-本框架在校准时为每层 Key 和 Value 分别独立计算 KL 散度
+行为对齐量化框架分两个阶段。
+离线阶段用少量校准数据搜索量化参数，目标是尽量保持注意力行为不变；
+在线阶段直接加载这些参数做量化推理，几乎不增加延迟。
+校准时为每层 Key 和 Value 分别独立计算 KL 散度
 并搜索最优 Scale（第~\ref{subsec:ch3-two-stage}~节），
 为 K/V 量化敏感性提供了统一的度量基础。
 当 Key 和 Value 设置不同量化位宽时（如 K@INT8+V@INT4），
@@ -40,7 +40,7 @@ Triton 融合核函数提供\textbf{部署级系统支撑}
 第~\ref{sec:exp-kv-sensitivity}~节的消融实验利用该特性
 定量分析了 K/V 精度的独立敏感性。
 
-本框架涉及两个正交的设计维度：
+框架的设计空间涉及两个正交维度：
 \textbf{量化格式}（对称 vs 非对称）与\textbf{校准目标}（MSE vs KL）。
 第~\ref{sec:ch3-static-scale}~节基于对称格式建立 INT8 路径，
 第~\ref{sec:ch3-rolealign}~节的 INT4-RoleAlign 在此基础上
@@ -65,8 +65,8 @@ Triton 融合核函数提供\textbf{部署级系统支撑}
 以及可选的逐头温度校正因子 $\tau^{-1}$（inverse temperature），
 作为框架的候选增强机制之一。
 
-图~\ref{fig:ch3-calib-pipeline} 给出了离线校准阶段的完整流程。
-具体而言，该阶段执行以下步骤：
+图~\ref{fig:ch3-calib-pipeline} 给出了离线校准的完整流程，
+各步骤如下：
 
 \begin{figure}[htbp]
   \centering
@@ -176,7 +176,7 @@ Triton 融合核函数提供\textbf{部署级系统支撑}
 
 \subsection{KL 散度目标函数}
 
-本文选择 Kullback-Leibler（KL）散度作为衡量量化前后注意力行为一致性的目标函数。
+我们选择 Kullback-Leibler（KL）散度衡量量化前后注意力行为的一致性。
 对于给定的 Query 向量 $\bq \in \mathbb{R}^{d_k}$ 和 Key 矩阵 $\bK \in \mathbb{R}^{n \times d_k}$，
 FP16 精度下的注意力权重分布定义为：
 \begin{equation}
@@ -245,7 +245,7 @@ FP16 精度下的注意力权重分布定义为：
 \subsection{两阶段搜索策略}
 \label{subsec:ch3-two-stage}
 
-本文采用两阶段分离搜索策略，
+校准采用两阶段分离搜索策略，
 其核心动机在于避免 Scale 搜索与温度校正之间的循环依赖：
 $\tau^{-1}$ 的最优值依赖于已确定的 Scale（因为反量化结果受 Scale 影响），
 而 Scale 的评估则不应包含 $\tau^{-1}$（否则温度校正会掩盖不同 Scale 之间的实际量化误差差异）。
@@ -589,7 +589,7 @@ $m \geq 1$ 为保护裕度（protection margin），默认值为 $1.0$。
 因此，自适应保护是一种\emph{前向保护}机制，
 其局部性保证缓存的流式积累不引入跨 token 的 Scale 耦合。
 
-此外，本框架在量化后对裁剪率进行实时监控：
+此外，量化后对裁剪率进行实时监控：
 当某层的裁剪率超过预设阈值（默认 5\%）时，发出运行时警告，
 提示用户可能需要重新校准或启用自适应保护。
 
