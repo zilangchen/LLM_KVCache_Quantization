@@ -52,62 +52,7 @@ Triton 融合核函数提供\textbf{部署级系统支撑}
 
 \begin{figure}[htbp]
   \centering
-  \begin{tikzpicture}[
-    stage/.style={rectangle, draw, rounded corners=5pt, minimum width=4.05cm,
-                  minimum height=1.58cm, text centered, font=\small,
-                  text width=3.72cm, inner sep=5.0pt, line width=0.9pt},
-    principle/.style={stage, fill=blue!4, draw=blue!28},
-    pathbox/.style={stage, fill=green!4!yellow!8, draw=green!34!black},
-    diagnosis/.style={stage, fill=orange!6, draw=orange!34!black},
-    rolebox/.style={stage, fill=teal!7, draw=teal!42!black, line width=1.1pt},
-    weakbox/.style={stage, fill=gray!4, draw=gray!35, minimum width=3.35cm,
-                    minimum height=1.16cm, text width=3.02cm},
-    optional/.style={weakbox, dashed, draw=gray!48},
-    arr/.style={-{Stealth[length=2.9mm]}, semithick, draw=black!42},
-    weakarr/.style={-{Stealth[length=2.6mm]}, thin, dashed, draw=black!33},
-    note/.style={font=\scriptsize\bfseries, text=black!66, fill=white, inner sep=1.4pt},
-  ]
-  \node[principle, minimum width=5.55cm, text width=5.18cm]
-    (principle) at (0, 3.0)
-    {\textbf{行为对齐原则}\\[-2pt]
-     \scriptsize Attention-KL：统一校准目标与诊断透镜};
-
-  \node[pathbox]
-    (int8) at (-4.35, 0.95)
-    {\textbf{INT8 规范路径}\\[-2pt]
-     \scriptsize 在稳定精度下验证原则成立};
-
-  \node[diagnosis]
-    (diag) at (0.35, 0.95)
-    {\textbf{低比特结构诊断}\\[-2pt]
-     \scriptsize 识别 Key 主导的退化来源};
-
-  \node[rolebox]
-    (rolealign) at (0.35, -1.55)
-    {\textbf{INT4-RoleAlign 扩展}\\[-2pt]
-     \scriptsize 恢复检索行为并保留能力边界};
-
-  \node[optional]
-    (invtau) at (-4.35, -2.0)
-    {\textbf{$\tau^{-1}$ 可选增强}\\[-2pt]
-     \scriptsize 仅在部分模型上额外获益};
-
-  \node[weakbox]
-    (deploy) at (5.25, 0.05)
-    {\textbf{部署级实现支撑}\\[-2pt]
-     \scriptsize Triton + JSON，服务主线落地};
-
-  \draw[arr] (principle.south west) |- (int8.north);
-  \draw[arr] (principle) -- (diag);
-  \draw[arr] (diag) -- (rolealign);
-  \draw[weakarr] (int8) -- (invtau);
-  \draw[weakarr] (int8.east) -- ++(0.55,0) |- (deploy.west);
-  \draw[weakarr] (rolealign.east) -- ++(0.7,0) |- (deploy.south);
-
-  \node[note] at (-2.35, 2.18) {规范验证};
-  \node[note] at (1.10, 2.18) {解释低比特失效};
-  \node[note] at (1.35, -0.35) {诊断导出扩展};
-  \end{tikzpicture}%
+  \includegraphics[width=0.98\textwidth]{figures/ch3_framework_gemini.jpeg}
   \caption{行为对齐量化框架的层级结构。顶层给出统一原则 Attention-KL；其一向左派生出 INT8 规范路径，用于在稳定精度 regime 下验证该原则，其二向下导出低比特结构诊断，用于解释对称 INT4 的失败来源。基于该诊断，进一步得到 INT4-RoleAlign 扩展。$\tau^{-1}$ 仅作为可选增强保留，Triton 融合解码与校准产物 JSON 只承担部署级实现支撑，不与主方法平级。}
   \label{fig:ch3-framework}
 \end{figure}
@@ -188,7 +133,7 @@ Triton 融合核函数提供\textbf{部署级系统支撑}
     其中，Query 向量需经过输入层归一化（input layer normalization）和旋转位置编码（Rotary Position Embedding, RoPE）~\cite{su2024rope} 处理，
     以确保校准时的 $\bQ \bK^T$ 点积与实际推理时一致。
 
-    \textbf{校准产物版本说明。}
+    \paragraph{校准产物版本说明}
     本文 1.5B 主模型的实验使用校准产物 v3\_quick，
     该版本在生成时 Q 向量的预处理流程尚未包含 input\_layernorm 和 RoPE 变换，
     后续版本已修正。
@@ -632,7 +577,7 @@ $m \geq 1$ 为保护裕度（protection margin），默认值为 $1.0$。
   \item 保护裕度 $m$ 可根据应用场景调节：$m > 1$ 提供更宽松的保护，$m = 1$ 则为最严格模式。
 \end{itemize}
 
-\textbf{自适应保护对历史缓存的影响。}\enspace
+\paragraph{自适应保护对历史缓存的影响}
 当自适应机制在某个 token 步触发
 （$s_{\text{dynamic}} > s_{\text{static}}$）时，
 \emph{仅当前 token 的 Scale 受影响}，
