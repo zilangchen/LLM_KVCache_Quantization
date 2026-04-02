@@ -7,6 +7,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
+from pathlib import Path
+from matplotlib import font_manager
 
 
 DPI = 300
@@ -20,23 +22,41 @@ C_BOX_EDGE = "#CBD5E1"
 
 models = ["Qwen2.5-1.5B", "Qwen2.5-7B", "LLaMA-3.1-8B"]
 
-# PPL absolute values (chunk_size=128)
-ppl_fp16 = [9.3088, 7.1407, 6.7330]
-ppl_kivi = [10.4294, 7.5311, 6.8954]
-ppl_role = [9.4197, 7.2141, 6.7511]
+# PPL absolute values (chunk_size=128, from tab:rolealign-results)
+# CRITICAL: ppl_role was previously [9.4197, 7.2141, 6.7511] — this was
+# buggy INT8-fallback data, NOT INT4-RoleAlign. Fixed 2026-04-02.
+ppl_fp16 = [9.31,  7.14,  6.73]
+ppl_kivi = [10.43, 7.53,  6.90]
+ppl_role = [10.58, 7.58,  6.90]
 
-ppl_deg_kivi = [(k - f) / f * 100 for k, f in zip(ppl_kivi, ppl_fp16)]
-ppl_deg_role = [(r - f) / f * 100 for r, f in zip(ppl_role, ppl_fp16)]
+# Use thesis-stated percentages directly to avoid floating-point rounding
+# discrepancies (e.g., 6.16% computed vs 6.1% stated).
+ppl_deg_kivi = [12.0, 5.5, 2.4]
+ppl_deg_role = [13.7, 6.1, 2.4]
 
 # LongBench-style synthetic macro scores (x100 in paper tables)
 lb_kivi = [4.83, 3.87, 6.31]
 lb_role = [4.92, 3.93, 6.31]
 
 
+def _pick_cjk_font_family():
+    candidates = [
+        Path("/System/Library/Fonts/Hiragino Sans GB.ttc"),
+        Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
+        Path("/System/Library/Fonts/Supplemental/Songti.ttc"),
+    ]
+    for path in candidates:
+        if path.exists():
+            font_manager.fontManager.addfont(str(path))
+            return font_manager.FontProperties(fname=str(path)).get_name()
+    return "DejaVu Sans"
+
+
 def setup_style():
+    font_family = _pick_cjk_font_family()
     plt.rcParams.update({
-        "font.family": "sans-serif",
-        "font.sans-serif": ["Arial", "Helvetica", "Nimbus Sans", "DejaVu Sans", "sans-serif"],
+        "font.family": font_family,
+        "font.sans-serif": [font_family, "Arial Unicode MS", "DejaVu Sans", "sans-serif"],
         "font.size": 10.5,
         "axes.titlesize": 11,
         "axes.labelsize": 10.5,
@@ -60,6 +80,8 @@ def setup_style():
         "legend.framealpha": 0.95,
         "legend.edgecolor": C_BOX_EDGE,
         "axes.unicode_minus": False,
+        "pdf.fonttype": 42,
+        "ps.fonttype": 42,
     })
 
 
@@ -79,8 +101,8 @@ def summary_box(ax, x0, width, title, value, accent):
 def main():
     setup_style()
 
-    fig = plt.figure(figsize=(10.4, 4.9))
-    gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 4.2], hspace=0.22, wspace=0.28)
+    fig = plt.figure(figsize=(10.6, 6.1))
+    gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 4.8], hspace=0.24, wspace=0.30)
 
     ax_top = fig.add_subplot(gs[0, :])
     ax_ppl = fig.add_subplot(gs[1, 0])
@@ -88,9 +110,9 @@ def main():
 
     # Top summary ribbon
     ax_top.axis("off")
-    summary_box(ax_top, 0.00, 0.31, "Needle retrieval", "100% across all 3 models", C_ROLE)
-    summary_box(ax_top, 0.345, 0.31, "PPL degradation", "0.3%–1.2%", C_ROLE)
-    summary_box(ax_top, 0.69, 0.31, "KV cache compression", "75%", C_ROLE)
+    summary_box(ax_top, 0.00, 0.31, "Needle 检索", "三模型均为 100%", C_ROLE)
+    summary_box(ax_top, 0.345, 0.31, "PPL 退化", "2.4% – 13.7%", "#B45309")
+    summary_box(ax_top, 0.69, 0.31, "KV Cache 压缩", "73%", C_ROLE)
 
     x = np.arange(len(models))
     w = 0.34
@@ -106,25 +128,19 @@ def main():
         h = bar.get_height()
         ax_ppl.text(bar.get_x() + bar.get_width() / 2, h + 0.18, f"{h:.1f}%", ha="center", va="bottom", fontsize=8.3, color=C_ROLE, fontweight="bold")
 
-    for i in range(len(models)):
-        reduction = ppl_deg_kivi[i] - ppl_deg_role[i]
-        ax_ppl.annotate(
-            f"−{reduction:.1f} pp",
-            xy=(x[i] + w / 2, ppl_deg_role[i]),
-            xytext=(x[i] + 0.40, (ppl_deg_kivi[i] + ppl_deg_role[i]) / 2 + 0.7),
-            fontsize=7.5,
-            color="#475569",
-            arrowprops=dict(arrowstyle="->", color="#94A3B8", lw=0.9),
-            ha="left",
-        )
+    # H_kv trend annotation (replacing old "reduction" arrows — RA does NOT
+    # reduce PPL vs KIVI; the advantage is in retrieval robustness, not PPL)
+    h_kv_vals = [2, 4, 8]
+    for i, h in enumerate(h_kv_vals):
+        ax_ppl.text(x[i], -2.2, f"$H_{{kv}}$={h}", ha="center",
+                    fontsize=7.5, color="#64748B", style="italic")
 
-    ax_ppl.set_title("(a) Perplexity Degradation", loc="left", fontweight="bold", pad=8)
-    ax_ppl.set_ylabel("PPL degradation vs FP16 (%)")
+    ax_ppl.set_title("(a) PPL 退化", loc="left", fontweight="bold", pad=8)
+    ax_ppl.set_ylabel("相对 FP16 的 PPL 退化 (%)")
     ax_ppl.set_xticks(x)
     ax_ppl.set_xticklabels(models)
     ax_ppl.set_ylim(0, max(ppl_deg_kivi) * 1.32)
     ax_ppl.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.0f%%"))
-    ax_ppl.legend(loc="upper right")
     ax_ppl.grid(axis="y", alpha=0.25, color=C_GRID)
     ax_ppl.grid(axis="x", alpha=0.08, color="#E2E8F0")
 
@@ -139,25 +155,26 @@ def main():
         h = bar.get_height()
         ax_lb.text(bar.get_x() + bar.get_width() / 2, h + 0.06, f"{h:.2f}", ha="center", va="bottom", fontsize=8.2, color=C_ROLE, fontweight="bold")
 
-    ax_lb.set_title("(b) LongBench-style Synthetic Quality", loc="left", fontweight="bold", pad=8)
-    ax_lb.set_ylabel("Synthetic macro score (×100)")
+    ax_lb.set_title("(b) LongBench-style 合成质量", loc="left", fontweight="bold", pad=8)
+    ax_lb.set_ylabel("合成宏平均分 (×100)")
     ax_lb.set_xticks(x)
     ax_lb.set_xticklabels(models)
     ax_lb.set_ylim(0, max(max(lb_kivi), max(lb_role)) * 1.36)
-    ax_lb.legend(loc="upper right")
     ax_lb.grid(axis="y", alpha=0.25, color=C_GRID)
     ax_lb.grid(axis="x", alpha=0.08, color="#E2E8F0")
-    ax_lb.text(
-        0.98, 0.05,
-        "LLaMA-3.1-8B is tied on this synthetic metric;\nRoleAlign still delivers the cleanest PPL improvement.",
-        transform=ax_lb.transAxes,
-        fontsize=7.4,
-        color="#475569",
-        ha="right",
-        va="bottom",
-        bbox=dict(boxstyle="round,pad=0.25", fc="white", ec=C_BOX_EDGE, lw=0.8, alpha=0.96),
+    handles, labels = ax_ppl.get_legend_handles_labels()
+    fig.legend(
+        handles,
+        labels,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.01),
+        ncol=2,
+        frameon=True,
+        fontsize=8.5,
+        columnspacing=1.6,
+        handlelength=2.0,
     )
-
+    fig.subplots_adjust(left=0.07, right=0.985, top=0.95, bottom=0.12)
     plt.savefig("thesis/figures/rolealign_summary.pdf")
     print("Saved: thesis/figures/rolealign_summary.pdf")
 
