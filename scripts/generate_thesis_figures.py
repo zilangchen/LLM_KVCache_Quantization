@@ -25,29 +25,32 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 
-def _pick_cjk_font_family():
-    """Return a reliable CJK-capable font family for thesis figures."""
-    candidates = [
-        Path("/System/Library/Fonts/Hiragino Sans GB.ttc"),
-        Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
+def _setup_thesis_fonts():
+    """Configure matplotlib fonts to match thesis: 宋体 (Chinese) + Times New Roman (English).
+
+    School requirement: Chinese = 宋体, English = Times New Roman.
+    """
+    # Register Songti SC (macOS 宋体) for CJK support
+    songti_paths = [
         Path("/System/Library/Fonts/Supplemental/Songti.ttc"),
+        Path("/System/Library/Fonts/STSong.ttf"),
     ]
-    for path in candidates:
-        if path.exists():
-            font_manager.fontManager.addfont(str(path))
-            return font_manager.FontProperties(fname=str(path)).get_name()
-    return "DejaVu Sans"
+    for p in songti_paths:
+        if p.exists():
+            font_manager.fontManager.addfont(str(p))
+            break
+
+    plt.rcParams.update({
+        "font.family": "serif",
+        "font.serif": ["Songti SC", "STSong", "SimSun", "Times New Roman"],
+        "axes.unicode_minus": False,
+        "mathtext.fontset": "stix",  # STIX matches Times New Roman for math
+        "pdf.fonttype": 42,
+        "ps.fonttype": 42,
+    })
 
 
-FIG_FONT_FAMILY = _pick_cjk_font_family()
-
-plt.rcParams.update({
-    "font.family": FIG_FONT_FAMILY,
-    "font.sans-serif": [FIG_FONT_FAMILY, "Arial Unicode MS", "DejaVu Sans", "sans-serif"],
-    "axes.unicode_minus": False,
-    "pdf.fonttype": 42,
-    "ps.fonttype": 42,
-})
+_setup_thesis_fonts()
 
 # ═══════════════════════════════════════════════════════════════
 # STYLE CONFIGURATION
@@ -164,8 +167,6 @@ PRIMARY_NEEDLE_MAINLINE_OVERRIDE = {
 def setup_style():
     """Configure matplotlib for publication-quality output."""
     plt.rcParams.update({
-        "font.family": FIG_FONT_FAMILY,
-        "font.sans-serif": [FIG_FONT_FAMILY, "Arial Unicode MS", "DejaVu Sans", "sans-serif"],
         "font.size": 10.5,
         "axes.titlesize": 11,
         "axes.labelsize": 10.5,

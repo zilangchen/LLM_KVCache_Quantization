@@ -14,6 +14,22 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
+from pathlib import Path
+from matplotlib import font_manager
+
+# --- Thesis font: 宋体 + Times New Roman ---
+for p in [Path("/System/Library/Fonts/Supplemental/Songti.ttc"),
+          Path("/System/Library/Fonts/STSong.ttf")]:
+    if p.exists():
+        font_manager.fontManager.addfont(str(p))
+        break
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["Songti SC", "STSong", "SimSun", "Times New Roman"],
+    "mathtext.fontset": "stix",
+    "axes.unicode_minus": False,
+    "pdf.fonttype": 42, "ps.fonttype": 42,
+})
 
 # ──────────────────────────────────────────────────
 # Data from tab:rolealign-results (verified)

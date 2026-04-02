@@ -29,24 +29,21 @@ DPI = 300
 CMAP = "cividis"
 
 
-def _pick_cjk_font_family():
-    candidates = [
-        Path("/System/Library/Fonts/Hiragino Sans GB.ttc"),
-        Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
-        Path("/System/Library/Fonts/Supplemental/Songti.ttc"),
-    ]
-    for path in candidates:
-        if path.exists():
-            font_manager.fontManager.addfont(str(path))
-            return font_manager.FontProperties(fname=str(path)).get_name()
-    return "DejaVu Sans"
+def _setup_thesis_fonts():
+    """Configure fonts: 宋体 (Chinese) + Times New Roman (English)."""
+    for p in [Path("/System/Library/Fonts/Supplemental/Songti.ttc"),
+              Path("/System/Library/Fonts/STSong.ttf")]:
+        if p.exists():
+            font_manager.fontManager.addfont(str(p))
+            break
 
 
 def setup_style():
-    font_family = _pick_cjk_font_family()
+    _setup_thesis_fonts()
     plt.rcParams.update({
-        "font.family": font_family,
-        "font.sans-serif": [font_family, "Arial Unicode MS", "DejaVu Sans", "sans-serif"],
+        "font.family": "serif",
+        "font.serif": ["Songti SC", "STSong", "SimSun", "Times New Roman"],
+        "mathtext.fontset": "stix",
         "font.size": 10.5,
         "axes.titlesize": 10.5,
         "axes.labelsize": 9.5,

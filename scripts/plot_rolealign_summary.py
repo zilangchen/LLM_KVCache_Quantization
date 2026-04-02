@@ -58,24 +58,24 @@ kv_mem_role = [30.73, 61.47, 140.50]
 kv_mem_saving = [100.0 * (1.0 - r / f) for r, f in zip(kv_mem_role, kv_mem_fp16)]
 
 
-def _pick_cjk_font_family():
-    candidates = [
-        Path("/System/Library/Fonts/Hiragino Sans GB.ttc"),
-        Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
+def _setup_thesis_fonts():
+    """Configure fonts: 宋体 (Chinese) + Times New Roman (English)."""
+    songti_paths = [
         Path("/System/Library/Fonts/Supplemental/Songti.ttc"),
+        Path("/System/Library/Fonts/STSong.ttf"),
     ]
-    for path in candidates:
-        if path.exists():
-            font_manager.fontManager.addfont(str(path))
-            return font_manager.FontProperties(fname=str(path)).get_name()
-    return "DejaVu Sans"
+    for p in songti_paths:
+        if p.exists():
+            font_manager.fontManager.addfont(str(p))
+            break
 
 
 def setup_style():
-    font_family = _pick_cjk_font_family()
+    _setup_thesis_fonts()
     plt.rcParams.update({
-        "font.family": font_family,
-        "font.sans-serif": [font_family, "Arial Unicode MS", "DejaVu Sans", "sans-serif"],
+        "font.family": "serif",
+        "font.serif": ["Songti SC", "STSong", "SimSun", "Times New Roman"],
+        "mathtext.fontset": "stix",
         "font.size": 10.5,
         "axes.titlesize": 11,
         "axes.labelsize": 10.5,
