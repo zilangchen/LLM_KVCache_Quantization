@@ -20,8 +20,34 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+from matplotlib import font_manager
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
+
+
+def _pick_cjk_font_family():
+    """Return a reliable CJK-capable font family for thesis figures."""
+    candidates = [
+        Path("/System/Library/Fonts/Hiragino Sans GB.ttc"),
+        Path("/System/Library/Fonts/Supplemental/Arial Unicode.ttf"),
+        Path("/System/Library/Fonts/Supplemental/Songti.ttc"),
+    ]
+    for path in candidates:
+        if path.exists():
+            font_manager.fontManager.addfont(str(path))
+            return font_manager.FontProperties(fname=str(path)).get_name()
+    return "DejaVu Sans"
+
+
+FIG_FONT_FAMILY = _pick_cjk_font_family()
+
+plt.rcParams.update({
+    "font.family": FIG_FONT_FAMILY,
+    "font.sans-serif": [FIG_FONT_FAMILY, "Arial Unicode MS", "DejaVu Sans", "sans-serif"],
+    "axes.unicode_minus": False,
+    "pdf.fonttype": 42,
+    "ps.fonttype": 42,
+})
 
 # ═══════════════════════════════════════════════════════════════
 # STYLE CONFIGURATION
@@ -138,8 +164,8 @@ PRIMARY_NEEDLE_MAINLINE_OVERRIDE = {
 def setup_style():
     """Configure matplotlib for publication-quality output."""
     plt.rcParams.update({
-        "font.family": "sans-serif",
-        "font.sans-serif": ["Arial", "Helvetica", "Nimbus Sans", "DejaVu Sans", "sans-serif"],
+        "font.family": FIG_FONT_FAMILY,
+        "font.sans-serif": [FIG_FONT_FAMILY, "Arial Unicode MS", "DejaVu Sans", "sans-serif"],
         "font.size": 10.5,
         "axes.titlesize": 11,
         "axes.labelsize": 10.5,
@@ -166,6 +192,8 @@ def setup_style():
         "lines.markersize": 5.5,
         "legend.fancybox": False,
         "axes.unicode_minus": False,
+        "pdf.fonttype": 42,
+        "ps.fonttype": 42,
     })
 
 
@@ -380,7 +408,7 @@ def fig_main_quality_dashboard(tables_dir, out_dir):
     longbench, _ = _subset_modes(longbench, modes)
 
     seq_lens = sorted(set(needle["seq_len"].unique()))
-    fig, axes = plt.subplots(1, 3, figsize=(13.4, 4.7))
+    fig, axes = plt.subplots(1, 3, figsize=(13.4, 6.0))
     ax_ppl, ax_needle, ax_longbench = axes
 
     # (a) PPL lollipop at 32K
@@ -406,9 +434,8 @@ def fig_main_quality_dashboard(tables_dir, out_dir):
         )
     ax_ppl.set_yticks(y_pos)
     ax_ppl.set_yticklabels([LABELS.get(m, m) for m in ppl32["kv_mode"]])
-    style_axis(ax_ppl, xlabel="Perplexity at 32K")
-    place_panel_tag(ax_ppl, "(a)", "PPL at 32K")
-    add_callout(ax_ppl, "INT8-Canonical stays close to FP16,\nwhile the symmetric INT4 anchor drifts sharply.", xy_axes=(0.02, 0.05))
+    style_axis(ax_ppl, xlabel="32K 困惑度")
+    place_panel_tag(ax_ppl, "(a)", "32K 困惑度")
 
     # (b) Needle vs context
     for mode in modes:
@@ -434,8 +461,8 @@ def fig_main_quality_dashboard(tables_dir, out_dir):
     ax_needle.set_xticks(seq_lens)
     ax_needle.set_xticklabels([format_seq_len(s) for s in seq_lens])
     ax_needle.set_ylim(-5, 108)
-    style_axis(ax_needle, ylabel="Needle Pass Rate (%)", xlabel="Context Length")
-    place_panel_tag(ax_needle, "(b)", "Needle vs Context")
+    style_axis(ax_needle, ylabel="Needle 通过率 (%)", xlabel="上下文长度")
+    place_panel_tag(ax_needle, "(b)", "Needle 通过率")
 
     # (c) LongBench-style synthetic vs context
     for mode in modes:
@@ -455,11 +482,11 @@ def fig_main_quality_dashboard(tables_dir, out_dir):
             )
     ax_longbench.set_xticks(seq_lens)
     ax_longbench.set_xticklabels([format_seq_len(s) for s in seq_lens])
-    style_axis(ax_longbench, ylabel="Synthetic Macro Score (×100)", xlabel="Context Length")
-    place_panel_tag(ax_longbench, "(c)", "LongBench-style Synthetic")
+    style_axis(ax_longbench, ylabel="LongBench-style 合成评分 (×100)", xlabel="上下文长度")
+    place_panel_tag(ax_longbench, "(c)", "LongBench-style 合成评分")
 
     handles, labels = _shared_mode_handles(modes)
-    fig.tight_layout(rect=(0, 0.11, 1, 1))
+    fig.tight_layout(rect=(0, 0.15, 1, 1))
     add_shared_legend(fig, handles, labels, ncol=min(5, len(labels)), y=0.01)
     save_fig(fig, out_dir / "main_quality_dashboard.pdf")
 
@@ -477,7 +504,7 @@ def fig_main_efficiency_dashboard(tables_dir, out_dir):
     memory, _ = _subset_modes(memory, modes)
     seq_lens = sorted(latency["seq_len"].unique())
 
-    fig, axes = plt.subplots(1, 2, figsize=(10.2, 4.4))
+    fig, axes = plt.subplots(1, 2, figsize=(10.2, 5.7))
     ax_tpot, ax_kv = axes
 
     for mode in modes:
@@ -493,14 +520,18 @@ def fig_main_efficiency_dashboard(tables_dir, out_dir):
             )
     ax_tpot.set_xticks(seq_lens)
     ax_tpot.set_xticklabels([format_seq_len(s) for s in seq_lens])
-    style_axis(ax_tpot, ylabel="Decode Latency (ms/token)", xlabel="Context Length")
-    place_panel_tag(ax_tpot, "(a)", "Decode Latency")
+    style_axis(ax_tpot, ylabel="解码延迟 TPOT (ms/token)", xlabel="上下文长度")
+    place_panel_tag(ax_tpot, "(a)", "解码延迟")
 
     base32 = latency[(latency["kv_mode"] == "int8_baseline") & (latency["seq_len"] == max(seq_lens))]
     ours32 = latency[(latency["kv_mode"] == "int8_ours") & (latency["seq_len"] == max(seq_lens))]
     if not base32.empty and not ours32.empty:
         gain = (base32["tpot_ms_mean"].iloc[0] - ours32["tpot_ms_mean"].iloc[0]) / base32["tpot_ms_mean"].iloc[0] * 100
-        add_callout(ax_tpot, f"32K speedup: +{gain:.1f}% vs INT8-Baseline", xy_axes=(0.02, 0.08), color=COLORS["int8_ours"])
+        ax_tpot.text(
+            0.02, 0.08, f"32K 相对 INT8-Baseline 加速 +{gain:.1f}%",
+            transform=ax_tpot.transAxes, fontsize=7.1, color=COLORS["int8_ours"],
+            ha="left", va="bottom"
+        )
 
     for mode in modes:
         sub = memory[memory["kv_mode"] == mode].sort_values("seq_len")
@@ -515,17 +546,21 @@ def fig_main_efficiency_dashboard(tables_dir, out_dir):
             )
     ax_kv.set_xticks(seq_lens)
     ax_kv.set_xticklabels([format_seq_len(s) for s in seq_lens])
-    style_axis(ax_kv, ylabel="KV Cache Memory (MB)", xlabel="Context Length")
-    place_panel_tag(ax_kv, "(b)", "KV Cache Memory")
+    style_axis(ax_kv, ylabel="KV Cache 显存 (MB)", xlabel="上下文长度")
+    place_panel_tag(ax_kv, "(b)", "KV Cache 显存")
 
     fp16_mem = memory[(memory["kv_mode"] == "fp16") & (memory["seq_len"] == max(seq_lens))]
     int8_mem = memory[(memory["kv_mode"] == "int8_ours") & (memory["seq_len"] == max(seq_lens))]
     if not fp16_mem.empty and not int8_mem.empty:
         gain = (fp16_mem["kv_cache_mem_mb_mean"].iloc[0] - int8_mem["kv_cache_mem_mb_mean"].iloc[0]) / fp16_mem["kv_cache_mem_mb_mean"].iloc[0] * 100
-        add_callout(ax_kv, f"32K KV memory reduction: {gain:.1f}%", xy_axes=(0.02, 0.92), color=COLORS["int8_ours"])
+        ax_kv.text(
+            0.02, 0.92, f"32K 相对 FP16 节省 {gain:.1f}% 显存",
+            transform=ax_kv.transAxes, fontsize=7.1, color=COLORS["int8_ours"],
+            ha="left", va="top"
+        )
 
     handles, labels = _shared_mode_handles(modes)
-    fig.tight_layout(rect=(0, 0.12, 1, 1))
+    fig.tight_layout(rect=(0, 0.15, 1, 1))
     add_shared_legend(fig, handles, labels, ncol=min(5, len(labels)), y=0.01)
     save_fig(fig, out_dir / "main_efficiency_dashboard.pdf")
 
@@ -542,7 +577,7 @@ def fig_needle_depth_grid(tables_dir, out_dir):
     context_lens = sorted(df["context_len"].unique())
     modes = [m for m in APPENDIX_MODES if m in set(df["kv_mode"].unique())]
     depths = sorted(df["depth"].unique())
-    fig, axes = plt.subplots(2, 2, figsize=(12, 6.8), sharex=True, sharey=True)
+    fig, axes = plt.subplots(2, 2, figsize=(12, 7.4), sharex=True, sharey=True)
     ims = []
 
     for ax, ctx, tag in zip(axes.flat, context_lens, ["(a)", "(b)", "(c)", "(d)"]):
@@ -560,11 +595,11 @@ def fig_needle_depth_grid(tables_dir, out_dir):
         step = max(1, len(depths) // 8)
         ax.set_xticks(range(0, len(depths), step))
         ax.set_xticklabels([f"{depths[i]:.0f}%" for i in range(0, len(depths), step)], fontsize=7)
-        place_panel_tag(ax, tag, f"Context = {format_seq_len(int(ctx))}")
+        place_panel_tag(ax, tag, f"上下文 = {format_seq_len(int(ctx))}")
         if ax in axes[1]:
-            ax.set_xlabel("Needle depth (%)")
+            ax.set_xlabel("Needle 深度 (%)")
         if ax in (axes[0, 0], axes[1, 0]):
-            ax.set_ylabel("Quantization mode")
+            ax.set_ylabel("量化模式")
         for i in range(len(modes)):
             for j in range(len(depths)):
                 val = matrix[i, j]
@@ -573,8 +608,8 @@ def fig_needle_depth_grid(tables_dir, out_dir):
                             color="white" if val < 45 else "black", fontweight="bold")
 
     cbar = fig.colorbar(ims[-1], ax=axes.ravel().tolist(), shrink=0.96, pad=0.02)
-    cbar.set_label("Pass rate (%)", fontsize=9)
-    fig.subplots_adjust(left=0.08, right=0.92, bottom=0.10, top=0.94, wspace=0.18, hspace=0.20)
+    cbar.set_label("通过率 (%)", fontsize=9)
+    fig.subplots_adjust(left=0.08, right=0.92, bottom=0.11, top=0.95, wspace=0.18, hspace=0.22)
     save_fig(fig, out_dir / "needle_depth_grid.pdf")
 
 
@@ -590,12 +625,12 @@ def fig_appendix_throughput_dashboard(tables_dir, out_dir):
     df_plot, modes = _subset_modes(df_plot, APPENDIX_MODES)
 
     panels = [
-        ("tok_per_s_mean", "tok_per_s_ci95_half", "Total throughput (tokens/s)", "(a) Total throughput"),
-        ("tok_per_s_per_seq_mean", "tok_per_s_per_seq_ci95_half", "Per-sequence throughput (tokens/s/seq)", "(b) Per-sequence throughput"),
-        ("prefill_tok_per_s_mean", "prefill_tok_per_s_ci95_half", "Prefill throughput (tokens/s)", "(c) Prefill throughput"),
+        ("tok_per_s_mean", "tok_per_s_ci95_half", "总吞吐量 (tokens/s)", "(a) 总吞吐量"),
+        ("tok_per_s_per_seq_mean", "tok_per_s_per_seq_ci95_half", "单序列吞吐量 (tokens/s/seq)", "(b) 单序列吞吐量"),
+        ("prefill_tok_per_s_mean", "prefill_tok_per_s_ci95_half", "Prefill 吞吐量 (tokens/s)", "(c) Prefill 吞吐量"),
     ]
 
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4.2), sharex=True)
+    fig, axes = plt.subplots(1, 3, figsize=(13, 5.3), sharex=True)
     batches = sorted(df_plot["batch"].unique())
     for ax, (y_col, ci_col, ylabel, title) in zip(axes, panels):
         for mode in modes:
@@ -607,10 +642,10 @@ def fig_appendix_throughput_dashboard(tables_dir, out_dir):
                 annotate_last_point(ax, sub["batch"].values, sub[y_col].values, LABELS.get(mode, mode), COLORS.get(mode, "#333333"), dx=0.15, dy=0.0)
         ax.set_xticks(batches)
         ax.set_xticklabels([str(int(b)) for b in batches])
-        style_axis(ax, ylabel=ylabel, xlabel="Batch Size")
+        style_axis(ax, ylabel=ylabel, xlabel="批大小")
         place_panel_tag(ax, title.split()[0], " ".join(title.split()[1:]))
     handles, labels = _shared_mode_handles(modes)
-    fig.tight_layout(rect=(0, 0.09, 1, 1))
+    fig.tight_layout(rect=(0, 0.15, 1, 1))
     add_shared_legend(fig, handles, labels, ncol=min(5, len(labels)), y=0.01)
     save_fig(fig, out_dir / "appendix_throughput_dashboard.pdf")
 
@@ -627,11 +662,11 @@ def fig_appendix_memory_dashboard(tables_dir, out_dir):
     df_plot, modes = _subset_modes(df_plot, APPENDIX_MODES)
 
     panels = [
-        ("kv_cache_mem_mb_mean", "kv_cache_mem_mb_ci95_half", "KV cache memory (MB)", "(a) KV cache memory"),
-        ("gpu_mem_peak_mb_mean", "gpu_mem_peak_mb_ci95_half", "Peak GPU memory (MB)", "(b) Peak GPU memory"),
+        ("kv_cache_mem_mb_mean", "kv_cache_mem_mb_ci95_half", "KV Cache 显存 (MB)", "(a) KV Cache 显存"),
+        ("gpu_mem_peak_mb_mean", "gpu_mem_peak_mb_ci95_half", "总峰值显存 (MB)", "(b) 总峰值显存"),
     ]
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4.1), sharex=True)
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5.3), sharex=True)
     batches = sorted(df_plot["batch"].unique())
     for ax, (y_col, ci_col, ylabel, title) in zip(axes, panels):
         for mode in modes:
@@ -643,10 +678,10 @@ def fig_appendix_memory_dashboard(tables_dir, out_dir):
                 annotate_last_point(ax, sub["batch"].values, sub[y_col].values, LABELS.get(mode, mode), COLORS.get(mode, "#333333"), dx=0.15, dy=0.0)
         ax.set_xticks(batches)
         ax.set_xticklabels([str(int(b)) for b in batches])
-        style_axis(ax, ylabel=ylabel, xlabel="Batch Size")
+        style_axis(ax, ylabel=ylabel, xlabel="批大小")
         place_panel_tag(ax, title.split()[0], " ".join(title.split()[1:]))
     handles, labels = _shared_mode_handles(modes)
-    fig.tight_layout(rect=(0, 0.11, 1, 1))
+    fig.tight_layout(rect=(0, 0.15, 1, 1))
     add_shared_legend(fig, handles, labels, ncol=min(5, len(labels)), y=0.01)
     save_fig(fig, out_dir / "appendix_memory_dashboard.pdf")
 
@@ -677,7 +712,7 @@ def fig_kv_ablation_summary_ruler(project_root, out_dir):
         mixed_val = float(mixed_df[mixed_df["kv_mode"] == "int4_mixed_kv"]["ruler_mean"].iloc[0])
         values["MixedKV"].append(mixed_val)
 
-    fig, ax = plt.subplots(figsize=(8.8, 4.4))
+    fig, ax = plt.subplots(figsize=(8.8, 5.6))
     x = np.arange(len(model_rows))
     width = 0.18
     for i, method in enumerate(methods):
@@ -715,11 +750,10 @@ def fig_kv_ablation_summary_ruler(project_root, out_dir):
                 )
     ax.set_xticks(x)
     ax.set_xticklabels(["Qwen\n1.5B", "Qwen\n7B", "LLaMA\n8B"])
-    style_axis(ax, ylabel="RULER Pass Rate (%)")
-    place_panel_tag(ax, "", "Key–Value Sensitivity at 32K")
-    ax.legend(ncol=4, loc="upper center", bbox_to_anchor=(0.5, 1.15), frameon=True, fontsize=8)
-    add_callout(ax, "Key-side low-bit perturbation drives the largest collapse;\nMixedKV restores a practical operating point.", xy_axes=(0.02, 0.98))
-    fig.tight_layout()
+    style_axis(ax, ylabel="RULER 通过率 (%)")
+    place_panel_tag(ax, "", "32K 下 K/V 敏感性")
+    ax.legend(ncol=4, loc="upper center", bbox_to_anchor=(0.5, -0.12), frameon=True, fontsize=8)
+    fig.tight_layout(rect=(0, 0.11, 1, 1))
     save_fig(fig, out_dir / "kv_ablation_summary_ruler.pdf")
 
 
@@ -827,8 +861,8 @@ def fig_needle_dual_panel(tables_dir, out_dir):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 3.8), sharey=True)
 
     for ax, mode_set, title in [
-        (ax1, INT8_MODES, "(a) INT8 Quantization"),
-        (ax2, INT4_MODES, "(b) INT4 Quantization"),
+        (ax1, INT8_MODES, "(a) INT8 量化"),
+        (ax2, INT4_MODES, "(b) INT4 量化"),
     ]:
         for mode in mode_set:
             sub = df[df["kv_mode"] == mode].sort_values("seq_len")
@@ -839,15 +873,15 @@ def fig_needle_dual_panel(tables_dir, out_dir):
             ci = sub["needle_pass_rate_ci95_half"].values
             plot_line_with_band(ax, x, y, ci, mode)
 
-        ax.set_xlabel("Context Length")
+        ax.set_xlabel("上下文长度")
         ax.set_title(title, fontsize=10)
         ax.set_xticks(seq_lens)
         ax.set_xticklabels([format_seq_len(s) for s in seq_lens])
         ax.set_ylim(-5, 108)
-        ax.legend(loc="lower left", fontsize=7.5)
+        ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=2, fontsize=7.2)
 
-    ax1.set_ylabel("Needle Pass Rate (%)")
-    fig.tight_layout(w_pad=2)
+    ax1.set_ylabel("Needle 通过率 (%)")
+    fig.tight_layout(rect=(0, 0.08, 1, 1), w_pad=2)
     save_fig(fig, out_dir / "needle_pass_rate_vs_context.pdf")
 
 
@@ -872,7 +906,7 @@ def _plot_metric_vs_seq(tables_dir, out_dir, filename, y_col, y_ci_col,
     seq_lens = sorted(df["seq_len"].unique())
     modes = sort_modes(df["kv_mode"].unique())
 
-    fig, ax = plt.subplots(figsize=(6.5, 4))
+    fig, ax = plt.subplots(figsize=(6.7, 4.9))
     for mode in modes:
         sub = df[df["kv_mode"] == mode].sort_values("seq_len")
         if sub.empty or y_col not in sub.columns:
@@ -882,32 +916,32 @@ def _plot_metric_vs_seq(tables_dir, out_dir, filename, y_col, y_ci_col,
         ci = sub[y_ci_col].values if y_ci_col in sub.columns else np.zeros_like(y)
         plot_line_with_band(ax, x, y, ci, mode)
 
-    ax.set_xlabel("Sequence Length")
+    ax.set_xlabel("序列长度")
     ax.set_ylabel(ylabel)
     ax.set_title(title, fontsize=10, pad=8)
     ax.set_xticks(seq_lens)
     ax.set_xticklabels([format_seq_len(s) for s in seq_lens])
-    ax.legend(fontsize=7.5, ncol=2)
-    fig.tight_layout()
+    ax.legend(fontsize=7.2, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.16))
+    fig.tight_layout(rect=(0, 0.11, 1, 1))
     save_fig(fig, out_dir / filename)
 
 
 def fig_tpot_vs_seq(tables_dir, out_dir):
     _plot_metric_vs_seq(tables_dir, out_dir, "latency_tpot_vs_seq.pdf",
                         "tpot_ms_mean", "tpot_ms_ci95_half",
-                        "TPOT (ms)", "Decode latency versus context length (batch=1)")
+                        "TPOT (ms)", "解码延迟随上下文长度变化（batch=1）")
 
 
 def fig_memory_kv_vs_seq(tables_dir, out_dir):
     _plot_metric_vs_seq(tables_dir, out_dir, "memory_kv_cache_vs_seq.pdf",
                         "kv_cache_mem_mb_mean", "kv_cache_mem_mb_ci95_half",
-                        "KV Cache Memory (MB)", "KV cache memory versus context length (batch=1)")
+                        "KV Cache 显存 (MB)", "KV Cache 显存随上下文长度变化（batch=1）")
 
 
 def fig_memory_peak_vs_seq(tables_dir, out_dir):
     _plot_metric_vs_seq(tables_dir, out_dir, "memory_peak_vs_seq.pdf",
                         "gpu_mem_peak_mb_mean", "gpu_mem_peak_mb_ci95_half",
-                        "Peak GPU Memory (MB)", "Peak GPU memory versus context length (batch=1)")
+                        "总峰值显存 (MB)", "总峰值显存随上下文长度变化（batch=1）")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -950,7 +984,7 @@ def fig_invtau_heatmap(tables_dir, out_dir):
             return "#F28E2B"   # orange — moderate correction
         return "#BAB0AC"       # gray — no correction
 
-    fig = plt.figure(figsize=(10, 5.5))
+    fig = plt.figure(figsize=(10.4, 6.4))
     gs = fig.add_gridspec(1, 2, width_ratios=[0.6, 0.4], wspace=0.35)
 
     # === Left panel: focused bar chart for layers with non-1.0 values ===
@@ -972,7 +1006,7 @@ def fig_invtau_heatmap(tables_dir, out_dir):
     ax_left.set_yticklabels(y_labels, fontsize=6.5)
     ax_left.set_xlim(0.35, 1.15)
     ax_left.set_xlabel("$\\tau^{-1}$")
-    ax_left.set_title("Adjusted heads only", fontsize=9.5, pad=8, loc="left", fontweight="bold")
+    ax_left.set_title("仅显示被校正的注意力头", fontsize=9.5, pad=8, loc="left", fontweight="bold")
     ax_left.invert_yaxis()
     ax_left.legend(loc="lower right", fontsize=7.5)
     # Annotate non-1.0 values
@@ -995,30 +1029,30 @@ def fig_invtau_heatmap(tables_dir, out_dir):
         ax_right.barh(i, 1.0, color=color, height=0.8, edgecolor="white", linewidth=0.3)
     ax_right.set_yticks(range(n_layers))
     ax_right.set_yticklabels([str(i) for i in range(n_layers)], fontsize=6.5)
-    ax_right.set_ylabel("Layer Index")
+    ax_right.set_ylabel("层编号")
     ax_right.set_xticks([])
-    ax_right.set_title("Layer-level sparsity overview", fontsize=9.5, pad=8, loc="left", fontweight="bold")
+    ax_right.set_title("逐层稀疏性总览", fontsize=9.5, pad=8, loc="left", fontweight="bold")
     ax_right.invert_yaxis()
     # Legend patches
     from matplotlib.patches import Patch as _Patch
     ax_right.legend(
         handles=[
-            _Patch(facecolor="#59A14F", label="all heads remain at $\\tau^{-1}=1.0$"),
-            _Patch(facecolor="#EDC948", label="contains adjusted heads"),
+            _Patch(facecolor="#59A14F", label="该层所有头均保持 $\\tau^{-1}=1.0$"),
+            _Patch(facecolor="#EDC948", label="该层包含被校正的头"),
         ],
-        loc="lower right", fontsize=7, frameon=True,
+        loc="lower right", fontsize=6.8, frameon=True,
     )
     # Summary annotation
     ax_right.text(
         0.5, 1.0,
-        f"{n_nonunit}/{total_heads} heads ({100*n_nonunit/total_heads:.1f}%) require correction",
+        f"{n_nonunit}/{total_heads} 个头 ({100*n_nonunit/total_heads:.1f}%) 需要校正",
         transform=ax_right.transAxes, fontsize=7.5, ha="center", va="top",
         bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="#CCCCCC", lw=0.7),
     )
 
     model_id = calib.get("model_id", "Qwen2.5-1.5B-Instruct")
     fig.suptitle(
-        f"Per-head inverse temperature ($\\tau^{{-1}}$) — {model_id}",
+        f"逐头逆温度系数分布（$\\tau^{{-1}}$）— {model_id}",
         fontsize=10.5, y=0.99,
     )
     fig.subplots_adjust(left=0.06, right=0.985, bottom=0.09, top=0.88, wspace=0.22)
@@ -1038,7 +1072,7 @@ def fig_ruler_vs_context(tables_dir, out_dir):
     seq_lens = sorted(df["seq_len"].unique())
     modes = [m for m in APPENDIX_MODES if m in set(df["kv_mode"].unique())]
 
-    fig, ax = plt.subplots(figsize=(6.5, 4))
+    fig, ax = plt.subplots(figsize=(6.8, 4.9))
     for mode in modes:
         sub = df[df["kv_mode"] == mode].sort_values("seq_len")
         if sub.empty:
@@ -1048,13 +1082,13 @@ def fig_ruler_vs_context(tables_dir, out_dir):
         ci = sub["ruler_pass_rate_ci95_half"].values
         plot_line_with_band(ax, x, y, ci, mode)
 
-    ax.set_xlabel("Context Length")
-    ax.set_ylabel("RULER pass rate (%)")
-    ax.set_title("RULER pass rate vs context length", fontsize=10, pad=8)
+    ax.set_xlabel("上下文长度")
+    ax.set_ylabel("RULER 通过率 (%)")
+    ax.set_title("RULER 通过率随上下文长度变化", fontsize=10, pad=8)
     ax.set_xticks(seq_lens)
     ax.set_xticklabels([format_seq_len(s) for s in seq_lens])
-    ax.legend(fontsize=7.5, ncol=2)
-    fig.tight_layout()
+    ax.legend(fontsize=7.2, ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.16))
+    fig.tight_layout(rect=(0, 0.11, 1, 1))
     save_fig(fig, out_dir / "ruler_pass_rate_vs_context.pdf")
 
 
@@ -1071,7 +1105,7 @@ def fig_longbench_vs_context(tables_dir, out_dir):
     seq_lens = sorted(df["seq_len"].unique())
     modes = [m for m in APPENDIX_MODES if m in set(df["kv_mode"].unique())]
 
-    fig, ax = plt.subplots(figsize=(6.5, 4))
+    fig, ax = plt.subplots(figsize=(6.8, 4.9))
     for mode in modes:
         sub = df[df["kv_mode"] == mode].sort_values("seq_len")
         if sub.empty:
@@ -1086,13 +1120,13 @@ def fig_longbench_vs_context(tables_dir, out_dir):
         ci = sub[ci_col].values * 100 if ci_col in sub.columns else np.zeros_like(y)
         plot_line_with_band(ax, x, y, ci, mode)
 
-    ax.set_xlabel("Context Length")
-    ax.set_ylabel("Synthetic macro score (×100)")
-    ax.set_title("LongBench-style synthetic score vs context length", fontsize=10, pad=8)
+    ax.set_xlabel("上下文长度")
+    ax.set_ylabel("LongBench-style 合成评分 (×100)")
+    ax.set_title("LongBench-style 合成评分随上下文长度变化", fontsize=10, pad=8)
     ax.set_xticks(seq_lens)
     ax.set_xticklabels([format_seq_len(s) for s in seq_lens])
-    ax.legend(fontsize=7.5, ncol=2)
-    fig.tight_layout()
+    ax.legend(fontsize=7.2, ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.16))
+    fig.tight_layout(rect=(0, 0.11, 1, 1))
     save_fig(fig, out_dir / "longbench_score_vs_context.pdf")
 
 
@@ -1139,12 +1173,12 @@ def fig_needle_depth_heatmaps(tables_dir, out_dir):
         ax.set_xticks(range(0, len(depths), step))
         ax.set_xticklabels([f"{depths[i]:.0f}%" for i in range(0, len(depths), step)],
                            fontsize=7)
-        ax.set_xlabel("Needle Depth (%)")
-        ax.set_title(f"Needle Pass Rate by Depth — Context = {format_seq_len(int(ctx))}",
+        ax.set_xlabel("Needle 深度 (%)")
+        ax.set_title(f"Needle 通过率热图 — 上下文 = {format_seq_len(int(ctx))}",
                      fontsize=10, pad=8)
 
         cbar = fig.colorbar(im, ax=ax, shrink=0.9, pad=0.02)
-        cbar.set_label("Pass Rate (%)", fontsize=8)
+        cbar.set_label("通过率 (%)", fontsize=8)
 
         # Annotate cells with < 100% pass rate
         for i in range(len(modes)):
@@ -1171,7 +1205,7 @@ def fig_needle_exact_match(tables_dir, out_dir):
     seq_lens = sorted(df["seq_len"].unique())
     modes = [m for m in APPENDIX_MODES if m in set(df["kv_mode"].unique())]
 
-    fig, ax = plt.subplots(figsize=(6.5, 4))
+    fig, ax = plt.subplots(figsize=(6.8, 4.9))
     for mode in modes:
         sub = df[df["kv_mode"] == mode].sort_values("seq_len")
         if sub.empty:
@@ -1181,14 +1215,14 @@ def fig_needle_exact_match(tables_dir, out_dir):
         ci = sub["needle_exact_match_rate_ci95_half"].values
         plot_line_with_band(ax, x, y, ci, mode)
 
-    ax.set_xlabel("Context Length")
-    ax.set_ylabel("Exact-match rate (%)")
-    ax.set_title("Needle exact match vs context length", fontsize=10, pad=8)
+    ax.set_xlabel("上下文长度")
+    ax.set_ylabel("精确匹配率 (%)")
+    ax.set_title("Needle 精确匹配率随上下文长度变化", fontsize=10, pad=8)
     ax.set_xticks(seq_lens)
     ax.set_xticklabels([format_seq_len(s) for s in seq_lens])
     ax.set_ylim(-5, 108)
-    ax.legend(fontsize=7.5, ncol=2)
-    fig.tight_layout()
+    ax.legend(fontsize=7.2, ncol=3, loc="upper center", bbox_to_anchor=(0.5, -0.16))
+    fig.tight_layout(rect=(0, 0.11, 1, 1))
     save_fig(fig, out_dir / "needle_exact_match_vs_context.pdf")
 
 
@@ -1213,7 +1247,7 @@ def fig_tpot_gain(tables_dir, out_dir):
     # Get FP16 baseline TPOT
     fp16 = df[df["kv_mode"] == "fp16"].set_index("seq_len")["tpot_ms_mean"]
 
-    fig, ax = plt.subplots(figsize=(7, 4))
+    fig, ax = plt.subplots(figsize=(7.2, 5.0))
     bar_width = 0.12
     x = np.arange(len(seq_lens))
 
@@ -1234,23 +1268,23 @@ def fig_tpot_gain(tables_dir, out_dir):
                       zorder=3)
 
     ax.axhline(y=0, color="#333", linewidth=0.8, linestyle="-", zorder=2)
-    ax.set_xlabel("Sequence Length")
-    ax.set_ylabel("TPOT change vs FP16 (%)")
-    ax.set_title("Relative decode latency vs FP16", fontsize=10, pad=8)
+    ax.set_xlabel("序列长度")
+    ax.set_ylabel("相对 FP16 的 TPOT 变化 (%)")
+    ax.set_title("相对 FP16 的解码延迟变化", fontsize=10, pad=8)
     ax.set_xticks(x)
     ax.set_xticklabels([format_seq_len(s) for s in seq_lens])
 
     # Annotate: above zero = faster, below zero = slower
     ylim = ax.get_ylim()
-    ax.text(0.98, 0.97, "↑ faster than FP16", transform=ax.transAxes,
+    ax.text(0.98, 0.97, "↑ 快于 FP16", transform=ax.transAxes,
             ha="right", va="top", fontsize=7, color="#27AE60", style="italic")
-    ax.text(0.98, 0.03, "↓ slower than FP16", transform=ax.transAxes,
+    ax.text(0.98, 0.03, "↓ 慢于 FP16", transform=ax.transAxes,
             ha="right", va="bottom", fontsize=7, color="#E74C3C", style="italic")
 
-    ax.legend(fontsize=7, ncol=2, loc="lower left")
+    ax.legend(fontsize=7, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.16))
     ax.grid(axis="y", alpha=0.3)
     ax.grid(axis="x", visible=False)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
     save_fig(fig, out_dir / "latency_tpot_gain_vs_fp16.pdf")
 
 
@@ -1332,7 +1366,7 @@ def _plot_metric_vs_batch(tables_dir, out_dir, filename, y_col, y_ci_col,
                                                     color=COLORS.get(mode, "#999"),
                                                     lw=1.5))
 
-    ax.set_xlabel("Batch Size")
+    ax.set_xlabel("批大小")
     ax.set_ylabel(ylabel)
     ax.set_title(title, fontsize=10, pad=8)
 
@@ -1341,8 +1375,8 @@ def _plot_metric_vs_batch(tables_dir, out_dir, filename, y_col, y_ci_col,
     ax.set_xticks(batches)
     ax.set_xticklabels([str(int(b)) for b in batches])
 
-    ax.legend(fontsize=7.5, ncol=2)
-    fig.tight_layout()
+    ax.legend(fontsize=7.2, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.16))
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
     save_fig(fig, out_dir / filename)
 
 
@@ -1350,7 +1384,7 @@ def fig_throughput_vs_batch(tables_dir, out_dir):
     _plot_metric_vs_batch(
         tables_dir, out_dir, "throughput_tok_per_s_vs_batch.pdf",
         "tok_per_s_mean", "tok_per_s_ci95_half",
-        "Throughput (tokens/s)", "Throughput scaling versus batch size",
+        "总吞吐量 (tokens/s)", "总吞吐量随批大小变化",
         use_throughput_csv=True)
 
 
@@ -1358,8 +1392,8 @@ def fig_throughput_per_seq_vs_batch(tables_dir, out_dir):
     _plot_metric_vs_batch(
         tables_dir, out_dir, "throughput_tok_per_s_per_seq_vs_batch.pdf",
         "tok_per_s_per_seq_mean", "tok_per_s_per_seq_ci95_half",
-        "Throughput per Sequence (tokens/s/seq)",
-        "Per-sequence throughput versus batch size",
+        "单序列吞吐量 (tokens/s/seq)",
+        "单序列吞吐量随批大小变化",
         use_throughput_csv=True)
 
 
@@ -1367,7 +1401,7 @@ def fig_memory_kv_vs_batch(tables_dir, out_dir):
     _plot_metric_vs_batch(
         tables_dir, out_dir, "memory_kv_cache_vs_batch.pdf",
         "kv_cache_mem_mb_mean", "kv_cache_mem_mb_ci95_half",
-        "KV Cache Memory (MB)", "KV cache memory versus batch size",
+        "KV Cache 显存 (MB)", "KV Cache 显存随批大小变化",
         use_throughput_csv=True, add_oom=False)
 
 
@@ -1375,7 +1409,7 @@ def fig_memory_peak_vs_batch(tables_dir, out_dir):
     _plot_metric_vs_batch(
         tables_dir, out_dir, "memory_peak_vs_batch.pdf",
         "gpu_mem_peak_mb_mean", "gpu_mem_peak_mb_ci95_half",
-        "Peak GPU Memory (MB)", "Peak GPU memory versus batch size",
+        "总峰值显存 (MB)", "总峰值显存随批大小变化",
         use_throughput_csv=True, add_oom=False)
 
 
@@ -1383,7 +1417,7 @@ def fig_prefill_vs_batch(tables_dir, out_dir):
     _plot_metric_vs_batch(
         tables_dir, out_dir, "prefill_tok_per_s_vs_batch.pdf",
         "prefill_tok_per_s_mean", "prefill_tok_per_s_ci95_half",
-        "Prefill Throughput (tokens/s)", "Prefill throughput versus batch size",
+        "Prefill 吞吐量 (tokens/s)", "Prefill 吞吐量随批大小变化",
         use_throughput_csv=True, add_oom=False)
 
 
