@@ -136,7 +136,7 @@ PLOT_ORDER = [
 # INT8-focus and INT4-focus subsets for dual-panel figures
 INT8_MODES = ["fp16", "int8_baseline", "int8_ours", "kivi_style"]
 INT4_MODES = ["fp16", "int4_baseline", "int4_fused", "int4_ours", "kivi_style", "int4_mixed_kv", "int4_ours_asym"]
-QUALITY_DASHBOARD_MODES = ["fp16", "int8_baseline", "int8_ours", "kivi_style", "int4_ours"]
+QUALITY_DASHBOARD_MODES = ["fp16", "int8_baseline", "int8_ours", "kivi_style"]
 EFFICIENCY_DASHBOARD_MODES = ["fp16", "int8_baseline", "int8_ours"]
 APPENDIX_MODES = ["fp16", "int8_baseline", "int8_ours", "kivi_style", "int4_ours", "int4_mixed_kv", "int4_ours_asym"]
 
@@ -405,65 +405,103 @@ def fig_main_quality_dashboard(tables_dir, out_dir):
     longbench = filter_mainline(_load_primary_table(tables_dir, "longbench_summary.csv"))
     ppl = filter_mainline(_load_primary_table(tables_dir, "ppl_summary.csv"))
 
-    needle, modes = _subset_modes(needle, QUALITY_DASHBOARD_MODES)
+    quality_modes = [m for m in QUALITY_DASHBOARD_MODES if m != "int4_ours"]
+    needle, modes = _subset_modes(needle, quality_modes)
     longbench, _ = _subset_modes(longbench, modes)
 
     seq_lens = sorted(set(needle["seq_len"].unique()))
     fig, axes = plt.subplots(1, 3, figsize=(13.4, 6.0))
     ax_ppl, ax_needle, ax_longbench = axes
 
-    # (a) PPL lollipop at 32K
+    # (a) PPL vertical bars at 32K
     ppl32 = ppl[ppl["seq_len"] >= 30000].copy()
-    ppl32, ppl_modes = _subset_modes(ppl32, modes)
-    ppl32["mode_rank"] = ppl32["kv_mode"].map({m: i for i, m in enumerate(ppl_modes)})
-    ppl32 = ppl32.sort_values("mode_rank", ascending=False).reset_index(drop=True)
-    y_pos = np.arange(len(ppl32))
-    bar_colors = [COLORS.get(m, "#999999") for m in ppl32["kv_mode"]]
-    x_vals = ppl32["perplexity_mean"].values
-    x_err = ppl32["perplexity_ci95_half"].values
-    ax_ppl.hlines(y_pos, np.min(x_vals) - 0.05, x_vals, color="#CBD5E1", linewidth=1.2, zorder=1)
+    ppl32_main, ppl_modes = _subset_modes(ppl32, modes)
+    ppl32_fail = ppl32[ppl32["kv_mode"] == "int4_ours"].copy()
+    ppl32_main = ppl32_main.copy()
+    ppl32_main["mode_rank"] = ppl32_main["kv_mode"].map({m: i for i, m in enumerate(ppl_modes)})
+    ppl32_main = ppl32_main.sort_values("mode_rank").reset_index(drop=True)
+    x_pos = np.arange(len(ppl32_main))
+    bar_colors = [COLORS.get(m, "#999999") for m in ppl32_main["kv_mode"]]
+    y_vals = ppl32_main["perplexity_mean"].values
+    y_err = ppl32_main["perplexity_ci95_half"].values
+    y_base = np.floor((np.min(y_vals) - 0.03) * 100) / 100
+    bar_heights = y_vals - y_base
+    ax_ppl.bar(
+        x_pos, bar_heights, bottom=y_base,
+        color=bar_colors, edgecolor="white", linewidth=0.8,
+        width=0.58, zorder=2,
+    )
     ax_ppl.errorbar(
-        x_vals, y_pos, xerr=x_err, fmt="none",
+        x_pos, y_vals, yerr=y_err, fmt="none",
         ecolor="#475569", elinewidth=1.0, capsize=3, zorder=4,
     )
-    ax_ppl.scatter(x_vals, y_pos, s=54, color=bar_colors, edgecolor="white", linewidth=0.8, zorder=5)
-    for i, row in enumerate(ppl32.itertuples()):
+    for i, row in enumerate(ppl32_main.itertuples()):
         ax_ppl.text(
-            row.perplexity_mean + 0.05, y_pos[i],
+            x_pos[i], row.perplexity_mean + 0.015,
             f"{row.perplexity_mean:.2f}",
-            va="center", ha="left", fontsize=7.5, color="#333333",
+            va="bottom", ha="center", fontsize=7.3, color="#333333",
         )
-    ax_ppl.set_yticks(y_pos)
-    ax_ppl.set_yticklabels([LABELS.get(m, m) for m in ppl32["kv_mode"]])
-    style_axis(ax_ppl, xlabel="32K 困惑度")
+    ax_ppl.set_xticks(x_pos)
+    ax_ppl.set_xticklabels([LABELS.get(m, m) for m in ppl32_main["kv_mode"]], rotation=16, ha="right")
+    ax_ppl.set_ylim(y_base, np.max(y_vals) + 0.10)
+    style_axis(ax_ppl, ylabel="32K 困惑度")
     place_panel_tag(ax_ppl, "(a)", "32K 困惑度")
+    if not ppl32_fail.empty:
+        fail_row = ppl32_fail.iloc[0]
+        add_callout(
+            ax_ppl,
+            f"对称 INT4 失败锚点\n{fail_row['perplexity_mean']:.2f}（{fail_row['perplexity_mean']/ppl32_main[ppl32_main['kv_mode']=='fp16']['perplexity_mean'].iloc[0]:.2f}× FP16）",
+            xy_axes=(0.52, 0.18),
+            color=COLORS["int4_ours"],
+        )
 
     # (b) Needle vs context
     for mode in modes:
         sub = needle[needle["kv_mode"] == mode].sort_values("seq_len")
         if sub.empty:
             continue
-        plot_line_with_band(
-            ax_needle,
+        ax_needle.plot(
             sub["seq_len"].values,
             sub["needle_pass_rate_mean"].values,
-            sub["needle_pass_rate_ci95_half"].values,
-            mode,
+            color=COLORS.get(mode, "#999999"),
+            marker=MARKERS.get(mode, "o"),
+            linestyle=LINESTYLES.get(mode, "-"),
+            markersize=5.5,
+            markeredgecolor="white",
+            markeredgewidth=0.6,
+            linewidth=2.1,
         )
-        if mode in ("fp16", "int8_ours", "int4_ours"):
+        if mode in ("fp16", "int8_baseline", "int8_ours", "kivi_style"):
+            dy_map = {
+                "int8_ours": 0.08,
+                "fp16": 0.01,
+                "int8_baseline": -0.08,
+                "kivi_style": 0.00,
+            }
             endpoint_label(
                 ax_needle,
                 sub["seq_len"].values,
                 sub["needle_pass_rate_mean"].values,
                 LABELS.get(mode, mode),
                 COLORS.get(mode, "#333333"),
-                dy=0.0 if mode != "fp16" else -2.2,
+                dy=dy_map.get(mode, 0.0),
             )
     ax_needle.set_xticks(seq_lens)
     ax_needle.set_xticklabels([format_seq_len(s) for s in seq_lens])
-    ax_needle.set_ylim(-5, 108)
+    ax_needle.set_ylim(98.4, 100.2)
+    ax_needle.set_yticks([98.5, 99.0, 99.5, 100.0])
     style_axis(ax_needle, ylabel="Needle 通过率 (%)", xlabel="上下文长度")
     place_panel_tag(ax_needle, "(b)", "Needle 通过率")
+    add_callout(ax_needle, "对称 INT4 失败锚点\n32K = 0%", xy_axes=(0.04, 0.14), color=COLORS["int4_ours"])
+    ax_needle.text(
+        0.03, 0.96,
+        "FP16 / INT8-Baseline / INT8-Canonical\n在 100% 处重合",
+        transform=ax_needle.transAxes,
+        fontsize=7.3,
+        color="#475569",
+        ha="left",
+        va="top",
+    )
 
     # (c) LongBench-style synthetic vs context
     for mode in modes:
@@ -471,24 +509,35 @@ def fig_main_quality_dashboard(tables_dir, out_dir):
         if sub.empty:
             continue
         y_col = "longbench_score_mean" if "longbench_score_mean" in sub.columns else "longbench_official_macro_mean"
-        ci_col = "longbench_score_ci95_half" if "longbench_score_ci95_half" in sub.columns else "longbench_official_macro_ci95_half"
         y = sub[y_col].values * 100
-        ci = sub[ci_col].values * 100 if ci_col in sub.columns else np.zeros_like(y)
-        plot_line_with_band(ax_longbench, sub["seq_len"].values, y, ci, mode)
+        ax_longbench.plot(
+            sub["seq_len"].values,
+            y,
+            color=COLORS.get(mode, "#999999"),
+            marker=MARKERS.get(mode, "o"),
+            linestyle=LINESTYLES.get(mode, "-"),
+            markersize=5.5,
+            markeredgecolor="white",
+            markeredgewidth=0.6,
+            linewidth=2.1,
+        )
         if mode in ("fp16", "int8_ours", "int4_ours"):
             endpoint_label(
                 ax_longbench, sub["seq_len"].values, y,
                 LABELS.get(mode, mode), COLORS.get(mode, "#333333"),
-                dy=0.0 if mode == "int8_ours" else (-0.15 if mode == "fp16" else 0.12),
+                dy=0.02 if mode == "int8_ours" else (-0.05 if mode == "fp16" else 0.04),
             )
     ax_longbench.set_xticks(seq_lens)
     ax_longbench.set_xticklabels([format_seq_len(s) for s in seq_lens])
+    ax_longbench.set_ylim(4.25, 5.08)
+    ax_longbench.set_yticks([4.4, 4.6, 4.8, 5.0])
     style_axis(ax_longbench, ylabel="LongBench-style 合成评分 (×100)", xlabel="上下文长度")
     place_panel_tag(ax_longbench, "(c)", "LongBench-style 合成评分")
+    add_callout(ax_longbench, "对称 INT4 失败锚点\n32K = 2.41", xy_axes=(0.04, 0.14), color=COLORS["int4_ours"])
 
     handles, labels = _shared_mode_handles(modes)
     fig.tight_layout(rect=(0, 0.15, 1, 1))
-    add_shared_legend(fig, handles, labels, ncol=min(5, len(labels)), y=0.01)
+    add_shared_legend(fig, handles, labels, ncol=min(4, len(labels)), y=0.01)
     save_fig(fig, out_dir / "main_quality_dashboard.pdf")
 
 
@@ -528,10 +577,31 @@ def fig_main_efficiency_dashboard(tables_dir, out_dir):
     ours32 = latency[(latency["kv_mode"] == "int8_ours") & (latency["seq_len"] == max(seq_lens))]
     if not base32.empty and not ours32.empty:
         gain = (base32["tpot_ms_mean"].iloc[0] - ours32["tpot_ms_mean"].iloc[0]) / base32["tpot_ms_mean"].iloc[0] * 100
+        y_base = base32["tpot_ms_mean"].iloc[0]
+        y_ours = ours32["tpot_ms_mean"].iloc[0]
+        y_mid = (y_base + y_ours) / 2
+        x_anchor = max(seq_lens) - 1700
+        # Explicitly mark the 32K gap between the two INT8 curves instead of
+        # pointing at empty space between them.
+        ax_tpot.plot([x_anchor, max(seq_lens) - 120], [y_base, y_base],
+                     color=COLORS["int8_baseline"], lw=0.9, ls="--", alpha=0.9)
+        ax_tpot.plot([x_anchor, max(seq_lens) - 120], [y_ours, y_ours],
+                     color=COLORS["int8_ours"], lw=0.9, ls="--", alpha=0.9)
+        ax_tpot.annotate(
+            "",
+            xy=(x_anchor, y_base),
+            xytext=(x_anchor, y_ours),
+            arrowprops=dict(arrowstyle="<->", color=COLORS["int8_ours"], lw=0.95),
+        )
         ax_tpot.text(
-            0.02, 0.08, f"32K 相对 INT8-Baseline 加速 +{gain:.1f}%",
-            transform=ax_tpot.transAxes, fontsize=7.1, color=COLORS["int8_ours"],
-            ha="left", va="bottom"
+            x_anchor + 260,
+            y_mid + 0.55,
+            f"32K 相对 Baseline\n加速 +{gain:.1f}%",
+            fontsize=7.1,
+            color=COLORS["int8_ours"],
+            ha="left",
+            va="center",
+            bbox=dict(boxstyle="round,pad=0.25", fc="white", ec=COLORS["int8_ours"], lw=0.8, alpha=0.95),
         )
 
     for mode in modes:
@@ -554,15 +624,46 @@ def fig_main_efficiency_dashboard(tables_dir, out_dir):
     int8_mem = memory[(memory["kv_mode"] == "int8_ours") & (memory["seq_len"] == max(seq_lens))]
     if not fp16_mem.empty and not int8_mem.empty:
         gain = (fp16_mem["kv_cache_mem_mb_mean"].iloc[0] - int8_mem["kv_cache_mem_mb_mean"].iloc[0]) / fp16_mem["kv_cache_mem_mb_mean"].iloc[0] * 100
+        y_fp16 = fp16_mem["kv_cache_mem_mb_mean"].iloc[0]
+        y_int8 = int8_mem["kv_cache_mem_mb_mean"].iloc[0]
+        y_mid = (y_fp16 + y_int8) / 2
+        x_anchor_mem = max(seq_lens) - 2600
+        # Mirror the left panel: explicitly show the 32K FP16-vs-INT8 gap with
+        # a bracket instead of a floating arrow that can be misread.
+        ax_kv.plot([x_anchor_mem, max(seq_lens) - 120], [y_fp16, y_fp16],
+                   color=COLORS["fp16"], lw=0.9, ls="--", alpha=0.9)
+        ax_kv.plot([x_anchor_mem, max(seq_lens) - 120], [y_int8, y_int8],
+                   color=COLORS["int8_ours"], lw=0.9, ls="--", alpha=0.9)
+        ax_kv.annotate(
+            "",
+            xy=(x_anchor_mem, y_fp16),
+            xytext=(x_anchor_mem, y_int8),
+            arrowprops=dict(arrowstyle="<->", color=COLORS["int8_ours"], lw=0.95),
+        )
         ax_kv.text(
-            0.02, 0.92, f"32K 相对 FP16 节省 {gain:.1f}% 显存",
-            transform=ax_kv.transAxes, fontsize=7.1, color=COLORS["int8_ours"],
-            ha="left", va="top"
+            x_anchor_mem + 260,
+            y_mid + 95,
+            f"32K 相对 FP16\n节省 {gain:.1f}% 显存",
+            fontsize=7.1,
+            color=COLORS["int8_ours"],
+            ha="left",
+            va="center",
+            bbox=dict(boxstyle="round,pad=0.25", fc="white", ec=COLORS["int8_ours"], lw=0.8, alpha=0.95),
+        )
+        ax_kv.text(
+            x_anchor_mem + 260,
+            y_int8 - 58,
+            "INT8-Baseline 与\nINT8-Canonical 完全重合",
+            fontsize=7.0,
+            color=COLORS["int8_baseline"],
+            ha="left",
+            va="center",
+            bbox=dict(boxstyle="round,pad=0.22", fc="white", ec=COLORS["int8_baseline"], lw=0.75, alpha=0.95),
         )
 
     handles, labels = _shared_mode_handles(modes)
     fig.tight_layout(rect=(0, 0.15, 1, 1))
-    add_shared_legend(fig, handles, labels, ncol=min(5, len(labels)), y=0.01)
+    add_shared_legend(fig, handles, labels, ncol=min(4, len(labels)), y=0.01)
     save_fig(fig, out_dir / "main_efficiency_dashboard.pdf")
 
 
