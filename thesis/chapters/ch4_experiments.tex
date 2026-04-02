@@ -1199,10 +1199,15 @@ INT4-RoleAlign 与对照方法在 PPL、Needle 和 LongBench 上的对比，
   \centering
   \includegraphics[width=\textwidth]{figures/rolealign_summary.pdf}
   \caption{INT4-RoleAlign 与 KIVI-style INT4 的跨模型性能对比。
-  顶部 summary ribbon 突出本文主结果：三模型 Needle 100\%、PPL 退化 2.4\%--13.7\%（随模型规模递减）、KV Cache 压缩 73\%。
-  面板（a）展示相对 FP16 的 PPL 退化，
-  面板（b）展示 LongBench-style 合成质量。
-  该图作为全文的 hero figure，强调 INT4-RoleAlign 在 hardest low-bit setting 下将诊断结论转化为稳定、可复用的主结果。}
+  顶部 summary ribbon 同时汇总其收益与代价：Needle 为 99.4\%--100\%，
+  MK-NIAH 为 92.7\%--99.5\%，KV Cache 显存节省约 73\%，
+  但 PPL 退化为 2.4\%--13.7\%，TPOT 仍有约 2.1--2.6$\times$ 的额外开销。
+  面板（a）以矩阵形式汇总 32K 上下文下的 Needle 与 MK-NIAH 检索结果，
+  大字给出 INT4-RoleAlign 的实际得分，小字给出相对 FP16 的下降；
+  面板（b）展示相对 FP16 的 PPL 退化，
+  面板（c）展示 4K 串行独占 GPU 条件下的 TPOT 与 KV Cache 显存对比。
+  该图作为全文的 hero figure，强调 INT4-RoleAlign 在检索与显存压缩上有效，
+  但语言建模与运行时仍存在明确边界。}
   \label{fig:rolealign-summary}
 \end{figure}
 \clearpage
