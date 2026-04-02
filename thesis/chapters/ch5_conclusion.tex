@@ -140,7 +140,7 @@ INT8 行为对齐量化在质量无损的前提下将可服务 batch 倍增至 2
 仅做量化而不融合计算路径反而可能增加延迟。
 INT4-RoleAlign 以 73\% 压缩率在 Needle、RULER、LongBench 评测上保持检索质量，
 同时 KV Cache 显存降低约 3.7$\times$。
-解码延迟因 \texttt{torch\_ref} 路径（无 Triton 融合核函数）比 FP16 增加约 2--2.5$\times$，
+解码延迟因 \code{torch\_ref} 路径（无 Triton 融合核函数）比 FP16 增加约 2--2.5$\times$，
 当前定位为``检索保持 + 显存优化方案''。
 校准为一次性离线过程（1.5B 约 15 分钟，7B/8B 约 30--50 分钟），
 产出 $<$10~KB 的 JSON 参数文件，部署成本极低。

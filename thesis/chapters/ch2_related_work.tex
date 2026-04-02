@@ -226,63 +226,63 @@ KL 散度来确定量化参数：
 量化理论的全面综述可参见 Nagel 等人~\cite{nagel2021whitepaper} 的白皮书，
 Hubara 等人~\cite{hubara2018quantized} 则系统讨论了低精度训练与推理的基础框架。
 
-\textbf{KIVI} \cite{liu2024kivi} 提出了一种无需微调的非对称 KV Cache 量化方法。
+KIVI \cite{liu2024kivi} 提出了一种无需微调的非对称 KV Cache 量化方法。
 其核心观察是：Key 缓存中不同通道的数值分布差异较大，而 Value 缓存中不同词元位置的
 分布差异较大。基于此，KIVI 对 Key 采用逐通道（per-channel）非对称量化，对 Value 采用
 逐词元（per-token）非对称量化，在 2-bit 量化下仍能维持接近原始模型的生成质量。KIVI
 的优势在于无需校准数据和额外训练，可直接应用于预训练模型，但其在极低比特下的精度损失
 仍有优化空间。
 
-\textbf{KVQuant} \cite{hooper2024kvquant} 将 KV Cache 量化推向了极低比特（sub-4-bit）
+KVQuant \cite{hooper2024kvquant} 将 KV Cache 量化推向了极低比特（sub-4-bit）
 领域。该方法采用非均匀量化（Non-Uniform Quantization），通过聚类方法学习最优的量化
 码本，使量化级别能够自适应地分配到数值密集区域。此外，KVQuant 引入了 per-channel
 Key 量化和 dense-and-sparse 策略处理异常值，支持百万级词元上下文的高效推理。
 
-\textbf{ZipCache} \cite{he2024zipcache} 从注意力权重的分布特征出发，提出了基于显著性
+ZipCache \cite{he2024zipcache} 从注意力权重的分布特征出发，提出了基于显著性
 （saliency）的混合精度 KV Cache 量化方案。该方法识别出对注意力输出贡献较大的
 "显著词元"（salient tokens），为其分配更高的量化精度，而对贡献较小的词元使用更激进
 的压缩。这种差异化处理策略在保持关键信息的同时实现了更高的整体压缩率。
 
-\textbf{GEAR}~\cite{zhang2024gear} 提出了一种基于残差低秩近似的 KV Cache 压缩方法，
+GEAR~\cite{zhang2024gear} 提出了一种基于残差低秩近似的 KV Cache 压缩方法，
 将量化残差通过低秩矩阵分解进行补偿，在近无损的条件下实现了高压缩率。
-\textbf{QServe}~\cite{lin2024qserve} 从系统协同设计的角度出发，
+QServe~\cite{lin2024qserve} 从系统协同设计的角度出发，
 提出了 W4A8KV4 的联合量化方案，将权重、激活和 KV Cache 的量化统一考虑，
 通过渐进式量化和 SmoothAttention 技术实现了端到端的推理加速。
-\textbf{CacheGen}~\cite{liu2024cachegen} 将 KV Cache 的压缩问题
+CacheGen~\cite{liu2024cachegen} 将 KV Cache 的压缩问题
 与流式传输结合，提出了面向分布式 LLM 推理的 KV Cache 编解码方案。
-\textbf{Atom}~\cite{zhao2024atom} 则针对低比特量化中的异常值问题，
+Atom~\cite{zhao2024atom} 则针对低比特量化中的异常值问题，
 通过混合精度量化和动态量化粒度调整，在 4-bit 和 2-bit 精度下
 实现了较好的精度保持。
 
 近期涌现了更多 KV Cache 量化与压缩方案。
-\textbf{ThinK}~\cite{luna2024think} 从查询驱动的角度分析 Key 缓存冗余，
+ThinK~\cite{luna2024think} 从查询驱动的角度分析 Key 缓存冗余，
 通过剪枝非关键 Key 在不显著降低质量的前提下减少缓存体积。
-\textbf{WKVQuant}~\cite{yue2024wkvquant} 将权重量化与 KV Cache 量化联合优化，
+WKVQuant~\cite{yue2024wkvquant} 将权重量化与 KV Cache 量化联合优化，
 在统一框架下同时搜索两者的量化参数。
-\textbf{IntactKV}~\cite{liu2024intactkv} 观察到少量``枢纽 token''对量化格外敏感，
+IntactKV~\cite{liu2024intactkv} 观察到少量``枢纽 token''对量化格外敏感，
 通过保持这些关键 token 的高精度来改善整体量化质量。
-\textbf{QJL}~\cite{zandieh2024qjl} 基于 Johnson-Lindenstrauss 随机投影
+QJL~\cite{zandieh2024qjl} 基于 Johnson-Lindenstrauss 随机投影
 实现 1-bit KV Cache 量化，将压缩比推至极限。
-\textbf{SKVQ}~\cite{duanmu2024skvq} 引入滑动窗口机制，
+SKVQ~\cite{duanmu2024skvq} 引入滑动窗口机制，
 对窗口内外的 KV Cache 采用差异化量化精度。
 
 除了量化压缩之外，KV Cache 驱逐（eviction）是另一类重要的压缩策略。
-\textbf{H$_2$O}~\cite{zhang2024h2o} 提出了基于注意力权重累积分数
+H$_2$O~\cite{zhang2024h2o} 提出了基于注意力权重累积分数
 的"重要 token"识别机制（Heavy-Hitter Oracle），仅保留最重要的 KV 对，
 在固定缓存预算下维持较好的生成质量。
-\textbf{StreamingLLM}~\cite{xiao2024efficient} 发现注意力模式中
+StreamingLLM~\cite{xiao2024efficient} 发现注意力模式中
 存在"注意力汇聚"（attention sinks）现象——初始 token 无论内容
 如何都会吸引大量注意力权重，
 基于此提出保留初始 token 和滑动窗口的高效无限长度推理方案。
 这些驱逐策略与量化技术正交，可结合使用以进一步降低显存开销。
-\textbf{SnapKV}~\cite{li2024snapkv} 利用注意力模式的可预测性，
+SnapKV~\cite{li2024snapkv} 利用注意力模式的可预测性，
 在生成前即识别重要的 KV 对，实现高效缓存压缩。
-\textbf{PyramidKV}~\cite{cai2024pyramidkv} 基于注意力信息在层间
+PyramidKV~\cite{cai2024pyramidkv} 基于注意力信息在层间
 呈金字塔形衰减的观察，为不同层分配差异化的缓存预算。
-\textbf{DuoAttention}~\cite{xiao2024duoattention} 将注意力头划分为
+DuoAttention~\cite{xiao2024duoattention} 将注意力头划分为
 检索头和流式头，仅对检索头保留完整 KV Cache，大幅降低长上下文显存。
 
-\textbf{SmoothQuant}~\cite{xiao2023smoothquant}
+SmoothQuant~\cite{xiao2023smoothquant}
 最初面向权重--激活联合量化而非专门针对 KV Cache，
 但其核心思想对 KV Cache 量化有重要启示。
 SmoothQuant 观察到激活值中存在显著的通道级异常值，
@@ -290,22 +290,21 @@ SmoothQuant 观察到激活值中存在显著的通道级异常值，
 使得激活值和权重均可使用 INT8 量化。
 这一思路提示了在量化前对数据分布进行预处理的重要性。
 
-在更广泛的模型量化领域，\textbf{GPTQ} \cite{frantar2023gptq} 基于近似最优脑损伤
+在更广泛的模型量化领域，GPTQ \cite{frantar2023gptq} 基于近似最优脑损伤
 （Approximate Optimal Brain Surgeon）框架，利用 Hessian 矩阵信息逐列量化模型权重并
-进行误差补偿，在 3--4 bit 权重量化下取得了优异的精度保持效果。\textbf{AWQ}
-\cite{lin2024awq} 发现不同权重通道对模型精度的重要性差异显著，通过搜索逐通道缩放因子
-保护重要权重，实现了激活感知的权重量化。\textbf{LLM.int8()} \cite{dettmers2022gpt3int8}
+进行误差补偿，在 3--4 bit 权重量化下取得了优异的精度保持效果。AWQ \cite{lin2024awq} 发现不同权重通道对模型精度的重要性差异显著，通过搜索逐通道缩放因子
+保护重要权重，实现了激活感知的权重量化。LLM.int8() \cite{dettmers2022gpt3int8}
 提出了混合精度分解方法，将含有异常值特征的维度保留为 FP16 精度，其余维度使用 INT8
 矩阵乘法，有效解决了大规模模型中的量化精度退化问题。
-\textbf{OmniQuant}~\cite{shao2024omniquant} 将可学习的等价变换与权重裁剪相结合，
+OmniQuant~\cite{shao2024omniquant} 将可学习的等价变换与权重裁剪相结合，
 在全方位校准框架中同时优化权重和激活的量化参数，
 在 W4A16 和 W4A4 配置下展现了出色的精度保持能力。
-\textbf{QLoRA}~\cite{dettmers2024qlora} 则创新性地将 4-bit NF4 量化
+QLoRA~\cite{dettmers2024qlora} 则创新性地将 4-bit NF4 量化
 与低秩适配微调结合，使得在单张消费级 GPU 上即可微调 65B 参数模型。
 在更极端的低比特方向上，
-\textbf{QuIP\#}~\cite{tseng2024quipsharp} 利用 Hadamard 不相干性和格码本
+QuIP\#~\cite{tseng2024quipsharp} 利用 Hadamard 不相干性和格码本
 实现了 2-bit 权重量化的突破性精度保持，
-\textbf{AQLM}~\cite{egiazarian2024aqlm} 通过加法量化码本进一步提升了
+AQLM~\cite{egiazarian2024aqlm} 通过加法量化码本进一步提升了
 极低比特权重压缩的质量。
 这些权重量化进展虽不直接作用于 KV Cache，
 但其量化理论（非均匀码本、误差补偿）对 KV Cache 量化的极低比特方向有参考价值。

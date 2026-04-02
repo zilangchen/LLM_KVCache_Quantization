@@ -32,7 +32,7 @@
   \end{tabular}
 \end{table}
 
-所有实验均采用确定性设置：固定随机种子（主实验 1234--1238，吞吐实验 1234--1241），贪心解码策略（\texttt{temperature=0.0}, \texttt{top\_p=1.0}, \texttt{top\_k=0}），以确保结果的可复现性。
+所有实验均采用确定性设置：固定随机种子（主实验 1234--1238，吞吐实验 1234--1241），贪心解码策略（\code{temperature=0.0}, \code{top\_p=1.0}, \code{top\_k=0}），以确保结果的可复现性。
 
 % ============================================================
 \section{校准产物格式}
@@ -76,9 +76,9 @@
 
 其中：
 \begin{itemize}[nosep]
-  \item \texttt{k\_scale} / \texttt{v\_scale}：逐层对称量化的缩放因子，始终以 float32 存储。
-  \item \texttt{inv\_tau}：逐头温度校正因子 $\tau^{-1}$，用于在注意力 softmax 前调节 logits 的分布锐度。
-  \item \texttt{k\_zero\_point} / \texttt{v\_zero\_point}：仅在 KIVI 风格非对称量化模式下出现。
+  \item \code{k\_scale} / \code{v\_scale}：逐层对称量化的缩放因子，始终以 float32 存储。
+  \item \code{inv\_tau}：逐头温度校正因子 $\tau^{-1}$，用于在注意力 softmax 前调节 logits 的分布锐度。
+  \item \code{k\_zero\_point} / \code{v\_zero\_point}：仅在 KIVI 风格非对称量化模式下出现。
 \end{itemize}
 
 % ============================================================
@@ -218,23 +218,18 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
 图~\ref{fig:app-ruler-vs-context} 展示了 RULER 通过率随上下文长度的变化趋势，
 图~\ref{fig:app-longbench-vs-context} 展示了 LongBench-style 合成综合评分的对应趋势。
 
-\begin{figure}[p]
+\begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.95\textwidth]{figures/ruler_pass_rate_vs_context.pdf}
-  \caption{各量化模式的 RULER 通过率随上下文长度的变化（Qwen2.5-1.5B-Instruct）。
-  该图作为补充质量证据保留在附录中，展示 S-NIAH、MK-NIAH、VT 和 CWE 四个子任务聚合后的整体趋势。}
-  \label{fig:app-ruler-vs-context}
+  \subcaptionbox{RULER 通过率\label{fig:app-ruler-vs-context}}
+    [0.48\textwidth]{\includegraphics[width=0.48\textwidth]{figures/ruler_pass_rate_vs_context.pdf}}
+  \hfill
+  \subcaptionbox{LongBench 综合评分\label{fig:app-longbench-vs-context}}
+    [0.48\textwidth]{\includegraphics[width=0.48\textwidth]{figures/longbench_score_vs_context.pdf}}
+  \caption{补充质量指标随上下文长度变化趋势（Qwen2.5-1.5B-Instruct）。
+  （a）RULER 通过率，含 S-NIAH、MK-NIAH、VT 和 CWE 四子任务聚合；
+  （b）LongBench-style 综合评分，为 7 类合成任务宏平均。}
+  \label{fig:app-quality-vs-context}
 \end{figure}
-\clearpage
-
-\begin{figure}[p]
-  \centering
-  \includegraphics[width=0.95\textwidth]{figures/longbench_score_vs_context.pdf}
-  \caption{各量化模式的 LongBench-style 合成综合评分随上下文长度的变化（Qwen2.5-1.5B-Instruct）。
-  综合评分为 7 类合成长上下文子任务对应指标的宏平均。}
-  \label{fig:app-longbench-vs-context}
-\end{figure}
-\clearpage
 
 % ============================================================
 \section{Needle-in-a-Haystack 深度-位置热力图}
@@ -249,7 +244,7 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
 热力图横轴为 needle 在 haystack 中的相对位置（深度百分比），
 纵轴对应量化模式，颜色表示通过率。
 
-\begin{figure}[p]
+\begin{figure}[htbp]
   \centering
   \includegraphics[width=\textwidth]{figures/needle_depth_grid.pdf}
   \caption{Needle-in-a-Haystack 深度-位置热力图总览。
@@ -259,16 +254,14 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
   说明量化噪声对远距离注意力检索的影响更为严重。}
   \label{fig:app-needle-depth-grid}
 \end{figure}
-\clearpage
 
-\begin{figure}[p]
+\begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.95\textwidth]{figures/needle_exact_match_vs_context.pdf}
+  \includegraphics[width=0.85\textwidth]{figures/needle_exact_match_vs_context.pdf}
   \caption{Needle-in-a-Haystack 精确匹配率随上下文长度的变化。
   精确匹配（exact match）采用比通过率更严格的评判标准。}
   \label{fig:app-needle-exact}
 \end{figure}
-\clearpage
 
 % ============================================================
 \section{推理效率与扩展性补充图表}
@@ -282,9 +275,9 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
 图~\ref{fig:app-memory-dashboard} 则合并展示 KV Cache 显存和总峰值显存
 随 batch size 的变化，以减少重复图例和页面跳转。
 
-\begin{figure}[p]
+\begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.95\textwidth]{figures/latency_tpot_gain_vs_fp16.pdf}
+  \includegraphics[width=0.85\textwidth]{figures/latency_tpot_gain_vs_fp16.pdf}
   \caption{各量化模式相对 FP16 基线的 TPOT 变化（Qwen2.5-1.5B-Instruct，batch=1）。
   正值表示加速（TPOT 降低），负值表示减速。
   在 batch=1 的单序列解码场景下，量化操作的计算开销尚未被批处理摊薄，
@@ -293,27 +286,24 @@ INT8-baseline 在质量指标和推理延迟上的统计检验结果。
   体现了融合核函数对反量化开销的缓解作用。}
   \label{fig:app-tpot-gain}
 \end{figure}
-\clearpage
 
-\begin{figure}[p]
+\begin{figure}[htbp]
   \centering
-  \includegraphics[width=\textwidth]{figures/appendix_throughput_dashboard.pdf}
+  \includegraphics[width=0.9\textwidth]{figures/appendix_throughput_dashboard.pdf}
   \caption{吞吐扩展性三联图（Qwen2.5-1.5B-Instruct）。
   面板（a）展示总吞吐量，面板（b）展示单序列吞吐量，
   面板（c）展示 prefill 吞吐量。统一图例和坐标轴便于比较量化模式在 batch 扩展中的并发收益与单序列代价。}
   \label{fig:app-throughput-dashboard}
 \end{figure}
-\clearpage
 
-\begin{figure}[p]
+\begin{figure}[htbp]
   \centering
-  \includegraphics[width=\textwidth]{figures/appendix_memory_dashboard.pdf}
+  \includegraphics[width=0.9\textwidth]{figures/appendix_memory_dashboard.pdf}
   \caption{显存扩展性双联图（Qwen2.5-1.5B-Instruct）。
   面板（a）展示 KV Cache 显存随 batch size 的线性增长，
   面板（b）展示总峰值显存；两者共同说明量化节省会随着并发度提升而持续转化为更高的可容纳 batch。}
   \label{fig:app-memory-dashboard}
 \end{figure}
-\clearpage
 
 % ============================================================
 \section{RULER 子任务分解}
@@ -449,7 +439,7 @@ INT4 量化模式在所有子任务上均完全失败（通过率 0\%），
 本文实验使用的校准产物信息如下：
 
 \begin{itemize}[leftmargin=2em, itemsep=2pt]
-  \item \textbf{校准文件}：\texttt{kv\_calib\_kl\_\allowbreak selected\_v3\_quick.json}
+  \item \textbf{校准文件}：\code{kv\_calib\_kl\_selected\_v3\_quick.json}
   \item \textbf{校准方法}：KL 散度行为对齐校准（kl\_selected）
   \item \textbf{校准模型}：Qwen2.5-1.5B-Instruct
   \item \textbf{校准样本}：128 条 WikiText-103 文本，序列长度 2048 tokens
