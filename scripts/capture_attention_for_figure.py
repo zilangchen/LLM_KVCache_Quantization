@@ -42,14 +42,18 @@ def _apply_rope_to_q(q, cos, sin):
     return (q * cos) + (_rotate_half(q) * sin)
 
 
-def _get_rope_for_position(attn, dummy_q, position_ids):
-    """Get RoPE cos/sin for a given position (compatible with multiple model families)."""
+def _get_rope_for_position(attn, dummy_q, position_ids, model_backbone=None):
+    """Get RoPE cos/sin for a given position.
+
+    CAL-034: transformers 4.48+ moved rotary_emb to model backbone level.
+    """
+    rotary = getattr(attn, "rotary_emb", None)
+    if rotary is None and model_backbone is not None:
+        rotary = getattr(model_backbone, "rotary_emb", None)
+    if rotary is None:
+        return None, None
     try:
-        rotary = attn.rotary_emb
-        if hasattr(rotary, "inv_freq"):
-            cos, sin = rotary(dummy_q, position_ids)
-        else:
-            cos, sin = rotary(dummy_q, position_ids)
+        cos, sin = rotary(dummy_q, position_ids)
         return cos, sin
     except Exception:
         return None, None
@@ -177,7 +181,7 @@ def main():
 
                 seq_len_val = hidden_states[l_idx].shape[1]
                 pos_ids = torch.tensor([[seq_len_val - 1]], device=q.device, dtype=torch.long)
-                rope_cos, rope_sin = _get_rope_for_position(attn, q, pos_ids)
+                rope_cos, rope_sin = _get_rope_for_position(attn, q, pos_ids, model_backbone=model.model)
                 if rope_cos is not None:
                     q = _apply_rope_to_q(q, rope_cos, rope_sin)
 

@@ -103,12 +103,18 @@ def _apply_rope_to_q(
     return torch.cat([q_embed, q_pass], dim=-1)
 
 
-def _get_rope_for_position(attn_module, dummy_states, position_ids):
+def _get_rope_for_position(attn_module, dummy_states, position_ids, model_backbone=None):
     """Get RoPE cos/sin for given position_ids, compatible with Qwen2/LLaMA APIs.
 
     Returns (cos, sin) or (None, None) if rotary embedding is unavailable.
+
+    CAL-034: transformers 4.48+ moved rotary_emb from self_attn to
+    model.model (backbone level). We try attn-level first, then fall
+    back to the backbone-level rotary_emb passed via *model_backbone*.
     """
     rotary = getattr(attn_module, "rotary_emb", None)
+    if rotary is None and model_backbone is not None:
+        rotary = getattr(model_backbone, "rotary_emb", None)
     if rotary is None:
         return None, None
     _EXPECTED = (AttributeError, KeyError, TypeError)
@@ -1218,7 +1224,7 @@ def main():
                 pos_ids = torch.tensor(
                     [[seq_len_val - 1]], device=q.device, dtype=torch.long
                 )
-                rope_cos, rope_sin = _get_rope_for_position(attn, q, pos_ids)
+                rope_cos, rope_sin = _get_rope_for_position(attn, q, pos_ids, model_backbone=model.model)
                 if rope_cos is not None and rope_sin is not None:
                     q = _apply_rope_to_q(q, rope_cos, rope_sin)
                 elif layer_idx == 0:
