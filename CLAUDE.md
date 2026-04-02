@@ -43,6 +43,14 @@ Memory 文件位于**项目级**目录: `~/.claude/projects/-Users-chenzilang-De
 | 发现新的"反复踩坑"模式 | MEMORY.md 已知陷阱 + 对应专题文件 |
 | Agent 协作出现新的失败/成功模式 | agent-coordination.md 更新 |
 | 会话结束前（如有重要发现）| 相关专题文件追加 |
+| **新增 kv_mode 或 cache 实现文件** | **MEMORY.md kv_modes 列表 + 文件导航** |
+| **论文章节完成重大改写/重构** | **MEMORY.md 当前阶段 + experiment-state.md** |
+| **源文件重命名/删除** | **MEMORY.md 文件导航** |
+| **新增实验结果目录** | **experiment-state.md 结果目录表** |
+
+> **自动检查**：项目级 SessionStart hook (`scripts/check_memory_freshness.sh`) 会在每次会话启动时
+> 检测 MEMORY.md 是否引用了不存在的文件、是否遗漏了代码中路由的 kv_mode、以及修改时间是否超过 7 天。
+> 检查失败时输出警告注入会话上下文。
 
 #### 约束
 
