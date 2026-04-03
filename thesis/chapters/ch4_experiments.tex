@@ -1252,6 +1252,31 @@ KIVI 的运行时统计量已能提供较好的 scale 估计，
 BA percentile 校准的边际改善收窄。
 该结果进一步佐证了 $H_{kv}$ 是低比特量化容忍度的关键架构因素。
 
+\paragraph{INT4-RoleAlign 与 KIVI-style 的关系}
+表~\ref{tab:rolealign-results} 显示，
+INT4-RoleAlign 在 PPL 上并不优于 KIVI-style
+（1.5B: 13.7\% vs 12.0\%，7B: 6.1\% vs 5.5\%，8B: 2.4\% 持平），
+两者在 Needle 和 RULER 检索指标上几乎不可区分。
+这一结果需放在方法论框架中理解：
+INT4-RoleAlign 与 KIVI-style 共享相同的非对称量化格式
+（per-channel K + per-token V），
+唯一的差异在于 percentile 确定方式——
+KIVI 在运行时基于 absmax/min 动态计算，
+RoleAlign 通过离线 KL/wMSE 搜索。
+在 cs$\geq$128 的标准评测下，
+两种策略产生的 scale 差异不足以在 4-bit 的 15 个离散级别下
+产生可区分的量化映射~\cite{xu2025kvtuner}。
+
+INT4-RoleAlign 的价值不在于点性能超越 KIVI，
+而在于它完成了从原则到设计的诊断闭环：
+（1）attention-KL 诊断透镜揭示 Key 主导退化和 GQA 架构依赖，
+（2）诊断结论直接导出非对称量化轴的设计方向，
+（3）BA percentile 校准提供了一种可与 KIVI 替换的离线确定性方案。
+KVTuner~\cite{xu2025kvtuner} 的独立评测显示
+Qwen 系列上 vanilla KIVI 在 2-bit 下 PPL 直接崩溃（$>$200），
+而 4-bit 行为对齐方案保持了 $<$14\% 的退化，
+说明离线校准在更极端压缩率下可能展现出差异化优势。
+
 \subsection{$\tau^{-1}$ 在非对称量化上的负面结果}
 \label{subsec:exp-rolealign-invtau}
 
@@ -1454,12 +1479,25 @@ Triton 融合核函数是效率收益的关键。
 受控 K/V 消融一致指向 Key 量化主导退化，Value 对 INT4 相当鲁棒。
 $H_{kv}$ 越大，量化噪声稀释越强——
 GQA 头数应作为比模型参数量更重要的量化策略考量因素。
+Coupled Quantization~\cite{liu2024coupled} 从互信息角度证实了
+KV 通道间的强关联结构，
+本文的 K/V 消融从另一方向——独立消融 + 架构依赖性分析——
+为 Key 主导退化提供了最清晰的 controlled ablation 证据
+（对称 INT4 Needle 0\% vs 非对称 100\%）。
 
 \paragraph{发现三：INT4-RoleAlign 恢复低比特检索}
 Needle 全部恢复至 100\%（RULER 检索提供支持性证据，
 s\_niah $\geq$99\%，4K--32K）。
 PPL 退化因模型规模而异（8B: 2.4\%，7B: 6.1\%，1.5B: 13.7\%），
 \emph{局部检索能力对 INT4 量化噪声的鲁棒性远高于全局语言建模质量}。
+该解耦现象与近期量化研究的间接观察一致——
+低比特模型在下游任务上的表现往往优于 PPL 所暗示的退化幅度~\cite{zhao2025lowbit}，
+而 PPL 退化的规模依赖性符合量化定标律
+$\Delta\mathrm{Loss} \propto N^{-\alpha}$（$\alpha \approx 0.23$）。
+本文的贡献在于首次在 KV Cache 量化场景下
+对检索-语言建模解耦进行了定量分析，
+并通过受控 K/V 消融（表~\ref{tab:kv-ablation-ruler}、
+表~\ref{tab:kv-ablation-ppl}）将其归因到 Key 通道异质性。
 KV Cache 显存节省 73\%，但 TPOT 增加约 2--2.5$\times$，
 构成检索恢复与系统效率之间的明确能力边界
 （第~\ref{subsec:exp-int4-boundary}~节）。
