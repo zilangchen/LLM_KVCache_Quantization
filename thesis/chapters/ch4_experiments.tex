@@ -1339,7 +1339,7 @@ KV Cache 显存节省约 73\%。
 表~\ref{tab:int4-tpot-cross-model} 给出了三个模型在独占 GPU、seq\_len=4096、batch=1 条件下
 的 TPOT 对比。
 INT4-RoleAlign 的 torch\_ref 解码路径 TPOT 为 FP16 的 2.4--2.6$\times$
-（1.5B: 58.09~ms vs 24.24~ms，7B: 62.06~ms vs 24.46~ms，8B: 70.32~ms vs 27.43~ms），
+（1.5B: 58.97~ms vs 24.57~ms，7B: 61.80~ms vs 24.47~ms，8B: 70.56~ms vs 27.41~ms），
 这一开销并非 RoleAlign 独有——KIVI-style INT4 在相同非对称量化格式和 torch\_ref
 路径下 TPOT 同样增加 2.1--2.3$\times$，
 说明延迟主因是逐步反量化的计算开销而非校准策略差异。
@@ -1357,10 +1357,10 @@ TPOT 仅为 FP16 的 1.8--1.9$\times$。
     \cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
     & TPOT (ms) & vs FP16 & TPOT (ms) & vs FP16 & TPOT (ms) & vs FP16 \\
     \midrule
-    FP16         & 24.24 & ---     & 24.46 & ---     & 27.43 & --- \\
-    INT8-ours    & 44.38 & +83\%  & 45.72 & +87\%  & 51.20 & +87\% \\
-    KIVI INT4    & 51.75 & +114\% & 54.54 & +123\% & 61.84 & +125\% \\
-    INT4-RA      & 58.09 & +140\% & 62.06 & +154\% & 70.32 & +156\% \\
+    FP16         & 24.57 & ---     & 24.47 & ---     & 27.41 & --- \\
+    INT8-ours    & 44.84 & +83\%  & 45.62 & +86\%  & 51.23 & +87\% \\
+    KIVI INT4    & 51.75 & +111\% & 53.79 & +120\% & 61.93 & +126\% \\
+    INT4-RA      & 58.97 & +140\% & 61.80 & +153\% & 70.56 & +157\% \\
     \bottomrule
   \end{tabular}
 \end{table}
