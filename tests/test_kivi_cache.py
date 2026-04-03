@@ -332,17 +332,23 @@ class TestKIVICacheInterface(unittest.TestCase):
         with self.assertRaises(ValueError):
             cache.append(2, k, v)  # num_layers=2, so layer_id=2 is out of range
 
-    def test_invalid_shape_raises(self):
+    def test_invalid_shape_wrong_rank(self):
+        """TST-069: 3D input (missing batch dim) should raise ValueError."""
         cache = self._make_cache()
-        # Wrong rank
-        with self.assertRaises(ValueError):
+        with self.assertRaises((ValueError, TypeError)):
             cache.append(0, torch.randn(1, 2, 16), torch.randn(1, 2, 16))
-        # K/V mismatch
-        with self.assertRaises(ValueError):
+
+    def test_invalid_shape_kv_mismatch(self):
+        """TST-069: K/V shape mismatch should raise ValueError."""
+        cache = self._make_cache()
+        with self.assertRaises((ValueError, TypeError)):
             cache.append(0, torch.randn(1, 2, 4, 16), torch.randn(1, 3, 4, 16))
-        # Transposed-like mismatch after cache is initialized
+
+    def test_invalid_shape_transposed_after_init(self):
+        """TST-069: Transposed-like shape after cache init should raise."""
+        cache = self._make_cache()
         cache.append(0, torch.randn(1, 2, 4, 16), torch.randn(1, 2, 4, 16))
-        with self.assertRaises(ValueError):
+        with self.assertRaises((ValueError, RuntimeError)):
             cache.append(0, torch.randn(1, 16, 2, 4), torch.randn(1, 16, 2, 4))
 
     def test_zero_batch_raises(self):

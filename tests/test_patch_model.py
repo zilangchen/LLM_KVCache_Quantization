@@ -1330,7 +1330,10 @@ class TestApplyInt8FusedPatchDuckTypedCacheEdgeCases(unittest.TestCase):
         return model, AttnClass
 
     def test_duck_cache_getitem_raises_falls_back(self):
-        """If duck-typed cache __getitem__ raises, cache_wrapper should be None (fallback)."""
+        """If duck-typed cache __getitem__ raises, cache_wrapper should be None (fallback).
+
+        TST-029: Added explicit self.assert* to verify the fallback path is taken.
+        """
         from unittest.mock import patch as mock_patch
 
         model, AttnClass = self._make_patched_model()
@@ -1345,9 +1348,15 @@ class TestApplyInt8FusedPatchDuckTypedCacheEdgeCases(unittest.TestCase):
             attn = model.model.layers[0].self_attn
             AttnClass.forward(attn, hidden, past_key_value=BadDuckCache())
             mock_fused.assert_not_called()
+            # TST-029: Explicit assertion that fused path was NOT invoked
+            self.assertEqual(mock_fused.call_count, 0,
+                             "Fused path should not be called when __getitem__ raises")
 
     def test_duck_cache_getitem_returns_non_wrapper(self):
-        """If duck-typed cache __getitem__ returns something other than INT8CacheWrapper, fallback."""
+        """If duck-typed cache __getitem__ returns something other than INT8CacheWrapper, fallback.
+
+        TST-029: Added explicit self.assert* to verify the fallback path is taken.
+        """
         from unittest.mock import patch as mock_patch
 
         model, AttnClass = self._make_patched_model()
@@ -1362,6 +1371,9 @@ class TestApplyInt8FusedPatchDuckTypedCacheEdgeCases(unittest.TestCase):
             attn = model.model.layers[0].self_attn
             AttnClass.forward(attn, hidden, past_key_value=NonWrapperDuckCache())
             mock_fused.assert_not_called()
+            # TST-029: Explicit assertion that fused path was NOT invoked
+            self.assertEqual(mock_fused.call_count, 0,
+                             "Fused path should not be called for non-INT8CacheWrapper")
 
 
 if __name__ == "__main__":
