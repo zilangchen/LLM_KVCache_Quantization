@@ -1,9 +1,5 @@
 ---
-name: review-sweep
-description: >
-  全项目代码审查扫描。单次执行，并行 spawn D1-D7 审查 Agent 按波次覆盖全部模块，
-  自动去重、修正 tracker 计数、写入 iteration.md 并 commit。
-  支持全量/增量/修复验证三种模式。默认 Sonnet（Opus 易触发速率限制）。
+description: 全项目代码审查扫描 — 并行 D1-D7 Agent 按波次覆盖全模块，自动去重+修正 tracker+commit。支持 full/incremental/verify 三模式。
 ---
 
 # Review Sweep — 全项目代码审查扫描
