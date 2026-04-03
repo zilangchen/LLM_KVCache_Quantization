@@ -191,33 +191,199 @@ ssh -p $SSH_PORT $SSH_USER@$SSH_HOST "tmux kill-session -t <completed_session>"
 └─ 修复后重新提交（复用原 tmux session 名称）
 ```
 
-### 5.4 结果验证（自动 spawn agent）
+### 5.4 主动结果检测
 
-收割结果后，自动 spawn agent 进行合理性检验：
+**不等任务完成**——每次轮询周期都主动拉取远端已产出的数据：
+
+```bash
+# 增量同步远端结果（包括运行中任务的部分输出）
+rsync -avz --progress --ignore-existing \
+  -e "ssh -p $SSH_PORT" \
+  $SSH_USER@$SSH_HOST:$REMOTE_DIR/results/ \
+  results/
+```
+
+检测新数据的判断：
+- 对比本地 `results/` 目录的文件列表与上次轮询的快照
+- 新增或修改的 CSV/JSON/log 文件即为"新数据"
+- 即使任务仍在运行，已输出的 seed/subtask 结果也可以提前验证
+
+**触发验证的条件**（满足任一即触发 §5.5 多 Agent 验证）：
+- 检测到新的 `*_results.csv` 或 `*_summary.json`
+- 某个 tmux session 状态变为 completed
+- 累积新增 ≥ 3 个 run 目录
+
+### 5.5 多 Agent 并行验证（自动 spawn）
+
+检测到新结果后，**并行 spawn 多个 agent**，从不同角度分析数据合理性：
 
 ```
-spawn Agent (subagent_type: general-purpose) 执行:
-1. 读取结果 CSV/JSON
-2. 与已有 baseline 对比（PPL 退化幅度、Needle 准确率等）
-3. 搜索相关论文数据对比（WebSearch）
-4. 判断结果是否在合理范围内
-5. 输出验证报告：通过/可疑/异常 + 理由
+                    检测到新结果数据
+                         │
+            ┌────────────┼────────────┐────────────┐
+            ▼            ▼            ▼            ▼
+      [Agent A]    [Agent B]    [Agent C]    [Agent D]
+       统计验证      文献对比      跨模型一致性    异常检测
+            │            │            │            │
+            └────────────┴────────────┴────────────┘
+                         │
+                    汇总验证报告
 ```
 
-验证维度:
-- PPL 退化: INT8 应 < 1%, INT4-RoleAlign < 15% (模型规模依赖)
-- Needle: 所有方法应 ≥ 95%, RoleAlign 应 100%
-- RULER: INT8 与 fp16 差距应 < 5 分
-- 吞吐: Triton 融合核应比 torch_ref 快 8-38%
+#### Agent A: 统计验证
 
-### 5.5 前台工作（GPU 全忙时）
+```
+spawn Agent (subagent_type: general-purpose, name: "verify-stats")
+prompt:
+  读取 results/<tag>/runs/ 中的新增结果 CSV，执行以下检查：
+  1. 各 kv_mode 的 PPL 退化幅度是否在预期范围内
+     - INT8-ours: < 1%
+     - INT4-RoleAlign (int4_ours_asym): < 15%（模型规模依赖：1.5B ~13.7%, 7B ~6.1%, 8B ~2.4%）
+  2. Needle-in-a-Haystack 准确率：RoleAlign 应 100%，其他 ≥ 95%
+  3. 同一配置多 seed 结果的方差是否合理（CV < 5% 为正常）
+  4. Bootstrap CI 区间是否覆盖预期值
+  输出：每项检查的 PASS/WARN/FAIL + 具体数值
+```
 
-按优先级选择:
-1. 验证刚收割的实验结果
-2. 推进 iteration.md Approved Plans 中的非 GPU 任务
-3. review_tracker.md 中的待修复 issue
-4. 论文写作/文档更新
-5. 代码审查和清理
+#### Agent B: 文献对比
+
+```
+spawn Agent (subagent_type: general-purpose, name: "verify-literature")
+prompt:
+  针对以下实验结果，搜索相关论文进行对比：
+  - 用 WebSearch 搜索 "KV cache quantization INT4 perplexity degradation"
+  - 搜索 "KIVI quantization results" 和 "KVQuant results"
+  - 搜索目标模型（Qwen2.5/LLaMA-3.1）的已知量化 benchmark
+  对比维度：
+  1. 我们的 INT4 PPL 退化 vs 论文中报告的同等位宽退化
+  2. 我们的 KV 压缩比 vs 论文声称的压缩比
+  3. 我们的 Needle 准确率 vs 论文中的长序列保真度
+  如果我们的结果明显好于或差于论文 → 标记为需要解释的异常
+  输出：论文对比表 + 我们数据的合理性评估
+```
+
+#### Agent C: 跨模型一致性
+
+```
+spawn Agent (subagent_type: general-purpose, name: "verify-consistency")
+prompt:
+  读取所有模型（1.5B, 7B, 8B）的结果，检查跨模型一致性：
+  1. PPL 退化的模型规模依赖性：大模型退化应更小（1.5B > 7B ≈ 8B）
+  2. Needle 准确率应跨模型一致（不应出现大模型反而更差）
+  3. RULER 各子任务的排序应跨模型一致
+  4. 吞吐加速比应与 head_dim/num_heads 相关
+  如果发现违反规模缩放规律的异常 → 重点标记
+  输出：跨模型一致性矩阵 + 异常点列表
+```
+
+#### Agent D: 异常检测
+
+```
+spawn Agent (subagent_type: general-purpose, name: "verify-anomaly")
+prompt:
+  扫描所有新增结果数据，寻找以下异常模式：
+  1. 离群值：某个 seed 的结果与同配置其他 seed 偏差 > 2σ
+  2. 全零/全满分：PPL=0 或 Needle=0% 或 100%（非 RoleAlign）可能是 bug
+  3. NaN/Inf：结果中出现非法数值
+  4. 异常快/慢：某个 run 的时间与同配置差异 > 50%
+  5. 文件不完整：CSV 行数不足、JSON 格式错误
+  6. task_failure_*.json：检查是否有新增失败记录
+  输出：异常清单（严重/警告/正常）+ 每条异常的可能原因
+```
+
+#### 汇总
+
+4 个 agent 全部返回后，Claude 汇总为统一报告：
+
+```markdown
+### 验证报告 — <timestamp>
+
+**总体评估**: ✅ 通过 / ⚠️ 有警告 / ❌ 有异常
+
+| 维度 | 结果 | 关键发现 |
+|------|------|---------|
+| 统计验证 | ✅/⚠️/❌ | ... |
+| 文献对比 | ✅/⚠️/❌ | ... |
+| 跨模型一致性 | ✅/⚠️/❌ | ... |
+| 异常检测 | ✅/⚠️/❌ | ... |
+
+**需要关注的问题**:
+1. ...
+2. ...
+
+**建议行动**:
+- ...
+```
+
+如果总体评估为 ❌：暂停提交同类新任务，优先排查问题。
+
+### 5.6 前台工作：深度思考 + 主动规划
+
+GPU 全忙的等待期**不是空闲期**——这是做深度思考和推进非 GPU 工作的黄金时间。
+
+#### Phase A: 全局状态审视（每次进入前台工作前必做）
+
+```
+Read 以下文件，构建当前项目的完整画面：
+1. iteration.md — Approved Plans + Timeline 最近 10 条
+2. review_tracker.md — open issues 概况
+3. objective.md — 当前 phase 目标和约束
+4. experiment_sop.md — 未完成的实验步骤
+5. 远端正在运行的任务列表（刚采集的）
+```
+
+然后进行一次**主动思考**，回答以下问题：
+
+```
+深度思考清单：
+┌─────────────────────────────────────────────────────┐
+│ 1. 目前什么在阻塞项目推进？                            │
+│    → 是等 GPU 结果？等人工决策？还是有前置任务没做？       │
+│                                                     │
+│ 2. 远端任务跑完后，下一步需要什么准备？                   │
+│    → 聚合脚本是否就绪？LaTeX 表格模板是否需要更新？       │
+│    → 结果目录结构是否需要调整？                         │
+│                                                     │
+│ 3. 有没有可以并行推进的非 GPU 工作？                    │
+│    → 论文中哪些章节可以先写框架、等数据填入？             │
+│    → review_tracker 中哪些 issue 与当前跑的实验无关？    │
+│                                                     │
+│ 4. 当前实验设计是否有隐患？                            │
+│    → 配置文件是否完整？seed 列表是否覆盖？               │
+│    → 是否有已知的 bug 可能影响正在运行的实验？            │
+│                                                     │
+│ 5. 有没有可以提前做的质量保障工作？                     │
+│    → 写/更新测试用例？                               │
+│    → 检查 experiment_sop 的复现步骤是否完整？           │
+│                                                     │
+│ 6. 距离目标 deadline（EMNLP ARR）还有哪些 gap？       │
+│    → 论文完成度如何？                                 │
+│    → 还缺哪些实验数据？                               │
+│    → 缺口和当前 GPU 任务的关系是什么？                  │
+└─────────────────────────────────────────────────────┘
+```
+
+#### Phase B: 选择最高价值行动
+
+基于 Phase A 的思考结果，选择**此刻最有价值**的工作。不是按固定列表走，而是根据项目实际状态判断。
+
+常见的高价值行动模式：
+
+| 项目状态 | 最有价值的行动 |
+|---------|--------------|
+| 远端即将跑完，本地缺聚合脚本 | 准备/调试聚合和绘图脚本 |
+| 论文实验章节缺数据描述框架 | 先写文字框架，留数据占位符 |
+| review_tracker 有与当前实验相关的 open issue | 优先修复（可能影响结果有效性） |
+| 上一轮结果验证发现可疑数据 | 深入分析根因，准备重跑方案 |
+| 目标 deadline 临近但论文进度落后 | 推进论文写作，不做低优先级代码清理 |
+| 所有前台工作都已完成 | 对已有全量结果做深度分析和可视化 |
+
+#### Phase C: 执行 + 为下一轮轮询做准备
+
+执行选定的工作，同时：
+- 如果发现了影响远端运行实验的问题 → 记录，等该任务完成后处理（不中断运行中的实验）
+- 如果发现了可以在下一轮提交的新任务 → 准备好命令和配置
+- 将思考结论和行动记录到轮询报告中（§7 报告新增"前台工作"段）
 
 ---
 
@@ -254,8 +420,21 @@ spawn Agent (subagent_type: general-purpose) 执行:
 
 **本轮决策**:
 - [x] GPU 1 空闲 → 提交 `8b_ppl_s1235` (CUDA_VISIBLE_DEVICES=1)
-- [x] 收割 `1p5b_needle` 结果 → spawn 验证 agent
+- [x] 收割 `1p5b_needle` 结果 → spawn 4 个验证 agent
 - [ ] 磁盘 72% — 正常
+
+**结果验证** (如有):
+| 维度 | Agent | 结果 | 关键发现 |
+|------|-------|------|---------|
+| 统计验证 | verify-stats | ✅ | PPL 退化 1.5B=13.2% 在预期内 |
+| 文献对比 | verify-literature | ⚠️ | 我们的 INT4 PPL 优于 KIVI 报告值，需确认是否因模型不同 |
+| 跨模型一致性 | verify-consistency | ✅ | 规模缩放趋势正常 |
+| 异常检测 | verify-anomaly | ✅ | 无离群值 |
+
+**前台思考**:
+- 当前阻塞: 等 7B RULER 跑完才能完成论文 Table 3
+- 最有价值行动: 先写 Table 3 框架 + 完成 1.5B 行的数据填充
+- 下轮准备: 聚合脚本已调试就绪，7B 完成后可立即聚合
 
 **下次轮询**: 10 分钟后
 ```
