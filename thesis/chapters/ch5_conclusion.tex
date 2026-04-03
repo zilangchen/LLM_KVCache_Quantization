@@ -112,9 +112,10 @@ K/V 消融实验覆盖了 RULER、LongBench 和 PPL
 
 \paragraph{校准框架局限}
 1.5B 主模型校准产物的 Q 向量预处理缺少 input\_layernorm 和 RoPE 变换
-（附录~\ref{sec:app-calib-provenance}），修正版对比验证尚未完成。
+（附录~\ref{sec:app-calib-provenance}），
+但修正版对比验证表明对 INT8 的 PPL 影响仅 0.05\%（$<$0.01 绝对值），
+对 INT4-RoleAlign 影响为零（BA percentile 校准独立于 RoPE）。
 校准仅使用 WikiText-103 数据集，对代码、多语言等分布外数据的适用性未验证。
-$\tau^{-1}$ 温度校正在非对称格式下无稳定收益甚至有害，
 提示有效组件依赖量化格式，不可跨格式迁移。
 校准参数与模型权重耦合，部署新模型需重新校准。
 
