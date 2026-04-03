@@ -96,13 +96,13 @@ def load_calibration(
     calib_group_k = calib.get("group_size_k", calib.get("group_size", group_size))
     calib_clip_k = calib.get("clip_percentile_k", calib.get("clip_percentile", clip_percentile))
 
-    group_size = calib_group_k or group_size
-    clip_percentile = calib_clip_k or clip_percentile
+    group_size = calib_group_k if calib_group_k is not None else group_size
+    clip_percentile = calib_clip_k if calib_clip_k is not None else clip_percentile
 
     if "k_scale" in calib:
-        static_k_scale = torch.tensor(calib["k_scale"], dtype=torch.float16, device=device)
+        static_k_scale = torch.tensor(calib["k_scale"], dtype=torch.float32, device=device)  # ENG-097: float32
     if "v_scale" in calib:
-        static_v_scale = torch.tensor(calib["v_scale"], dtype=torch.float16, device=device)
+        static_v_scale = torch.tensor(calib["v_scale"], dtype=torch.float32, device=device)  # ENG-097: float32
     if use_attn_temperature and "inv_tau" in calib:
         inv_tau = torch.tensor(calib["inv_tau"], dtype=torch.float32, device=device)
     outlier_rescue_ratio = float(calib.get("int4_outlier_ratio", 0.0) or 0.0)
@@ -394,13 +394,19 @@ def main():
 
     apply_int8_fused_patch(model_fused)
 
-    inputs = tokenizer(args.prompt, return_tensors="pt").to(model_ref.device)
+    inputs = tokenizer(args.prompt, return_tensors="pt")
     input_ids = inputs["input_ids"]
     attention_mask = inputs.get("attention_mask")
 
     if input_ids.shape[1] < 2:
         print("Prompt must tokenize to at least 2 tokens for decode-step verification.")
         sys.exit(2)
+
+    # ENG-097: move inputs to each model's device before forward to handle
+    # multi-GPU device_map="auto" where models may reside on different GPUs.
+    ref_inputs = {k: v.to(model_ref.device) for k, v in inputs.items()}
+    input_ids = ref_inputs["input_ids"]
+    attention_mask = ref_inputs.get("attention_mask")
 
     prefix_ids = input_ids[:, :-1]
     current_token = input_ids[:, -1:]
@@ -444,11 +450,14 @@ def main():
         attention_mask = torch.ones_like(input_ids)
 
     # Fused logits
+    # ENG-097: move inputs to model_fused device for multi-GPU safety.
+    fused_current_token = current_token.to(model_fused.device)
+    fused_attention_mask = attention_mask.to(model_fused.device) if attention_mask is not None else None
     fused_past = INT8CacheWrapperContainer(kv_cache_fused, kv_cache_fused.num_layers)
     with torch.no_grad():
         outputs_fused = model_fused(
-            input_ids=current_token,
-            attention_mask=attention_mask,
+            input_ids=fused_current_token,
+            attention_mask=fused_attention_mask,
             past_key_values=fused_past,
             use_cache=True,
         )
@@ -483,8 +492,8 @@ def main():
                 )
                 with torch.no_grad():
                     outputs_ref_step = model_fused(
-                        input_ids=current_token,
-                        attention_mask=attention_mask,
+                        input_ids=fused_current_token,
+                        attention_mask=fused_attention_mask,
                         past_key_values=fused_past_ref,
                         use_cache=True,
                     )
@@ -500,8 +509,8 @@ def main():
                 )
                 with torch.no_grad():
                     outputs_ref_step = model_fused(
-                        input_ids=current_token,
-                        attention_mask=attention_mask,
+                        input_ids=fused_current_token,
+                        attention_mask=fused_attention_mask,
                         past_key_values=fused_past_ref,
                         use_cache=True,
                     )

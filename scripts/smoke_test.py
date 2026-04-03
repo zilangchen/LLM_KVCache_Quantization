@@ -32,6 +32,7 @@ sys.path.insert(0, str(project_root))
 
 from src.utils.repro import get_git_commit, get_hardware_info, set_seed  # QUA-001: centralized
 from src.utils.hf import resolve_pretrained_path
+from scripts.config_utils import ALLOWED_MODEL_IDS  # SMK-008: model whitelist
 
 
 def main():
@@ -131,6 +132,12 @@ def main():
             sys.exit(1)
 
     # Step 2: Load model and tokenizer
+    # SMK-008: validate model_id against whitelist before trust_remote_code
+    if args.model_id not in ALLOWED_MODEL_IDS:
+        print(f"\n  ERROR: model_id '{args.model_id}' not in ALLOWED_MODEL_IDS whitelist.")
+        print(f"  Allowed: {sorted(ALLOWED_MODEL_IDS)}")
+        print("  Refusing to load with trust_remote_code=True for unknown model.")
+        sys.exit(1)
     print(f"\n[2/4] Loading model: {args.model_id}...")
     try:
         model_path = resolve_pretrained_path(args.model_id, revision=args.model_revision)

@@ -267,48 +267,57 @@ def cmd_add(path: Path, issue_id: str, sev: str, section_header: str, title: str
             )
             return 1
 
-        # RVW-014: Ensure "## Open Issues" section exists
+        # RVW-014: Ensure "## Open Issues" section exists; auto-create if missing
         oi_match = re.search(r'^## Open Issues', content, re.MULTILINE)
         if not oi_match:
+            # Auto-create the section before "## Resolved" or at end of file
+            resolved_match = re.search(r'^## Resolved', content, re.MULTILINE)
+            if resolved_match:
+                insert_at = resolved_match.start()
+                content = content[:insert_at] + "## Open Issues\n\n---\n\n" + content[insert_at:]
+            else:
+                content = content.rstrip("\n") + "\n\n## Open Issues\n\n---\n"
+            oi_match = re.search(r'^## Open Issues', content, re.MULTILINE)
             print(
-                f"ERROR: '## Open Issues' section not found in {path}",
+                f"WARNING: '## Open Issues' section was missing in {path}; auto-created.",
                 file=sys.stderr,
             )
-            return 1
 
-        # Find the section in Open Issues, or create it
+        # RVW-024: Determine the Open Issues region boundaries so that
+        # section_pattern.search does not accidentally match inside Resolved.
+        oi_start = oi_match.end()
+        next_h2 = re.search(r'^## (?!Open Issues)', content[oi_start:], re.MULTILINE)
+        oi_end = oi_start + next_h2.start() if next_h2 else len(content)
+        oi_region = content[oi_start:oi_end]
+
+        # Find the section in Open Issues only, or create it
         section_pattern = re.compile(
             rf'^### {re.escape(section_header)}',
             re.MULTILINE
         )
 
-        m = section_pattern.search(content)
+        m = section_pattern.search(oi_region)
         if m:
             # Find the end of this section (next ### or ---)
-            rest = content[m.end():]
+            rest = oi_region[m.end():]
             next_section = re.search(r'\n(?=###\s|---)', rest)
             if next_section:
-                insert_pos = m.end() + next_section.start()
+                insert_pos = oi_start + m.end() + next_section.start()
             else:
-                insert_pos = len(content)
+                insert_pos = oi_end
             content = content[:insert_pos] + "\n" + new_line + content[insert_pos:]
         else:
             # Insert new section before "---" that ends Open Issues
-            rest = content[oi_match.end():]
-            sep = re.search(r'\n---', rest)
+            sep = re.search(r'\n---', oi_region)
             if sep:
-                insert_pos = oi_match.end() + sep.start()
+                insert_pos = oi_start + sep.start()
                 new_section = f"\n\n### {section_header}\n{new_line}\n"
                 content = content[:insert_pos] + new_section + content[insert_pos:]
             else:
-                # RVW-014: Fail explicitly instead of silently dropping the issue
-                print(
-                    f"ERROR: no '---' separator found after '## Open Issues' "
-                    f"in {path}. Cannot determine insertion point for new "
-                    f"section '{section_header}'.",
-                    file=sys.stderr,
-                )
-                return 1
+                # No separator found; append at end of Open Issues region
+                insert_pos = oi_end
+                new_section = f"\n\n### {section_header}\n{new_line}\n"
+                content = content[:insert_pos] + new_section + content[insert_pos:]
 
         # RVW-002: Atomic write
         _atomic_write(path, content)

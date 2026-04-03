@@ -18,6 +18,8 @@ from typing import Tuple
 import torch
 from torch import Tensor
 
+from src.quant._common import _check_quantize_input
+
 
 def quantize_asymmetric(
     tensor: Tensor,
@@ -41,6 +43,7 @@ def quantize_asymmetric(
         scale: FP16 scale tensor
         zero_point: FP16 zero_point tensor
     """
+    _check_quantize_input(tensor, "quantize_asymmetric")
     if not tensor.is_floating_point():
         raise ValueError(f"Input tensor must be float, got {tensor.dtype}")
     if quant_bits not in (4, 8):

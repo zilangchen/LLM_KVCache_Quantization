@@ -112,8 +112,10 @@ def _split_csv(text: str | None) -> List[str]:
 
 def _normalize_text(text: str) -> str:
     text = str(text).strip().lower()
-    text = text.translate(str.maketrans("", "", string.punctuation))
-    text = re.sub(r"\s+", " ", text)
+    # Remove articles (SQuAD/LongBench convention)
+    text = re.sub(r"\b(a|an|the)\b", " ", text)
+    text = re.sub(r"[^\w\s]", " ", text)  # remove punctuation
+    text = re.sub(r"\s+", " ", text).strip()
     return text
 
 
@@ -178,7 +180,7 @@ TASK_OFFICIAL_METRIC: Dict[str, str] = {
 }
 # LongBench official classification metric is strict normalized exact match.
 # We intentionally do NOT use substring/contains matching here.
-CLASSIFICATION_MATCH_POLICY = "exact_match_only"
+CLASSIFICATION_MATCH_POLICY = "task_specific"  # EVL-041: passage_count=num_extract, passage_retrieval=substring
 
 
 def _lcs_length(x: List[str], y: List[str]) -> int:
@@ -267,6 +269,31 @@ def _classification_accuracy(pred: str, answers: Sequence[str]) -> float:
     return 0.0
 
 
+def _passage_count_accuracy(pred: str, answers: Sequence[str]) -> float:
+    """passage_count: extract the first number from the prediction and compare to the answer."""
+    # Extract numbers: integers, decimals (.5), signed (+3/-3), scientific (1e5)
+    pred_nums = re.findall(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?", pred.strip())
+    if not pred_nums:
+        return 0.0
+    pred_num = pred_nums[0]
+    for ans in answers:
+        ans_nums = re.findall(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?", str(ans).strip())
+        ans_num = ans_nums[0] if ans_nums else str(ans).strip()
+        if pred_num == ans_num:
+            return 1.0
+    return 0.0
+
+
+def _passage_retrieval_accuracy(pred: str, answers: Sequence[str]) -> float:
+    """passage_retrieval: substring contains match (official LongBench uses this for retrieval)."""
+    pred_norm = _normalize_text(pred)
+    for ans in answers:
+        ans_norm = _normalize_text(ans)
+        if ans_norm and ans_norm in pred_norm:
+            return 1.0
+    return 0.0
+
+
 def _compute_official_metric(
     pred: str, answers: Sequence[str], task_name: str
 ) -> tuple[str, float]:
@@ -277,7 +304,13 @@ def _compute_official_metric(
     if metric_name == "rouge_l":
         score = max((_rouge_l(pred, ans) for ans in answers), default=0.0)
     elif metric_name == "accuracy":
-        score = _classification_accuracy(pred, answers)
+        # EVL-041: passage_count uses number extraction, passage_retrieval uses substring match
+        if task_name == "passage_count":
+            score = _passage_count_accuracy(pred, answers)
+        elif task_name.startswith("passage_retrieval"):
+            score = _passage_retrieval_accuracy(pred, answers)
+        else:
+            score = _classification_accuracy(pred, answers)
     elif metric_name == "edit_sim":
         score = max((_edit_similarity(pred, ans) for ans in answers), default=0.0)
     else:  # "f1" or unknown → token-F1
@@ -316,6 +349,8 @@ def _truncate_prompt_ids(tokenizer, prompt: str, max_tokens: int) -> torch.Tenso
         head_keep = max_tokens - tail_keep
         if head_keep <= 0:
             ids = ids[:max_tokens]
+        elif tail_keep == 0:  # EVL-101: ids[-0:] returns all, guard against it
+            ids = ids[:head_keep]
         else:
             ids = ids[:head_keep] + ids[-tail_keep:]
     return torch.tensor([ids], dtype=torch.long)
@@ -480,7 +515,11 @@ def _load_jsonl_samples(
                 text = line.strip()
                 if not text:
                     continue
-                row = json.loads(text)
+                try:
+                    row = json.loads(text)
+                except json.JSONDecodeError:
+                    logger.warning("Skipping malformed JSONL line %d in %s", line_idx, filepath)
+                    continue
                 if not isinstance(row, dict):
                     continue
                 if task_override is not None:
@@ -550,7 +589,37 @@ def _load_hf_samples(
     return samples
 
 
+_SUMMARIZATION_TASKS = {"gov_report", "multi_news", "vcsum", "qmsum", "samsum"}  # Codex R5: added qmsum/samsum
+_CODE_TASKS = {"lcc", "repobench-p"}
+_CLASSIFICATION_TASKS = {"trec", "lsht"}  # Codex R5: added lsht
+_PASSAGE_TASKS = {"passage_count", "passage_retrieval_en", "passage_retrieval_zh"}
+
+
 def _build_prompt(sample: LongBenchSample) -> str:
+    task = sample.task_name.lower()
+    if task in _SUMMARIZATION_TASKS:
+        return (
+            f"Context:\n{sample.context}\n\n"
+            "Summarize the above text. Output only the summary."
+        )
+    if task in _CODE_TASKS:
+        return (
+            f"{sample.context}\n\n"
+            "Complete the code above. Output only the code."
+        )
+    if task in _CLASSIFICATION_TASKS:
+        return (
+            f"Context:\n{sample.context}\n\n"
+            f"Question:\n{sample.question}\n\n"
+            "Classify the above text. Output only the category label."
+        )
+    if task in _PASSAGE_TASKS:
+        return (
+            f"Context:\n{sample.context}\n\n"
+            f"Question:\n{sample.question}\n\n"
+            "Answer the question based on the passages above."
+        )
+    # Default: QA tasks (hotpotqa, 2wikimqa, musique, multifieldqa_en, triviaqa, narrativeqa, qasper, etc.)
     return (
         "You are a long-context QA assistant. Read the context and answer exactly.\n\n"
         f"Context:\n{sample.context}\n\n"
@@ -600,7 +669,6 @@ def main() -> None:
     global _LAST_ARGS
     parser = argparse.ArgumentParser(description="Week5: LongBench-style evaluation")
     parser.add_argument("--seq_len", type=int, default=4096)
-    parser.add_argument("--gen_len", type=int, default=64)
     parser.add_argument(
         "--kv_mode",
         type=str,
@@ -720,7 +788,7 @@ def main() -> None:
     parser.add_argument("--longbench_context_len", type=int, default=None)
     parser.add_argument("--longbench_allow_synthetic_fallback", action="store_true", default=False)
 
-    parser.add_argument("--save_csv", action="store_true", default=True)
+    parser.add_argument("--save_csv", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--replica_id", type=int, default=0)
     parser.add_argument("--out_dir", type=str, default="results/runs")
@@ -773,71 +841,111 @@ def main() -> None:
     peak_mem_vals: List[float] = []
 
     for idx, sample in enumerate(samples):
-        prompt = _build_prompt(sample)
-        input_ids = _truncate_prompt_ids(tokenizer, prompt, max_context_len).to(model.device)
-        attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=model.device)
+        try:
+            prompt = _build_prompt(sample)
+            input_ids = _truncate_prompt_ids(tokenizer, prompt, max_context_len).to(model.device)
+            attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=model.device)
 
-        out = generate_from_ids(
-            model=model,
-            tokenizer=tokenizer,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            max_new_tokens=int(args.longbench_max_new_tokens),
-            kv_mode=args.kv_mode,
-            group_size=args.group_size,
-            clip_percentile=args.clip_percentile,
-            seed=args.seed,
-            calib_file=args.calib_file,
-            use_attn_temperature=args.use_attn_temperature,
-            use_static_scales=args.use_static_scales,
-            adaptive_static_scales=args.adaptive_static_scales,
-            adaptive_static_margin=args.adaptive_static_margin,
-            adaptive_static_k=args.adaptive_static_k,
-            adaptive_static_v=args.adaptive_static_v,
-            decode_attn_impl=args.decode_attn_impl or "triton_fused",
-            stop_on_eos=True,
-            quant_bits=getattr(args, 'quant_bits', None),
-            k_bits=getattr(args, 'k_bits', None),
-            v_bits=getattr(args, 'v_bits', None),
-        )
+            out = generate_from_ids(
+                model=model,
+                tokenizer=tokenizer,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_new_tokens=int(args.longbench_max_new_tokens),
+                kv_mode=args.kv_mode,
+                group_size=args.group_size,
+                clip_percentile=args.clip_percentile,
+                seed=args.seed,
+                calib_file=args.calib_file,
+                use_attn_temperature=args.use_attn_temperature,
+                use_static_scales=args.use_static_scales,
+                adaptive_static_scales=args.adaptive_static_scales,
+                adaptive_static_margin=args.adaptive_static_margin,
+                adaptive_static_k=args.adaptive_static_k,
+                adaptive_static_v=args.adaptive_static_v,
+                decode_attn_impl=args.decode_attn_impl or "triton_fused",
+                stop_on_eos=True,
+                quant_bits=getattr(args, 'quant_bits', None),
+                k_bits=getattr(args, 'k_bits', None),
+                v_bits=getattr(args, 'v_bits', None),
+            )
 
-        pred_text = tokenizer.decode(out.generated_ids[0].tolist(), skip_special_tokens=True).strip()
-        score = _score_prediction(pred_text, sample.answers)
-        official_metric_name, official_metric_value = _compute_official_metric(
-            pred_text, sample.answers, sample.task_name
-        )
-        score["official_metric_name"] = official_metric_name  # type: ignore[assignment]
-        score["official_metric_value"] = official_metric_value
+            pred_text = tokenizer.decode(out.generated_ids[0].tolist(), skip_special_tokens=True).strip()
+            score = _score_prediction(pred_text, sample.answers)
+            official_metric_name, official_metric_value = _compute_official_metric(
+                pred_text, sample.answers, sample.task_name
+            )
+            score["official_metric_name"] = official_metric_name  # type: ignore[assignment]
+            score["official_metric_value"] = official_metric_value
 
-        details_rows.append(
-            {
-                "run_id": f"longbench_{timestamp}",
-                "sample_index": idx,
-                "sample_id": sample.sample_id,
-                "task_name": sample.task_name,
-                "kv_mode": args.kv_mode,
-                "seq_len": int(input_ids.shape[1]),
-                "gen_len": int(args.longbench_max_new_tokens),
-                "prediction": pred_text,
-                "answers": " || ".join(sample.answers),
-                "exact_match": float(score["exact_match"]),
-                "contains_match": float(score["contains_match"]),
-                "f1": float(score["f1"]),
-                "official_metric_name": str(official_metric_name),
-                "official_metric_value": float(official_metric_value),
-                "classification_match_policy": CLASSIFICATION_MATCH_POLICY,
-                "seed": int(args.seed),
-                "replica_id": int(args.replica_id),
-                "timestamp": timestamp,
-                "git_commit": git_commit,
-            }
-        )
-        task_scores[sample.task_name].append(score)
+            details_rows.append(
+                {
+                    "run_id": f"longbench_{timestamp}",
+                    "sample_index": idx,
+                    "sample_id": sample.sample_id,
+                    "task_name": sample.task_name,
+                    "kv_mode": args.kv_mode,
+                    "seq_len": int(input_ids.shape[1]),
+                    "gen_len": int(args.longbench_max_new_tokens),
+                    "prediction": pred_text,
+                    "answers": " || ".join(sample.answers),
+                    "exact_match": float(score["exact_match"]),
+                    "contains_match": float(score["contains_match"]),
+                    "f1": float(score["f1"]),
+                    "official_metric_name": str(official_metric_name),
+                    "official_metric_value": float(official_metric_value),
+                    "classification_match_policy": CLASSIFICATION_MATCH_POLICY,
+                    "seed": int(args.seed),
+                    "replica_id": int(args.replica_id),
+                    "timestamp": timestamp,
+                    "git_commit": git_commit,
+                }
+            )
+            task_scores[sample.task_name].append(score)
 
-        ttft_vals.append(float(out.ttft_ms))
-        tpot_vals.append(float(out.tpot_ms))
-        tokps_vals.append(float(out.tok_per_s))
-        peak_mem_vals.append(float(out.gpu_mem_peak_mb))
+            ttft_vals.append(float(out.ttft_ms))
+            tpot_vals.append(float(out.tpot_ms))
+            tokps_vals.append(float(out.tok_per_s))
+            peak_mem_vals.append(float(out.gpu_mem_peak_mb))
+        except torch.cuda.OutOfMemoryError:
+            raise  # OOM must propagate to top-level handler
+        except Exception as exc:  # noqa: BLE001 — EVL-044: per-sample resilience
+            logger.warning(
+                "Sample %d (%s/%s) failed: %s: %s — recording failure",
+                idx, sample.task_name, sample.sample_id,
+                type(exc).__name__, exc,
+            )
+            # Codex P1 fix: record failed samples instead of silently dropping.
+            # This ensures sample_count reflects actual attempts and downstream
+            # aggregation can detect incomplete evaluations.
+            details_rows.append(
+                {
+                    "run_id": f"longbench_{timestamp}",
+                    "sample_index": idx,
+                    "sample_id": sample.sample_id,
+                    "task_name": sample.task_name,
+                    "kv_mode": args.kv_mode,
+                    "seq_len": -1,
+                    "gen_len": int(args.longbench_max_new_tokens),
+                    "prediction": f"FAILED: {type(exc).__name__}: {exc}",
+                    "answers": " || ".join(sample.answers),
+                    "exact_match": 0.0,
+                    "contains_match": 0.0,
+                    "f1": 0.0,
+                    "official_metric_name": "failed",
+                    "official_metric_value": 0.0,
+                    "classification_match_policy": CLASSIFICATION_MATCH_POLICY,
+                    "seed": int(args.seed),
+                    "replica_id": int(args.replica_id),
+                    "timestamp": timestamp,
+                    "git_commit": git_commit,
+                }
+            )
+            # Count as zero-score rather than omission — denominator stays honest.
+            task_scores[sample.task_name].append(
+                {"exact_match": 0.0, "contains_match": 0.0, "f1": 0.0,
+                 "official_metric_name": "failed", "official_metric_value": 0.0}
+            )
 
     task_rows: List[Dict[str, object]] = []
     em_macro = []
@@ -858,8 +966,8 @@ def main() -> None:
                 f"Inconsistent official metric names for task '{task_name}': {sorted(metric_names)}"
             )
         task_off_name = str(next(iter(metric_names)))
-        # LongBench official macro is tracked in [0, 1] to match objective.md.
-        task_off_val = float(np.mean([v["official_metric_value"] for v in vals]))
+        # EVL-060: Scale official_metric_value to [0, 100] to match EM/F1 columns.
+        task_off_val = float(np.mean([v["official_metric_value"] for v in vals]) * 100.0)
         em_macro.append(em)
         contains_macro.append(contains)
         f1_macro.append(f1)

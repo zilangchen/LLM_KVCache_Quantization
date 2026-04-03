@@ -394,8 +394,8 @@ def _evaluate_claim_row(
     meets_min_pairs = False
     significant_q = False
     favors_challenger = False
-    statistical_pass = not claim.require_q_significance
-    stat_reason = "q-significance not required"
+    statistical_pass = False
+    stat_reason = "no significance data available"
 
     if sig_row is not None:
         q_value = float(pd.to_numeric(pd.Series([sig_row.get("q_value")]), errors="coerce").iloc[0])
@@ -660,9 +660,19 @@ def build_statistical_decisions(
         return pd.DataFrame()
     out = significance.copy()
     out = _to_numeric(out, ["gain_pct_mean", "n_pairs", "q_value", "p_value"])
-    out["meets_min_pairs"] = out.get("meets_min_pairs", False).map(_to_bool)
-    out["significant_q_alpha"] = out.get("significant_q_alpha", False).map(_to_bool)
-    out["favors_challenger"] = out.get("favors_challenger", False).map(_to_bool)
+    # RPT-005: .get() returns scalar False when column missing; .map() needs Series
+    if "meets_min_pairs" not in out.columns:
+        out["meets_min_pairs"] = True  # default: assume sufficient pairs
+    else:
+        out["meets_min_pairs"] = out["meets_min_pairs"].map(_to_bool)
+    if "significant_q_alpha" not in out.columns:
+        out["significant_q_alpha"] = False
+    else:
+        out["significant_q_alpha"] = out["significant_q_alpha"].map(_to_bool)
+    if "favors_challenger" not in out.columns:
+        out["favors_challenger"] = False
+    else:
+        out["favors_challenger"] = out["favors_challenger"].map(_to_bool)
     out["practical_threshold_pct"] = out["metric"].map(practical_thresholds).fillna(0.0)
     out["practical_pass"] = (
         pd.to_numeric(out["gain_pct_mean"], errors="coerce")
@@ -727,6 +737,11 @@ def build_reproducibility_gate(
         expected_oom = 0
     else:
         fr = failure_registry.copy()
+        # RPT-006: filter out success rows and rows with empty/nan failure_category
+        # before computing unexpected failures; only genuine failure rows should count.
+        fail_cat = fr.get("failure_category", pd.Series(dtype=object)).astype(str)
+        is_real_failure = ~fail_cat.isin(["", "nan", "success", "None"])
+        fr = fr[is_real_failure]
         is_oom = fr.get("failure_category", pd.Series(dtype=object)).astype(str) == "oom"
         is_throughput = fr.get("is_throughput_run", pd.Series(dtype=bool)).fillna(False).astype(bool)
         expected_oom_mask = is_oom & is_throughput

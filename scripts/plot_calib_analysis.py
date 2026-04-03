@@ -41,8 +41,16 @@ def plot_inv_tau_heatmap(
 ) -> None:
     """Plot inv_tau as a layer x head heatmap."""
     num_layers = len(inv_tau)
-    num_heads = len(inv_tau[0]) if num_layers > 0 else 0
-    arr = np.array(inv_tau)  # [L, H]
+    if num_layers == 0:
+        print(f"  SKIP heatmap: inv_tau is empty")
+        return
+    num_heads = len(inv_tau[0])
+    # CAL-048: ragged inv_tau (different head counts per layer) → pad to max
+    max_h = max(len(row) for row in inv_tau)
+    if any(len(row) != max_h for row in inv_tau):
+        inv_tau = [row + [float("nan")] * (max_h - len(row)) for row in inv_tau]
+        num_heads = max_h
+    arr = np.array(inv_tau, dtype=np.float64)  # [L, H]
 
     fig, ax = plt.subplots(figsize=(max(6, num_heads * 0.5), max(4, num_layers * 0.25)))
     im = ax.imshow(arr, aspect="auto", cmap="RdYlBu_r", interpolation="nearest")
@@ -64,7 +72,12 @@ def plot_inv_tau_histogram(
     inv_tau: list, out_path: str
 ) -> None:
     """Plot distribution of inv_tau values."""
-    arr = np.array(inv_tau).flatten()
+    arr = np.array(inv_tau, dtype=object)
+    arr = np.concatenate([np.asarray(row, dtype=np.float64) for row in arr]) if len(arr) > 0 else np.array([], dtype=np.float64)
+    arr = arr[np.isfinite(arr)]  # CAL-048: drop NaN from ragged padding
+    if len(arr) == 0:  # CAL-049: empty inv_tau guard
+        print(f"  SKIP histogram: no valid inv_tau values")
+        return
     fig, ax = plt.subplots(figsize=(6, 4))
     ax.hist(arr, bins=20, edgecolor="black", alpha=0.75, color="#4C72B0")
     ax.axvline(1.0, color="red", linestyle="--", linewidth=1, label="$\\tau^{-1}=1$ (no scaling)")

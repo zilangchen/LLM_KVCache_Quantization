@@ -43,6 +43,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -204,6 +205,9 @@ def dequantize_with_scale(
     head_dim = k.shape[-1]
     num_groups = head_dim // group_size
     k_view = k.view(-1, num_groups, group_size)
+    # CAL-010: Clamp scale to prevent division-by-zero when a group has
+    # all-zero values, which would produce NaN and silently corrupt inv_tau.
+    scale = scale.clamp(min=1e-5)
     scale_view = scale.view(1, num_groups, 1)
     q = torch.round(k_view / scale_view).clamp(-int(qmax), int(qmax))
     k_deq = q * scale_view
@@ -328,6 +332,13 @@ def compute_inv_tau(
             num_samples = len(q_samples)
             if num_samples > 0:
                 loss_accum /= num_samples
+
+            # CAL-037: Clamp accumulated loss to non-negative before argmin.
+            # KL divergence can become slightly negative due to clamping that
+            # breaks the normalization invariant (see CAL-026). Negative loss
+            # would bias argmin toward those candidates. Clamping to zero makes
+            # the selection robust against this numerical artifact.
+            loss_accum.clamp_(min=0.0)
 
             # CAL-017: Detect NaN in loss_accum which could silently corrupt
             # inv_tau selection (argmin of NaN is undefined).
@@ -920,7 +931,9 @@ def main():
         default=None,
         help="Optional model revision (commit hash/tag) for strict reproducibility.",
     )
-    parser.add_argument("--samples", type=int, default=16)
+    # CAL-038: Default must match get_calibration_dataset(n_samples=128)
+    # to avoid silent sample-count mismatch between CLI and function.
+    parser.add_argument("--samples", type=int, default=128)
     parser.add_argument("--seq_len", type=int, default=512)
     parser.add_argument("--out_dir", type=str, default="results/calibration")
     parser.add_argument(
@@ -1236,7 +1249,14 @@ def main():
                         RuntimeWarning,
                     )
 
-                q_last = q.squeeze(2).squeeze(0).cpu()  # [num_heads, head_dim]
+                # CAL-040: Assert bsz==1 instead of squeeze, which silently
+                # becomes a no-op when bsz>1, leaving an extra batch dimension
+                # that corrupts downstream attention computation.
+                assert bsz == 1, (
+                    f"Calibration expects bsz=1, got bsz={bsz}. "
+                    "Multi-sample batching is not supported in calibration."
+                )
+                q_last = q[:, :, 0, :].squeeze(0).cpu()  # [num_heads, head_dim]
 
                 k = past_key_values[layer_idx][0].squeeze(0).cpu()  # [kv_heads, seq, head_dim]
                 v = past_key_values[layer_idx][1].squeeze(0).cpu()
@@ -1593,8 +1613,17 @@ def main():
             "v_search_results": v_calib_result,
         }
 
-    with open(calib_out_path, "w") as f:
-        json.dump(calib_payload, f, indent=2)
+    # CAL-039: Atomic write — use tempfile + os.replace so a crash mid-write
+    # cannot leave a truncated/corrupt calibration JSON on disk.
+    calib_out_dir = os.path.dirname(str(calib_out_path)) or "."
+    fd, tmp_path = tempfile.mkstemp(suffix=".json", dir=calib_out_dir)
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(calib_payload, f, indent=2)
+        os.replace(tmp_path, str(calib_out_path))
+    except BaseException:
+        os.unlink(tmp_path)
+        raise
     print(f"Saved calibration JSON to {calib_out_path}")
 
     # Optional: write stats CSV + plot

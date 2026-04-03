@@ -907,6 +907,7 @@ def main() -> int:
         print("\n[SIGINT] Interrupt received; finishing current task then exiting cleanly.")
 
     signal.signal(signal.SIGINT, _sigint_handler)
+    signal.signal(signal.SIGTERM, _sigint_handler)  # RUN-082: also handle SIGTERM (tmux kill, systemd stop)
     if int(args.max_retries) < 0:
         print("Error: --max_retries must be >= 0.")
         return 2
@@ -1223,8 +1224,10 @@ def main() -> int:
         # RUN-050: include kivi_style in calib_file pre-validation so misconfigured
         # calib_file for kivi_style is caught early rather than silently ignored.
         if not args.dry_run and kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused", "kivi_style", "int4_ours_asym", "int4_ours_asym_ba"]:
+            # CFG-040: check all calib strategies that require a calibration file,
+            # not just kl_attn (mse also needs one).
             needs_calib = (
-                calib_params.get("calib_strategy") == "kl_attn"
+                calib_params.get("calib_strategy") in ("kl_attn", "mse")
                 or calib_params.get("use_attn_temperature") is True
                 or (kv_mode == "kivi_style" and calib_file is not None)
             )
@@ -1366,7 +1369,7 @@ def main() -> int:
                 if kv_mode != "fp16":
                     if run_quant_bits is not None:
                         cmd.extend(["--quant_bits", str(run_quant_bits)])
-                    if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused", "int4_ours_asym", "int4_ours_asym_ba"] and calib_file_path:
+                    if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused", "int4_ours_asym", "int4_ours_asym_ba", "kivi_style"] and calib_file_path:  # RUN-062: add kivi_style
                         cmd.extend(["--calib_file", str(calib_file_path)])
                     if calib_params.get("calib_strategy"):
                         cmd.extend(["--calib_strategy", str(calib_params["calib_strategy"])])

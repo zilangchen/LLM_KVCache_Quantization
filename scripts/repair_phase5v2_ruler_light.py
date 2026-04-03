@@ -73,6 +73,11 @@ def main() -> int:
                 "--append", "--skip_completed_success", "--failure_policy", "continue_all",
             ])
     shell_path = runs_dir.parent / "repair_commands.sh"
+    # EVL-097: don't silently overwrite existing file
+    if shell_path.exists():
+        bak = shell_path.with_suffix(".sh.bak")
+        shell_path.rename(bak)
+        print(f"  Backed up existing {shell_path.name} → {bak.name}")
     shell_path.write_text(
         "\n".join(" ".join(shlex.quote(x) for x in cmd) for cmd in commands) + ("\n" if commands else ""),
         encoding="utf-8",
@@ -84,15 +89,17 @@ def main() -> int:
     for cmd in commands:
         print("CMD:", " ".join(shlex.quote(x) for x in cmd))
     if args.execute and not args.dry_run:
-        for src, dst in archives:
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(src), str(dst))
+        project_root = runs_dir.parent
         failed_cmds: list[tuple[list[str], int]] = []
         for cmd in commands:
-            result = subprocess.run(cmd)
+            result = subprocess.run(cmd, cwd=project_root)
             if result.returncode != 0:
                 print(f"Warning: command failed (rc={result.returncode}): {' '.join(cmd)}")
                 failed_cmds.append((cmd, result.returncode))
+        # Archive old logs only after commands have executed
+        for src, dst in archives:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(src), str(dst))
         if failed_cmds:
             print(f"\n{len(failed_cmds)} command(s) failed:")
             for fc, rc in failed_cmds:

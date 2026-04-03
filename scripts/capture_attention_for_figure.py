@@ -39,6 +39,12 @@ def _apply_rope_to_q(q, cos, sin):
     if cos.dim() == 3:
         cos = cos.unsqueeze(1)
         sin = sin.unsqueeze(1)
+    rotary_dim = cos.shape[-1]
+    if rotary_dim < q.shape[-1]:
+        q_rot = q[..., :rotary_dim]
+        q_pass = q[..., rotary_dim:]
+        q_rot = (q_rot * cos) + (_rotate_half(q_rot) * sin)
+        return torch.cat([q_rot, q_pass], dim=-1)
     return (q * cos) + (_rotate_half(q) * sin)
 
 
@@ -46,17 +52,26 @@ def _get_rope_for_position(attn, dummy_q, position_ids, model_backbone=None):
     """Get RoPE cos/sin for a given position.
 
     CAL-034: transformers 4.48+ moved rotary_emb to model backbone level.
+    Tries multiple calling conventions (cf. calibrate_behavior.py).
     """
     rotary = getattr(attn, "rotary_emb", None)
     if rotary is None and model_backbone is not None:
         rotary = getattr(model_backbone, "rotary_emb", None)
     if rotary is None:
         return None, None
-    try:
-        cos, sin = rotary(dummy_q, position_ids)
-        return cos, sin
-    except Exception:
-        return None, None
+    _EXPECTED = (TypeError, RuntimeError, ValueError)
+    # Try multiple calling conventions
+    for call_fn in [
+        lambda: rotary(dummy_q, position_ids),
+        lambda: rotary(dummy_q, position_ids=position_ids),
+        lambda: rotary(position_ids),
+    ]:
+        try:
+            cos, sin = call_fn()
+            return cos, sin
+        except _EXPECTED:
+            continue
+    return None, None
 
 
 def quantize_dequantize_symmetric(k, group_size=32, qmax=7):
@@ -70,18 +85,26 @@ def quantize_dequantize_symmetric(k, group_size=32, qmax=7):
     return (q * scale).view(seq, head_dim)
 
 
-def quantize_dequantize_perchannel_k(k, percentile=99.9, qmax=7):
-    """Per-channel asymmetric quantization for Key (INT4-RoleAlign style)."""
-    # k: [seq, head_dim]
-    # Per-channel: scale computed across seq dim for each channel
-    abs_k = k.abs()
-    if percentile >= 100.0:
-        channel_max = abs_k.amax(dim=0)  # [head_dim]
+def quantize_dequantize_perchannel_k(k, percentile=99.9):
+    """Per-channel asymmetric quantization for Key (INT4-RoleAlign style).
+
+    Matches src/quant/asymmetric_quant.py: signed INT4 [-8, 7], float zero_point.
+    """
+    # k: [seq, head_dim], per-channel (axis=0 = seq dim)
+    qmin, qmax = -8, 7
+    k_f = k.float()
+    if percentile < 100.0:
+        k_min = torch.quantile(k_f, (100.0 - percentile) / 100.0, dim=0)
+        k_max = torch.quantile(k_f, percentile / 100.0, dim=0)
     else:
-        channel_max = torch.quantile(abs_k.float(), percentile / 100.0, dim=0)
-    scale = channel_max.clamp(min=1e-5) / qmax  # [head_dim]
-    q = torch.round(k / scale.unsqueeze(0)).clamp(-qmax, qmax)
-    return q * scale.unsqueeze(0)
+        k_min = k_f.amin(dim=0)  # [head_dim]
+        k_max = k_f.amax(dim=0)
+    # Scale and float zero_point (same convention as asymmetric_quant.py)
+    scale = (k_max - k_min).clamp(min=1e-5) / (qmax - qmin)
+    zero_point = k_min - qmin * scale  # float offset, NOT integer code
+    # Quantize + dequantize
+    q = torch.round((k_f - zero_point) / scale).clamp(qmin, qmax)
+    return (q * scale + zero_point).to(k.dtype)
 
 
 def main():
@@ -212,7 +235,7 @@ def main():
                     p_sym = torch.softmax(logits_sym, dim=-1)
 
                     # INT4 RoleAlign (per-channel K)
-                    k_ra = quantize_dequantize_perchannel_k(k_h, percentile=k_percentile, qmax=7)
+                    k_ra = quantize_dequantize_perchannel_k(k_h, percentile=k_percentile)
                     logits_ra = (q_h @ k_ra.T) * sm_scale
                     p_ra = torch.softmax(logits_ra, dim=-1)
 

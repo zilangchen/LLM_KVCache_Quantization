@@ -224,9 +224,16 @@ def _score_case(case: RulerCase, prediction: str) -> Dict[str, float]:
     """Dispatch scoring based on task type."""
     if case.task_name == "cwe":
         return _score_set_answer(prediction, case.expected_answers)
-    if case.task_name in {"mk_niah", "vt"} and len(case.expected_answers) > 1:
+    if case.task_name == "mk_niah":
         return _score_multi_answer(prediction, case.expected_answers)
-    # s_niah and single-chain vt
+    # EVL-121 FIX: VT always uses _score_multi_answer even for single-chain.
+    # _score_single_answer uses strict exact_match which penalises VT unfairly
+    # when the model wraps the correct value in extra text (e.g. "The value is
+    # v_abc123").  _score_multi_answer checks contains_match per answer, which
+    # is the appropriate primary metric for retrieval tasks.
+    if case.task_name == "vt":
+        return _score_multi_answer(prediction, case.expected_answers)
+    # s_niah: single expected answer
     return _score_single_answer(prediction, case.expected_answers[0])
 
 
@@ -284,6 +291,62 @@ def _embed_payload_in_noise(
     noise_after = _build_noise_block(rng, tokenizer, noise_after_budget)
 
     parts = [p for p in [noise_before, payload_text, noise_after] if p]
+    return "\n\n".join(parts)
+
+
+def _embed_multiple_payloads(
+    *,
+    tokenizer,
+    rng: random.Random,
+    payloads: List[Tuple[str, float]],
+    context_len: int,
+) -> str:
+    """Embed multiple (payload_text, depth_ratio) pairs at scattered positions.
+
+    EVL-048 FIX: Each payload is placed at its own depth position within a
+    shared noise context, matching the RULER paper convention of scattering
+    needles at different depths rather than packing them at a single location.
+
+    Algorithm: sort payloads by depth_ratio, then partition the noise budget
+    into segments separated by the payloads.  Each payload lands at its
+    designated fractional position.
+    """
+    if not payloads:
+        return _build_noise_block(rng, tokenizer, context_len)
+
+    # Sort by depth so we can lay them out left-to-right
+    sorted_payloads = sorted(payloads, key=lambda x: x[1])
+
+    total_payload_tokens = sum(
+        _count_tokens(tokenizer, p) for p, _ in sorted_payloads
+    )
+    noise_budget = max(0, context_len - total_payload_tokens - 50)
+
+    # Partition noise into len(payloads)+1 segments based on depth_ratios.
+    # depth_ratio=0.0 means start, 1.0 means end.
+    # Segment boundaries: 0.0, d0, d1, ..., dN, 1.0
+    # Noise before payload_i gets budget proportional to its gap from previous.
+    boundaries = [0.0] + [d for _, d in sorted_payloads] + [1.0]
+    gaps = [boundaries[i + 1] - boundaries[i] for i in range(len(boundaries) - 1)]
+    gap_total = sum(gaps)
+    if gap_total <= 0:
+        # All at same depth; distribute noise evenly
+        segment_budgets = [noise_budget // (len(gaps))] * len(gaps)
+    else:
+        segment_budgets = [int(round(noise_budget * g / gap_total)) for g in gaps]
+
+    # Build the context: noise_0, payload_0, noise_1, payload_1, ..., noise_N
+    parts: List[str] = []
+    for i, (payload_text, _depth) in enumerate(sorted_payloads):
+        noise_seg = _build_noise_block(rng, tokenizer, segment_budgets[i])
+        if noise_seg:
+            parts.append(noise_seg)
+        parts.append(payload_text)
+    # Final trailing noise segment
+    trailing = _build_noise_block(rng, tokenizer, segment_budgets[-1])
+    if trailing:
+        parts.append(trailing)
+
     return "\n\n".join(parts)
 
 
@@ -346,29 +409,44 @@ def _build_mk_niah_cases(
 ) -> List[RulerCase]:
     """MK-NIAH: Multi-Key Needle-in-a-Haystack.
 
-    Multiple key-value pairs are scattered across noise.
-    The model must retrieve ALL values.
+    EVL-048 FIX: Each key-value pair is embedded at a different depth position,
+    matching the RULER paper convention of scattering multiple needles across
+    the context rather than packing them at a single location.
     """
+    if num_keys <= 0:
+        raise ValueError(f"num_keys must be >= 1, got {num_keys}")
     cases: List[RulerCase] = []
     for idx in range(num_cases):
-        ratio = depth_ratios[idx % len(depth_ratios)]
+        base_ratio = depth_ratios[idx % len(depth_ratios)]
         pairs: List[Tuple[str, str]] = []
         for k_idx in range(num_keys):
             key = f"KEY_{idx:04d}_{k_idx:02d}"
             value = _random_token(rng, prefix="val", n=6)
             pairs.append((key, value))
 
-        # Build payload lines spread across the context
-        payload_lines: List[str] = []
-        for k, v in pairs:
-            payload_lines.append(f"Important record: {k} = {v}.")
+        # EVL-048: Scatter pairs around base_ratio, respecting --ruler_depth_ratios.
+        # Spread is symmetric around base_ratio, clamped to [0.05, 0.95].
+        base_ratio = max(0.05, min(0.95, base_ratio))  # clamp to safe range
+        if num_keys == 1:
+            pair_depths = [base_ratio]
+        else:
+            max_spread = max(0.0, min(base_ratio - 0.05, 0.95 - base_ratio, 0.40))
+            pair_depths = [
+                max(0.05, min(0.95,
+                    base_ratio + max_spread * (2.0 * k_idx / (num_keys - 1) - 1.0)))
+                for k_idx in range(num_keys)
+            ]
+        # Build (payload, depth) tuples for _embed_multiple_payloads
+        payload_depth_pairs: List[Tuple[str, float]] = []
+        for (k, v), depth in zip(pairs, pair_depths):
+            payload_depth_pairs.append(
+                (f"Important record: {k} = {v}.", depth)
+            )
 
-        payload = "\n".join(payload_lines)
-        context = _embed_payload_in_noise(
+        context = _embed_multiple_payloads(
             tokenizer=tokenizer,
             rng=rng,
-            payload_text=payload,
-            depth_ratio=ratio,
+            payloads=payload_depth_pairs,
             context_len=context_len,
         )
         key_names = ", ".join(k for k, _ in pairs)
@@ -378,14 +456,22 @@ def _build_mk_niah_cases(
             "Output only the values, nothing else."
         )
         expected = [v for _, v in pairs]
+        # depth_ratio for the case record: use statistical median
+        sorted_depths = sorted(pair_depths)
+        n = len(sorted_depths)
+        median_depth = float(
+            (sorted_depths[n // 2 - 1] + sorted_depths[n // 2]) / 2.0
+            if n % 2 == 0 else sorted_depths[n // 2]
+        )
         cases.append(RulerCase(
             task_name="mk_niah",
             case_id=f"mk_niah_{idx:05d}",
-            depth_ratio=ratio,
+            depth_ratio=median_depth,
             context=context,
             question=question,
             expected_answers=expected,
-            metadata={"num_keys": num_keys, "pairs": pairs},
+            metadata={"num_keys": num_keys, "pairs": pairs,
+                       "pair_depths": pair_depths},
         ))
     return cases
 
@@ -413,7 +499,12 @@ def _build_vt_cases(
         final_values: List[str] = []
 
         for chain_idx in range(num_chains):
-            prefix = f"C{chain_idx}"
+            # EVL-072 FIX: Randomise variable name prefix per chain so that
+            # the model cannot exploit a fixed pattern (e.g. C0_VAR_0..C0_VAR_4)
+            # to shortcut the variable-tracking task.
+            rand_letter = rng.choice("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+            rand_num = rng.randint(0, 99)
+            prefix = f"{rand_letter}{rand_num}"
             value = _random_token(rng, prefix="v", n=6)
             var_names = [f"{prefix}_VAR_{h}" for h in range(num_hops + 1)]
             assignments: List[str] = []
@@ -579,6 +670,8 @@ def _truncate_prompt_ids(
         head_keep = max_tokens - tail_keep
         if head_keep <= 0:
             ids = ids[:max_tokens]
+        elif tail_keep == 0:  # EVL-076: ids[-0:] returns all, guard against it
+            ids = ids[:head_keep]
         else:
             ids = ids[:head_keep] + ids[-tail_keep:]
         truncated = True
@@ -589,12 +682,18 @@ def _effective_prompt_budget(
     *,
     requested_context_len: int,
     seq_len: int,
-    gen_len: int,
     gen_tokens_case: int,
     max_model_len: int,
 ) -> Tuple[int, int]:
-    """Return (effective_prompt_budget, base_total_budget)."""
-    base_total_budget = min(int(seq_len) + int(gen_len), int(max_model_len))
+    """Return (effective_prompt_budget, base_total_budget).
+
+    EVL-079 FIX: Use gen_tokens_case (the actual per-case generation budget,
+    e.g. cwe_max_tokens=128 for CWE) instead of the global gen_len for both
+    base_total_budget and the prompt budget subtraction.  Previously CWE used
+    gen_len=64 for the total budget but subtracted cwe_max_tokens=128, making
+    the effective prompt budget 64 tokens too small.
+    """
+    base_total_budget = min(int(seq_len) + int(gen_tokens_case), int(max_model_len))
     effective_prompt_budget = min(
         int(requested_context_len),
         int(base_total_budget) - int(gen_tokens_case),
@@ -711,7 +810,7 @@ def main() -> None:
         "--use_attn_temperature",
         dest="use_attn_temperature",
         action="store_true",
-        default=True,
+        default=False,  # EVL-078 FIX: project mainline uses False
     )
     parser.add_argument(
         "--no_use_attn_temperature",
@@ -841,6 +940,7 @@ def main() -> None:
     # ---- Generate cases for each task ----
     all_cases: List[RulerCase] = []
     rng = random.Random(int(args.seed))
+    failed_task_count = 0  # EVL-049: track task generation failures
 
     for task_name in tasks:
         try:
@@ -882,13 +982,22 @@ def main() -> None:
                     rng=rng,
                 ))
         except Exception as exc:  # noqa: BLE001
+            failed_task_count += 1
             print(
                 f"  [WARN] Case generation failed for task '{task_name}': "
                 f"{type(exc).__name__}: {exc}. Skipping this task."
             )
 
+    if failed_task_count > 0:
+        print(
+            f"  [WARN] {failed_task_count}/{len(tasks)} task(s) failed "
+            f"during case generation."
+        )
     if not all_cases:
-        raise RuntimeError("No RULER cases generated.")
+        raise RuntimeError(
+            f"No RULER cases generated. "
+            f"{failed_task_count}/{len(tasks)} task(s) failed during generation."
+        )
 
     print(f"Generated {len(all_cases)} RULER cases across tasks: {tasks}")
 
@@ -925,7 +1034,6 @@ def main() -> None:
         effective_prompt_budget, base_total_budget = _effective_prompt_budget(
             requested_context_len=int(context_len),
             seq_len=int(args.seq_len),
-            gen_len=int(args.gen_len),
             gen_tokens_case=int(gen_tokens),
             max_model_len=int(max_model_len),
         )
@@ -1019,6 +1127,9 @@ def main() -> None:
                     f"em={score['exact_match']:.0f} f1={score['f1']:.2f} "
                     f"errors={case_error_count}"
                 )
+        except torch.cuda.OutOfMemoryError:
+            # EVL-123: OOM must propagate, not be silently counted as case error
+            raise
         except Exception as exc:  # noqa: BLE001
             case_error_count += 1
             print(
@@ -1060,10 +1171,19 @@ def main() -> None:
             "All RULER cases failed; no valid samples to aggregate. "
             f"case_total={case_total} case_error_count={case_error_count}"
         )
+    # EVL-124: warn + exit non-zero if error rate is high but not 100%
+    error_rate = case_error_count / max(case_total, 1)
+    if error_rate > 0.3:
+        print(
+            f"  [WARN] High case error rate: {error_rate:.1%} "
+            f"({case_error_count}/{case_total}). Results may be unreliable."
+        )
 
     # ---- Aggregate per-task ----
     task_rows: List[Dict[str, object]] = []
-    task_exact_rates: List[float] = []
+    task_contains_rates: List[float] = []  # EVL-070: primary metric = contains_match
+    task_exact_rates: List[float] = []     # secondary metric = exact_match (strict)
+    task_f1_scores: List[float] = []       # EVL-081: task-level F1 for consistent aggregation
 
     for task_name in tasks:
         vals = task_scores.get(task_name, [])
@@ -1075,7 +1195,9 @@ def main() -> None:
         exact_rate = float(np.nanmean([v["exact_match"] for v in vals]) * 100.0)
         contains_rate = float(np.nanmean([v["contains_match"] for v in vals]) * 100.0)
         f1_mean = float(np.nanmean([v["f1"] for v in vals]) * 100.0)
+        task_contains_rates.append(contains_rate)
         task_exact_rates.append(exact_rate)
+        task_f1_scores.append(f1_mean)
         task_rows.append(
             {
                 "run_id": f"ruler_{timestamp}",
@@ -1083,7 +1205,8 @@ def main() -> None:
                 "seq_len": int(context_len),
                 "ruler_task": task_name,
                 "sample_count": int(len(vals)),
-                "ruler_pass_rate": round(exact_rate, 4),
+                "ruler_pass_rate": round(contains_rate, 4),  # EVL-070: primary=contains
+                "ruler_exact_rate": round(exact_rate, 4),
                 "ruler_contains_rate": round(contains_rate, 4),
                 "ruler_f1_mean": round(f1_mean, 4),
                 "seed": int(args.seed),
@@ -1115,7 +1238,8 @@ def main() -> None:
                 "gen_len": int(max_new_tokens),
                 "depth_ratio": float(depth_ratio),
                 "sample_count": int(len(vals)),
-                "ruler_pass_rate": round(exact_rate, 4),
+                "ruler_pass_rate": round(contains_rate, 4),  # EVL-070: primary=contains
+                "ruler_exact_rate": round(exact_rate, 4),
                 "ruler_contains_rate": round(contains_rate, 4),
                 "ruler_f1_mean": round(f1_mean, 4),
                 "seed": int(args.seed),
@@ -1146,18 +1270,24 @@ def main() -> None:
     # micro-averaged accuracy should compute it from ruler_details_*.csv
     # (case_status=="success" rows) directly.
     #
-    # overall_f1 and overall_contains use depth-level macro average
-    # (mean over depth buckets) for backward compatibility with the original
-    # depth-summary schema; this is a different aggregation axis than
-    # overall_pass_rate.
+    # EVL-081 FIX: All overall_* metrics now use task-level macro average
+    # (mean of per-task scores) for semantic consistency.  Previously
+    # overall_f1 and overall_contains used depth-level macro average while
+    # overall_pass_rate used task-level, causing inconsistent aggregation.
+    # EVL-070: primary metric switched from exact_match to contains_match.
+    # exact_match is too strict for S-NIAH (model outputs "The magic number
+    # is 123456" but exact requires just "123456"), causing systematic 0%.
     overall_pass_rate = round(
+        float(np.mean(task_contains_rates)) if task_contains_rates else 0.0, 4
+    )
+    overall_exact_rate = round(
         float(np.mean(task_exact_rates)) if task_exact_rates else 0.0, 4
     )
     overall_f1 = round(
-        float(np.mean(depth_f1_scores)) if depth_f1_scores else 0.0, 4
+        float(np.mean(task_f1_scores)) if task_f1_scores else 0.0, 4
     )
     overall_contains = round(
-        float(np.mean(depth_contains_rates)) if depth_contains_rates else 0.0, 4
+        float(np.mean(task_contains_rates)) if task_contains_rates else 0.0, 4
     )
 
     summary_row = {
@@ -1193,10 +1323,11 @@ def main() -> None:
         "case_error_count": int(case_error_count),
         "case_error_rate": round(float(case_error_count / max(case_total, 1)), 6),
         "ruler_tasks": ",".join(tasks),
-        "ruler_pass_rate": overall_pass_rate,
+        "ruler_pass_rate": overall_pass_rate,       # EVL-070: now uses contains_match
+        "ruler_exact_rate": overall_exact_rate,      # strict exact_match (reference)
         "ruler_contains_rate": overall_contains,
         "ruler_f1_mean": overall_f1,
-        "ruler_score": overall_pass_rate,
+        "ruler_score": overall_pass_rate,            # same as ruler_pass_rate
     }
 
     # ---- Write CSVs ----

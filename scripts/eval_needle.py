@@ -334,7 +334,11 @@ def main():
         revision=args.model_revision,
         trust_remote_code=True
     )
+    model.eval()  # NDL-001: ensure inference mode (dropout off, etc.)
 
+    # NDL-004: guard against num_depths=0 causing ZeroDivisionError
+    if args.num_depths <= 0:
+        raise ValueError(f"--num_depths must be >= 1, got {args.num_depths}")
     depths = np.linspace(0, 100, args.num_depths)
     results = []
     timestamp = datetime.now().isoformat()

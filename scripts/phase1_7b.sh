@@ -1,15 +1,24 @@
 #!/bin/bash
 # Phase 1 Stream B: Qwen2.5-7B — all experiments
+# Usage: bash phase1_7b.sh [GPU_ID] [CALIB_FILE] [RESULTS_DIR]
 set -euo pipefail
-export CUDA_VISIBLE_DEVICES=0
+GPU_ID="${1:-${CUDA_VISIBLE_DEVICES:-0}}"
+export CUDA_VISIBLE_DEVICES="$GPU_ID"
 cd /root/LLM_KVCache_Quantization
 source /etc/network_turbo 2>/dev/null || true
 export HF_HUB_OFFLINE=1
 
 MODEL_ID="Qwen/Qwen2.5-7B-Instruct"
-CALIB="artifacts/kv_calib_rolealign_7b.json"
+CALIB="${2:-${PHASE1_CALIB:-artifacts/kv_calib_rolealign_7b_v3.json}}"
 TAG="7b"
-RD="results/emnlp_rolealign_v2"
+RD="${3:-${PHASE1_RESULTS_DIR:-results/emnlp_rolealign_v4}}"
+
+# F2 fail-fast: abort if calibration file missing
+if [ ! -f "$CALIB" ]; then
+  echo "FATAL: Calibration file not found: $CALIB" >&2
+  exit 1
+fi
+
 mkdir -p "$RD/runs" "$RD/tables" "$RD/logs"
 
 echo "[${TAG}] Start: $(date '+%Y-%m-%d %H:%M:%S')"

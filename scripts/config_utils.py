@@ -148,9 +148,13 @@ def resolve_run_config(config: Dict[str, Any], run_name: str) -> Dict[str, Any]:
         run_entry.get("group_size", quant_defaults.get("group_size_v", 128)),
     )
 
+    # CFG-049: kv_mode is required, None causes silent fp16 fallback
+    kv_mode = run_entry.get("kv_mode")
+    if kv_mode is None:
+        raise ValueError("run entry missing required 'kv_mode' field")
     resolved = {
         "model_id": project.get("model_id"),
-        "kv_mode": run_entry.get("kv_mode"),
+        "kv_mode": kv_mode,
         "seq_len": run_entry.get("seq_len"),
         "gen_len": run_entry.get("gen_len"),
         "batch": run_entry.get("batch"),
@@ -172,6 +176,10 @@ def resolve_run_config(config: Dict[str, Any], run_name: str) -> Dict[str, Any]:
         "calib_file": run_entry.get("calib_file", quant_defaults.get("calib_file")),
         "use_attn_temperature": run_entry.get(
             "use_attn_temperature", quant_defaults.get("use_attn_temperature")
+        ),
+        # EVL-089: pass use_static_scales so matrix runner can override via config
+        "use_static_scales": run_entry.get(
+            "use_static_scales", quant_defaults.get("use_static_scales", True)
         ),
         "k_bits": run_entry.get("k_bits"),
         "v_bits": run_entry.get("v_bits"),

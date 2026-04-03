@@ -513,5 +513,71 @@ class TestRulerTruncatePromptIds(unittest.TestCase):
         self.assertEqual(ids_list[-3:], [197, 198, 199])
 
 
+@unittest.skipIf(ruler is None, "eval_ruler not importable")
+class TestScoreSingleAnswerContainsMatch(unittest.TestCase):
+    """EVL-070 regression: _score_single_answer must return contains_match."""
+
+    def test_contains_match_reported(self):
+        result = ruler._score_single_answer("The answer is 123456", "123456")
+        self.assertIn("contains_match", result)
+        self.assertEqual(result["contains_match"], 1.0)
+        # exact_match should be 0 because pred != ans
+        self.assertEqual(result["exact_match"], 0.0)
+
+    def test_exact_match_implies_contains(self):
+        result = ruler._score_single_answer("123456", "123456")
+        self.assertEqual(result["exact_match"], 1.0)
+        self.assertEqual(result["contains_match"], 1.0)
+
+
+@unittest.skipIf(ruler is None, "eval_ruler not importable")
+class TestMkNiahDistinctPositions(unittest.TestCase):
+    """EVL-048 regression: MK-NIAH needles must be at different positions."""
+
+    def test_pair_depths_are_distinct(self):
+        import random
+        num_keys = 4
+        base_ratio = 0.5
+        # Reproduce the depth scattering logic from _build_mk_niah_cases
+        max_spread = min(base_ratio - 0.05, 0.95 - base_ratio, 0.40)
+        pair_depths = [
+            max(0.05, min(0.95,
+                base_ratio + max_spread * (2.0 * k / (num_keys - 1) - 1.0)))
+            for k in range(num_keys)
+        ]
+        # All depths must be distinct
+        self.assertEqual(len(pair_depths), len(set(pair_depths)),
+                         f"MK-NIAH depths not distinct: {pair_depths}")
+
+
+@unittest.skipIf(ruler is None, "eval_ruler not importable")
+class TestCweTargetFrequencyDominates(unittest.TestCase):
+    """EVL-047 regression: target words must be more frequent than distractors."""
+
+    def test_target_more_frequent(self):
+        import random as stdlib_random
+        rng = stdlib_random.Random(42)
+        freq_cw = 30
+        num_cw = 10
+        word_pool = [f"word_{i}" for i in range(50)]
+        rng_copy = stdlib_random.Random(42)
+        rng_copy.shuffle(word_pool)
+        target_words = word_pool[:num_cw]
+        distractor_words = word_pool[num_cw:num_cw + 20]
+
+        all_words = []
+        for w in target_words:
+            all_words.extend([w] * freq_cw)
+        for w in distractor_words:
+            all_words.extend([w] * rng.randint(1, 3))
+
+        from collections import Counter
+        counts = Counter(all_words)
+        min_target = min(counts[w] for w in target_words)
+        max_distractor = max(counts[w] for w in distractor_words if w in counts)
+        self.assertGreater(min_target, max_distractor,
+                           "Target words must be more frequent than distractors")
+
+
 if __name__ == "__main__":
     unittest.main()

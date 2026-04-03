@@ -127,10 +127,17 @@ def _to_dynamic_cache_safely(legacy_cache):
     except Exception as exc:
         errors.append(f"from_legacy_cache failed: {exc}")
 
+    # ENG-058: Manual DynamicCache construction — iterate (k, v) layers and
+    # call cache.update() which is the stable public API.  The previous
+    # fallback used the non-existent kwarg ``ddp_cache_data`` which always
+    # raised TypeError, was silently caught, and fell through to RuntimeError.
     try:
-        return DynamicCache(ddp_cache_data=legacy_cache)
+        cache = DynamicCache()
+        for layer_idx, (k, v) in enumerate(legacy_cache):
+            cache.update(k, v, layer_idx)
+        return cache
     except Exception as exc:
-        errors.append(f"DynamicCache(ddp_cache_data=...) failed: {exc}")
+        errors.append(f"manual DynamicCache.update() construction failed: {exc}")
 
     raise RuntimeError(
         "Failed to convert legacy past_key_values tuple to DynamicCache. "
@@ -590,6 +597,7 @@ def generate_from_ids(
             )
 
     # Apply patch if needed
+    _fused_patch_applied = False
     if kv_mode in _FUSED_KV_MODES:
         if kv_mode == "int8_ours":
             import warnings
@@ -601,660 +609,736 @@ def generate_from_ids(
             )
         from src.engine.patch_model import apply_int8_fused_patch
 
-        apply_int8_fused_patch(model)
-
-    # Set seeds for reproducibility
-    set_seed(seed=seed, deterministic=True)
-
-    # Reset memory stats for accurate peak measurement
-    reset_gpu_memory_stats()
-
-    # Get available GPU memory for OOM checks
-    try:
-        gpu_free_mb = (
-            torch.cuda.get_device_properties(0).total_memory
-            - torch.cuda.memory_allocated()
-        ) / (1024 * 1024)
-    except Exception:
-        gpu_free_mb = None
-
-    # Check for excessively long input
-    max_model_len = getattr(model.config, "max_position_embeddings", 32768)
-    if prompt_len + max_new_tokens > int(max_model_len):
-        raise ValueError(
-            f"Total length ({prompt_len} + {max_new_tokens} = "
-            f"{prompt_len + max_new_tokens}) exceeds model's max "
-            f"position embeddings ({max_model_len}). "
-            f"Reduce prompt length or max_new_tokens."
-        )
-
-    max_cache_len = min(int(max_model_len), int(prompt_len + max_new_tokens))
-
-    # Initialize KV Cache based on mode
-    num_layers = getattr(model.config, "num_hidden_layers", 28)
-    static_k_scale = None
-    static_v_scale = None
-    inv_tau = None
-    outlier_rescue_ratio = 0.0
-    mixed_rescue = False
-
-    if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused"]:
-        import warnings
-
-        if kv_mode == "int8_ours":
-            default_calib = os.path.join("artifacts", "kv_calib_kl.json")
-        else:
-            default_calib = os.path.join("artifacts", "kv_calib_kl_int4_selected.json")
-        calib_path = calib_file or default_calib
-        if calib_path and os.path.exists(calib_path):
+        # ENG-086: Wrap patch in try/except so that on failure we restore
+        # the original forward method, preventing a half-patched model.
+        try:
+            apply_int8_fused_patch(model)
+            _fused_patch_applied = True
+        except Exception:
+            # Attempt to restore original forward if it was partially saved.
             try:
-                with open(calib_path, "r") as f:
-                    calib = json.load(f)
+                first_attn = model.model.layers[0].self_attn
+                AttnClass = first_attn.__class__
+                if hasattr(AttnClass, "_original_forward"):
+                    AttnClass.forward = AttnClass._original_forward
+                    del AttnClass._original_forward
+            except Exception:
+                pass
+            raise
 
-                # CAL-033: Version check — warn on legacy v1, fail-fast if
-                # postfix gate requires v2.
-                _calib_version = calib.get("version", 0)
-                if _calib_version < 2:
-                    warnings.warn(
-                        f"Calibration file '{calib_path}' has version={_calib_version} "
-                        f"(expected >=2). Legacy v1 calibration lacks provenance fields "
-                        f"(model_revision, seed, dataset_source). Results may not be "
-                        f"reproducible. Re-run calibrate_behavior.py to generate v2.",
-                        UserWarning,
-                    )
-                calib_group_k = calib.get("group_size_k", calib.get("group_size", group_size))
-                calib_group_v = calib.get("group_size_v", calib.get("group_size", group_size))
-                calib_clip_k = calib.get("clip_percentile_k", calib.get("clip_percentile", clip_percentile))
-                calib_clip_v = calib.get("clip_percentile_v", calib.get("clip_percentile", clip_percentile))
-
-                if calib_group_k and calib_group_v and calib_group_k != calib_group_v:
-                    # CAL-022: group_size_v is read from calib but the cache engine
-                    # uses a single group_size for both K and V. Warn explicitly that
-                    # group_size_v is discarded so users know V-side calibration differs.
-                    warnings.warn(
-                        f"CAL-022: Calibration group_size_k ({calib_group_k}) != group_size_v ({calib_group_v}); "
-                        "the cache engine uses a single group_size for both K and V. "
-                        "group_size_k will be used for both; group_size_v is discarded. "
-                        "Re-calibrate with symmetric group sizes to avoid this mismatch.",
-                        UserWarning,
-                    )
-                if calib_clip_k and calib_clip_v and calib_clip_k != calib_clip_v:
-                    # CAL-022: clip_percentile_v is read from calib but the cache engine
-                    # uses a single clip_percentile for both K and V. Warn explicitly.
-                    warnings.warn(
-                        f"CAL-022: Calibration clip_percentile_k ({calib_clip_k}) != clip_percentile_v ({calib_clip_v}); "
-                        "the cache engine uses a single clip_percentile for both K and V. "
-                        "clip_percentile_k will be used for both; clip_percentile_v is discarded.",
-                        UserWarning,
-                    )
-
-                # ENG-026: Use `is not None` instead of `or` to avoid
-                # replacing legitimate falsy values (e.g. 0).
-                group_size = calib_group_k if calib_group_k is not None else group_size
-                clip_percentile = calib_clip_k if calib_clip_k is not None else clip_percentile
-
-                if use_static_scales and "k_scale" in calib:
-                    # ENG-021/ENG-066: INT4 scales loaded as float32 to preserve
-                    # precision through the quantization chain. INT4's coarse step
-                    # size (1/7) amplifies fp16 rounding error ~18×. INT8 path
-                    # remains fp16 (step size 1/127 tolerates fp16 precision).
-                    _scale_dtype = torch.float32 if kv_mode.startswith("int4") else torch.float16
-                    static_k_scale = torch.tensor(calib["k_scale"], dtype=_scale_dtype)
-                if use_static_scales and "v_scale" in calib:
-                    _scale_dtype = torch.float32 if kv_mode.startswith("int4") else torch.float16
-                    static_v_scale = torch.tensor(calib["v_scale"], dtype=_scale_dtype)
-
-                # ENG-048: Detect asymmetric k_scale / v_scale presence and warn.
-                # Having k_scale without v_scale (or vice versa) means one side uses
-                # static scales while the other uses dynamic quantization. This is
-                # almost always unintentional and indicates a corrupt or partial
-                # calibration file. Without this warning, the mismatch is silent.
-                if use_static_scales:
-                    _has_k_scale = "k_scale" in calib
-                    _has_v_scale = "v_scale" in calib
-                    if _has_k_scale and not _has_v_scale:
-                        warnings.warn(
-                            "ENG-048: Calibration file has 'k_scale' but no 'v_scale'. "
-                            "K uses static scales; V will use dynamic quantization. "
-                            "This asymmetry is usually unintentional. Verify calibration file.",
-                            UserWarning,
-                        )
-                    elif _has_v_scale and not _has_k_scale:
-                        warnings.warn(
-                            "ENG-048: Calibration file has 'v_scale' but no 'k_scale'. "
-                            "V uses static scales; K will use dynamic quantization. "
-                            "This asymmetry is usually unintentional. Verify calibration file.",
-                            UserWarning,
-                        )
-                if use_attn_temperature and "inv_tau" in calib:
-                    inv_tau = torch.tensor(calib["inv_tau"], dtype=torch.float32)
-                outlier_rescue_ratio = float(calib.get("int4_outlier_ratio", 0.0) or 0.0)
-                mixed_rescue = bool(calib.get("int4_mixed_rescue", False))
-                if kv_mode == "int4_ours_mixed":
-                    mixed_rescue = True
-
-                if static_k_scale is not None:
-                    static_k_scale = static_k_scale.to(model.device)
-                if static_v_scale is not None:
-                    static_v_scale = static_v_scale.to(model.device)
-                if inv_tau is not None:
-                    inv_tau = inv_tau.to(model.device)
-            except Exception as exc:
-                if allow_missing_calib:
-                    # ENG-038: Warn clearly that the fallback means no static_scale
-                    # and no inv_tau will be used, even though kv_mode remains
-                    # unchanged. Without this warning, experiment results labelled
-                    # as "int8_ours" (or int4_ours) actually run as baseline,
-                    # silently invalidating comparisons.
-                    warnings.warn(
-                        f"Failed to load calibration file {calib_path}: {exc}. "
-                        f"Falling back to dynamic-only quantization (no static scales, "
-                        f"no inv_tau temperature). kv_mode is still '{kv_mode}' but "
-                        f"effective behavior is equivalent to baseline. Results "
-                        f"labelled '{kv_mode}' from this run should NOT be compared "
-                        f"against properly-calibrated runs.",
-                        UserWarning,
-                    )
-                else:
-                    raise RuntimeError(
-                        f"Failed to load calibration file {calib_path}: {exc}."
-                    ) from exc
-        else:
-            if allow_missing_calib:
-                warnings.warn(
-                    f"Calibration file not found: {calib_path}. "
-                    "Falling back to baseline behavior.",
-                    UserWarning,
-                )
-            else:
-                raise FileNotFoundError(
-                    f"kv_mode={kv_mode} requires a calibration file, but it was not found: {calib_path}. "
-                    "Run scripts/calibrate_behavior.py to generate calibration artifacts, "
-                    "or switch kv_mode to baseline."
-                )
-
-    if kv_mode == "fp16":
-        from src.cache import FP16KVCache
-
-        kv_cache = FP16KVCache(
-            num_layers=num_layers,
-            device=model.device.type,
-            max_seq_len=max_cache_len,
-        )
-    elif kv_mode in ["int8_baseline", "int8_fused", "int8_ours"]:
-        from src.cache import INT8KVCache
-
-        kv_cache = INT8KVCache(
-            num_layers=num_layers,
-            device=model.device.type,
-            clip_percentile=clip_percentile,
-            group_size=group_size,
-            max_seq_len=max_cache_len,
-            decode_attn_impl=decode_attn_impl,
-            static_k_scale=static_k_scale,
-            static_v_scale=static_v_scale,
-            inv_tau=inv_tau,
-            use_attn_temperature=use_attn_temperature,
-            adaptive_static_scales=adaptive_static_scales,
-            adaptive_static_margin=adaptive_static_margin,
-            adaptive_static_k=adaptive_static_k,
-            adaptive_static_v=adaptive_static_v,
-        )
-    elif kv_mode in ["int4_baseline", "int4_fused", "int4_ours", "int4_ours_mixed"]:
-        from src.cache import INT4KVCache
-
-        kv_cache = INT4KVCache(
-            num_layers=num_layers,
-            device=model.device.type,
-            clip_percentile=clip_percentile,
-            group_size=group_size,
-            max_seq_len=max_cache_len,
-            decode_attn_impl=decode_attn_impl,
-            static_k_scale=static_k_scale,
-            static_v_scale=static_v_scale,
-            inv_tau=inv_tau,
-            use_attn_temperature=use_attn_temperature,
-            adaptive_static_scales=adaptive_static_scales,
-            adaptive_static_margin=adaptive_static_margin,
-            adaptive_static_k=adaptive_static_k,
-            adaptive_static_v=adaptive_static_v,
-            outlier_rescue_ratio=outlier_rescue_ratio,
-            mixed_rescue=mixed_rescue,
-        )
-    elif kv_mode == "kivi_style":
-        # ENG-013: KIVI mode — uses asymmetric per-channel K / per-token V quantization
-        # from the KIVI paper (Liu et al., 2024). Always runs torch_ref decode attention.
-        from src.cache import KIVIStyleKVCache
-
-        kv_cache = KIVIStyleKVCache(
-            num_layers=num_layers,
-            device=model.device.type,
-            max_seq_len=max_cache_len,
-            quant_bits=int(quant_bits),
-        )
-    elif kv_mode == "int4_kivi_aligned":
-        # KIVI INT4 skeleton + attention-aligned calibration (K-path inv_tau).
-        # Uses KIVIStyleKVCache with inv_tau for Q pre-scaling in decode.
-        from src.cache import KIVIStyleKVCache
-
-        # Load calibration file for inv_tau (v3 schema supported).
-        kivi_inv_tau = None
-        kivi_v_percentile = 100.0
-        if calib_file is not None:
-            calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(os.getcwd(), calib_file)
-            if os.path.exists(calib_path):
-                with open(calib_path, "r") as f:
-                    calib_data = json.load(f)
-                # v3 schema: separate k_calibration / v_calibration
-                if "k_calibration" in calib_data and "inv_tau" in calib_data["k_calibration"]:
-                    raw_tau = calib_data["k_calibration"]["inv_tau"]
-                    kivi_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
-                elif "inv_tau" in calib_data:
-                    # v2 schema fallback
-                    raw_tau = calib_data["inv_tau"]
-                    kivi_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
-                # v3: v_calibration with optimized v_percentile
-                if "v_calibration" in calib_data and "v_percentile" in calib_data["v_calibration"]:
-                    kivi_v_percentile = float(calib_data["v_calibration"]["v_percentile"])
-
-        kv_cache = KIVIStyleKVCache(
-            num_layers=num_layers,
-            device=model.device.type,
-            max_seq_len=max_cache_len,
-            quant_bits=4,
-            v_percentile=kivi_v_percentile,
-            inv_tau=kivi_inv_tau,
-            use_attn_temperature=use_attn_temperature,
-        )
-    elif kv_mode in ("int4_ours_asym", "int4_ours_asym_ba"):
-        # Role-Aware Asymmetric: per-channel K + per-token V with BA calibration.
-        # ours_asym: BA-calibrated percentiles only (no inv_tau)
-        # ours_asym_ba: BA-calibrated percentiles + inv_tau (full method)
-        from src.cache.role_aware_asym_cache import RoleAwareAsymKVCache
-
-        ra_k_percentile = 100.0
-        ra_v_percentile = 100.0
-        ra_inv_tau = None
-
-        if calib_file is not None:
-            calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(os.getcwd(), calib_file)
-            if os.path.exists(calib_path):
-                with open(calib_path, "r") as f:
-                    calib_data = json.load(f)
-                # Role-aware schema: k_percentile, v_percentile at top level or under role_aware
-                if "role_aware" in calib_data:
-                    ra_section = calib_data["role_aware"]
-                    ra_k_percentile = float(ra_section.get("k_percentile", 100.0))
-                    ra_v_percentile = float(ra_section.get("v_percentile", 100.0))
-                elif "k_calibration" in calib_data:
-                    # Fallback: v3 schema from int4_kivi_aligned calibration.
-                    # Look inside k_calibration first, then top-level.
-                    import warnings
-                    warnings.warn(
-                        f"RoleAlign mode '{kv_mode}' using k_calibration fallback schema; "
-                        "consider re-generating calibration with role_aware schema.",
-                        UserWarning,
-                    )
-                    k_cal = calib_data["k_calibration"]
-                    ra_k_percentile = float(k_cal.get("k_percentile", calib_data.get("k_percentile", 100.0)))
-                    if "v_calibration" in calib_data:
-                        ra_v_percentile = float(calib_data["v_calibration"].get("v_percentile", 100.0))
-                # inv_tau: only for ours_asym_ba
-                if kv_mode == "int4_ours_asym_ba":
-                    if "role_aware" in calib_data and "inv_tau" in calib_data["role_aware"]:
-                        raw_tau = calib_data["role_aware"]["inv_tau"]
-                        ra_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
-                    elif "k_calibration" in calib_data and "inv_tau" in calib_data["k_calibration"]:
-                        raw_tau = calib_data["k_calibration"]["inv_tau"]
-                        ra_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
-                    elif "inv_tau" in calib_data:
-                        raw_tau = calib_data["inv_tau"]
-                        ra_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
-
-        use_temp = use_attn_temperature and (kv_mode == "int4_ours_asym_ba")
-        framework_tag = "ours_asym_ba" if kv_mode == "int4_ours_asym_ba" else "ours_asym"
-
-        kv_cache = RoleAwareAsymKVCache(
-            num_layers=num_layers,
-            device=model.device.type,
-            max_seq_len=max_cache_len,
-            quant_bits=4,
-            k_percentile=ra_k_percentile,
-            v_percentile=ra_v_percentile,
-            inv_tau=ra_inv_tau,
-            use_attn_temperature=use_temp,
-            framework=framework_tag,
-        )
-        if decode_attn_impl != "torch_ref":
-            import warnings
-            warnings.warn(
-                f"kv_mode='{kv_mode}' forces decode_attn_impl='torch_ref' "
-                f"(requested '{decode_attn_impl}'). RoleAwareAsym uses torch_ref only.",
-                UserWarning,
-            )
-            decode_attn_impl = "torch_ref"
-    elif kv_mode == "int4_mixed_kv":
-        # K-INT8 symmetric + V-INT4 asymmetric per-token (hybrid mode).
-        # k_bits/v_bits allow K/V ablation (K-only, V-only, counterfactual).
-        from src.cache.mixed_kv_cache import MixedKVCache
-
-        kv_cache = MixedKVCache(
-            num_layers=num_layers,
-            device=model.device.type,
-            max_seq_len=max_cache_len,
-            k_bits=k_bits if k_bits is not None else 8,
-            v_bits=v_bits if v_bits is not None else 4,
-        )
-    else:
-        raise ValueError(f"Unsupported kv_mode: {kv_mode}")
-
-    # Simple explicit memory check (rough estimate)
-    if gpu_free_mb is not None and gpu_free_mb < 2000:
-        import warnings
-
-        warnings.warn(
-            f"Low GPU memory ({gpu_free_mb:.0f} MB). Generation may OOM.",
-            ResourceWarning,
-        )
-
-    generated_steps: List[torch.Tensor] = []
-    decode_times = TimingStats()
-    model_cache_for_decode = None
-    fp16_use_model_cache = False
-
-    hook_handles = []
-    if kv_mode == "int4_kivi_aligned" and use_attn_temperature:
-        # int4_kivi_aligned uses torch_ref decode (not fused), so inv_tau must
-        # be applied via hooks for BOTH prefill and decode.
-        _kivi_inv_tau = inv_tau
-        if _kivi_inv_tau is None and hasattr(kv_cache, "inv_tau"):
-            _kivi_inv_tau = kv_cache.inv_tau
-        if _kivi_inv_tau is not None:
-            hook_handles = _register_all_temperature_hooks(model, _kivi_inv_tau)
-    elif kv_mode == "int4_ours_asym_ba" and use_attn_temperature:
-        # ours_asym_ba uses torch_ref decode (not fused), so inv_tau must
-        # be applied via hooks for BOTH prefill and decode (same as int4_kivi_aligned).
-        _ra_inv_tau = inv_tau
-        if _ra_inv_tau is None and hasattr(kv_cache, "inv_tau"):
-            _ra_inv_tau = kv_cache.inv_tau
-        if _ra_inv_tau is not None:
-            hook_handles = _register_all_temperature_hooks(model, _ra_inv_tau)
-    elif kv_mode in {"int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused"} and use_attn_temperature and inv_tau is not None:
-        # Fused modes: prefill hooks only; decode temperature handled by _fused_forward_impl.
-        hook_handles = _register_prefill_temperature_hooks(model, inv_tau)
-
-    # ========== PREFILL PHASE ==========
-    prefill_timer = CUDATimer()
-    prefill_timer.start()
-
-    try:
-        with torch.no_grad():
-            outputs = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                use_cache=True,
-            )
-
-            # Extract and store KV cache (prefill)
-            if outputs.past_key_values is not None:
-                # ENG-046: We iterate outputs.past_key_values as an iterable of
-                # (k, v) tuples. For transformers < 4.36 this is a plain tuple.
-                # For transformers >= 4.36, model.forward may return a DynamicCache
-                # object. We rely on DynamicCache.__iter__ yielding per-layer
-                # (key_cache[i], value_cache[i]) tuples, which is the documented
-                # behavior as of transformers 4.40 but may change in future versions.
-                # If the iteration behavior changes (e.g. yields layer objects instead
-                # of tensor tuples), this loop will break with a TypeError at unpack.
-                # Pin transformers version in requirements.txt to avoid silent drift.
-                for i, (k, v) in enumerate(outputs.past_key_values):
-                    kv_cache.append(i, k, v)
-                if (
-                    kv_mode == "fp16"
-                    and HAS_DYNAMIC_CACHE
-                    and hasattr(outputs.past_key_values, "get_seq_length")
-                ):
-                    # Reuse HF dynamic cache directly in decode to avoid
-                    # per-step tuple->DynamicCache conversion spikes at high batch.
-                    model_cache_for_decode = outputs.past_key_values
-                    fp16_use_model_cache = True
-
-            next_token_logits = outputs.logits[:, -1, :]
-            next_token = torch.argmax(next_token_logits, dim=-1)  # [B]
-    finally:
-        # UTIL-001: Ensure prefill_timer.stop() runs even if model() throws,
-        # so ttft_ms is always defined and CUDA events are properly finalized.
-        prefill_timer.stop()
-        for h in hook_handles:
+    # ENG-086: Helper to unconditionally restore the fused monkeypatch.
+    # Called on every exit path (normal return AND exceptions) so the model's
+    # forward method never remains pointing at the fused proxy after this
+    # function returns or raises.  Strictly idempotent: after first
+    # successful restore, further calls are no-ops.
+    def _restore_fused_patch():
+        nonlocal _fused_patch_applied
+        if not _fused_patch_applied:
+            return
+        _fused_patch_applied = False
+        try:
+            from src.engine.patch_model import remove_int8_fused_patch as _remove
+            _remove(model)
+        except Exception:
+            # Last-resort manual restore if the high-level helper fails.
             try:
-                h.remove()
+                first_attn = model.model.layers[0].self_attn
+                AttnClass = first_attn.__class__
+                if hasattr(AttnClass, "_original_forward"):
+                    AttnClass.forward = AttnClass._original_forward
+                    del AttnClass._original_forward
             except Exception:
                 pass
 
-    ttft_ms = prefill_timer.elapsed_ms
+    # ENG-086: Wrap the entire post-patch region in try/finally so that
+    # _restore_fused_patch() is guaranteed to run on ALL exit paths,
+    # including ValueError (length check), RuntimeError/FileNotFoundError
+    # (calibration), cache construction failures, and hook registration
+    # errors that were previously uncovered.
+    try:
+        # Set seeds for reproducibility
+        set_seed(seed=seed, deterministic=True)
 
-    # ENG-018: If max_new_tokens=0, skip generation entirely.
-    if max_new_tokens > 0:
-        generated_steps.append(next_token)
-        current_token = next_token.view(batch_size, 1)  # [B, 1]
+        # Reset memory stats for accurate peak measurement
+        reset_gpu_memory_stats()
 
-        # Update attention mask for decode phase
-        if attention_mask is not None:
-            attention_mask = torch.cat(
-                [
-                    attention_mask,
-                    torch.ones((batch_size, 1), device=model.device, dtype=attention_mask.dtype),
-                ],
-                dim=1,
+        # ENG-060: Get available GPU memory for OOM checks using the model's
+        # actual device instead of hardcoded GPU 0.
+        try:
+            _model_device = model.device
+            _device_idx = _model_device.index if _model_device.index is not None else 0
+            gpu_free_mb = (
+                torch.cuda.get_device_properties(_device_idx).total_memory
+                - torch.cuda.memory_allocated(_device_idx)
+            ) / (1024 * 1024)
+        except Exception:
+            gpu_free_mb = None
+
+        # Check for excessively long input
+        max_model_len = getattr(model.config, "max_position_embeddings", 32768)
+        if prompt_len + max_new_tokens > int(max_model_len):
+            raise ValueError(
+                f"Total length ({prompt_len} + {max_new_tokens} = "
+                f"{prompt_len + max_new_tokens}) exceeds model's max "
+                f"position embeddings ({max_model_len}). "
+                f"Reduce prompt length or max_new_tokens."
             )
 
-    # ========== DECODE PHASE ==========
-    eos_token_id = _normalize_eos_token_id(tokenizer.eos_token_id)
+        max_cache_len = min(int(max_model_len), int(prompt_len + max_new_tokens))
 
-    # ENG-110: Per-sequence EOS tracking. Once a sequence emits EOS, all its
-    # subsequent tokens are forced to eos_token_id to avoid garbage generation
-    # while waiting for slower sequences in the batch to finish.
-    eos_reached = torch.zeros(batch_size, dtype=torch.bool, device=model.device)
-    if stop_on_eos and eos_token_id is not None and max_new_tokens > 0 and generated_steps:
-        eos_reached = generated_steps[-1] == eos_token_id
+        # Initialize KV Cache based on mode
+        num_layers = getattr(model.config, "num_hidden_layers", 28)
+        static_k_scale = None
+        static_v_scale = None
+        inv_tau = None
+        outlier_rescue_ratio = 0.0
+        mixed_rescue = False
 
-    for _ in range(max(max_new_tokens - 1, 0)):
-        if stop_on_eos and eos_token_id is not None:
-            if torch.all(eos_reached).item():
-                break
+        if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused"]:
+            import warnings
 
-        decode_timer = CUDATimer()
-        decode_timer.start()
-
-        with torch.no_grad():
-            # Prepare past_key_values
-            if kv_mode == "fp16" and fp16_use_model_cache and model_cache_for_decode is not None:
-                current_past_key_values = model_cache_for_decode
-            elif kv_mode in _FUSED_KV_MODES:
-                from src.engine.patch_model import INT8CacheWrapperContainer
-
-                # ENG-033: INT8CacheWrapperContainer is reconstructed each decode step. This is intentional — wrappers are lightweight (no buffer copy), and caching them would require tracking cache mutations.
-                current_past_key_values = INT8CacheWrapperContainer(kv_cache, num_layers)
-            elif kv_mode in ["int8_baseline", "int4_baseline", "kivi_style", "int4_kivi_aligned", "int4_mixed_kv", "int4_ours_asym", "int4_ours_asym_ba"]:
-                # For baseline / KIVI / mixed / role-aware-asym modes, we dequantize BEFORE attention.
-                # For int4_kivi_aligned and int4_ours_asym_ba, inv_tau Q pre-scaling is applied via
-                # hooks registered on model forward (both prefill and decode).
-                current_past_key_values = []
-                for i in range(num_layers):
-                    k, v = kv_cache.get_kv(i)
-                    current_past_key_values.append((k, v))
-                current_past_key_values = tuple(current_past_key_values)
+            # ENG-089: Compute project root from __file__ so default calib paths
+            # resolve correctly regardless of the caller's working directory.
+            _project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            if kv_mode == "int8_ours":
+                default_calib = os.path.join(_project_root, "artifacts", "kv_calib_kl.json")
             else:
-                current_past_key_values = kv_cache.to_tuple()
+                default_calib = os.path.join(_project_root, "artifacts", "kv_calib_kl_int4_selected.json")
+            calib_path = calib_file or default_calib
+            if calib_path and os.path.exists(calib_path):
+                try:
+                    with open(calib_path, "r") as f:
+                        calib = json.load(f)
 
-            # Dynamic Cache Check (Skipped for fused wrapper as it mocks Cache)
-            if (
-                kv_mode not in _FUSED_KV_MODES
-                and HAS_DYNAMIC_CACHE
-                and isinstance(current_past_key_values, tuple)
-            ):
-                current_past_key_values = _to_dynamic_cache_safely(current_past_key_values)
+                    # CAL-033: Version check — warn on legacy v1, fail-fast if
+                    # postfix gate requires v2.
+                    _calib_version = calib.get("version", 0)
+                    if _calib_version < 2:
+                        warnings.warn(
+                            f"Calibration file '{calib_path}' has version={_calib_version} "
+                            f"(expected >=2). Legacy v1 calibration lacks provenance fields "
+                            f"(model_revision, seed, dataset_source). Results may not be "
+                            f"reproducible. Re-run calibrate_behavior.py to generate v2.",
+                            UserWarning,
+                        )
+                    calib_group_k = calib.get("group_size_k", calib.get("group_size", group_size))
+                    calib_group_v = calib.get("group_size_v", calib.get("group_size", group_size))
+                    calib_clip_k = calib.get("clip_percentile_k", calib.get("clip_percentile", clip_percentile))
+                    calib_clip_v = calib.get("clip_percentile_v", calib.get("clip_percentile", clip_percentile))
 
-            outputs = model(
-                input_ids=current_token,
-                attention_mask=attention_mask,
-                past_key_values=current_past_key_values,
-                use_cache=True,
+                    if calib_group_k and calib_group_v and calib_group_k != calib_group_v:
+                        # CAL-022: group_size_v is read from calib but the cache engine
+                        # uses a single group_size for both K and V. Warn explicitly that
+                        # group_size_v is discarded so users know V-side calibration differs.
+                        warnings.warn(
+                            f"CAL-022: Calibration group_size_k ({calib_group_k}) != group_size_v ({calib_group_v}); "
+                            "the cache engine uses a single group_size for both K and V. "
+                            "group_size_k will be used for both; group_size_v is discarded. "
+                            "Re-calibrate with symmetric group sizes to avoid this mismatch.",
+                            UserWarning,
+                        )
+                    if calib_clip_k and calib_clip_v and calib_clip_k != calib_clip_v:
+                        # CAL-022: clip_percentile_v is read from calib but the cache engine
+                        # uses a single clip_percentile for both K and V. Warn explicitly.
+                        warnings.warn(
+                            f"CAL-022: Calibration clip_percentile_k ({calib_clip_k}) != clip_percentile_v ({calib_clip_v}); "
+                            "the cache engine uses a single clip_percentile for both K and V. "
+                            "clip_percentile_k will be used for both; clip_percentile_v is discarded.",
+                            UserWarning,
+                        )
+
+                    # ENG-026: Use `is not None` instead of `or` to avoid
+                    # replacing legitimate falsy values (e.g. 0).
+                    group_size = calib_group_k if calib_group_k is not None else group_size
+                    clip_percentile = calib_clip_k if calib_clip_k is not None else clip_percentile
+
+                    if use_static_scales and "k_scale" in calib:
+                        # ENG-021/ENG-066: INT4 scales loaded as float32 to preserve
+                        # precision through the quantization chain. INT4's coarse step
+                        # size (1/7) amplifies fp16 rounding error ~18×. INT8 path
+                        # remains fp16 (step size 1/127 tolerates fp16 precision).
+                        _scale_dtype = torch.float32 if kv_mode.startswith("int4") else torch.float16
+                        static_k_scale = torch.tensor(calib["k_scale"], dtype=_scale_dtype)
+                    if use_static_scales and "v_scale" in calib:
+                        _scale_dtype = torch.float32 if kv_mode.startswith("int4") else torch.float16
+                        static_v_scale = torch.tensor(calib["v_scale"], dtype=_scale_dtype)
+
+                    # ENG-048: Detect asymmetric k_scale / v_scale presence and warn.
+                    # Having k_scale without v_scale (or vice versa) means one side uses
+                    # static scales while the other uses dynamic quantization. This is
+                    # almost always unintentional and indicates a corrupt or partial
+                    # calibration file. Without this warning, the mismatch is silent.
+                    if use_static_scales:
+                        _has_k_scale = "k_scale" in calib
+                        _has_v_scale = "v_scale" in calib
+                        if _has_k_scale and not _has_v_scale:
+                            warnings.warn(
+                                "ENG-048: Calibration file has 'k_scale' but no 'v_scale'. "
+                                "K uses static scales; V will use dynamic quantization. "
+                                "This asymmetry is usually unintentional. Verify calibration file.",
+                                UserWarning,
+                            )
+                        elif _has_v_scale and not _has_k_scale:
+                            warnings.warn(
+                                "ENG-048: Calibration file has 'v_scale' but no 'k_scale'. "
+                                "V uses static scales; K will use dynamic quantization. "
+                                "This asymmetry is usually unintentional. Verify calibration file.",
+                                UserWarning,
+                            )
+                    if use_attn_temperature and "inv_tau" in calib:
+                        inv_tau = torch.tensor(calib["inv_tau"], dtype=torch.float32)
+                    outlier_rescue_ratio = float(calib.get("int4_outlier_ratio", 0.0) or 0.0)
+                    mixed_rescue = bool(calib.get("int4_mixed_rescue", False))
+                    if kv_mode == "int4_ours_mixed":
+                        mixed_rescue = True
+
+                    if static_k_scale is not None:
+                        static_k_scale = static_k_scale.to(model.device)
+                    if static_v_scale is not None:
+                        static_v_scale = static_v_scale.to(model.device)
+                    if inv_tau is not None:
+                        inv_tau = inv_tau.to(model.device)
+                except Exception as exc:
+                    if allow_missing_calib:
+                        # ENG-038: Warn clearly that the fallback means no static_scale
+                        # and no inv_tau will be used, even though kv_mode remains
+                        # unchanged. Without this warning, experiment results labelled
+                        # as "int8_ours" (or int4_ours) actually run as baseline,
+                        # silently invalidating comparisons.
+                        warnings.warn(
+                            f"Failed to load calibration file {calib_path}: {exc}. "
+                            f"Falling back to dynamic-only quantization (no static scales, "
+                            f"no inv_tau temperature). kv_mode is still '{kv_mode}' but "
+                            f"effective behavior is equivalent to baseline. Results "
+                            f"labelled '{kv_mode}' from this run should NOT be compared "
+                            f"against properly-calibrated runs.",
+                            UserWarning,
+                        )
+                    else:
+                        raise RuntimeError(
+                            f"Failed to load calibration file {calib_path}: {exc}."
+                        ) from exc
+            else:
+                if allow_missing_calib:
+                    warnings.warn(
+                        f"Calibration file not found: {calib_path}. "
+                        "Falling back to baseline behavior.",
+                        UserWarning,
+                    )
+                else:
+                    raise FileNotFoundError(
+                        f"kv_mode={kv_mode} requires a calibration file, but it was not found: {calib_path}. "
+                        "Run scripts/calibrate_behavior.py to generate calibration artifacts, "
+                        "or switch kv_mode to baseline."
+                    )
+
+        if kv_mode == "fp16":
+            from src.cache import FP16KVCache
+
+            kv_cache = FP16KVCache(
+                num_layers=num_layers,
+                device=model.device.type,
+                max_seq_len=max_cache_len,
             )
-            if kv_mode == "fp16" and fp16_use_model_cache:
-                model_cache_for_decode = outputs.past_key_values
+        elif kv_mode in ["int8_baseline", "int8_fused", "int8_ours"]:
+            from src.cache import INT8KVCache
 
-            # Update cache with NEW token's KV for non-fused modes.
-            if (
-                kv_mode not in _FUSED_KV_MODES
-                and not (kv_mode == "fp16" and fp16_use_model_cache)
-            ):
+            kv_cache = INT8KVCache(
+                num_layers=num_layers,
+                device=model.device.type,
+                clip_percentile=clip_percentile,
+                group_size=group_size,
+                max_seq_len=max_cache_len,
+                decode_attn_impl=decode_attn_impl,
+                static_k_scale=static_k_scale,
+                static_v_scale=static_v_scale,
+                inv_tau=inv_tau,
+                use_attn_temperature=use_attn_temperature,
+                adaptive_static_scales=adaptive_static_scales,
+                adaptive_static_margin=adaptive_static_margin,
+                adaptive_static_k=adaptive_static_k,
+                adaptive_static_v=adaptive_static_v,
+            )
+        elif kv_mode in ["int4_baseline", "int4_fused", "int4_ours", "int4_ours_mixed"]:
+            from src.cache import INT4KVCache
+
+            kv_cache = INT4KVCache(
+                num_layers=num_layers,
+                device=model.device.type,
+                clip_percentile=clip_percentile,
+                group_size=group_size,
+                max_seq_len=max_cache_len,
+                decode_attn_impl=decode_attn_impl,
+                static_k_scale=static_k_scale,
+                static_v_scale=static_v_scale,
+                inv_tau=inv_tau,
+                use_attn_temperature=use_attn_temperature,
+                adaptive_static_scales=adaptive_static_scales,
+                adaptive_static_margin=adaptive_static_margin,
+                adaptive_static_k=adaptive_static_k,
+                adaptive_static_v=adaptive_static_v,
+                outlier_rescue_ratio=outlier_rescue_ratio,
+                mixed_rescue=mixed_rescue,
+            )
+        elif kv_mode == "kivi_style":
+            # ENG-013: KIVI mode — uses asymmetric per-channel K / per-token V quantization
+            # from the KIVI paper (Liu et al., 2024). Always runs torch_ref decode attention.
+            from src.cache import KIVIStyleKVCache
+
+            kv_cache = KIVIStyleKVCache(
+                num_layers=num_layers,
+                device=model.device.type,
+                max_seq_len=max_cache_len,
+                quant_bits=int(quant_bits),
+            )
+        elif kv_mode == "int4_kivi_aligned":
+            # KIVI INT4 skeleton + attention-aligned calibration (K-path inv_tau).
+            # Uses KIVIStyleKVCache with inv_tau for Q pre-scaling in decode.
+            from src.cache import KIVIStyleKVCache
+
+            # Load calibration file for inv_tau (v3 schema supported).
+            kivi_inv_tau = None
+            kivi_v_percentile = 100.0
+            if calib_file is not None:
+                calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(os.getcwd(), calib_file)
+                if os.path.exists(calib_path):
+                    with open(calib_path, "r") as f:
+                        calib_data = json.load(f)
+                    # v3 schema: separate k_calibration / v_calibration
+                    if "k_calibration" in calib_data and "inv_tau" in calib_data["k_calibration"]:
+                        raw_tau = calib_data["k_calibration"]["inv_tau"]
+                        kivi_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
+                    elif "inv_tau" in calib_data:
+                        # v2 schema fallback
+                        raw_tau = calib_data["inv_tau"]
+                        kivi_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
+                    # v3: v_calibration with optimized v_percentile
+                    if "v_calibration" in calib_data and "v_percentile" in calib_data["v_calibration"]:
+                        kivi_v_percentile = float(calib_data["v_calibration"]["v_percentile"])
+
+            kv_cache = KIVIStyleKVCache(
+                num_layers=num_layers,
+                device=model.device.type,
+                max_seq_len=max_cache_len,
+                quant_bits=4,
+                v_percentile=kivi_v_percentile,
+                inv_tau=kivi_inv_tau,
+                use_attn_temperature=use_attn_temperature,
+            )
+        elif kv_mode in ("int4_ours_asym", "int4_ours_asym_ba"):
+            # Role-Aware Asymmetric: per-channel K + per-token V with BA calibration.
+            # ours_asym: BA-calibrated percentiles only (no inv_tau)
+            # ours_asym_ba: BA-calibrated percentiles + inv_tau (full method)
+            from src.cache.role_aware_asym_cache import RoleAwareAsymKVCache
+
+            ra_k_percentile = 100.0
+            ra_v_percentile = 100.0
+            ra_inv_tau = None
+
+            if calib_file is not None:
+                calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(os.getcwd(), calib_file)
+                if os.path.exists(calib_path):
+                    with open(calib_path, "r") as f:
+                        calib_data = json.load(f)
+                    # Role-aware schema: k_percentile, v_percentile at top level or under role_aware
+                    if "role_aware" in calib_data:
+                        ra_section = calib_data["role_aware"]
+                        ra_k_percentile = float(ra_section.get("k_percentile", 100.0))
+                        ra_v_percentile = float(ra_section.get("v_percentile", 100.0))
+                    elif "k_calibration" in calib_data:
+                        # Fallback: v3 schema from int4_kivi_aligned calibration.
+                        # Look inside k_calibration first, then top-level.
+                        import warnings
+                        warnings.warn(
+                            f"RoleAlign mode '{kv_mode}' using k_calibration fallback schema; "
+                            "consider re-generating calibration with role_aware schema.",
+                            UserWarning,
+                        )
+                        k_cal = calib_data["k_calibration"]
+                        ra_k_percentile = float(k_cal.get("k_percentile", calib_data.get("k_percentile", 100.0)))
+                        if "v_calibration" in calib_data:
+                            ra_v_percentile = float(calib_data["v_calibration"].get("v_percentile", 100.0))
+                    # inv_tau: only for ours_asym_ba
+                    if kv_mode == "int4_ours_asym_ba":
+                        if "role_aware" in calib_data and "inv_tau" in calib_data["role_aware"]:
+                            raw_tau = calib_data["role_aware"]["inv_tau"]
+                            ra_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
+                        elif "k_calibration" in calib_data and "inv_tau" in calib_data["k_calibration"]:
+                            raw_tau = calib_data["k_calibration"]["inv_tau"]
+                            ra_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
+                        elif "inv_tau" in calib_data:
+                            raw_tau = calib_data["inv_tau"]
+                            ra_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
+
+            use_temp = use_attn_temperature and (kv_mode == "int4_ours_asym_ba")
+            framework_tag = "ours_asym_ba" if kv_mode == "int4_ours_asym_ba" else "ours_asym"
+
+            kv_cache = RoleAwareAsymKVCache(
+                num_layers=num_layers,
+                device=model.device.type,
+                max_seq_len=max_cache_len,
+                quant_bits=4,
+                k_percentile=ra_k_percentile,
+                v_percentile=ra_v_percentile,
+                inv_tau=ra_inv_tau,
+                use_attn_temperature=use_temp,
+                framework=framework_tag,
+            )
+            if decode_attn_impl != "torch_ref":
+                import warnings
+                warnings.warn(
+                    f"kv_mode='{kv_mode}' forces decode_attn_impl='torch_ref' "
+                    f"(requested '{decode_attn_impl}'). RoleAwareAsym uses torch_ref only.",
+                    UserWarning,
+                )
+                decode_attn_impl = "torch_ref"
+        elif kv_mode == "int4_mixed_kv":
+            # K-INT8 symmetric + V-INT4 asymmetric per-token (hybrid mode).
+            # k_bits/v_bits allow K/V ablation (K-only, V-only, counterfactual).
+            from src.cache.mixed_kv_cache import MixedKVCache
+
+            kv_cache = MixedKVCache(
+                num_layers=num_layers,
+                device=model.device.type,
+                max_seq_len=max_cache_len,
+                k_bits=k_bits if k_bits is not None else 8,
+                v_bits=v_bits if v_bits is not None else 4,
+            )
+        else:
+            raise ValueError(f"Unsupported kv_mode: {kv_mode}")
+
+        # Simple explicit memory check (rough estimate)
+        if gpu_free_mb is not None and gpu_free_mb < 2000:
+            import warnings
+
+            warnings.warn(
+                f"Low GPU memory ({gpu_free_mb:.0f} MB). Generation may OOM.",
+                ResourceWarning,
+            )
+
+        generated_steps: List[torch.Tensor] = []
+        decode_times = TimingStats()
+        model_cache_for_decode = None
+        fp16_use_model_cache = False
+
+        hook_handles = []
+        if kv_mode == "int4_kivi_aligned" and use_attn_temperature:
+            # int4_kivi_aligned uses torch_ref decode (not fused), so inv_tau must
+            # be applied via hooks for BOTH prefill and decode.
+            _kivi_inv_tau = inv_tau
+            if _kivi_inv_tau is None and hasattr(kv_cache, "inv_tau"):
+                _kivi_inv_tau = kv_cache.inv_tau
+            if _kivi_inv_tau is not None:
+                hook_handles = _register_all_temperature_hooks(model, _kivi_inv_tau)
+        elif kv_mode == "int4_ours_asym_ba" and use_attn_temperature:
+            # ours_asym_ba uses torch_ref decode (not fused), so inv_tau must
+            # be applied via hooks for BOTH prefill and decode (same as int4_kivi_aligned).
+            _ra_inv_tau = inv_tau
+            if _ra_inv_tau is None and hasattr(kv_cache, "inv_tau"):
+                _ra_inv_tau = kv_cache.inv_tau
+            if _ra_inv_tau is not None:
+                hook_handles = _register_all_temperature_hooks(model, _ra_inv_tau)
+        elif kv_mode in {"int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused"} and use_attn_temperature and inv_tau is not None:
+            # Fused modes: prefill hooks only; decode temperature handled by _fused_forward_impl.
+            hook_handles = _register_prefill_temperature_hooks(model, inv_tau)
+
+        # ENG-088: Helper to guarantee kv_cache cleanup on any exit path (OOM, etc.).
+        def _cleanup_kv_cache():
+            try:
+                kv_cache.clear()
+            except Exception:
+                pass
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        # ========== PREFILL PHASE ==========
+        prefill_timer = CUDATimer()
+        prefill_timer.start()
+
+        try:
+            with torch.no_grad():
+                outputs = model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    use_cache=True,
+                )
+
+                # Extract and store KV cache (prefill)
                 if outputs.past_key_values is not None:
+                    # ENG-046: We iterate outputs.past_key_values as an iterable of
+                    # (k, v) tuples. For transformers < 4.36 this is a plain tuple.
+                    # For transformers >= 4.36, model.forward may return a DynamicCache
+                    # object. We rely on DynamicCache.__iter__ yielding per-layer
+                    # (key_cache[i], value_cache[i]) tuples, which is the documented
+                    # behavior as of transformers 4.40 but may change in future versions.
+                    # If the iteration behavior changes (e.g. yields layer objects instead
+                    # of tensor tuples), this loop will break with a TypeError at unpack.
+                    # Pin transformers version in requirements.txt to avoid silent drift.
                     for i, (k, v) in enumerate(outputs.past_key_values):
-                        # Only append the newly produced token when model returns full cache.
-                        # This avoids re-quantizing historical tokens already stored in kv_cache.
-                        if k.shape[2] > 1:
-                            # ENG-045: The model returned more than one new KV token
-                            # (k.shape[2] > 1). This occurs with speculative decoding
-                            # or models that return the full cumulative cache instead
-                            # of only the new token. We take only the last token to
-                            # avoid re-appending previously cached tokens, but any
-                            # accepted draft tokens beyond the last one are silently
-                            # dropped. Speculative decoding multi-token returns are
-                            # NOT correctly handled by this non-fused decode path.
+                        kv_cache.append(i, k, v)
+                    if (
+                        kv_mode == "fp16"
+                        and HAS_DYNAMIC_CACHE
+                        and hasattr(outputs.past_key_values, "get_seq_length")
+                    ):
+                        # Reuse HF dynamic cache directly in decode to avoid
+                        # per-step tuple->DynamicCache conversion spikes at high batch.
+                        model_cache_for_decode = outputs.past_key_values
+                        fp16_use_model_cache = True
+
+                next_token_logits = outputs.logits[:, -1, :]
+                next_token = torch.argmax(next_token_logits, dim=-1)  # [B]
+        except Exception:
+            # ENG-088: Guarantee kv_cache cleanup on prefill failure (e.g. OOM).
+            _cleanup_kv_cache()
+            raise
+        finally:
+            # UTIL-001: Ensure prefill_timer.stop() runs even if model() throws,
+            # so ttft_ms is always defined and CUDA events are properly finalized.
+            prefill_timer.stop()
+            for h in hook_handles:
+                try:
+                    h.remove()
+                except Exception:
+                    pass
+
+        ttft_ms = prefill_timer.elapsed_ms
+
+        # ENG-018: If max_new_tokens=0, skip generation entirely.
+        if max_new_tokens > 0:
+            generated_steps.append(next_token)
+            current_token = next_token.view(batch_size, 1)  # [B, 1]
+
+            # Update attention mask for decode phase
+            if attention_mask is not None:
+                attention_mask = torch.cat(
+                    [
+                        attention_mask,
+                        torch.ones((batch_size, 1), device=model.device, dtype=attention_mask.dtype),
+                    ],
+                    dim=1,
+                )
+
+        # ========== DECODE PHASE ==========
+        eos_token_id = _normalize_eos_token_id(tokenizer.eos_token_id)
+
+        # ENG-110: Per-sequence EOS tracking. Once a sequence emits EOS, all its
+        # subsequent tokens are forced to eos_token_id to avoid garbage generation
+        # while waiting for slower sequences in the batch to finish.
+        eos_reached = torch.zeros(batch_size, dtype=torch.bool, device=model.device)
+        if stop_on_eos and eos_token_id is not None and max_new_tokens > 0 and generated_steps:
+            eos_reached = generated_steps[-1] == eos_token_id
+
+        for _ in range(max(max_new_tokens - 1, 0)):
+            if stop_on_eos and eos_token_id is not None:
+                if torch.all(eos_reached).item():
+                    break
+
+            decode_timer = CUDATimer()
+            decode_timer.start()
+
+            # ENG-087: Wrap decode step in try/finally so decode_timer.stop()
+            # always executes, preventing CUDATimer event leaks on exceptions.
+            # ENG-088: Also guarantee kv_cache cleanup on decode-step exceptions.
+            try:
+                with torch.no_grad():
+                    # Prepare past_key_values
+                    if kv_mode == "fp16" and fp16_use_model_cache and model_cache_for_decode is not None:
+                        current_past_key_values = model_cache_for_decode
+                    elif kv_mode in _FUSED_KV_MODES:
+                        from src.engine.patch_model import INT8CacheWrapperContainer
+
+                        # ENG-033: INT8CacheWrapperContainer is reconstructed each decode step. This is intentional — wrappers are lightweight (no buffer copy), and caching them would require tracking cache mutations.
+                        current_past_key_values = INT8CacheWrapperContainer(kv_cache, num_layers)
+                    elif kv_mode in ["int8_baseline", "int4_baseline", "kivi_style", "int4_kivi_aligned", "int4_mixed_kv", "int4_ours_asym", "int4_ours_asym_ba"]:
+                        # For baseline / KIVI / mixed / role-aware-asym modes, we dequantize BEFORE attention.
+                        # For int4_kivi_aligned and int4_ours_asym_ba, inv_tau Q pre-scaling is applied via
+                        # hooks registered on model forward (both prefill and decode).
+                        current_past_key_values = []
+                        for i in range(num_layers):
+                            k, v = kv_cache.get_kv(i)
+                            current_past_key_values.append((k, v))
+                        current_past_key_values = tuple(current_past_key_values)
+                    else:
+                        current_past_key_values = kv_cache.to_tuple()
+
+                    # Dynamic Cache Check (Skipped for fused wrapper as it mocks Cache)
+                    if (
+                        kv_mode not in _FUSED_KV_MODES
+                        and HAS_DYNAMIC_CACHE
+                        and isinstance(current_past_key_values, tuple)
+                    ):
+                        current_past_key_values = _to_dynamic_cache_safely(current_past_key_values)
+
+                    outputs = model(
+                        input_ids=current_token,
+                        attention_mask=attention_mask,
+                        past_key_values=current_past_key_values,
+                        use_cache=True,
+                    )
+                    if kv_mode == "fp16" and fp16_use_model_cache:
+                        model_cache_for_decode = outputs.past_key_values
+
+                    # Update cache with NEW token's KV for non-fused modes.
+                    if (
+                        kv_mode not in _FUSED_KV_MODES
+                        and not (kv_mode == "fp16" and fp16_use_model_cache)
+                    ):
+                        if outputs.past_key_values is not None:
+                            for i, (k, v) in enumerate(outputs.past_key_values):
+                                # Only append the newly produced token when model returns full cache.
+                                # This avoids re-quantizing historical tokens already stored in kv_cache.
+                                if k.shape[2] > 1:
+                                    # ENG-045: The model returned more than one new KV token
+                                    # (k.shape[2] > 1). This occurs with speculative decoding
+                                    # or models that return the full cumulative cache instead
+                                    # of only the new token. We take only the last token to
+                                    # avoid re-appending previously cached tokens, but any
+                                    # accepted draft tokens beyond the last one are silently
+                                    # dropped. Speculative decoding multi-token returns are
+                                    # NOT correctly handled by this non-fused decode path.
+                                    import warnings
+                                    warnings.warn(
+                                        f"ENG-045: Layer {i} decode step returned k.shape[2]={k.shape[2]} > 1. "
+                                        "Only the last token will be appended to the KV cache. "
+                                        "Speculative decoding with multiple accepted tokens is not "
+                                        "supported in non-fused mode; extra tokens will be dropped, "
+                                        "which may degrade output quality.",
+                                        RuntimeWarning,
+                                        stacklevel=2,
+                                    )
+                                    k_new = k[:, :, -1:, :]
+                                    v_new = v[:, :, -1:, :]
+                                    kv_cache.append(i, k_new, v_new)
+                                else:
+                                    kv_cache.append(i, k, v)
+                        else:
+                            # ENG-027: past_key_values is None in decode step for a non-fused
+                            # mode. This should not happen under normal circumstances because
+                            # use_cache=True is always passed to the model. When it does happen
+                            # (e.g. model ignores use_cache, or HF version mismatch), the KV
+                            # cache is NOT updated for this decode step, causing the cache to
+                            # fall behind by one token. Subsequent decode steps will use a
+                            # stale/shorter context, silently degrading output quality.
                             import warnings
                             warnings.warn(
-                                f"ENG-045: Layer {i} decode step returned k.shape[2]={k.shape[2]} > 1. "
-                                "Only the last token will be appended to the KV cache. "
-                                "Speculative decoding with multiple accepted tokens is not "
-                                "supported in non-fused mode; extra tokens will be dropped, "
-                                "which may degrade output quality.",
+                                f"Decode step returned past_key_values=None for kv_mode={kv_mode!r}. "
+                                "The KV cache will NOT be updated for this step, which may degrade "
+                                "output quality. Ensure use_cache=True is supported by the model.",
                                 RuntimeWarning,
                                 stacklevel=2,
                             )
-                            k_new = k[:, :, -1:, :]
-                            v_new = v[:, :, -1:, :]
-                            kv_cache.append(i, k_new, v_new)
-                        else:
-                            kv_cache.append(i, k, v)
-                else:
-                    # ENG-027: past_key_values is None in decode step for a non-fused
-                    # mode. This should not happen under normal circumstances because
-                    # use_cache=True is always passed to the model. When it does happen
-                    # (e.g. model ignores use_cache, or HF version mismatch), the KV
-                    # cache is NOT updated for this decode step, causing the cache to
-                    # fall behind by one token. Subsequent decode steps will use a
-                    # stale/shorter context, silently degrading output quality.
-                    import warnings
-                    warnings.warn(
-                        f"Decode step returned past_key_values=None for kv_mode={kv_mode!r}. "
-                        "The KV cache will NOT be updated for this step, which may degrade "
-                        "output quality. Ensure use_cache=True is supported by the model.",
-                        RuntimeWarning,
-                        stacklevel=2,
-                    )
 
-            next_token_logits = outputs.logits[:, -1, :]
-            next_token = torch.argmax(next_token_logits, dim=-1)  # [B]
+                    next_token_logits = outputs.logits[:, -1, :]
+                    next_token = torch.argmax(next_token_logits, dim=-1)  # [B]
 
-            # ENG-110: Force completed sequences to emit EOS instead of garbage.
-            # Without this, sequences that finished early continue decoding with
-            # stale context, producing meaningless tokens in the output.
-            if stop_on_eos and eos_token_id is not None:
-                next_token = torch.where(
-                    eos_reached,
-                    torch.full_like(next_token, eos_token_id),
-                    next_token,
+                    # ENG-110: Force completed sequences to emit EOS instead of garbage.
+                    # Without this, sequences that finished early continue decoding with
+                    # stale context, producing meaningless tokens in the output.
+                    if stop_on_eos and eos_token_id is not None:
+                        next_token = torch.where(
+                            eos_reached,
+                            torch.full_like(next_token, eos_token_id),
+                            next_token,
+                        )
+                        eos_reached = eos_reached | (next_token == eos_token_id)
+            except Exception:
+                # ENG-088: Guarantee kv_cache cleanup on decode-step failure.
+                _cleanup_kv_cache()
+                raise
+            finally:
+                decode_timer.stop()
+            decode_times.add(decode_timer.elapsed_ms)
+
+            generated_steps.append(next_token)
+            current_token = next_token.view(batch_size, 1)
+
+            # Update attention mask
+            # ENG-034: attention_mask grows O(seq_len^2) each step. The fused path deletes it, but the non-fused path still allocates. Acceptable for current max_seq_len=32K.
+            if attention_mask is not None:
+                attention_mask = torch.cat(
+                    [
+                        attention_mask,
+                        torch.ones((batch_size, 1), device=model.device, dtype=attention_mask.dtype),
+                    ],
+                    dim=1,
                 )
-                eos_reached = eos_reached | (next_token == eos_token_id)
 
-        decode_timer.stop()
-        decode_times.add(decode_timer.elapsed_ms)
+        # ========== COLLECT RESULTS ==========
+        gen_len = int(len(generated_steps))
+        gpu_mem_peak_mb = get_gpu_memory_mb()
+        kv_cache_mem_mb = 0.0
+        kv_cache_seq_len = 0
+        if kv_mode == "fp16" and fp16_use_model_cache and model_cache_for_decode is not None:
+            kv_cache_mem_mb, kv_cache_seq_len = _cache_stats_from_past_key_values(model_cache_for_decode)
+        else:
+            try:
+                kv_cache_mem_mb = float(kv_cache.get_memory_mb())
+            except Exception:
+                kv_cache_mem_mb = 0.0
+            try:
+                kv_cache_seq_len = int(kv_cache.get_seq_len())
+            except Exception:
+                kv_cache_seq_len = 0
 
-        generated_steps.append(next_token)
-        current_token = next_token.view(batch_size, 1)
+        # TPOT: average decode time (exclude prefill)
+        tpot_ms = decode_times.mean_ms if decode_times.count > 0 else 0.0
 
-        # Update attention mask
-        # ENG-034: attention_mask grows O(seq_len^2) each step. The fused path deletes it, but the non-fused path still allocates. Acceptable for current max_seq_len=32K.
-        if attention_mask is not None:
-            attention_mask = torch.cat(
-                [
-                    attention_mask,
-                    torch.ones((batch_size, 1), device=model.device, dtype=attention_mask.dtype),
-                ],
-                dim=1,
-            )
+        # Throughput: report both total tok/s (across batch) and per-sequence tok/s.
+        total_decode_ms = decode_times.total_ms
+        if total_decode_ms > 0:
+            decode_tokens_per_seq = max(gen_len - 1, 0)
+            decode_tokens_total = batch_size * decode_tokens_per_seq
+            tok_per_s_total = (decode_tokens_total / total_decode_ms) * 1000.0
+            tok_per_s_per_seq = tok_per_s_total / max(batch_size, 1)
+        else:
+            tok_per_s_total = 0.0
+            tok_per_s_per_seq = 0.0
 
-    # ========== COLLECT RESULTS ==========
-    gen_len = int(len(generated_steps))
-    gpu_mem_peak_mb = get_gpu_memory_mb()
-    kv_cache_mem_mb = 0.0
-    kv_cache_seq_len = 0
-    if kv_mode == "fp16" and fp16_use_model_cache and model_cache_for_decode is not None:
-        kv_cache_mem_mb, kv_cache_seq_len = _cache_stats_from_past_key_values(model_cache_for_decode)
-    else:
+        # ENG-018: Handle empty generated_steps when max_new_tokens=0.
+        if generated_steps:
+            generated_ids = torch.stack(generated_steps, dim=1).to(dtype=torch.long)  # [B, gen_len]
+        else:
+            generated_ids = torch.empty((batch_size, 0), dtype=torch.long, device=model.device)
+
+        output = GenerationBatchOutput(
+            generated_ids=generated_ids,
+            ttft_ms=ttft_ms,
+            tpot_ms=tpot_ms,
+            tok_per_s=float(tok_per_s_total),
+            tok_per_s_per_seq=float(tok_per_s_per_seq),
+            gpu_mem_peak_mb=float(gpu_mem_peak_mb),
+            kv_cache_mem_mb=float(kv_cache_mem_mb),
+            kv_cache_seq_len=int(kv_cache_seq_len),
+            prompt_len=int(prompt_len),
+            gen_len=int(gen_len),
+            batch=int(batch_size),
+        )
+
+        # ENG-056 + ENG-088: Cleanup kv_cache and intermediates.
+        # _cleanup_kv_cache() is also called via the except blocks above if an
+        # exception occurs before reaching this point.
+        _cleanup_kv_cache()
         try:
-            kv_cache_mem_mb = float(kv_cache.get_memory_mb())
-        except Exception:
-            kv_cache_mem_mb = 0.0
+            del kv_cache
+        except NameError:
+            pass
         try:
-            kv_cache_seq_len = int(kv_cache.get_seq_len())
-        except Exception:
-            kv_cache_seq_len = 0
+            del outputs
+        except NameError:
+            pass
+        try:
+            del current_past_key_values
+        except NameError:
+            pass
 
-    # TPOT: average decode time (exclude prefill)
-    tpot_ms = decode_times.mean_ms if decode_times.count > 0 else 0.0
+        gc.collect()
+        torch.cuda.empty_cache()
 
-    # Throughput: report both total tok/s (across batch) and per-sequence tok/s.
-    total_decode_ms = decode_times.total_ms
-    if total_decode_ms > 0:
-        decode_tokens_per_seq = max(gen_len - 1, 0)
-        decode_tokens_total = batch_size * decode_tokens_per_seq
-        tok_per_s_total = (decode_tokens_total / total_decode_ms) * 1000.0
-        tok_per_s_per_seq = tok_per_s_total / max(batch_size, 1)
-    else:
-        tok_per_s_total = 0.0
-        tok_per_s_per_seq = 0.0
 
-    # ENG-018: Handle empty generated_steps when max_new_tokens=0.
-    if generated_steps:
-        generated_ids = torch.stack(generated_steps, dim=1).to(dtype=torch.long)  # [B, gen_len]
-    else:
-        generated_ids = torch.empty((batch_size, 0), dtype=torch.long, device=model.device)
-
-    output = GenerationBatchOutput(
-        generated_ids=generated_ids,
-        ttft_ms=ttft_ms,
-        tpot_ms=tpot_ms,
-        tok_per_s=float(tok_per_s_total),
-        tok_per_s_per_seq=float(tok_per_s_per_seq),
-        gpu_mem_peak_mb=float(gpu_mem_peak_mb),
-        kv_cache_mem_mb=float(kv_cache_mem_mb),
-        kv_cache_seq_len=int(kv_cache_seq_len),
-        prompt_len=int(prompt_len),
-        gen_len=int(gen_len),
-        batch=int(batch_size),
-    )
-
-    # ENG-056: Use explicit try/del instead of `if name in locals()` checks.
-    # locals() inspection is fragile: it captures the snapshot at call time and
-    # can miss names that were conditionally assigned in branches not taken.
-    # Direct del with try/except NameError is more robust and intent-clear.
-    try:
-        kv_cache.clear()
-        del kv_cache
-    except NameError:
-        pass
-    try:
-        del outputs
-    except NameError:
-        pass
-    try:
-        del current_past_key_values
-    except NameError:
-        pass
-
-    gc.collect()
-    torch.cuda.empty_cache()
+    finally:
+        _restore_fused_patch()
 
     return output
 

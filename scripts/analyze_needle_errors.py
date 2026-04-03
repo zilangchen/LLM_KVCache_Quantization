@@ -161,7 +161,8 @@ def aggregate(rows: list[dict]) -> list[dict]:
                 "step": key[4],
                 "error_bucket": key[5],
                 "count": count,
-                "ratio": round(count / total, 6) if total else 0.0,
+                "total": total,  # NDL-013: expose total for downstream filtering
+                "ratio": round(count / total, 6) if total > 1 else float("nan"),
             }
         )
     return out

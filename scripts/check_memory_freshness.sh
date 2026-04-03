@@ -42,7 +42,7 @@ done
 if [[ -f "$PROJECT_ROOT/src/engine/generate_loop.py" ]]; then
     for mode in $(grep -oE "kv_mode\s*==\s*['\"][a-z0-9_]+['\"]" "$PROJECT_ROOT/src/engine/generate_loop.py" 2>/dev/null \
                   | grep -oE "['\"][a-z0-9_]+['\"]" | tr -d "'" | tr -d '"' | sort -u); do
-        if ! grep -q "$mode" "$MEMORY_FILE" 2>/dev/null; then
+        if ! grep -qw "$mode" "$MEMORY_FILE" 2>/dev/null; then
             WARNINGS="${WARNINGS}⚠ kv_mode '$mode' 在代码中路由但未在 MEMORY.md 记录\n"
         fi
     done

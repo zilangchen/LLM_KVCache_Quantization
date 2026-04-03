@@ -54,6 +54,7 @@ class MixedKVCache:
         dtype: torch.dtype = torch.float16,
         max_seq_len: Optional[int] = None,
         k_group_size: int = 128,
+        v_group_size: Optional[int] = None,
         k_clip_percentile: float = 99.9,
         v_percentile: float = 100.0,
         k_bits: int = 8,
@@ -71,6 +72,9 @@ class MixedKVCache:
         self.dtype = dtype
         self.max_seq_len = int(max_seq_len) if max_seq_len is not None else None
         self.k_group_size = k_group_size
+        # KVC-082: Independent V group size. Defaults to k_group_size for
+        # backward compatibility, but allows independent tuning (e.g. K@g128, V@g64).
+        self.v_group_size = v_group_size if v_group_size is not None else k_group_size
         self.k_clip_percentile = k_clip_percentile
         self.v_percentile = v_percentile
         self.k_bits = k_bits
@@ -124,7 +128,7 @@ class MixedKVCache:
             return v.to(self.dtype), None, None
         elif self.v_bits == 8:
             q_v, v_scale = quantize_symmetric_int8(
-                v, percentile=self.v_percentile, group_size=self.k_group_size
+                v, percentile=self.v_percentile, group_size=self.v_group_size
             )
             return q_v, v_scale, None
         else:  # v_bits == 4
@@ -171,7 +175,13 @@ class MixedKVCache:
         # Quantize V
         q_v, v_scale, v_zp = self._quantize_v(v)
 
-        # Concatenate with existing cache
+        # KVC-081: PERF WARNING — torch.cat per step is O(S^2) cumulative memory
+        # copies. For long-sequence workloads this is a bottleneck. A pre-allocated
+        # buffer + slice-write approach (like INT8KVCache._ensure_capacity) would
+        # reduce this to O(S), but the mixed-type buffer layout (INT8 scales have a
+        # group dim, INT4/FP16 have different shapes, zp may be None) makes a
+        # unified _ensure_capacity non-trivial. Revisit if profiling shows this
+        # cache type on the critical path for long sequences.
         if self._k_cache[layer_id] is None:
             self._k_cache[layer_id] = q_k
             self._k_scale[layer_id] = k_scale
@@ -211,15 +221,33 @@ class MixedKVCache:
         return self._seq_len
 
     def clear(self) -> None:
-        """Clear cache contents."""
-        for i in range(self.num_layers):
-            self._k_cache[i] = self._k_scale[i] = self._k_zp[i] = None
-            self._v_cache[i] = self._v_scale[i] = self._v_zp[i] = None
+        """Reset sequence lengths, keep tensor references for memory reporting.
+
+        KVC-083: clear() keeps buffer references (get_memory_mb() still
+        reports non-zero), release() frees them to None. Since this cache
+        uses torch.cat, "reuse" is limited, but the semantic distinction
+        matches other cache classes. Next append() will torch.cat from
+        scratch, ignoring stale data.
+        """
+        # Keep tensor references — don't nil them out
         self._layer_seq_lens = [0] * self.num_layers
         self._seq_len = 0
 
     def release(self) -> None:
-        self.clear()
+        """Release all buffers and reset state completely.
+
+        KVC-083: Unlike clear(), this also resets internal list structures,
+        matching the semantics of INT8KVCache.release() and
+        KIVIStyleKVCache.release().
+        """
+        self._k_cache = [None] * self.num_layers
+        self._v_cache = [None] * self.num_layers
+        self._k_scale = [None] * self.num_layers
+        self._v_scale = [None] * self.num_layers
+        self._k_zp = [None] * self.num_layers
+        self._v_zp = [None] * self.num_layers
+        self._layer_seq_lens = [0] * self.num_layers
+        self._seq_len = 0
 
     def get_memory_mb(self) -> float:
         total = 0

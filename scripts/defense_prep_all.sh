@@ -9,6 +9,15 @@ cd /root/LLM_KVCache_Quantization
 source /etc/network_turbo 2>/dev/null || true
 export HF_HUB_OFFLINE=1
 
+# Trap to restore .bak files on unexpected exit
+cleanup() {
+    echo "Restoring backup files..."
+    for f in scripts/phase1_*.sh.bak; do
+        [ -f "$f" ] && mv "$f" "${f%.bak}" && echo "  Restored ${f%.bak}"
+    done
+}
+trap cleanup EXIT ERR INT TERM
+
 mkdir -p logs
 
 echo "============================================"
@@ -64,56 +73,45 @@ ls -la artifacts/kv_calib_rolealign_*_v2.json
 echo ""
 
 # ============================================================
-# T2 → T3 切换：更新 phase1 脚本的 CALIB 路径
-# ============================================================
-echo "========== 更新 CALIB 路径 =========="
-
-# 备份原脚本
-cp scripts/phase1_1p5b.sh scripts/phase1_1p5b.sh.bak
-cp scripts/phase1_7b.sh scripts/phase1_7b.sh.bak
-cp scripts/phase1_8b.sh scripts/phase1_8b.sh.bak
-
-# 替换 CALIB 路径
-sed -i 's|artifacts/kv_calib_rolealign_1p5b.json|artifacts/kv_calib_rolealign_1p5b_v2.json|' scripts/phase1_1p5b.sh
-sed -i 's|artifacts/kv_calib_rolealign_7b.json|artifacts/kv_calib_rolealign_7b_v2.json|' scripts/phase1_7b.sh
-sed -i 's|artifacts/kv_calib_rolealign_8b.json|artifacts/kv_calib_rolealign_8b_v2.json|' scripts/phase1_8b.sh
-
-# 替换结果目录
-sed -i 's|results/emnlp_rolealign_v2|results/emnlp_rolealign_v3|' scripts/phase1_1p5b.sh
-sed -i 's|results/emnlp_rolealign_v2|results/emnlp_rolealign_v3|' scripts/phase1_7b.sh
-sed -i 's|results/emnlp_rolealign_v2|results/emnlp_rolealign_v3|' scripts/phase1_8b.sh
-
-echo "CALIB 路径已更新为 v2，结果目录已更新为 v3"
-
-# ============================================================
 # T3: 完整重跑（RULER + PPL + Profiling）
-# 预计: ~27 小时
+# phase1 脚本已参数化（F1 修复），直接传参调用，无需 sed 替换
+# 预计: ~12.5 小时（3 卡并行，受限于最慢的 8B）
 # ============================================================
 echo ""
-echo "========== T3: 完整重跑 =========="
+echo "========== T3: 完整重跑（3 卡并行） =========="
 echo "开始时间: $(date '+%Y-%m-%d %H:%M:%S')"
 
-# --- 1.5B (~5 小时) ---
-echo ">>> T3: 1.5B 全量实验"
-bash scripts/phase1_1p5b.sh 2>&1 | tee logs/t3_1p5b.log
-echo ">>> 1.5B 完成: $(date '+%Y-%m-%d %H:%M:%S')"
+# 校准产物路径（T2 生成的 v2 产物）
+CALIB_1P5B="artifacts/kv_calib_rolealign_1p5b_v2.json"
+CALIB_7B="artifacts/kv_calib_rolealign_7b_v2.json"
+CALIB_8B="artifacts/kv_calib_rolealign_8b_v2.json"
+T3_RD="results/emnlp_rolealign_v3"
 
-# --- 7B (~9.5 小时) ---
-echo ">>> T3: 7B 全量实验"
-bash scripts/phase1_7b.sh 2>&1 | tee logs/t3_7b.log
-echo ">>> 7B 完成: $(date '+%Y-%m-%d %H:%M:%S')"
+# 3 卡并行：每卡一个模型
+# Codex P1 fix: capture the *script* exit code, not tee's.
+# Use subshell + exit-code files so `wait` sees the real status.
+echo ">>> T3: 启动 3 卡并行（1.5B@GPU0, 7B@GPU1, 8B@GPU2）"
 
-# --- 8B (~12.5 小时) ---
-echo ">>> T3: 8B 全量实验"
-bash scripts/phase1_8b.sh 2>&1 | tee logs/t3_8b.log
-echo ">>> 8B 完成: $(date '+%Y-%m-%d %H:%M:%S')"
+( bash scripts/phase1_1p5b.sh 0 "$CALIB_1P5B" "$T3_RD" 2>&1 | tee logs/t3_1p5b.log; exit "${PIPESTATUS[0]}"; ) &
+PID_1P5B=$!
+( bash scripts/phase1_7b.sh   1 "$CALIB_7B"   "$T3_RD" 2>&1 | tee logs/t3_7b.log; exit "${PIPESTATUS[0]}"; ) &
+PID_7B=$!
+( bash scripts/phase1_8b.sh   2 "$CALIB_8B"   "$T3_RD" 2>&1 | tee logs/t3_8b.log; exit "${PIPESTATUS[0]}"; ) &
+PID_8B=$!
 
-# ============================================================
-# 恢复原脚本（保留 v1 版本可追溯）
-# ============================================================
-mv scripts/phase1_1p5b.sh.bak scripts/phase1_1p5b.sh
-mv scripts/phase1_7b.sh.bak scripts/phase1_7b.sh
-mv scripts/phase1_8b.sh.bak scripts/phase1_8b.sh
+echo ">>> PIDs: 1.5B=$PID_1P5B, 7B=$PID_7B, 8B=$PID_8B"
+T3_FAIL=0
+wait $PID_1P5B && echo ">>> 1.5B 完成" || { echo ">>> 1.5B 失败 (exit $?)"; T3_FAIL=1; }
+wait $PID_7B   && echo ">>> 7B 完成"   || { echo ">>> 7B 失败 (exit $?)"; T3_FAIL=1; }
+wait $PID_8B   && echo ">>> 8B 完成"   || { echo ">>> 8B 失败 (exit $?)"; T3_FAIL=1; }
+
+if [ "$T3_FAIL" -ne 0 ]; then
+  echo "FATAL: One or more T3 streams failed. Check logs/ for details." >&2
+  exit 1
+fi
+
+# Normal completion — disable cleanup trap
+trap - EXIT ERR INT TERM
 
 # ============================================================
 # 完成汇总

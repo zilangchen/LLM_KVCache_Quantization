@@ -315,9 +315,10 @@ class FP16KVCache:
             cache._layer_seq_lens[layer_id] = seq_len
             cache._layer_capacity[layer_id] = capacity
 
-        # Set sequence length from first layer
-        if cache._layer_seq_lens[0] > 0:
-            cache._seq_len = cache._layer_seq_lens[0]
+        # KVC-071: use max across all layers, not just layer 0
+        max_seq = max(cache._layer_seq_lens) if cache._layer_seq_lens else 0
+        if max_seq > 0:
+            cache._seq_len = max_seq
 
         return cache
 

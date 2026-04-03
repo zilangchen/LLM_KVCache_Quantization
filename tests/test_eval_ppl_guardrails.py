@@ -134,5 +134,57 @@ class TestEvalPplFiniteGuard(unittest.TestCase):
             mocked.assert_called_once()
 
 
+class TestCalibFileWarning(unittest.TestCase):
+    """F2/EVL-037: calibrated modes must warn when --calib_file is unspecified."""
+
+    def test_int8_ours_warns_without_calib_file(self):
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            ep.load_calibration(
+                kv_mode="int8_ours",
+                calib_file=None,
+                use_attn_temperature=False,
+                use_static_scales=True,
+                group_size=128,
+                clip_percentile=99.9,
+                device="cpu",
+            )
+        warning_messages = [str(x.message) for x in w]
+        matched = any("No --calib_file specified" in m for m in warning_messages)
+        self.assertTrue(matched, f"Expected calib_file warning, got: {warning_messages}")
+
+    def test_explicit_calib_file_no_warning(self):
+        import warnings
+        import tempfile, json, os
+        # Create a minimal calib file
+        calib_data = {
+            "version": 1, "model_id": "test",
+            "k_scale": [], "v_scale": [], "inv_tau": [],
+            "group_size_k": 128, "group_size_v": 128,
+            "clip_percentile_k": 99.9, "clip_percentile_v": 99.9,
+        }
+        fd, path = tempfile.mkstemp(suffix=".json")
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(calib_data, f)
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                ep.load_calibration(
+                    kv_mode="int8_ours",
+                    calib_file=path,
+                    use_attn_temperature=False,
+                    use_static_scales=True,
+                    group_size=128,
+                    clip_percentile=99.9,
+                    device="cpu",
+                )
+            warning_messages = [str(x.message) for x in w]
+            matched = any("No --calib_file specified" in m for m in warning_messages)
+            self.assertFalse(matched, f"Should not warn with explicit calib_file, got: {warning_messages}")
+        finally:
+            os.unlink(path)
+
+
 if __name__ == "__main__":
     unittest.main()

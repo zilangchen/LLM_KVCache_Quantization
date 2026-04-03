@@ -62,6 +62,12 @@ class RoleAwareAsymKVCache(KIVIStyleKVCache):
             use_attn_temperature=use_attn_temperature,
         )
         self.framework = framework
-        # Mark whether BA-calibrated percentiles are in use
-        # (vs default 100.0 which means no calibration = plain KIVI behavior)
+        # KVC-084: Heuristic flag — True when either percentile deviates from the
+        # default 100.0, which implies offline BA calibration was applied.
+        # Limitation: this check is purely value-based. If a calibration pipeline
+        # happens to select 100.0 as the optimal percentile for both K and V
+        # (unlikely but possible for very well-behaved layers), this flag will
+        # incorrectly read False. Callers that need a guaranteed signal should
+        # set ba_calibrated explicitly after construction rather than relying on
+        # this heuristic.
         self.ba_calibrated = (k_percentile != 100.0) or (v_percentile != 100.0)

@@ -8,12 +8,17 @@ memory savings. Dequantization unpacks back to FP16 for attention.
 """
 
 import logging
+import warnings
 from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor
 
 logger = logging.getLogger(__name__)
+
+# KVC-021: Threshold for warning on excessive clipping in static-scale quantization.
+# If more than this fraction of values are clipped to [-7, 7], emit a warning.
+_CLIP_WARN_THRESHOLD = 0.05  # 5%
 
 from src.quant.int4_basic import (
     dequantize_symmetric_int4,
@@ -160,8 +165,11 @@ class INT4KVCache:
         head_dim: int,
         num_groups: int,
         target_len: int,
-        scale_dtype: torch.dtype,
+        scale_dtype: torch.dtype = torch.float32,
     ) -> None:
+        # KVC-066: Force scale buffers to float32 for INT4 precision chain.
+        # fp16 scales lose precision at the INT4 quantization boundary.
+        scale_dtype = torch.float32
         if self.max_seq_len is not None and target_len > self.max_seq_len:
             raise ValueError(
                 f"target_len {target_len} exceeds max_seq_len {self.max_seq_len} for layer {layer_id}"
@@ -248,15 +256,17 @@ class INT4KVCache:
             device=self.device,
             dtype=torch.int8,
         )
+        # KVC-065: use torch.float32 for scale buffers instead of inheriting
+        # from old buffer dtype, which could be wrong after prior allocations.
         new_ks = torch.empty(
             (batch, heads, new_capacity, num_groups),
             device=self.device,
-            dtype=ks_buf.dtype,
+            dtype=torch.float32,
         )
         new_vs = torch.empty(
             (batch, heads, new_capacity, num_groups),
             device=self.device,
-            dtype=vs_buf.dtype,
+            dtype=torch.float32,
         )
 
         if old_len > 0:
@@ -311,8 +321,8 @@ class INT4KVCache:
         num_groups = head_dim // self.group_size
         reshaped = tensor.view(batch, heads, seq_len, num_groups, self.group_size)
         absmax = reshaped.abs().amax(dim=-1)
-        # ENG-066: Keep dynamic scale in float32 for INT4 precision.
-        return (absmax.clamp(min=1e-5) / 7.0).to(torch.float32)
+        # KVC-020/ENG-066: compute in float32 to avoid fp16 subnormal risk.
+        return absmax.float().clamp(min=1e-5) / 7.0
 
     def _apply_outlier_rescue(self, tensor: Tensor, scale: Tensor) -> Tensor:
         """
@@ -347,6 +357,34 @@ class INT4KVCache:
         if layer_id < 0 or layer_id >= self.num_layers:
             raise ValueError(f"layer_id {layer_id} out of range")
 
+        # KVC-031: Warn when outlier_rescue_ratio / mixed_rescue have no effect
+        # because static scales are not provided.  Check each side independently:
+        # if K has a static scale but V does not (or vice-versa), the rescue
+        # parameters silently do nothing for the missing side.
+        _missing_sides = []
+        if self.static_k_scale is None:
+            _missing_sides.append("K")
+        if self.static_v_scale is None:
+            _missing_sides.append("V")
+        if _missing_sides:
+            _side_str = " and ".join(_missing_sides)
+            if self.outlier_rescue_ratio > 0:
+                warnings.warn(
+                    f"KVC-031: outlier_rescue_ratio={self.outlier_rescue_ratio} has no "
+                    f"effect on {_side_str} at layer {layer_id} because no static "
+                    f"{_side_str} scale is provided. Outlier rescue only adjusts "
+                    f"static scales; dynamic quantization already adapts per-token.",
+                    RuntimeWarning,
+                )
+            if self.mixed_rescue:
+                warnings.warn(
+                    f"KVC-031: mixed_rescue=True has no effect on {_side_str} at layer "
+                    f"{layer_id} because no static {_side_str} scale is provided. "
+                    f"Mixed rescue only adjusts static scales; dynamic quantization "
+                    f"already adapts per-token.",
+                    RuntimeWarning,
+                )
+
         # Quantize incoming K and V to INT4
         if self.static_k_scale is not None:
             scale_k = self.static_k_scale[layer_id].to(k.device)
@@ -363,6 +401,29 @@ class INT4KVCache:
             q_k, scale_k = quantize_symmetric_int4_with_scale(
                 k, scale_k, self.group_size
             )
+            # KVC-021: Detect excessive clipping in static-scale K quantization.
+            # Check in the float domain *before* quantization: values whose
+            # absolute magnitude exceeds 7*scale will be clipped to +/-7.
+            # Using post-quantization `abs(q)==7` is unreliable because 7
+            # is itself a valid non-clipped value.
+            _total_k = k.numel()
+            if _total_k > 0:
+                _k_reshaped = k.view(
+                    k.shape[0], k.shape[1], k.shape[2], -1, self.group_size
+                )
+                _k_bound = (scale_k.unsqueeze(-1) * 7.0).expand_as(_k_reshaped)
+                _clip_ratio_k = (
+                    (_k_reshaped.abs() > _k_bound).float().mean().item()
+                )
+                if _clip_ratio_k > _CLIP_WARN_THRESHOLD:
+                    warnings.warn(
+                        f"KVC-021: Static K scale overflow at layer {layer_id}: "
+                        f"{_clip_ratio_k:.1%} of values exceed scale capacity "
+                        f"(threshold={_CLIP_WARN_THRESHOLD:.0%}). "
+                        f"The static scale may be too small for this input. "
+                        f"Consider re-calibrating or enabling adaptive_static_scales.",
+                        RuntimeWarning,
+                    )
         else:
             q_k, scale_k = quantize_symmetric_int4(
                 k, self.clip_percentile, self.group_size
@@ -376,10 +437,33 @@ class INT4KVCache:
                 scale_v = torch.maximum(
                     scale_v * float(self.adaptive_static_margin), dynamic_v_scale
                 )
+            # KVC-032: Apply mixed_rescue to V as well (not just K).
+            if self.mixed_rescue:
+                scale_v = torch.maximum(scale_v, self._compute_dynamic_group_scale(v))
             scale_v = self._apply_outlier_rescue(v, scale_v)
             q_v, scale_v = quantize_symmetric_int4_with_scale(
                 v, scale_v, self.group_size
             )
+            # KVC-021: Detect excessive clipping in static-scale V quantization.
+            # Float-domain check: values exceeding 7*scale will be clipped.
+            _total_v = v.numel()
+            if _total_v > 0:
+                _v_reshaped = v.view(
+                    v.shape[0], v.shape[1], v.shape[2], -1, self.group_size
+                )
+                _v_bound = (scale_v.unsqueeze(-1) * 7.0).expand_as(_v_reshaped)
+                _clip_ratio_v = (
+                    (_v_reshaped.abs() > _v_bound).float().mean().item()
+                )
+                if _clip_ratio_v > _CLIP_WARN_THRESHOLD:
+                    warnings.warn(
+                        f"KVC-021: Static V scale overflow at layer {layer_id}: "
+                        f"{_clip_ratio_v:.1%} of values exceed scale capacity "
+                        f"(threshold={_CLIP_WARN_THRESHOLD:.0%}). "
+                        f"The static scale may be too small for this input. "
+                        f"Consider re-calibrating or enabling adaptive_static_scales.",
+                        RuntimeWarning,
+                    )
         else:
             q_v, scale_v = quantize_symmetric_int4(
                 v, self.clip_percentile, self.group_size
@@ -393,11 +477,12 @@ class INT4KVCache:
             q_k = pack_int4(q_k)
             q_v = pack_int4(q_v)
 
-        # Move to storage device
+        # Move to storage device.
+        # KVC-066: Ensure scales are float32 regardless of quantizer output dtype.
         q_k = q_k.to(self.device)
-        scale_k = scale_k.to(self.device)
+        scale_k = scale_k.to(device=self.device, dtype=torch.float32)
         q_v = q_v.to(self.device)
-        scale_v = scale_v.to(self.device)
+        scale_v = scale_v.to(device=self.device, dtype=torch.float32)
 
         new_seq_len = q_k.shape[2]
         batch, heads, _, head_dim = q_k.shape
@@ -460,6 +545,23 @@ class INT4KVCache:
             q_k = unpack_int4(q_k)
             q_v = unpack_int4(q_v)
 
+        # KVC-053: Defensive check for corrupted INT4 data after unpacking.
+        # Valid symmetric INT4 values are in [-7, 7]. The value -8 is
+        # representable in 4-bit signed but outside the symmetric range,
+        # indicating possible bit-packing corruption or data integrity issues.
+        if (q_k < -7).any() or (q_k > 7).any():
+            warnings.warn(
+                f"KVC-053: Unpacked INT4 K values out of [-7, 7] range at layer "
+                f"{layer_id}. This may indicate bit-packing corruption.",
+                RuntimeWarning,
+            )
+        if (q_v < -7).any() or (q_v > 7).any():
+            warnings.warn(
+                f"KVC-053: Unpacked INT4 V values out of [-7, 7] range at layer "
+                f"{layer_id}. This may indicate bit-packing corruption.",
+                RuntimeWarning,
+            )
+
         # Dequantize
         k = dequantize_symmetric_int4(q_k, scale_k)
         v = dequantize_symmetric_int4(q_v, scale_v)
@@ -509,7 +611,7 @@ class INT4KVCache:
             if self._k_cache[i] is not None:
                 total_bytes += self._k_cache[i].numel() * self._k_cache[i].element_size()
                 total_bytes += self._v_cache[i].numel() * self._v_cache[i].element_size()
-                # Scale tensors (FP16)
+                # Scale tensors (FP32, per KVC-066)
                 total_bytes += (
                     self._k_scale[i].numel() * self._k_scale[i].element_size()
                 )

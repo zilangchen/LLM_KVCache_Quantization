@@ -413,10 +413,10 @@ class TestToDynamicCacheSafely(unittest.TestCase):
         self.assertIs(result, sentinel)
         _mock_DynamicCache.from_legacy_cache.assert_called_once_with(legacy)
 
-    def test_from_legacy_cache_fails_ddp_succeeds(self):
-        """When from_legacy_cache fails but DynamicCache(ddp_cache_data=...) succeeds."""
+    def test_from_legacy_cache_fails_manual_update_succeeds(self):
+        """When from_legacy_cache fails but manual DynamicCache.update() succeeds (ENG-058)."""
         legacy = (("k", "v"),)
-        sentinel = MagicMock(name="ddp_converted")
+        sentinel = MagicMock(name="manual_converted")
 
         _mock_DynamicCache.from_legacy_cache = MagicMock(
             side_effect=TypeError("from_legacy_cache failed")
@@ -425,16 +425,18 @@ class TestToDynamicCacheSafely(unittest.TestCase):
 
         result = _to_dynamic_cache_safely(legacy)
         self.assertIs(result, sentinel)
-        _mock_DynamicCache.assert_called_with(ddp_cache_data=legacy)
+        # The manual path calls DynamicCache() then cache.update(k, v, layer_idx)
+        _mock_DynamicCache.assert_called_with()
+        sentinel.update.assert_called_once_with("k", "v", 0)
 
     def test_both_paths_fail_raises_runtime_error(self):
-        """When both from_legacy_cache and DynamicCache(ddp_cache_data=...) fail."""
+        """When both from_legacy_cache and manual DynamicCache.update() fail (ENG-058)."""
         legacy = (("k", "v"),)
 
         _mock_DynamicCache.from_legacy_cache = MagicMock(
             side_effect=TypeError("from_legacy_cache failed")
         )
-        _mock_DynamicCache.side_effect = TypeError("ddp_cache_data failed")
+        _mock_DynamicCache.side_effect = TypeError("manual construction failed")
 
         with self.assertRaises(RuntimeError) as ctx:
             _to_dynamic_cache_safely(legacy)
@@ -442,7 +444,7 @@ class TestToDynamicCacheSafely(unittest.TestCase):
         error_msg = str(ctx.exception)
         self.assertIn("Failed to convert legacy past_key_values", error_msg)
         self.assertIn("from_legacy_cache failed", error_msg)
-        self.assertIn("ddp_cache_data", error_msg)
+        self.assertIn("manual DynamicCache.update()", error_msg)
 
         # Cleanup side_effect
         _mock_DynamicCache.side_effect = None

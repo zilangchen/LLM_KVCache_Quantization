@@ -95,6 +95,12 @@ class INT8KVCache:
         self._v_scale: List[Optional[Tensor]] = [None] * num_layers
         self._layer_seq_lens: List[int] = [0] * num_layers
         self._layer_capacity: List[int] = [0] * num_layers
+        # ENG-009 / KVC-066: Scale buffers are always stored in float32 to avoid
+        # precision loss.  fp16 has only 10-bit mantissa (~0.1% relative error)
+        # and its subnormal range can lose very small scales entirely.  This
+        # matches KIVIStyleKVCache._scale_dtype and the project-wide convention
+        # "Scale/zero_point always stored as float32".
+        self._scale_dtype = torch.float32
         self._seq_len: int = 0
         self.decode_stats: Dict[str, object] = {
             "fused_decode_calls": 0,
@@ -112,7 +118,7 @@ class INT8KVCache:
         head_dim: int,
         num_groups: int,
         target_len: int,
-        scale_dtype: torch.dtype,
+        scale_dtype: torch.dtype = None,  # ignored; kept for back-compat
     ) -> None:
         if self.max_seq_len is not None and target_len > self.max_seq_len:
             raise ValueError(
@@ -155,26 +161,43 @@ class INT8KVCache:
                     raise ValueError(
                         f"target_len {target_len} exceeds capped capacity {new_capacity} for layer {layer_id}"
                     )
-            self._k_cache[layer_id] = torch.empty(
-                (batch, heads, new_capacity, head_dim),
-                device=self.device,
-                dtype=torch.int8,
-            )
-            self._v_cache[layer_id] = torch.empty(
-                (batch, heads, new_capacity, head_dim),
-                device=self.device,
-                dtype=torch.int8,
-            )
-            self._k_scale[layer_id] = torch.empty(
-                (batch, heads, new_capacity, num_groups),
-                device=self.device,
-                dtype=scale_dtype,
-            )
-            self._v_scale[layer_id] = torch.empty(
-                (batch, heads, new_capacity, num_groups),
-                device=self.device,
-                dtype=scale_dtype,
-            )
+            # KVC-036: Wrap initial allocation in try/except so that a partial
+            # OOM (e.g. 2 of 4 buffers allocated) does not leave the layer in
+            # an inconsistent state with some buffers set and others None.
+            try:
+                new_k = torch.empty(
+                    (batch, heads, new_capacity, head_dim),
+                    device=self.device,
+                    dtype=torch.int8,
+                )
+                new_v = torch.empty(
+                    (batch, heads, new_capacity, head_dim),
+                    device=self.device,
+                    dtype=torch.int8,
+                )
+                new_ks = torch.empty(
+                    (batch, heads, new_capacity, num_groups),
+                    device=self.device,
+                    dtype=self._scale_dtype,
+                )
+                new_vs = torch.empty(
+                    (batch, heads, new_capacity, num_groups),
+                    device=self.device,
+                    dtype=self._scale_dtype,
+                )
+            except torch.cuda.OutOfMemoryError:
+                # Roll back: ensure all four slots stay None so the layer
+                # remains in a clean uninitialized state for retry.
+                self._k_cache[layer_id] = None
+                self._v_cache[layer_id] = None
+                self._k_scale[layer_id] = None
+                self._v_scale[layer_id] = None
+                self._layer_capacity[layer_id] = 0
+                raise
+            self._k_cache[layer_id] = new_k
+            self._v_cache[layer_id] = new_v
+            self._k_scale[layer_id] = new_ks
+            self._v_scale[layer_id] = new_vs
             self._layer_capacity[layer_id] = new_capacity
             return
 
@@ -203,12 +226,12 @@ class INT8KVCache:
         new_ks = torch.empty(
             (batch, heads, new_capacity, num_groups),
             device=self.device,
-            dtype=ks_buf.dtype,
+            dtype=self._scale_dtype,
         )
         new_vs = torch.empty(
             (batch, heads, new_capacity, num_groups),
             device=self.device,
-            dtype=vs_buf.dtype,
+            dtype=self._scale_dtype,
         )
 
         if old_len > 0:
@@ -268,6 +291,10 @@ class INT8KVCache:
     def _expand_static_scale_for_tensor(self, scale: Tensor, tensor: Tensor) -> Tensor:
         """
         Expand static scale to [B, H, S, num_groups] for the incoming tensor.
+
+        KVC-069: Returns scale in self._scale_dtype (float32) so that all
+        scale arithmetic (adaptive max, dynamic comparison) stays in float32
+        and both static/dynamic paths have symmetric dtype before storage.
         """
         batch, heads, seq_len, head_dim = tensor.shape
         if head_dim % self.group_size != 0:
@@ -289,12 +316,16 @@ class INT8KVCache:
             raise ValueError(f"Unsupported static scale shape: {tuple(scale.shape)}")
 
         scale_view = scale_view.expand(batch, heads, seq_len, num_groups)
-        return scale_view.to(tensor.dtype).clamp(min=1e-5)
+        return scale_view.to(self._scale_dtype).clamp(min=1e-5)
 
     def _compute_dynamic_group_scale(self, tensor: Tensor) -> Tensor:
         """
         Compute per-token group scale from incoming tensor as absmax/127.
         Returns shape [B, H, S, num_groups].
+
+        KVC-020: The division result (~7.87e-8 for small groups) falls into
+        the fp16 subnormal range (< 6.1e-5), losing mantissa bits silently.
+        We therefore compute in float32 and only cast back at the end.
         """
         batch, heads, seq_len, head_dim = tensor.shape
         if head_dim % self.group_size != 0:
@@ -304,7 +335,10 @@ class INT8KVCache:
         num_groups = head_dim // self.group_size
         reshaped = tensor.view(batch, heads, seq_len, num_groups, self.group_size)
         absmax = reshaped.abs().amax(dim=-1)
-        return (absmax.clamp(min=1e-5) / 127.0).to(tensor.dtype)
+        # KVC-020: compute in float32 to avoid fp16 subnormal precision loss.
+        # KVC-069: return in self._scale_dtype (float32) so that both
+        # static and dynamic paths produce symmetric dtype before storage.
+        return (absmax.float().clamp(min=1e-5) / 127.0).to(self._scale_dtype)
 
     def append(self, layer_id: int, k: Tensor, v: Tensor) -> None:
         """
@@ -317,6 +351,18 @@ class INT8KVCache:
         """
         if layer_id < 0 or layer_id >= self.num_layers:
             raise ValueError(f"layer_id {layer_id} out of range")
+
+        # KVC-034: Validate static scale layer bounds before indexing.
+        if self.static_k_scale is not None and layer_id >= len(self.static_k_scale):
+            raise IndexError(
+                f"layer_id {layer_id} exceeds calibration layers "
+                f"{len(self.static_k_scale)} for static_k_scale"
+            )
+        if self.static_v_scale is not None and layer_id >= len(self.static_v_scale):
+            raise IndexError(
+                f"layer_id {layer_id} exceeds calibration layers "
+                f"{len(self.static_v_scale)} for static_v_scale"
+            )
 
         # Quantize incoming K and V
         # Note: We quantize the new token(s) before appending
@@ -384,11 +430,11 @@ class INT8KVCache:
                 v, self.clip_percentile, self.group_size
             )
 
-        # Move to storage device
+        # Move to storage device; cast scales to float32 (KVC-066).
         q_k = q_k.to(self.device)
-        scale_k = scale_k.to(self.device)
+        scale_k = scale_k.to(device=self.device, dtype=self._scale_dtype)
         q_v = q_v.to(self.device)
-        scale_v = scale_v.to(self.device)
+        scale_v = scale_v.to(device=self.device, dtype=self._scale_dtype)
 
         new_seq_len = q_k.shape[2]
         batch, heads, _, head_dim = q_k.shape
@@ -403,7 +449,6 @@ class INT8KVCache:
             head_dim=head_dim,
             num_groups=num_groups,
             target_len=target_len,
-            scale_dtype=scale_k.dtype,
         )
 
         self._k_cache[layer_id][:, :, old_len:target_len, :] = q_k
@@ -451,6 +496,12 @@ class INT8KVCache:
                 "free the underlying buffer memory.",
                 layer_id,
             )
+        # KVC-035: These are mutable views into the pre-allocated buffer.
+        # All callers (generate_loop non-fused decode path, patch_model
+        # CacheWrapperContainer) use them read-only for attention computation.
+        # Cloning here would waste memory and VRAM bandwidth on every decode
+        # step.  If a future caller needs to mutate the output, it must clone
+        # explicitly at the call site.
         q_k = self._k_cache[layer_id][:, :, :seq_len, :]
         scale_k = self._k_scale[layer_id][:, :, :seq_len, :]
         q_v = self._v_cache[layer_id][:, :, :seq_len, :]
@@ -511,3 +562,60 @@ class INT8KVCache:
                     self._v_scale[i].numel() * self._v_scale[i].element_size()
                 )
         return total_bytes / (1024 * 1024)
+
+    # ---- KVC-019: HuggingFace past_key_values interop ----
+
+    def to_tuple(self) -> Tuple[Tuple[Tensor, Tensor], ...]:
+        """
+        Convert cache to HuggingFace past_key_values format.
+
+        Each layer's quantized K/V is dequantized before returning, so the
+        output is a tuple of (k_float, v_float) tuples identical to what
+        ``get_kv()`` returns per layer.
+
+        Returns:
+            Tuple of (k, v) tuples for each layer.
+
+        Raises:
+            ValueError: If any layer cache is empty.
+        """
+        result = []
+        for i in range(self.num_layers):
+            if self._k_cache[i] is None:
+                raise ValueError(f"Layer {i} cache is empty")
+            result.append(self.get_kv(i))
+        return tuple(result)
+
+    @classmethod
+    def from_tuple(
+        cls,
+        past_key_values: Tuple[Tuple[Tensor, Tensor], ...],
+        device: str = "cuda",
+        clip_percentile: float = 99.9,
+        group_size: int = 128,
+    ) -> "INT8KVCache":
+        """
+        Create INT8KVCache from HuggingFace past_key_values format.
+
+        Each (k, v) pair is quantized with the default dynamic-scale path
+        (no static scales) and stored.
+
+        Args:
+            past_key_values: Tuple of (k, v) tuples from model output.
+            device: Device to store tensors on.
+            clip_percentile: Clipping percentile for quantization.
+            group_size: Group size for quantization.
+
+        Returns:
+            INT8KVCache instance with loaded data.
+        """
+        num_layers = len(past_key_values)
+        cache = cls(
+            num_layers=num_layers,
+            device=device,
+            clip_percentile=clip_percentile,
+            group_size=group_size,
+        )
+        for layer_id, (k, v) in enumerate(past_key_values):
+            cache.append(layer_id, k.to(device), v.to(device))
+        return cache

@@ -307,6 +307,11 @@ def decode_attn_int8(
         raise ValueError(f"context_lens must be 1D, got {tuple(context_lens.shape)}")
     if not q.is_cuda:
         raise ValueError("decode_attn_int8 requires CUDA tensors.")
+    # KRN-016: k_cache/v_cache must be int8, not float16
+    if k_cache.dtype != torch.int8:
+        raise ValueError(f"k_cache must be torch.int8, got {k_cache.dtype}")
+    if v_cache.dtype != torch.int8:
+        raise ValueError(f"v_cache must be torch.int8, got {v_cache.dtype}")
 
     batch, q_heads, head_dim = q.shape
     # KRN-007: Triton reshape/broadcast operations require HEAD_DIM to be a
@@ -338,6 +343,12 @@ def decode_attn_int8(
             "Scale and cache shapes mismatch: "
             f"k_scale={tuple(k_scale.shape)}, v_scale={tuple(v_scale.shape)}, "
             f"k={tuple(k_cache.shape)}, v={tuple(v_cache.shape)}"
+        )
+    # KRN-015: k_scale and v_scale must have same num_groups
+    if k_scale.shape[-1] != v_scale.shape[-1]:
+        raise ValueError(
+            f"k_scale/v_scale num_groups mismatch: k={k_scale.shape[-1]} vs v={v_scale.shape[-1]}. "
+            "Kernel uses k_scale num_groups for both K and V dequantization."
         )
     if context_lens.shape[0] != batch:
         raise ValueError(

@@ -201,11 +201,29 @@ def load_calibration(
         )
 
     import warnings
-    if kv_mode == "int8_ours":
-        default_calib = os.path.join("artifacts", "kv_calib_kl.json")
+    # F2/EVL-037: warn when calibrated mode runs without explicit --calib_file.
+    # int4_ours_asym / int4_ours_asym_ba go through a separate path (L367+)
+    # and are NOT handled by this function.
+    if calib_file is None:
+        if kv_mode == "int8_ours":
+            default_calib = os.path.join("artifacts", "kv_calib_kl.json")
+        else:
+            default_calib = os.path.join("artifacts", "kv_calib_kl_int4_selected.json")
+        warnings.warn(
+            f"No --calib_file specified for calibrated mode '{kv_mode}'. "
+            f"Falling back to default: {default_calib}. "
+            f"Pass --calib_file explicitly to avoid ambiguity.",
+            UserWarning,
+        )
     else:
-        default_calib = os.path.join("artifacts", "kv_calib_kl_int4_selected.json")
+        default_calib = None
     calib_path = calib_file or default_calib
+    user_explicit = calib_file is not None
+    if user_explicit and not os.path.exists(calib_path):
+        raise FileNotFoundError(
+            f"User-specified calibration file not found: {calib_path}. "
+            "Refusing to silently fall back to baseline."
+        )
     if calib_path and os.path.exists(calib_path):
         try:
             with open(calib_path, "r") as f:
@@ -215,26 +233,26 @@ def load_calibration(
             calib_clip_k = calib.get("clip_percentile_k", calib.get("clip_percentile", clip_percentile))
             calib_clip_v = calib.get("clip_percentile_v", calib.get("clip_percentile", clip_percentile))
 
-            if calib_group_k and calib_group_v and calib_group_k != calib_group_v:
+            if calib_group_k is not None and calib_group_v is not None and calib_group_k != calib_group_v:
                 warnings.warn(
                     f"Calibration group_size_k ({calib_group_k}) != group_size_v ({calib_group_v}); "
                     "using group_size_k for both.",
                     UserWarning,
                 )
-            if calib_clip_k and calib_clip_v and calib_clip_k != calib_clip_v:
+            if calib_clip_k is not None and calib_clip_v is not None and calib_clip_k != calib_clip_v:
                 warnings.warn(
                     f"Calibration clip_percentile_k ({calib_clip_k}) != clip_percentile_v ({calib_clip_v}); "
                     "using clip_percentile_k for both.",
                     UserWarning,
                 )
 
-            group_size = calib_group_k or group_size
-            clip_percentile = calib_clip_k or clip_percentile
+            group_size = calib_group_k if calib_group_k is not None else group_size
+            clip_percentile = calib_clip_k if calib_clip_k is not None else clip_percentile
 
             if use_static_scales and "k_scale" in calib:
-                static_k_scale = torch.tensor(calib["k_scale"], dtype=torch.float16, device=device)
+                static_k_scale = torch.tensor(calib["k_scale"], dtype=torch.float32, device=device)  # XMD-001
             if use_static_scales and "v_scale" in calib:
-                static_v_scale = torch.tensor(calib["v_scale"], dtype=torch.float16, device=device)
+                static_v_scale = torch.tensor(calib["v_scale"], dtype=torch.float32, device=device)  # XMD-001
             if use_attn_temperature and "inv_tau" in calib:
                 inv_tau = torch.tensor(calib["inv_tau"], dtype=torch.float32, device=device)
             outlier_rescue_ratio = float(calib.get("int4_outlier_ratio", 0.0) or 0.0)
@@ -948,9 +966,20 @@ def main():
                 if ppl_mode == "hf":
                     with torch.no_grad():
                         outputs = model(input_ids, labels=target_ids)
-                        neg_log_likelihood = outputs.loss * trg_len
+                        # EVL-052/130: HF CrossEntropyLoss averages over non-masked
+                        # positions in shift_labels = labels[..., 1:].  When the first
+                        # max_length-stride positions are masked to -100, exactly
+                        # `trg_len` positions survive the shift.  But when no masking
+                        # is applied (first window: trg_len >= seq_len), the shift
+                        # removes one position so only seq_len-1 targets remain.
+                        input_len = input_ids.size(1)
+                        if trg_len >= input_len:
+                            effective_trg = input_len - 1
+                        else:
+                            effective_trg = trg_len
+                        neg_log_likelihood = outputs.loss * effective_trg
                     total_nll += neg_log_likelihood
-                    total_tokens += trg_len
+                    total_tokens += effective_trg
                 else:
                     nll, tokens = eval_window_kv_cache(
                         model=model,
@@ -980,9 +1009,15 @@ def main():
                 if ppl_mode == "hf":
                     with torch.no_grad():
                         outputs = model(input_ids, labels=target_ids)
-                        neg_log_likelihood = outputs.loss * trg_len
+                        # EVL-052/130: same effective_trg logic as main loop
+                        input_len = input_ids.size(1)
+                        if trg_len >= input_len:
+                            effective_trg = input_len - 1
+                        else:
+                            effective_trg = trg_len
+                        neg_log_likelihood = outputs.loss * effective_trg
                     total_nll += neg_log_likelihood
-                    total_tokens += trg_len
+                    total_tokens += effective_trg
                 else:
                     nll, tokens = eval_window_kv_cache(
                         model=model,
@@ -1028,7 +1063,10 @@ def main():
         print("Tip: keep --allow_dataset_repeat enabled or reduce --target_tokens.")
         sys.exit(2)
 
-    seq_len = prev_end_loc
+    # EVL-131: seq_len should record the sliding-window size (max_length),
+    # not the cumulative stream position (prev_end_loc).  Downstream
+    # aggregation filters on seq_len == max_length (e.g. 32768).
+    seq_len = max_length
     ppl = torch.exp(total_nll / total_tokens)
 
     ppl_val = ppl.item()
@@ -1066,7 +1104,7 @@ def main():
             "group_size": effective_group_size,
             "dtype": str(model.dtype),
             "hardware": f"{hardware['gpu']} ({hardware['gpu_memory']})",
-            "seq_len": seq_len, # Total evaluated
+            "seq_len": seq_len,  # EVL-131: sliding-window size, not cumulative
             "gen_len": 0,
             "batch": 1,
             "ttft_ms": 0,
@@ -1099,11 +1137,34 @@ def main():
             "target_tokens"
         ]
         
-        with open(path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fields)
-            writer.writeheader()
-            writer.writerow(row)
-        print(f"Saved to {path}")
+        # EVL-038: wrap CSV write in try/except so computed PPL is not lost
+        # on I/O failure; fall back to a JSON backup file.
+        try:
+            with open(path, "w", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=fields)
+                writer.writeheader()
+                writer.writerow(row)
+            print(f"Saved to {path}")
+        except Exception as csv_err:  # noqa: BLE001
+            import warnings
+            warnings.warn(
+                f"CSV write failed ({csv_err}); attempting JSON backup.",
+                RuntimeWarning,
+                stacklevel=1,
+            )
+            try:
+                backup_ts = datetime.now().strftime("%Y%m%dT%H%M%S")
+                backup_path = out_dir / f"ppl_backup_{backup_ts}.json"
+                # Convert any non-serialisable values to strings
+                json_row = {k: (v if isinstance(v, (int, float, str, bool)) else str(v))
+                            for k, v in row.items()}
+                backup_path.write_text(
+                    json.dumps(json_row, indent=2, ensure_ascii=True),
+                    encoding="utf-8",
+                )
+                print(f"Backup saved to {backup_path}")
+            except Exception as backup_err:  # noqa: BLE001
+                print(f"WARNING: backup write also failed: {backup_err}")
 
         run_snapshot_dir = out_dir / row["run_id"]
         snapshot = build_config_snapshot(

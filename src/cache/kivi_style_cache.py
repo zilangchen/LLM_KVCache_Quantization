@@ -102,6 +102,14 @@ class KIVIStyleKVCache:
 
         # K cache: quantized tokens + per-channel scale/zp (computed at prefill).
         # For quant_bits=4, K/V values are bit-packed as uint8 payloads in int8 tensors.
+        # KVC-057: Dimension relationship when bit_packed=True:
+        #   _k_cache[i] has shape [B, H, S, D//2] — two INT4 values packed per byte
+        #   _k_scale[i] has shape [B, H, D]        — one scale per logical channel
+        #   _k_zp[i]    has shape [B, H, D]        — one zero-point per logical channel
+        # This is intentional: scale/zp operate on the *logical* head_dim (D), while
+        # the cache stores the *packed* representation (D//2).  unpack_int4() restores
+        # the logical dimension before dequantization in get_kv().  The same applies
+        # to V cache vs V scale/zp (V scale is per-token so shape is [B, H, S]).
         self._k_cache: List[Optional[Tensor]] = [None] * num_layers  # int8
         self._k_scale: List[Optional[Tensor]] = [None] * num_layers  # [B, H, D]
         self._k_zp: List[Optional[Tensor]] = [None] * num_layers  # [B, H, D]
@@ -320,6 +328,14 @@ class KIVIStyleKVCache:
         else:
             # Decode: reuse prefill scale and zero-point.
             # ENG-007: KIVI decode path dequant->requant accumulates precision loss; this is inherent to the KIVI design.
+            # KVC-074: Assert that the per-channel K scale was actually computed
+            # during prefill before we rely on it.  The outer `if/else` already
+            # branches on `_k_scale_initialized`, but an explicit assert guards
+            # against future refactors that might decouple the flag from the data.
+            assert self._k_scale_initialized[layer_id], (
+                f"BUG: entered decode branch for layer {layer_id} but "
+                f"_k_scale_initialized is False"
+            )
             k_scale = self._k_scale[layer_id]  # [B, H, D]
             k_zp = self._k_zp[layer_id]  # [B, H, D]
             if k_scale is None or k_zp is None:
@@ -357,6 +373,14 @@ class KIVIStyleKVCache:
             q_k_full = torch.round(_unscaled).clamp(qmin, qmax_val).to(torch.int8)
 
         q_k_store = pack_int4(q_k_full) if self.bit_packed else q_k_full
+
+        # KVC-057: Verify the packed-vs-logical dimension invariant.
+        # After bit packing, stored head_dim should be D//2; scale head_dim stays D.
+        if self.bit_packed:
+            assert q_k_store.shape[-1] == head_dim // 2, (
+                f"BUG: bit-packed K head_dim mismatch: "
+                f"packed={q_k_store.shape[-1]}, expected={head_dim // 2}"
+            )
 
         # --- V: per-token quantization ---
         q_v_full, v_scale, v_zp = quantize_asymmetric_per_token(
@@ -417,10 +441,12 @@ class KIVIStyleKVCache:
         q_v = self._v_cache[layer_id][:, :, :seq_len, :]
         if self.bit_packed:
             q_v = unpack_int4(q_v)
+        # KVC-059: Check for None *before* slicing — slicing a None tensor raises
+        # TypeError, so a post-slice None check would be dead code.
+        if self._v_scale[layer_id] is None or self._v_zp[layer_id] is None:
+            raise RuntimeError(f"V scale/zp missing for layer {layer_id}")
         v_scale = self._v_scale[layer_id][:, :, :seq_len]
         v_zp = self._v_zp[layer_id][:, :, :seq_len]
-        if v_scale is None or v_zp is None:
-            raise RuntimeError(f"V scale/zp missing for layer {layer_id}")
         v = dequantize_asymmetric_per_token(q_v, v_scale, v_zp).to(self.dtype)
 
         return k, v
@@ -442,16 +468,20 @@ class KIVIStyleKVCache:
         # Reset K scale/zp so stale values from a previous batch don't persist.
         self._k_scale = [None] * self.num_layers
         self._k_zp = [None] * self.num_layers
-        # Re-allocate V scale/zp buffers to match existing cache capacity.
-        # This keeps the _ensure_capacity invariant (if k_buf exists, vs_buf/vzp_buf
-        # must also exist) while clearing stale per-token metadata.
+        # KVC-058: Zero-fill V scale/zp buffers instead of leaving them
+        # uninitialized.  With torch.empty the buffer contains random values;
+        # if a new sequence is shorter than the old one, _ensure_capacity's
+        # grow-and-copy path could propagate stale random scale/zp into the
+        # new buffer beyond the valid region.  Using torch.zeros eliminates
+        # this class of bug at negligible cost (clear() is called once per
+        # new sequence, not per token).
         for i in range(self.num_layers):
             if self._v_cache[i] is not None:
                 B, H, cap, _ = self._v_cache[i].shape
-                self._v_scale[i] = torch.empty(
+                self._v_scale[i] = torch.zeros(
                     (B, H, cap), device=self.device, dtype=self._scale_dtype
                 )
-                self._v_zp[i] = torch.empty(
+                self._v_zp[i] = torch.zeros(
                     (B, H, cap), device=self.device, dtype=self._scale_dtype
                 )
             else:
@@ -494,6 +524,66 @@ class KIVIStyleKVCache:
                     total_bytes += self._v_scale[i].numel() * self._v_scale[i].element_size()
                     total_bytes += self._v_zp[i].numel() * self._v_zp[i].element_size()
         return total_bytes / (1024 * 1024)
+
+    # ---- KVC-019: HuggingFace past_key_values interop ----
+
+    def to_tuple(self) -> Tuple[Tuple[Tensor, Tensor], ...]:
+        """
+        Convert cache to HuggingFace past_key_values format.
+
+        Each layer's quantized K/V is dequantized before returning, so the
+        output is a tuple of (k_float, v_float) tuples identical to what
+        ``get_kv()`` returns per layer.
+
+        Returns:
+            Tuple of (k, v) tuples for each layer.
+
+        Raises:
+            ValueError: If any layer cache is empty.
+        """
+        result = []
+        for i in range(self.num_layers):
+            if self._k_cache[i] is None:
+                raise ValueError(f"Layer {i} cache is empty")
+            result.append(self.get_kv(i))
+        return tuple(result)
+
+    @classmethod
+    def from_tuple(
+        cls,
+        past_key_values: Tuple[Tuple[Tensor, Tensor], ...],
+        device: str = "cuda",
+        quant_bits: int = 8,
+        k_percentile: float = 100.0,
+        v_percentile: float = 100.0,
+    ) -> "KIVIStyleKVCache":
+        """
+        Create KIVIStyleKVCache from HuggingFace past_key_values format.
+
+        Each (k, v) pair is treated as a prefill batch: per-channel K scale
+        is computed from the full K sequence, and V is quantized per-token.
+
+        Args:
+            past_key_values: Tuple of (k, v) tuples from model output.
+            device: Device to store tensors on.
+            quant_bits: 4 or 8.
+            k_percentile: Clipping percentile for K quantization.
+            v_percentile: Clipping percentile for V quantization.
+
+        Returns:
+            KIVIStyleKVCache instance with loaded data.
+        """
+        num_layers = len(past_key_values)
+        cache = cls(
+            num_layers=num_layers,
+            device=device,
+            quant_bits=quant_bits,
+            k_percentile=k_percentile,
+            v_percentile=v_percentile,
+        )
+        for layer_id, (k, v) in enumerate(past_key_values):
+            cache.append(layer_id, k.to(device), v.to(device))
+        return cache
 
     # --- Decode stats interface (compatible with INT8KVCache) ---
 

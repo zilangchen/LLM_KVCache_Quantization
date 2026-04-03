@@ -665,5 +665,56 @@ class TestCalibOutputFormat(unittest.TestCase):
             self.assertIn(lf, ["kl", "mse"])
 
 
+class TestGetRopeForPosition(unittest.TestCase):
+    """CAL-034: _get_rope_for_position must fall back to model_backbone.rotary_emb."""
+
+    def _make_mock_rotary(self):
+        """Return a callable that mimics rotary_emb(states, pos) -> (cos, sin)."""
+        cos = torch.ones(1, 1, 128)
+        sin = torch.zeros(1, 1, 128)
+
+        def rotary_fn(dummy_states, position_ids=None):
+            return cos, sin
+
+        return rotary_fn, cos, sin
+
+    def test_attn_level_rotary(self):
+        """If attn_module has rotary_emb, use it directly."""
+        from scripts.calibrate_behavior import _get_rope_for_position
+
+        rotary_fn, expected_cos, _ = self._make_mock_rotary()
+        attn = types.SimpleNamespace(rotary_emb=rotary_fn)
+        dummy = torch.zeros(1, 1, 128)
+        pos = torch.tensor([[0]])
+        cos, sin = _get_rope_for_position(attn, dummy, pos)
+        self.assertIsNotNone(cos)
+        self.assertTrue(torch.equal(cos, expected_cos))
+
+    def test_backbone_fallback(self):
+        """If attn_module.rotary_emb is None, fall back to model_backbone."""
+        from scripts.calibrate_behavior import _get_rope_for_position
+
+        rotary_fn, expected_cos, _ = self._make_mock_rotary()
+        attn = types.SimpleNamespace()  # no rotary_emb
+        backbone = types.SimpleNamespace(rotary_emb=rotary_fn)
+        dummy = torch.zeros(1, 1, 128)
+        pos = torch.tensor([[0]])
+        cos, sin = _get_rope_for_position(attn, dummy, pos, model_backbone=backbone)
+        self.assertIsNotNone(cos)
+        self.assertTrue(torch.equal(cos, expected_cos))
+
+    def test_no_rotary_returns_none(self):
+        """If neither attn nor backbone has rotary_emb, return (None, None)."""
+        from scripts.calibrate_behavior import _get_rope_for_position
+
+        attn = types.SimpleNamespace()
+        backbone = types.SimpleNamespace()
+        dummy = torch.zeros(1, 1, 128)
+        pos = torch.tensor([[0]])
+        cos, sin = _get_rope_for_position(attn, dummy, pos, model_backbone=backbone)
+        self.assertIsNone(cos)
+        self.assertIsNone(sin)
+
+
 if __name__ == "__main__":
     unittest.main()

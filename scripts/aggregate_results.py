@@ -697,8 +697,9 @@ def _collect_execution_coverage(
         for task_name in sorted(observed_tasks):
             csv_pattern = known_tasks.get(task_name, "")
             has_csv = bool(csv_pattern and any(run_dir.glob(csv_pattern)))
-            log_path = logs_dir / run_dir.name / f"{task_name}.log" if logs_dir is not None else Path("")
-            has_log = bool(log_path and log_path.exists())
+            # AGG-036: Path("") is CWD which always exists; use None instead
+            log_path = logs_dir / run_dir.name / f"{task_name}.log" if logs_dir is not None else None
+            has_log = log_path is not None and log_path.exists() and log_path.is_file()
             log_has_oom = _log_contains_oom(log_path) if has_log else False
             log_has_traceback = _log_contains_traceback(log_path) if has_log else False
 
@@ -1929,6 +1930,7 @@ def main() -> int:
         "--significance_min_pairs",
         type=int,
         default=3,
+        choices=range(2, 1000),  # AGG-035: min 2 enforced at argparse level
         help=(
             "Minimum paired seeds required for significance claims. "
             "Rows below this threshold are marked as low-confidence."
@@ -2644,6 +2646,17 @@ def main() -> int:
         _save_table(ruler_task_summary, tables_dir / "ruler_task_summary.csv")
         _save_table(ruler_task_summary, tables_dir / "ruler_subtask_summary.csv")
 
+        # F4: Thesis-facing whitelist — only report verified subtasks in main text.
+        # CWE/VT have known limitations (EVL-047/073/081); full 4-subtask data
+        # is preserved above for appendix use.
+        RULER_THESIS_WHITELIST = {"s_niah", "mk_niah"}
+        if "ruler_task" in ruler_task_summary.columns:
+            thesis_ruler = ruler_task_summary[
+                ruler_task_summary["ruler_task"].isin(RULER_THESIS_WHITELIST)
+            ].copy()
+            if not thesis_ruler.empty:
+                _save_table(thesis_ruler, tables_dir / "ruler_thesis_whitelist.csv")
+
     # Needle details (curve over depth)
     needle_details = _read_csvs(runs_dir, ["needle_details_*.csv"])
     needle_details = _to_numeric(needle_details, ["context_len", "depth", "passed"])
@@ -2720,7 +2733,7 @@ def main() -> int:
             pairings=pairings,
             metric_name=spec["metric_name"],
             higher_is_better=bool(spec["higher_is_better"]),
-            min_pairs=max(2, int(args.significance_min_pairs)),
+            min_pairs=int(args.significance_min_pairs),  # AGG-035: removed silent clamp; argparse validates
             alpha=float(args.significance_alpha),
             ci_level=float(args.significance_ci_level),
             n_bootstrap=max(1000, int(args.significance_bootstrap)),

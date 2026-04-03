@@ -687,6 +687,10 @@ def _fused_forward_impl(
         )
 
     seq_len = int(k_quant.shape[2])
+    # ENG-077: seq_len is the token count (dim 2), NOT the packed head_dim (dim 3).
+    # For bit_packed INT4: shape is [bsz, kv_heads, seq_len, head_dim//2].
+    # The packed dimension is always dim 3, so k_quant.shape[2] is always tokens.
+    assert seq_len > 0, f"seq_len must be positive, got {seq_len} from k_quant.shape={k_quant.shape}"
     # ENG-049: context_lens is set uniformly to seq_len for all batch entries.
     # This assumes a non-padded batch where every sequence has the same valid
     # length (generate_from_ids enforces all-ones attention_mask for batch>1).
