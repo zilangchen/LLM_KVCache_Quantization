@@ -270,7 +270,7 @@ $\tau^{-1}$ 的最优值依赖于已确定的 Scale（因为反量化结果受 S
 \paragraph{第一阶段：Scale 搜索}
 
 在第一阶段中，框架不施加任何温度校正（即 $\tau^{-1} = 1$），
-在候选 clip percentile $p_c$ 和 group size $g$ 的笛卡尔积上进行网格搜索。
+在候选 clip percentile $p_c$ 和 group size $g$ 的笛卡尔积上进行网格搜索（具体候选值集合见附录表~\ref{tab:app-search-space}）。
 对于每组候选参数，执行以下步骤：
 
 \begin{enumerate}[label=(\alph*)]
@@ -618,7 +618,7 @@ INT4-RoleAlign 的主要设计区别在于参数确定范式：
 INT4-RoleAlign 通过行为对齐框架的离线搜索确定最优的
 $p_K$ 和 $p_V$ percentile 参数。
 搜索目标仍为 KL 散度（公式~\eqref{eq:ch3-kl}），
-但搜索空间从对称格式的 $(p_c, g)$ 切换为非对称格式的 $(p_K, p_V)$：
+但搜索空间从对称格式的 $(p_c, g)$ 切换为非对称格式的 $(p_K, p_V)$（候选值见附录表~\ref{tab:app-search-space}）：
 \begin{equation}
   (p_K^*, p_V^*) = \argmin_{(p_K, p_V) \in \mathcal{P}_K \times \mathcal{P}_V}
   \frac{1}{|\mathcal{D}|} \sum_{(\bq, \bK, \bV) \in \mathcal{D}}
