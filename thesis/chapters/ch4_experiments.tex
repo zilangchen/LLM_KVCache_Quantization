@@ -1304,6 +1304,10 @@ Qwen 系列上 vanilla KIVI 在 2-bit 下 PPL 直接崩溃（$>$200），
     \quad 无$\tau^{-1}$ & 7.58 & --- & 100\% \\
     \quad 有$\tau^{-1}$ & 8.03 & $+$6.0\% & 100\% \\
     \midrule
+    \multicolumn{4}{l}{\textit{INT4-RoleAlign（8B，$H_{kv}=8$）}} \\
+    \quad 无$\tau^{-1}$ & 6.92 & --- & 100\% \\
+    \quad 有$\tau^{-1}$ & 7.16 & $+$3.4\% & 100\% \\
+    \midrule
     \multicolumn{4}{l}{\textit{INT8-ours（1.5B）}} \\
     \quad 无$\tau^{-1}$ & 9.34 & --- & 100\% \\
     \quad 有$\tau^{-1}$ & 9.34 & $-$0.02\% & 100\% \\
