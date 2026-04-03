@@ -124,12 +124,16 @@ cd thesis && bibtex main && xelatex -interaction=nonstopmode main.tex
 
 ### 4.1 何时需要 Plan
 
-涉及以下任一情况时，**必须先进入 Plan Mode**（使用 `EnterPlanMode`），输出详细计划并等待用户确认后再实现：
+涉及以下任一情况时，**必须先使用 `/planning-with-files`（推荐）或 `EnterPlanMode` 进行计划**，等待用户确认后再实现：
 
 - 新增/修改代码（跨 2+ 文件）
 - 运行命令、改依赖/配置
 - 改实验流程或仓库结构
 - 任何可能偏离 `objective.md` 边界的工作
+
+**推荐 `/planning-with-files`**：将计划持久化到 `task_plan.md`，支持跨 session 读取、auto-compact 后恢复、gpu-orchestrator 自动调度。原生 `EnterPlanMode` 的计划仅存在于对话上下文中，compact 或 session 结束后丢失。
+
+无论使用哪种方式，退出 Plan Mode 后 **PostToolUse hook 会强制要求**将计划写入 `task_plan.md` + `iteration.md Approved Plans`。
 
 ### 4.2 Plan 必须包含
 
