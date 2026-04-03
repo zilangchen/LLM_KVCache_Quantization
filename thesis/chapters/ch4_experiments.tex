@@ -642,7 +642,14 @@ INT8-ours（对称量化 + KL 校准）与 KIVI-style（非对称量化 + 无校
 
 \begin{itemize}[leftmargin=2em, itemsep=2pt]
   \item 本实现仅采用 KIVI 的核心量化轴策略（per-channel K + per-token V 非对称量化），
-    不包含原文中的残差补偿等完整工程优化细节；
+    不包含原文中的 FP16 残差缓冲区（residual buffer, $R=128$）和分组 Scale 更新机制。
+    KIVI 原版在 decode 阶段将最近 $R$ 个 token 保持 FP16，
+    每当 buffer 满时才对该组计算新的 per-channel Scale；
+    本实现在 prefill 阶段一次性计算 Scale 后永久冻结，
+    decode 阶段所有 token 复用同一组 Scale。
+    这一简化在 chunk\_size$\geq$128 的标准 PPL 评测下影响有限，
+    但在 chunk\_size=1 的极端评测粒度下导致 Scale 统计量不足
+    （详见附录~\ref{sec:app-chunksize}）；
   \item KIVI-style 的 decode 路径固定使用 \code{torch\_ref} 核函数
     （非 Triton 融合），因此 TPOT 对比需考虑 kernel 实现差异；
   \item KIVI-style 不使用温度校正（$\tau^{-1}$），
