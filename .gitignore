@@ -48,6 +48,10 @@ thesis.zip
 # Session artifacts (planning-with-files skill)
 progress.md
 task_plan.md
+findings.md
+
+# LaTeX temp
+texput.log
 
 # Sensitive server credentials
 docs/autodl_server.md
