@@ -389,6 +389,7 @@ Codex 建议仅作为**参考**，最终决策权在 Supervisor。
 3. **审核后再提交**——sub-agent/Codex 修改后 Supervisor 必须 `git diff` 审核 + 验证，确认无误后才提交
 4. **不重复劳动**——两个 agent 不能同时修同一个文件
 5. **文件分区**——批量修复时按文件分区分配，每个 sub-agent 负责互斥的文件集
+6. **默认 Opus**——Supervisor spawn 的所有 sub-agent 必须使用 `model: "opus"`，不使用 Sonnet/Haiku
 
 ### Sub-Agent Prompt 模板（强制）
 
