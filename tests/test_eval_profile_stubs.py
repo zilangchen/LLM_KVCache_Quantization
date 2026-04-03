@@ -1,14 +1,9 @@
-"""TST-048/049/050/051: Test stubs for scripts with zero test coverage.
+"""TST-048/049/050/051: Import smoke tests for eval/profile scripts.
 
-These scripts require GPU and model weights for full execution. These tests
-use unittest.mock to verify argument parsing, error handling, and helper
-functions without actual GPU or model dependencies.
-
-Covers:
-  TST-048: scripts/eval_ppl.py
-  TST-049: scripts/eval_needle.py
-  TST-050: scripts/profile_latency.py
-  TST-051: scripts/profile_memory.py
+WARNING: These are import-level smoke tests, NOT logic regression tests.
+Full eval/profile testing requires GPU + model weights.
+These tests verify that scripts can be imported without crashing,
+and that key constants/functions exist. They do NOT test correctness.
 """
 
 import sys

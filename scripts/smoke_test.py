@@ -171,10 +171,10 @@ def main():
     try:
         from src.engine.generate_loop import generate_from_ids  # noqa: F401
         from src.cache.fp16_cache import FP16KVCache  # noqa: F401
-        from src.cache.int8_cache import Int8KVCache  # noqa: F401
+        from src.cache.int8_cache import INT8KVCache  # noqa: F401
         print("  ✓ Engine generate_from_ids importable")
         print("  ✓ FP16KVCache importable")
-        print("  ✓ Int8KVCache importable")
+        print("  ✓ INT8KVCache importable")
     except ImportError as e:
         print(f"  ✗ Engine/Cache pipeline import failed: {e}")
         print("  WARNING: src/engine/ or src/cache/ may be broken.")
