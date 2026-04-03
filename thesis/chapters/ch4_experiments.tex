@@ -647,8 +647,10 @@ INT8-ours（对称量化 + KL 校准）与 KIVI-style（非对称量化 + 无校
     每当 buffer 满时才对该组计算新的 per-channel Scale；
     本实现在 prefill 阶段一次性计算 Scale 后永久冻结，
     decode 阶段所有 token 复用同一组 Scale。
-    这一简化在 chunk\_size$\geq$128 的标准 PPL 评测下影响有限，
-    但在 chunk\_size=1 的极端评测粒度下导致 Scale 统计量不足
+    这一简化在 chunk\_size$\geq$128 的标准 PPL 评测下影响有限：
+    对照实验（residual\_length=0/64/128）在 1.5B 模型上 PPL 均为 10.43、
+    Needle 均为 100\%，确认残差缓冲区在标准评测粒度下对质量无可观测影响。
+    但在 chunk\_size=1 的极端评测粒度下 Scale 统计量不足会导致灾难性退化
     （详见附录~\ref{sec:app-chunksize}）；
   \item KIVI-style 的 decode 路径固定使用 \code{torch\_ref} 核函数
     （非 Triton 融合），因此 TPOT 对比需考虑 kernel 实现差异；
