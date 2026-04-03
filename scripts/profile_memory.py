@@ -7,6 +7,7 @@ Detailed memory analysis (sampling & peak) for objective.md compliance.
 import argparse
 import csv
 import json
+import math
 import sys
 import torch
 import gc
@@ -83,6 +84,7 @@ def _write_task_failure(
 class MemoryMonitor(threading.Thread):
     def __init__(self, device_id=0, interval=0.1):
         super().__init__()
+        self.daemon = True  # PRF-012: prevent hanging on abnormal exit
         self.device_id = device_id
         self.interval = interval
         self.stop_signal = False
@@ -157,6 +159,13 @@ def main():
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--run_name", type=str, default=None)
     parser.add_argument("--batch", type=int, default=1)
+    # PRF-021: repeated measurement for statistical confidence
+    parser.add_argument(
+        "--runs",
+        type=int,
+        default=3,
+        help="Number of profiling runs for repeated measurement (default: 3).",
+    )
     # Schema args
     parser.add_argument("--group_size", type=int, default=128)
     parser.add_argument("--clip_percentile", type=float, default=99.9)
@@ -330,106 +339,84 @@ def main():
 
     hardware = get_hardware_info()
 
-    print("Profiling Memory...")
-    gc.collect()
-    torch.cuda.empty_cache()
-    torch.cuda.reset_peak_memory_stats()
-    
-    # Start Monitor
-    monitor = MemoryMonitor()
-    monitor.start()
+    # PRF-021: Validate --runs lower bound.
+    if args.runs < 1:
+        print(f"WARNING: --runs={args.runs} < 1, clamping to 1.")
+        args.runs = 1
 
-    out = None
-    try:
-        input_ids = torch.tensor(tokens, dtype=torch.long, device=model.device).unsqueeze(0)
-        input_ids = input_ids.repeat(int(args.batch), 1)
-        attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=model.device)
-        out = generate_from_ids(
-            model=model,
-            tokenizer=tokenizer,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            max_new_tokens=args.gen_len,
-            kv_mode=args.kv_mode,
-            group_size=args.group_size,
-            clip_percentile=args.clip_percentile,
-            calib_file=args.calib_file,
-            use_attn_temperature=args.use_attn_temperature,
-            use_static_scales=args.use_static_scales,
-            adaptive_static_scales=args.adaptive_static_scales,
-            adaptive_static_margin=args.adaptive_static_margin,
-            adaptive_static_k=args.adaptive_static_k,
-            adaptive_static_v=args.adaptive_static_v,
-            decode_attn_impl=args.decode_attn_impl or "triton_fused",
-            seed=args.seed,
-            stop_on_eos=False,
-            quant_bits=runtime_quant_bits,
-            k_bits=getattr(args, 'k_bits', None),
-            v_bits=getattr(args, 'v_bits', None),
-        )
-    finally:
-        monitor.stop()
+    # PRF-021: Repeated measurement loop for statistical confidence.
+    print(f"Profiling Memory ({args.runs} runs)...")
+    results = []
+    timestamp = datetime.now().isoformat()
+    git_commit = get_git_commit()
 
-    torch_peak = torch.cuda.max_memory_allocated() / 1024 / 1024
-    nvml_peak = monitor.peak_mem
-    kv_cache_mem_source = "reported"
-    if out is None:
-        raise RuntimeError("generate_from_ids returned no output")
-    if hasattr(out, "kv_cache_mem_mb"):
-        kv_cache_mem_mb = float(out.kv_cache_mem_mb)
-    else:
-        kv_cache_mem_mb = float("nan")
-        kv_cache_mem_source = "missing_attr"
-    if hasattr(out, "kv_cache_seq_len"):
-        kv_cache_seq_len = int(out.kv_cache_seq_len)
-    else:
-        kv_cache_seq_len = -1
-    print(f"Torch Peak: {torch_peak:.2f} MB")
-    print(f"NVML Peak: {nvml_peak:.2f} MB")
-    if monitor.init_error:
-        print(f"NVML unavailable, fallback to torch peak ({monitor.init_error})")
-    print(f"KV Cache (resident): {kv_cache_mem_mb:.2f} MB")
-    print(f"KV Cache (seq_len): {kv_cache_seq_len}")
+    for run_i in range(args.runs):
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
 
-    if args.save_csv:
-        timestamp = datetime.now().isoformat()
-        git_commit = get_git_commit()
-        out_dir = Path(args.out_dir)
-        if not out_dir.is_absolute():
-            out_dir = project_root / out_dir
-        out_dir.mkdir(parents=True, exist_ok=True)
-        path = out_dir / f"profile_memory_{args.kv_mode}_{timestamp.replace(':','-')}.csv"
-        
-        # PRF-005: GPU peak memory source selection logic.
-        #
-        # Two measurement backends are available:
-        #   1. NVML (pynvml) – samples the physical GPU memory via the NVIDIA
-        #      Management Library on a background thread (MemoryMonitor).
-        #      Preferred because it captures the true system-level peak including
-        #      CUDA context overhead, driver allocations, and memory not tracked
-        #      by PyTorch's allocator.
-        #   2. torch.cuda.max_memory_allocated() – tracks only tensors allocated
-        #      through PyTorch's caching allocator.  It under-reports peak usage
-        #      (misses driver/context overhead) but is always available.
-        #
-        # Selection rule:
-        #   - Use NVML peak when: pynvml initialised successfully
-        #     (monitor.source == "nvml") AND no error occurred during sampling
-        #     (not monitor.init_error).
-        #   - Fall back to torch peak when pynvml is unavailable (not installed),
-        #     the device handle could not be obtained, or NVML sampling raised
-        #     an exception mid-run.
-        #
-        # The chosen source is recorded in gpu_mem_peak_source for auditability.
+        # Start Monitor
+        monitor = MemoryMonitor()
+        monitor.start()
+
+        out = None
+        try:
+            input_ids = torch.tensor(tokens, dtype=torch.long, device=model.device).unsqueeze(0)
+            input_ids = input_ids.repeat(int(args.batch), 1)
+            attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=model.device)
+            out = generate_from_ids(
+                model=model,
+                tokenizer=tokenizer,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_new_tokens=args.gen_len,
+                kv_mode=args.kv_mode,
+                group_size=args.group_size,
+                clip_percentile=args.clip_percentile,
+                calib_file=args.calib_file,
+                use_attn_temperature=args.use_attn_temperature,
+                use_static_scales=args.use_static_scales,
+                adaptive_static_scales=args.adaptive_static_scales,
+                adaptive_static_margin=args.adaptive_static_margin,
+                adaptive_static_k=args.adaptive_static_k,
+                adaptive_static_v=args.adaptive_static_v,
+                decode_attn_impl=args.decode_attn_impl or "triton_fused",
+                seed=args.seed,
+                stop_on_eos=False,
+                quant_bits=runtime_quant_bits,
+                k_bits=getattr(args, 'k_bits', None),
+                v_bits=getattr(args, 'v_bits', None),
+            )
+        finally:
+            monitor.stop()
+
+        torch_peak = torch.cuda.max_memory_allocated() / 1024 / 1024
+        nvml_peak = monitor.peak_mem
+        kv_cache_mem_source = "reported"
+        if out is None:
+            raise RuntimeError("generate_from_ids returned no output")
+        if hasattr(out, "kv_cache_mem_mb"):
+            kv_cache_mem_mb = float(out.kv_cache_mem_mb)
+        else:
+            kv_cache_mem_mb = float("nan")
+            kv_cache_mem_source = "missing_attr"
+        if hasattr(out, "kv_cache_seq_len"):
+            kv_cache_seq_len = int(out.kv_cache_seq_len)
+        else:
+            kv_cache_seq_len = -1
+
+        # PRF-005 + PRF-013: GPU peak memory source selection.
+        # Take max(nvml, torch) when both available to avoid under-reporting.
         use_nvml = monitor.source == "nvml" and not monitor.init_error
         if use_nvml:
-            gpu_peak = float(nvml_peak)
-            gpu_peak_source = "nvml"
+            gpu_peak = max(float(nvml_peak), float(torch_peak))
+            gpu_peak_source = "max(nvml,torch)"
         else:
             gpu_peak = float(torch_peak)
             gpu_peak_source = "torch_peak"
+
         row = {
-            "run_id": f"mem_{timestamp}",
+            "run_id": f"mem_{timestamp}_{run_i}",
             "model_id": args.model_id,
             "run_name": args.run_name,
             "kv_mode": args.kv_mode,
@@ -457,25 +444,60 @@ def main():
             "seed": int(args.seed),
             "replica_id": int(args.replica_id),
         }
+        results.append(row)
+        print(
+            f"Run {run_i}: Torch Peak={torch_peak:.2f}MB, NVML Peak={nvml_peak:.2f}MB, "
+            f"GPU Peak={gpu_peak:.2f}MB ({gpu_peak_source}), "
+            f"KV Cache={kv_cache_mem_mb:.2f}MB"
+        )
+        if monitor.init_error:
+            print(f"  NVML unavailable, fallback to torch peak ({monitor.init_error})")
 
-        run_snapshot_dir = out_dir / row["run_id"]
+        run_snapshot_dir = (_resolve_out_dir(args.out_dir)) / row["run_id"]
         snapshot = build_config_snapshot(
             script_name=Path(__file__).name,
             args=args,
         )
         write_config_snapshot(str(run_snapshot_dir), snapshot)
-        
+
+    # PRF-021: Print summary statistics for memory measurements.
+    if len(results) >= 2:
+        n = len(results)
+        _t_crit_table = {
+            1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
+            6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
+            15: 2.131, 20: 2.086, 25: 2.060, 30: 2.042,
+        }
+        df = n - 1
+        t_crit = _t_crit_table.get(df)
+        if t_crit is None:
+            candidates = [k for k in _t_crit_table if k <= df]
+            t_crit = _t_crit_table[max(candidates)] if candidates else 1.96
+        _stat_keys = ["gpu_mem_peak_mb", "torch_peak_mb", "kv_cache_mem_mb"]
+        print(f"\n--- Memory Summary ({n} runs, 95% CI) ---")
+        for key in _stat_keys:
+            vals = [r[key] for r in results]
+            mean = sum(vals) / n
+            var = sum((v - mean) ** 2 for v in vals) / (n - 1)
+            std = math.sqrt(var)
+            ci = t_crit * std / math.sqrt(n)
+            print(f"  {key}: mean={mean:.2f}, std={std:.2f}, 95%CI=[{mean - ci:.2f}, {mean + ci:.2f}]")
+
+    if args.save_csv and results:
+        out_dir = _resolve_out_dir(args.out_dir)
+        path = out_dir / f"profile_memory_{args.kv_mode}_{timestamp.replace(':','-')}.csv"
+
         fields = [
             "run_id", "model_id", "run_name", "kv_mode", "quant_bits", "clip_percentile", "group_size",
             "dtype", "hardware", "seq_len", "gen_len", "batch", "ttft_ms", "tpot_ms",
             "tok_per_s", "tok_per_s_per_seq", "gpu_mem_peak_mb", "gpu_mem_peak_source", "torch_peak_mb", "nvml_peak_mb", "kv_cache_mem_mb",
             "kv_cache_mem_source", "kv_cache_seq_len", "timestamp", "git_commit", "seed", "replica_id"
         ]
-        
+
         with open(path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fields)
             writer.writeheader()
-            writer.writerow(row)
+            writer.writerows(results)
         print(f"Saved to {path}")
 
 if __name__ == "__main__":

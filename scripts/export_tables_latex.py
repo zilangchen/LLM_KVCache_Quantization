@@ -46,9 +46,14 @@ logger = logging.getLogger(__name__)
 
 
 def _sanitize_label(text: str) -> str:
-    """Remove or replace characters that are unsafe inside LaTeX \\label{}."""
-    # Strip backslashes and braces which would break \label{...}
-    text = re.sub(r'[{}\\#$%&^~]', '', text)
+    """Remove or replace characters that are unsafe inside LaTeX \\label{}.
+
+    LTX-008: Also strips colons — hyperref treats colons as category
+    separators and double colons (e.g. ``tab:app:latency:...``) break
+    cross-references in some LaTeX engines.
+    """
+    # Strip backslashes, braces, colons, and other special chars
+    text = re.sub(r'[{}\\#$%&^~:]', '', text)
     # Collapse whitespace to underscores
     text = re.sub(r'\s+', '_', text.strip())
     return text

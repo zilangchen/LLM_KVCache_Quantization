@@ -51,7 +51,7 @@ from scripts.config_utils import load_config, normalize_kv_params, resolve_run_c
 
 # EVL-029: Standard exit codes aligned with eval_longbench/eval_ruler.
 EXIT_OOM = 73
-EXIT_EXCEPTION = 2
+EXIT_EXCEPTION = 74  # XMD-003: aligned with all other eval scripts (was 2, POSIX "misuse")
 
 _LAST_ARGS: argparse.Namespace | None = None
 
@@ -484,6 +484,20 @@ def eval_window_kv_cache(
     kv_mode: str,
     chunk_size: int = 1,
 ):
+    """Evaluate PPL on a single window using quantized KV cache.
+
+    .. note:: EVL-039 performance caveat
+       When ``chunk_size=1`` (token-by-token), this function calls
+       ``build_past_key_values`` at every decode step, which triggers a
+       full ``get_kv(i)`` dequantization across all layers. For non-fused
+       modes the total work is **O(seq_len^2 * num_layers)** dequantizations.
+       At seq_len=1024 this means ~1023*28 full dequant calls — a significant
+       performance bottleneck. Correctness is unaffected.
+
+       Use ``chunk_size > 1`` to amortise this cost: each chunk processes
+       multiple tokens in a single forward pass, reducing the number of
+       dequant rounds from seq_len to seq_len/chunk_size.
+    """
     num_layers = getattr(model.config, "num_hidden_layers", 28)
     seq_len = input_ids.size(1)
     start_loss_idx = max(seq_len - trg_len, 0)
@@ -499,6 +513,8 @@ def eval_window_kv_cache(
             current_token = input_ids[:, 0:1]
 
             for t in range(seq_len - 1):
+                # EVL-039: Each call to build_past_key_values triggers full
+                # dequantization for quantized modes — O(N^2) total. See docstring.
                 past_key_values, should_update_cache = build_past_key_values(
                     kv_mode, kv_cache, num_layers
                 )

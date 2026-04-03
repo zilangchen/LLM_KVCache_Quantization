@@ -188,6 +188,26 @@ def get_calibration_dataset(tokenizer, n_samples=128, seq_len=512):
 
 
 def compute_absmax_per_group(tensor: torch.Tensor, group_size: int) -> torch.Tensor:
+    """Compute per-group absmax over the full sequence dimension.
+
+    .. note:: CAL-012 — systematic scale overestimation (confidence 80%)
+       This function takes the absmax over the entire sequence (amax(dim=1)),
+       producing the global maximum per (head, group). When used to compute
+       static calibration scales (via collect_absmax_samples -> percentile),
+       the resulting scale = percentile(absmax_over_seq, across_samples).
+       During inference, KV tokens are quantized incrementally per token,
+       where each token's actual absmax is typically much smaller than the
+       sequence-wide maximum. This makes the static scale conservatively
+       large, leading to a coarser quantization grid than necessary.
+
+       This is a known design trade-off of static symmetric calibration:
+       the scale must accommodate the worst-case token to avoid clipping.
+       The adaptive_static_scales mechanism (adaptive_static_margin) partially
+       mitigates this by allowing per-token scale adjustment at inference time.
+       A tighter calibration would require per-token or sliding-window scale
+       computation, which conflicts with the static-scale design goal.
+       No code fix applied; documented for awareness.
+    """
     # tensor: [heads, seq, head_dim]
     heads, seq_len, head_dim = tensor.shape
     num_groups = head_dim // group_size
@@ -272,6 +292,21 @@ def compute_inv_tau(
     qmax: int,
     loss_function: str = "kl",
 ) -> torch.Tensor:
+    """Search for optimal inv_tau per (layer, head) via grid search over candidates.
+
+    .. note:: CAL-011 — short-sequence degeneracy (confidence 75%)
+       When a calibration sample has very short sequence length (1-2 tokens),
+       the softmax attention distribution degenerates to near-uniform for all
+       inv_tau candidates, making the KL/MSE losses approximately equal. In
+       this case argmin selects the first candidate (typically 0.5), which may
+       not be meaningful. In practice this is benign because:
+       (a) calibration samples are filtered by min_text_len (default 256),
+       (b) the per-sample loss is averaged over all samples, so short outliers
+           are diluted by longer samples,
+       (c) inv_tau is NOT used in the final INT4-RoleAlign configuration.
+       No code fix needed; this is a known theoretical limitation of the grid
+       search approach documented here for completeness.
+    """
     if not inv_tau_candidates:
         raise ValueError(
             "inv_tau_candidates is empty. At least one candidate value is required "
@@ -1256,6 +1291,13 @@ def main():
                     f"Calibration expects bsz=1, got bsz={bsz}. "
                     "Multi-sample batching is not supported in calibration."
                 )
+                # CAL-015: After the bsz==1 assertion, squeeze(0) is safe because
+                # dimension 0 is guaranteed to be size 1. We use explicit indexing
+                # for the q sequence dimension ([:, :, 0, :]) and squeeze only the
+                # batch dim. Shape transformations:
+                #   q: [1, num_heads, seq, head_dim] -> [:,:,0,:] -> [1, num_heads, head_dim] -> squeeze(0) -> [num_heads, head_dim]
+                #   k: [1, kv_heads, seq, head_dim] -> squeeze(0) -> [kv_heads, seq, head_dim]
+                #   v: [1, kv_heads, seq, head_dim] -> squeeze(0) -> [kv_heads, seq, head_dim]
                 q_last = q[:, :, 0, :].squeeze(0).cpu()  # [num_heads, head_dim]
 
                 k = past_key_values[layer_idx][0].squeeze(0).cpu()  # [kv_heads, seq, head_dim]

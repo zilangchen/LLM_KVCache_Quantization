@@ -1524,22 +1524,34 @@ def _add_bh_fdr_qvalues_by_metric(
     df: pd.DataFrame,
     *,
     metric_col: str = "metric",
+    condition_cols: tuple[str, ...] = ("seq_len", "gen_len", "batch"),
     p_col: str = "p_value",
     q_col: str = "q_value",
 ) -> pd.DataFrame:
     """
-    Apply BH-FDR independently per metric family.
+    Apply BH-FDR independently per metric + condition family.
 
     AGG-049: Avoid mixing heterogeneous metrics (latency/PPL/quality) in one
     BH family, which inflates family size and over-penalizes q-values.
+
+    AGG-052: Within each metric, further subdivide by condition columns
+    (seq_len, gen_len, batch) when present.  For latency, different
+    gen_len/batch combinations produce independent test families; mixing
+    them into one BH correction severely dilutes statistical power.
     """
     if df.empty:
         return df
     if metric_col not in df.columns:
         return _add_bh_fdr_qvalues(df, p_col=p_col, q_col=q_col)
 
+    # Build the groupby key: metric + any condition columns that exist.
+    group_keys = [metric_col]
+    for col in condition_cols:
+        if col in df.columns:
+            group_keys.append(col)
+
     out_frames: List[pd.DataFrame] = []
-    for _, sub in df.groupby(metric_col, dropna=False, sort=False):
+    for _, sub in df.groupby(group_keys, dropna=False, sort=False):
         out_frames.append(_add_bh_fdr_qvalues(sub, p_col=p_col, q_col=q_col))
     if not out_frames:
         return df

@@ -167,9 +167,18 @@ def _score_single_answer(prediction: str, answer: str) -> Dict[str, float]:
 
 
 def _score_multi_answer(prediction: str, answers: List[str]) -> Dict[str, float]:
-    """Score for tasks with multiple expected answers (MK-NIAH).
+    """Score for tasks with multiple expected answers (MK-NIAH, VT).
 
     Each answer is checked independently; metrics are micro-averaged.
+
+    .. note:: EVL-071 — multi-chain VT caveat
+       When num_chains > 1, the model is asked to output all values separated
+       by semicolons ("v1; v2; v3"). Generation uses stop_on_eos=True, which
+       may truncate the output before all values are emitted. In that case
+       ``exact_match`` (requires ALL values present) will be 0.0 even though
+       some values were correct. ``contains_match`` and ``f1`` still credit
+       partially correct responses. The default config uses num_chains=1 so
+       this does not affect standard RULER evaluation.
     """
     if not answers:
         return {"exact_match": 0.0, "contains_match": 0.0, "f1": 0.0}

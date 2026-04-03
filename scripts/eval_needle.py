@@ -110,16 +110,27 @@ def generate_haystack_ids(tokenizer, context_len, needle, depth_percent):
 
     current_tokens.extend(needle_tokens)
 
-    remaining = target_len - len(current_tokens)
     while len(current_tokens) < target_len:
         current_tokens.extend(filler_tokens)
     current_tokens = current_tokens[:target_len]
 
-    if remaining < 0:
-        # Should not happen; keep as a guard to avoid silent needle truncation.
+    # NDL-002: Verify the needle tokens survive the final truncation.
+    # The previous guard (remaining < 0) was dead code because the math
+    # guarantees remaining >= 0.  Instead, verify the needle token sequence
+    # is actually present in the final haystack — this catches tokenizer
+    # round-trip instabilities that could silently corrupt the needle.
+    needle_seq = tuple(needle_tokens)
+    haystack_seq = tuple(current_tokens)
+    needle_found = False
+    for i in range(len(haystack_seq) - len(needle_seq) + 1):
+        if haystack_seq[i : i + len(needle_seq)] == needle_seq:
+            needle_found = True
+            break
+    if not needle_found:
         raise RuntimeError(
-            f"Internal error: haystack overflow. target_len={target_len}, "
-            f"len(current_tokens)={len(current_tokens)}"
+            f"Internal error: needle tokens not found in final haystack. "
+            f"target_len={target_len}, needle_len={len(needle_tokens)}, "
+            f"haystack_len={len(current_tokens)}"
         )
 
     return current_tokens
@@ -372,9 +383,23 @@ def main():
         needle = str(uuid.UUID(bytes=rng.bytes(16)))
         haystack_ids = generate_haystack_ids(tokenizer, args.context_len, needle, depth)
         haystack_text = tokenizer.decode(haystack_ids, skip_special_tokens=True)
-        if needle not in haystack_text:
+        # NDL-005: Use token-ID level verification as primary check to avoid
+        # tokenizer round-trip false positives/negatives.  The decoded-text
+        # check is kept as a secondary diagnostic.
+        needle_token_ids = tokenizer.encode(
+            f" The special secret passkey is {needle}. Remember it. ",
+            add_special_tokens=False,
+        )
+        needle_id_tuple = tuple(needle_token_ids)
+        haystack_id_tuple = tuple(haystack_ids)
+        token_level_found = any(
+            haystack_id_tuple[i : i + len(needle_id_tuple)] == needle_id_tuple
+            for i in range(len(haystack_id_tuple) - len(needle_id_tuple) + 1)
+        )
+        if not token_level_found and needle not in haystack_text:
             raise RuntimeError(
-                "Needle not present in generated haystack. "
+                "Needle not present in generated haystack (both token-ID and "
+                "decoded-text checks failed). "
                 f"context_len={args.context_len} depth={float(depth):.1f} needle={needle}"
             )
 
@@ -385,6 +410,22 @@ def main():
 
     if not prompt_ids_list:
         raise RuntimeError("No prompts were generated for needle evaluation.")
+
+    # NDL-003: validate that the final prompt does not exceed the model's
+    # max_position_embeddings.  Unlike eval_ruler.py (which has
+    # _truncate_prompt_ids) and eval_longbench.py, this script previously
+    # had no truncation safeguard.
+    max_pos = getattr(model.config, "max_position_embeddings", None)
+    if max_pos is not None:
+        total_len = len(prompt_ids_list[0]) + args.needle_max_new_tokens
+        if total_len > max_pos:
+            import warnings
+            warnings.warn(
+                f"NDL-003: prompt ({len(prompt_ids_list[0])}) + max_new_tokens "
+                f"({args.needle_max_new_tokens}) = {total_len} exceeds "
+                f"max_position_embeddings ({max_pos}). Results may be unreliable.",
+                RuntimeWarning,
+            )
 
     prompt_len = len(prompt_ids_list[0])
     for idx, ids in enumerate(prompt_ids_list):

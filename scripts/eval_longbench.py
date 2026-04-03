@@ -239,24 +239,28 @@ def _rouge_l(pred: str, truth: str) -> float:
 
 
 def _edit_similarity(pred: str, truth: str) -> float:
-    """Edit similarity = 1 - normalised edit distance (character-level)."""
-    pred_norm = _normalize_text(pred)
-    truth_norm = _normalize_text(truth)
-    if not pred_norm and not truth_norm:
+    """Edit similarity using difflib.SequenceMatcher (official LongBench metric).
+
+    EVL-102: The original implementation used character-level Levenshtein edit
+    distance with _normalize_text (lowering + punctuation removal), which
+    deviates from the official LongBench eval.py that uses
+    difflib.SequenceMatcher.ratio() on raw strings. For code tasks (lcc,
+    repobench-p), normalization is especially harmful because it transforms
+    code tokens (e.g. ``arr[0]=func(x)`` -> ``arr0 funcx``). The measured
+    deviation was 4-16% vs the official metric.
+
+    Now matches the official THUDM/LongBench evaluation protocol.
+    """
+    from difflib import SequenceMatcher
+    # Official LongBench does NOT normalize text for code edit similarity.
+    # Strip only leading/trailing whitespace for robustness.
+    pred_s = pred.strip()
+    truth_s = truth.strip()
+    if not pred_s and not truth_s:
         return 1.0
-    if not pred_norm or not truth_norm:
+    if not pred_s or not truth_s:
         return 0.0
-    m, n = len(pred_norm), len(truth_norm)
-    prev = list(range(n + 1))
-    for i in range(1, m + 1):
-        curr = [i] + [0] * n
-        for j in range(1, n + 1):
-            if pred_norm[i - 1] == truth_norm[j - 1]:
-                curr[j] = prev[j - 1]
-            else:
-                curr[j] = 1 + min(prev[j], curr[j - 1], prev[j - 1])
-        prev = curr
-    return 1.0 - prev[n] / max(m, n)
+    return SequenceMatcher(None, pred_s, truth_s).ratio()
 
 
 def _classification_accuracy(pred: str, answers: Sequence[str]) -> float:

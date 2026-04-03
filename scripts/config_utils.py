@@ -29,6 +29,10 @@ ALLOWED_MODEL_IDS: frozenset[str] = frozenset({
 
 # QUA-005: Canonical KV mode ordering, shared across aggregate_results.py
 # and export_tables_latex.py. Defined here as the single source of truth.
+# CFG-050: int8_fused is a valid internal mode (Triton fused INT8 decode)
+# but is not listed in CLAUDE.md §9 fixed quantization methods because it
+# is an implementation variant of int8_ours, not a separate research method.
+# It is kept here for correct table ordering when int8_fused runs appear.
 KV_MODE_ORDER: List[str] = [
     "fp16",
     "int8_baseline",
@@ -41,6 +45,8 @@ KV_MODE_ORDER: List[str] = [
     "kivi_style",
     "int4_kivi_aligned",
     "int4_mixed_kv",
+    "int4_ours_asym",
+    "int4_ours_asym_ba",
 ]
 
 
@@ -171,6 +177,7 @@ def resolve_run_config(config: Dict[str, Any], run_name: str) -> Dict[str, Any]:
             "decode_attn_impl", kernel_defaults.get("decode_attn_impl")
         ),
         "quant_bits": run_entry.get("quant_bits", quant_defaults.get("quant_bits")),
+        "model_revision": project.get("model_revision"),  # CFG-031: pass revision to child scripts
         "dtype": runtime.get("dtype"),
         "seed": run_entry.get("seed", runtime.get("seed")),
         "calib_file": run_entry.get("calib_file", quant_defaults.get("calib_file")),
@@ -180,6 +187,21 @@ def resolve_run_config(config: Dict[str, Any], run_name: str) -> Dict[str, Any]:
         # EVL-089: pass use_static_scales so matrix runner can override via config
         "use_static_scales": run_entry.get(
             "use_static_scales", quant_defaults.get("use_static_scales", True)
+        ),
+        # CFG-030: pass adaptive_static_* fields so that child scripts invoked
+        # via --config+--run_name get the same values as the run_experiments.py
+        # dispatch path (which reads these from its own resolve_quant_params).
+        "adaptive_static_scales": run_entry.get(
+            "adaptive_static_scales", quant_defaults.get("adaptive_static_scales", False)
+        ),
+        "adaptive_static_margin": run_entry.get(
+            "adaptive_static_margin", quant_defaults.get("adaptive_static_margin", 1.0)
+        ),
+        "adaptive_static_k": run_entry.get(
+            "adaptive_static_k", quant_defaults.get("adaptive_static_k", True)
+        ),
+        "adaptive_static_v": run_entry.get(
+            "adaptive_static_v", quant_defaults.get("adaptive_static_v", True)
         ),
         "k_bits": run_entry.get("k_bits"),
         "v_bits": run_entry.get("v_bits"),
@@ -192,11 +214,22 @@ def normalize_kv_params(args) -> None:
     Normalize k/v group_size and clip_percentile into shared args.
     We keep group_size/clip_percentile for backward compatibility and
     record k/v-specific values for config snapshots.
+
+    Mutates *args* in-place: sets group_size_k, group_size_v,
+    clip_percentile_k, clip_percentile_v, and the legacy group_size /
+    clip_percentile attributes.
     """
-    group_size_k = getattr(args, "group_size_k", None) or getattr(args, "group_size", None)
-    group_size_v = getattr(args, "group_size_v", None) or getattr(args, "group_size", None)
-    clip_k = getattr(args, "clip_percentile_k", None) or getattr(args, "clip_percentile", None)
-    clip_v = getattr(args, "clip_percentile_v", None) or getattr(args, "clip_percentile", None)
+    # CFG-033: Use `is not None` instead of `or` to avoid falsy-value
+    # short-circuit (e.g. group_size_k=0 or clip_percentile_k=0.0 would
+    # silently fall through to the backup value with bare `or`).
+    _gk = getattr(args, "group_size_k", None)
+    group_size_k = _gk if _gk is not None else getattr(args, "group_size", None)
+    _gv = getattr(args, "group_size_v", None)
+    group_size_v = _gv if _gv is not None else getattr(args, "group_size", None)
+    _ck = getattr(args, "clip_percentile_k", None)
+    clip_k = _ck if _ck is not None else getattr(args, "clip_percentile", None)
+    _cv = getattr(args, "clip_percentile_v", None)
+    clip_v = _cv if _cv is not None else getattr(args, "clip_percentile", None)
 
     if group_size_k is not None and group_size_v is not None and group_size_k != group_size_v:
         warnings.warn(

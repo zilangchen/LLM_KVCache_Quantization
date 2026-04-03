@@ -189,6 +189,14 @@ def main():
             if value is not None:
                 setattr(args, key, value)
 
+    # PRF-016: Validate --runs and --warmup lower bounds.
+    if args.runs < 1:
+        print(f"ERROR: --runs={args.runs} is invalid (must be >= 1). Clamping to 1.")
+        args.runs = 1
+    if args.warmup < 0:
+        print(f"WARNING: --warmup={args.warmup} < 0, clamping to 0.")
+        args.warmup = 0
+
     print("=" * 60)
     print("PROFILE BASELINE: Generation Loop")
     print(f"KV Mode: {args.kv_mode}")

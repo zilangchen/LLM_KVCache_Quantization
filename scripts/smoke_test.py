@@ -166,6 +166,20 @@ def main():
         print("  - Model ID incorrect")
         sys.exit(1)
 
+    # Step 2b: Verify project Engine/Cache pipeline is importable (SMK-006)
+    print("\n[2b/4] Verifying project Engine/Cache pipeline imports...")
+    try:
+        from src.engine.generate_loop import generate_from_ids  # noqa: F401
+        from src.cache.fp16_cache import FP16KVCache  # noqa: F401
+        from src.cache.int8_cache import Int8KVCache  # noqa: F401
+        print("  ✓ Engine generate_from_ids importable")
+        print("  ✓ FP16KVCache importable")
+        print("  ✓ Int8KVCache importable")
+    except ImportError as e:
+        print(f"  ✗ Engine/Cache pipeline import failed: {e}")
+        print("  WARNING: src/engine/ or src/cache/ may be broken.")
+        # Non-fatal for smoke test — the HF generate path still works.
+
     # Step 3: Generate with greedy decoding
     print(f"\n[3/4] Generating text (greedy, max_new_tokens={args.max_new_tokens})...")
     print(f"  Prompt: {args.prompt[:50]}...")

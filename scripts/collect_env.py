@@ -32,9 +32,10 @@ def get_gpu_info() -> str:
             capture_output=True,
             text=True,
             check=True,
+            timeout=30,  # UTL-011: prevent hang on driver issues
         )
         return result.stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
         return "No GPU detected or nvidia-smi not available"
 
 
@@ -46,13 +47,14 @@ def get_cuda_version() -> str:
             capture_output=True,
             text=True,
             check=True,
+            timeout=30,  # UTL-011: prevent hang on driver issues
         )
         # Parse version from output
         for line in result.stdout.split("\n"):
             if "release" in line.lower():
                 return line.strip()
         return result.stdout.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
         return "nvcc not available"
 
 
@@ -111,10 +113,11 @@ def pip_freeze(output_path: Path) -> None:
             capture_output=True,
             text=True,
             check=True,
+            timeout=30,  # UTL-011: prevent hang on NFS/network issues
         )
         output_path.write_text(result.stdout)
         print(f"✓ pip freeze saved to {output_path}")
-    except subprocess.CalledProcessError as e:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         print(f"✗ Failed to run pip freeze: {e}")
 
 

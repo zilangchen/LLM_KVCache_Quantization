@@ -7,6 +7,7 @@ Standardized TTFT/TPOT profiling for objective.md compliance.
 import argparse
 import csv
 import json
+import math
 import sys
 import torch
 import gc
@@ -273,34 +274,58 @@ def main():
     _base_id = _hello_ids[0] if _hello_ids else (tokenizer.eos_token_id or 0)
     tokens = [_base_id] * args.seq_len
 
+    # PRF-020: Validate --runs / --warmup lower bounds.
+    if args.runs < 1:
+        print(f"WARNING: --runs={args.runs} < 1, clamping to 1.")
+        args.runs = 1
+    if args.warmup < 0:
+        print(f"WARNING: --warmup={args.warmup} < 0, clamping to 0.")
+        args.warmup = 0
+
+    # PRF-020: CUDA sync before warmup to flush residual GPU ops.
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+
     print(f"Warmup ({args.warmup} runs)...")
     warmup_ids = tokenizer("Hello", return_tensors="pt")["input_ids"].to(model.device)
     warmup_ids = warmup_ids.repeat(int(args.batch), 1)
     warmup_mask = torch.ones_like(warmup_ids, dtype=torch.long, device=model.device)
-    for _ in range(args.warmup):
-        generate_from_ids(
-            model=model,
-            tokenizer=tokenizer,
-            input_ids=warmup_ids,
-            attention_mask=warmup_mask,
-            max_new_tokens=8,
-            kv_mode=args.kv_mode,
-            group_size=args.group_size,
-            clip_percentile=args.clip_percentile,
-            calib_file=args.calib_file,
-            use_attn_temperature=args.use_attn_temperature,
-            use_static_scales=args.use_static_scales,
-            adaptive_static_scales=args.adaptive_static_scales,
-            adaptive_static_margin=args.adaptive_static_margin,
-            adaptive_static_k=args.adaptive_static_k,
-            adaptive_static_v=args.adaptive_static_v,
-            decode_attn_impl=args.decode_attn_impl or "triton_fused",
-            seed=args.seed,
-            stop_on_eos=False,
-            quant_bits=runtime_quant_bits,
-            k_bits=getattr(args, 'k_bits', None),
-            v_bits=getattr(args, 'v_bits', None),
+    # PRF-020: Wrap warmup in independent try/except so warmup OOM is
+    # distinguishable from profiling OOM in task_failure JSON.
+    try:
+        for _ in range(args.warmup):
+            generate_from_ids(
+                model=model,
+                tokenizer=tokenizer,
+                input_ids=warmup_ids,
+                attention_mask=warmup_mask,
+                max_new_tokens=8,
+                kv_mode=args.kv_mode,
+                group_size=args.group_size,
+                clip_percentile=args.clip_percentile,
+                calib_file=args.calib_file,
+                use_attn_temperature=args.use_attn_temperature,
+                use_static_scales=args.use_static_scales,
+                adaptive_static_scales=args.adaptive_static_scales,
+                adaptive_static_margin=args.adaptive_static_margin,
+                adaptive_static_k=args.adaptive_static_k,
+                adaptive_static_v=args.adaptive_static_v,
+                decode_attn_impl=args.decode_attn_impl or "triton_fused",
+                seed=args.seed,
+                stop_on_eos=False,
+                quant_bits=runtime_quant_bits,
+                k_bits=getattr(args, 'k_bits', None),
+                v_bits=getattr(args, 'v_bits', None),
+            )
+    except torch.cuda.OutOfMemoryError as exc:
+        print("OOM during warmup phase")
+        _write_task_failure(
+            args=args,
+            failure_type="oom_warmup",
+            message="CUDA out of memory during warmup phase (not profiling).",
+            exception=exc,
         )
+        sys.exit(EXIT_OOM)
 
     print(f"Profiling ({args.runs} runs)...")
     results = []
@@ -399,13 +424,40 @@ def main():
         )
         write_config_snapshot(str(run_snapshot_dir), snapshot)
 
+    # PRF-011: Compute per-metric mean / std / 95% CI and print summary.
+    # Uses t-distribution critical value for small samples (n < 30).
+    if len(results) >= 2:
+        _stat_keys = ["ttft_ms", "tpot_ms", "prefill_tok_per_s", "tok_per_s", "tok_per_s_per_seq"]
+        n = len(results)
+        # t critical values for 95% CI (two-tailed) for df = n-1, small table.
+        _t_crit_table = {
+            1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
+            6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
+            15: 2.131, 20: 2.086, 25: 2.060, 30: 2.042,
+        }
+        df = n - 1
+        t_crit = _t_crit_table.get(df)
+        if t_crit is None:
+            # Approximate: pick closest key <= df, fallback 1.96 for large n
+            candidates = [k for k in _t_crit_table if k <= df]
+            t_crit = _t_crit_table[max(candidates)] if candidates else 1.96
+
+        print(f"\n--- Latency Summary ({n} runs, 95% CI) ---")
+        for key in _stat_keys:
+            vals = [r[key] for r in results]
+            mean = sum(vals) / n
+            var = sum((v - mean) ** 2 for v in vals) / (n - 1)
+            std = math.sqrt(var)
+            ci = t_crit * std / math.sqrt(n)
+            print(f"  {key}: mean={mean:.2f}, std={std:.2f}, 95%CI=[{mean - ci:.2f}, {mean + ci:.2f}]")
+
     if args.save_csv and results:
         out_dir = Path(args.out_dir)
         if not out_dir.is_absolute():
             out_dir = project_root / out_dir
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / f"profile_latency_{args.kv_mode}_{timestamp.replace(':','-')}.csv"
-        
+
         # Schema from objective.md
         fields = [
             "run_id", "model_id", "run_name", "kv_mode", "quant_bits", "clip_percentile", "group_size",
@@ -413,7 +465,7 @@ def main():
             "prefill_tok_per_s", "tok_per_s", "tok_per_s_per_seq", "gpu_mem_peak_mb", "kv_cache_mem_mb", "kv_cache_seq_len",
             "timestamp", "git_commit", "seed", "replica_id"
         ]
-        
+
         with open(path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fields)
             writer.writeheader()

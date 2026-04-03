@@ -107,7 +107,11 @@ def _read_text(path: Path) -> str:
 
 
 def _is_oom_from_log(content: str) -> bool:
-    return bool(re.search(r"\boom\b|out of memory|cuda out of memory", content, flags=re.IGNORECASE))
+    # CHK-004: match all OOM patterns including JVM (outofmemoryerror)
+    return bool(re.search(
+        r"\boom\b|out of memory|cuda out of memory|outofmemoryerror",
+        content, flags=re.IGNORECASE,
+    ))
 
 
 def _is_traceback_from_log(content: str) -> bool:
@@ -245,7 +249,14 @@ def _detect_failure_type(
     may contain values not in this list (e.g. "exception"); those are passed
     through unchanged by the ``manifest_failure`` fallback branch below.
     """
-    if manifest_failure == "oom" or _is_oom_from_log(log_content):
+    # CHK-024/025: manifest-reported failure type has higher priority than log scan.
+    # OOM keywords in logs may be from prior retry attempts; manifest is definitive.
+    if manifest_failure in ("timeout", "interrupt"):
+        return manifest_failure
+    if manifest_failure == "oom":
+        return "oom"
+    # Only fall back to log scan when manifest doesn't have a specific type
+    if not manifest_failure and _is_oom_from_log(log_content):
         return "oom"
     if _is_traceback_from_log(log_content):
         return "traceback"
@@ -440,11 +451,17 @@ def _check_group(
                 task_row["group"] = group_name
                 per_task_rows.append(task_row)
 
+            # CHK-003: "missing" state now included in unexpected_failures so
+            # CI consumers can see detailed error info for absent runs.
+            # CHK-037: "csv_valid_manifest_incomplete" and "task_artifacts_missing"
+            # are excluded — the former is a recoverable intermediate state and
+            # the latter may be a normal configuration difference.
+            _benign_states = {"success", "csv_valid_manifest_incomplete", "task_artifacts_missing"}
             for row in per_task_rows:
                 state = str(row["state"])
                 if state == "oom":
                     oom_registry.append(row)
-                elif state not in {"success", "missing"}:
+                elif state not in _benign_states:
                     unexpected_failures.append(row)
 
             allowed_states = {"success"}

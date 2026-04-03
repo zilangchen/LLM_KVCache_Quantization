@@ -385,7 +385,12 @@ def _init_manifest(
             ("model_id", model_id),
         ]
         for key, expected in identity_pairs:
-            existing = manifest.get(key, expected)
+            # RUN-070: use sentinel so missing keys are detected, not silently accepted
+            _MISSING = object()
+            existing = manifest.get(key, _MISSING)
+            if existing is _MISSING:
+                manifest[key] = expected  # backfill missing field
+                continue
             if existing != expected:
                 raise ValueError(
                     f"append blocked: manifest {key} mismatch "
@@ -448,49 +453,59 @@ def _mark_task_status(
     attempt_idx: int | None = None,
     record_history: bool = True,
 ) -> None:
-    now = _now_iso()
-    tasks = manifest.setdefault("tasks", {})
-    entry = tasks.get(task, {})
-    history = entry.get("history")
-    if not isinstance(history, list):
-        history = []
-    if status == "running":
-        entry["attempts"] = int(entry.get("attempts", 0)) + 1
-        entry["started_at"] = now
-        if attempt_idx is None:
-            attempt_idx = int(entry["attempts"])
-    entry["status"] = status
-    entry["updated_at"] = now
-    entry["log_path"] = str(log_path)
-    entry["cmd"] = cmd
-    if attempt_idx is not None:
-        entry["last_attempt"] = int(attempt_idx)
-    if returncode is not None:
-        entry["returncode"] = int(returncode)
-    if status in {"success", "skipped"}:
-        # Keep terminal success state canonical when resuming/skip-completed paths.
-        entry.pop("failure_type", None)
-        entry.pop("error", None)
-    elif failure_type:
-        entry["failure_type"] = str(failure_type)
-    if error and status not in {"success", "skipped"}:
-        entry["error"] = str(error)
-    if status in {"success", "failed", "skipped"} and record_history:
-        hist_row: Dict[str, Any] = {
-            "timestamp": now,
-            "status": status,
-            "attempt": int(attempt_idx) if attempt_idx is not None else int(entry.get("attempts", 0)),
-            "returncode": int(returncode) if returncode is not None else None,
-            "failure_type": str(failure_type) if failure_type else "",
-            "error": str(error) if error else "",
-        }
-        history.append(hist_row)
-        # RUN-013: history is capped at 20 entries to prevent manifest bloat in long retry sequences.
-        entry["history"] = history[-20:]
-    tasks[task] = entry
-    manifest["tasks"] = tasks
-    manifest["updated_at"] = now
-    _write_json(manifest_path, manifest)
+    # RUN-084: wrap body in try/except so manifest write errors never crash the
+    # experiment runner — losing status tracking is acceptable, losing the whole
+    # run is not.
+    try:
+        now = _now_iso()
+        tasks = manifest.setdefault("tasks", {})
+        entry = tasks.get(task, {})
+        history = entry.get("history")
+        if not isinstance(history, list):
+            history = []
+        if status == "running":
+            entry["attempts"] = int(entry.get("attempts", 0)) + 1
+            entry["started_at"] = now
+            if attempt_idx is None:
+                attempt_idx = int(entry["attempts"])
+        entry["status"] = status
+        entry["updated_at"] = now
+        entry["log_path"] = str(log_path)
+        entry["cmd"] = cmd
+        if attempt_idx is not None:
+            entry["last_attempt"] = int(attempt_idx)
+        if returncode is not None:
+            entry["returncode"] = int(returncode)
+        if status in {"success", "skipped"}:
+            # Keep terminal success state canonical when resuming/skip-completed paths.
+            entry.pop("failure_type", None)
+            entry.pop("error", None)
+        elif failure_type:
+            entry["failure_type"] = str(failure_type)
+        if error and status not in {"success", "skipped"}:
+            entry["error"] = str(error)
+        if status in {"success", "failed", "skipped"} and record_history:
+            hist_row: Dict[str, Any] = {
+                "timestamp": now,
+                "status": status,
+                "attempt": int(attempt_idx) if attempt_idx is not None else int(entry.get("attempts", 0)),
+                "returncode": int(returncode) if returncode is not None else None,
+                "failure_type": str(failure_type) if failure_type else "",
+                "error": str(error) if error else "",
+            }
+            history.append(hist_row)
+            # RUN-013: history is capped at 20 entries to prevent manifest bloat in long retry sequences.
+            entry["history"] = history[-20:]
+        tasks[task] = entry
+        manifest["tasks"] = tasks
+        manifest["updated_at"] = now
+        _write_json(manifest_path, manifest)
+    except Exception as exc:
+        print(
+            f"Warning: _mark_task_status failed for task={task} status={status}: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
 
 
 def _task_is_completed_successfully(
@@ -1030,12 +1045,17 @@ def main() -> int:
             return 2
         run_name = entry.get("run_name")
         kv_mode = entry.get("kv_mode", "fp16")
-        # RUN-049: when run_name_filter is active, entries that don't match the filter are
-        # skipped. Invalid kv_mode on a non-matching entry is a warning (not an error) because
-        # that entry will never run. Invalid kv_mode on a matching entry is still an error.
+        # RUN-049 + RUN-069: Validation treats entries that will actually run
+        # differently from entries that will be skipped by the filter:
+        #   - Entries matching the filter (or all entries when no filter): hard error
+        #   - Entries NOT matching the filter: warning only (they won't execute)
+        # This is intentionally asymmetric: when a filter is active, config errors
+        # on unrelated entries should not block the filtered subset from running.
+        # Without a filter all entries are candidates, so all errors are hard.
+        will_run = (run_name_filter is None) or (run_name in run_name_filter)
         if kv_mode not in SUPPORTED_KV_MODES:
             label = run_name or f"index={idx}"
-            if run_name_filter and run_name not in run_name_filter:
+            if not will_run:
                 print(
                     f"Warning: skipped entry {label} has unsupported kv_mode={kv_mode!r} "
                     f"(not in SUPPORTED_KV_MODES). Ignored because it does not match --run_names filter."
@@ -1043,10 +1063,10 @@ def main() -> int:
             else:
                 invalid_kv_modes.append(f"{label}:{kv_mode}")
             continue
-        if run_name_filter and run_name not in run_name_filter:
+        if not will_run:
             continue
     if invalid_kv_modes:
-        print("Error: found unsupported kv_mode entries:")
+        print("Error: found unsupported kv_mode entries that would run:")
         for item in invalid_kv_modes:
             print(f"  - {item}")
         return 2
@@ -1767,14 +1787,18 @@ def main() -> int:
                         attempt_idx=attempt_idx,
                     )
                     if attempt_idx <= int(args.max_retries):
-                        # RUN-042: OOM failures must not be retried without config adjustment;
-                        # retrying an OOM with identical config will just OOM again and waste GPU time.
+                        # RUN-063/068/081: OOM failures are now retried (PyTorch CUDA
+                        # caching allocator non-determinism can cause transient OOM).
+                        # Only the *final* OOM attempt falls through to failure handling.
                         if failure_type == "oom":
                             print(
                                 f"Warning: task {task} for {label} failed with OOM on attempt "
-                                f"{attempt_idx}/{total_attempts}. OOM failures are not retried "
-                                "(retrying with identical config will reproduce OOM). Treating as final failure."
+                                f"{attempt_idx}/{total_attempts}, retrying..."
                             )
+                            _backoff = float(args.retry_backoff_sec) * (2 ** (attempt_idx - 1))
+                            if _backoff > 0:
+                                time.sleep(_backoff)
+                            continue  # skip execution_rows append, go to next attempt
                         else:
                             print(
                                 "Task failed (will retry): "
