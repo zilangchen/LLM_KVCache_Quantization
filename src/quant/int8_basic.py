@@ -136,6 +136,7 @@ def quantize_symmetric_int8_with_scale(
     """
     if not tensor.is_floating_point():
         raise ValueError(f"Input tensor must be float, got {tensor.dtype}")
+    _check_quantize_input(tensor, "quantize_symmetric_int8_with_scale")
 
     head_dim = tensor.shape[-1]
     if group_size == -1:
