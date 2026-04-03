@@ -225,6 +225,23 @@ FP16 精度下的注意力权重分布定义为：
     天然规避了这一"数值精度与行为保真度不一致"的问题。
 \end{enumerate}
 
+\paragraph{KL 散度方向的选择}
+式~\eqref{eq:ch3-kl} 采用 forward KL（$D_{\KL}(p_{\text{ref}} \| p_{\text{quant}})$），
+即以 FP16 参考分布为权重的期望对数比。
+该方向具有 \emph{zero-avoiding} 特性：
+当参考分布在某个 token 位置有显著注意力权重
+而量化分布在该位置权重过低时，对数比趋正无穷，产生强惩罚。
+这恰好匹配 KV Cache 量化的核心关切——
+防止量化导致模型\emph{遗漏}关键 token 的注意力。
+相比之下，reverse KL（$D_{\KL}(p_{\text{quant}} \| p_{\text{ref}})$）
+具有 \emph{zero-forcing} 特性，
+主要惩罚量化分布在参考分布低权重位置上的虚假注意力，
+对遗漏关键 token 的敏感度较低。
+Jensen-Shannon 散度（对称化的均值分布 KL）在理论上同样可行，
+但引入额外的混合分布计算开销且不保留 zero-avoiding 的强惩罚特性。
+Forward KL 方向消融的实验验证列入后续工作
+（见第~\ref{sec:conclusion-future}~节）。
+
 在实际计算中，为防止 $\ln(0)$ 导致的数值不稳定，
 对概率值施加小量截断 $\epsilon = 10^{-6}$：
 \begin{equation}

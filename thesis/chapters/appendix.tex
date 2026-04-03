@@ -337,10 +337,13 @@ VT（变量追踪）和 CWE（常见词提取）。
     \footnotesize
     \item[a] int8\_ours 的均值包含所有配置变体（mainline + ablation，$n=45$），
     MK-NIAH 和 S-NIAH 退化主要受非 mainline 变体拉低。
-    \item 注：$\pm$ 为 Bootstrap 95\% CI 半宽。CWE 子任务在所有模式下均接近 0\%，
-    原因在于 CWE 评测的设计特性（干扰词频高于目标词频约 90 倍）
-    而非量化引起。VT 子任务同样因评测难度极高而普遍接近零通过率。
-    实际质量差异主要体现在 S-NIAH 和 MK-NIAH 两个检索类子任务上。
+    \item 注：$\pm$ 为 Bootstrap 95\% CI 半宽。
+    上表数据基于修复前的 CWE 实现（干扰词频高于目标词频约 90 倍，EVL-047），
+    导致 CWE 在所有模式下均接近 0\%。
+    修复后的 FP16 验证（4K 上下文，seed=1234）显示 CWE 通过率回升至 37.97\%，
+    MK-NIAH 保持 100\%，证实 CWE 的零通过率系评测缺陷而非模型能力或量化所致。
+    VT 子任务在修复后仍为 4.69\%，反映了该任务的固有难度。
+    修复后的完整多模式多上下文 RULER 数据将在 T3 重跑完成后更新。
   \end{tablenotes}
 \end{table}
 
@@ -677,3 +680,73 @@ KIVI-style 的 PPL 从 cs=128 的 10.43 急剧退化至 cs=1 的 9442
 上述观察仅在 Qwen2.5-1.5B 单模型、单种子条件下验证，
 跨模型推广仍需后续实验
 （见第~\ref{sec:conclusion-limitations}~节）。
+
+% ============================================================
+\section{官方 LongBench 对照验证}
+\label{sec:app-longbench-official}
+% ============================================================
+
+前述各节的 LongBench 评测均使用自行实现的确定性合成数据源，
+评分只反映方法间的相对差异，绝对值不可与社区结果直接对比。
+为验证合成评测结论在真实数据上的泛化性，
+本节选取 LongBench~\cite{bai2024longbench} 官方数据集中
+3 个代表性子任务进行对照实验：
+NarrativeQA（单文档 QA，F1）、HotpotQA（多文档 QA，F1）和
+GovReport（摘要，Rouge-L）。
+
+\paragraph{实验设置。}
+模型为 Qwen2.5-1.5B-Instruct，
+上下文长度截断至 32K，seed=1234，每任务最多 50 个样本（从官方 HuggingFace
+数据源加载，非本文合成）。量化配置为 INT8-ours mainline
+（KL 行为对齐校准 + adaptive static scale + Triton 融合核函数）。
+
+\begin{table}[htbp]
+  \centering
+  \caption{官方 LongBench 子集对照验证（Qwen2.5-1.5B-Instruct，seed=1234，$n \leq 50$）}
+  \label{tab:app-longbench-official}
+  \small
+  \begin{threeparttable}
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{任务} & \textbf{FP16} & \textbf{INT8-ours} & \textbf{$\Delta$（pp）} \\
+    \midrule
+    NarrativeQA（F1 $\uparrow$）  & 7.07 & 6.64 & $-$0.43 \\
+    HotpotQA（F1 $\uparrow$）     & 4.90 & 5.21 & $+$0.31 \\
+    GovReport（Rouge-L $\uparrow$）& 9.21 & 9.29 & $+$0.08 \\
+    \midrule
+    宏平均                         & 7.06 & 7.05 & $-$0.01 \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \small
+    \item 注：分数以 $\times$100 显示。$\Delta$ 为绝对差（pp = 百分点），
+    正值表示 INT8-ours 优于 FP16。
+    宏平均差异仅 0.01 个百分点，所有单任务差异均 $<$0.5 pp。
+    该实验为单 seed 小样本验证，旨在建立外部效度锚点，
+    非统计检验级别的全面评估。
+  \end{tablenotes}
+  \end{threeparttable}
+\end{table}
+
+\paragraph{结果分析。}
+表~\ref{tab:app-longbench-official} 显示，INT8-ours 在 3 个官方 LongBench 子任务上
+与 FP16 的差异均小于 0.5 个百分点（pp），宏平均差异仅为 0.01 pp。
+NarrativeQA 上 INT8-ours 略低（$-$0.43 pp），
+而 HotpotQA（$+$0.31 pp）和 GovReport（$+$0.08 pp）上略高——
+这种任务间的随机波动符合量化噪声不偏不倚的预期行为。
+
+该验证实验在以下层面加强了主文结论的外部效度：
+\begin{itemize}
+  \item 合成评测中观察到的"INT8-ours 质量不劣于 FP16"结论，
+        在官方真实数据上同样成立；
+  \item 1.5B 小模型在官方任务上的绝对分数较低
+        （宏平均 $\sim$7\%，反映小模型的固有能力上限），
+        但 FP16 与 INT8-ours 之间的相对差异极小，
+        表明量化噪声未引入额外的质量退化；
+  \item 该结果初步回应了"合成数据源可能高估量化保真度"的质疑——
+        至少在 INT8 精度下，合成评测与官方评测的结论方向一致。
+\end{itemize}
+
+\emph{局限}：本验证限于 1.5B 单模型、3 个任务、单种子，
+尚不构成全面的统计检验。
+跨模型、INT4 精度及更多任务的官方验证为后续工作。
