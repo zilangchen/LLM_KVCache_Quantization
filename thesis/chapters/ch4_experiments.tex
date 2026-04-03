@@ -1292,8 +1292,40 @@ LongBench 综合评分下降约 15\%。
 \label{subsec:exp-rolealign-boundary}
 
 INT4-RoleAlign 已完成四类质量评测及系统效率评测（3 模型 $\times$ 3--5 seeds），
-KV Cache 显存节省约 73\%，但 TPOT 因缺少 Triton 融合核函数增加约 2--2.5$\times$。
-当前定位为``质量保持 + 显存优化方案''。
+KV Cache 显存节省约 73\%。
+表~\ref{tab:int4-tpot-cross-model} 给出了三个模型在独占 GPU、seq\_len=4096、batch=1 条件下
+的 TPOT 对比。
+INT4-RoleAlign 的 torch\_ref 解码路径 TPOT 为 FP16 的 2.4--2.6$\times$
+（1.5B: 58.09~ms vs 24.24~ms，7B: 62.06~ms vs 24.46~ms，8B: 70.32~ms vs 27.43~ms），
+这一开销并非 RoleAlign 独有——KIVI-style INT4 在相同非对称量化格式和 torch\_ref
+路径下 TPOT 同样增加 2.1--2.3$\times$，
+说明延迟主因是逐步反量化的计算开销而非校准策略差异。
+作为对照，INT8-ours 因使用 Triton 融合核函数（第~\ref{sec:ch3-triton}~节），
+TPOT 仅为 FP16 的 1.8--1.9$\times$。
+
+\begin{table}[htbp]
+  \centering
+  \caption{INT4-RoleAlign 跨模型 TPOT 对比（独占 GPU，seq\_len=4096，batch=1）}
+  \label{tab:int4-tpot-cross-model}
+  \small
+  \begin{tabular}{lcccccc}
+    \toprule
+    \multirow{2}{*}{方法} & \multicolumn{2}{c}{Qwen2.5-1.5B} & \multicolumn{2}{c}{Qwen2.5-7B} & \multicolumn{2}{c}{LLaMA-3.1-8B} \\
+    \cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
+    & TPOT (ms) & vs FP16 & TPOT (ms) & vs FP16 & TPOT (ms) & vs FP16 \\
+    \midrule
+    FP16         & 24.24 & ---     & 24.46 & ---     & 27.43 & --- \\
+    INT8-ours    & 44.38 & +83\%  & 45.72 & +87\%  & 51.20 & +87\% \\
+    KIVI INT4    & 51.75 & +114\% & 54.54 & +123\% & 61.84 & +125\% \\
+    INT4-RA      & 58.09 & +140\% & 62.06 & +154\% & 70.32 & +156\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+当前定位为``质量保持 + 显存优化方案''——
+KV 压缩 73\% 释放的显存在批量推理场景中转化为更大的可服务并发数
+（附录~\ref{sec:app-batch-capacity} 展示 batch=16 时 INT4-RA 的 KV 仅占 968~MB
+vs FP16 的 3640~MB，压缩比 3.76$\times$ 恒定）。
 
 
 % ============================================================

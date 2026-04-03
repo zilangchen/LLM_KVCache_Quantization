@@ -550,6 +550,40 @@ class KIVIStyleKVCache:
 
         return k, v
 
+    def get_int4_asym_tensors(
+        self, layer_id: int
+    ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
+        """
+        Return raw packed cache + scale/zp for Triton INT4 asymmetric kernel.
+
+        Returns:
+            (k_packed, v_packed, k_scale, k_zp, v_scale, v_zp)
+            k_packed: [B, H, S, D//2] int8 (bit-packed)
+            v_packed: [B, H, S, D//2] int8
+            k_scale:  [B, H, D] float32 per-channel
+            k_zp:     [B, H, D] float32 per-channel
+            v_scale:  [B, H, S] float32 per-token
+            v_zp:     [B, H, S] float32 per-token
+        """
+        if layer_id < 0 or layer_id >= self.num_layers:
+            raise ValueError(f"layer_id {layer_id} out of range [0, {self.num_layers})")
+        if self._k_cache[layer_id] is None:
+            raise ValueError(f"Cache for layer {layer_id} is empty")
+        if not self.bit_packed:
+            raise RuntimeError(
+                "get_int4_asym_tensors requires bit_packed=True (quant_bits=4)"
+            )
+
+        seq_len = self._layer_seq_lens[layer_id]
+        k_packed = self._k_cache[layer_id][:, :, :seq_len, :]
+        v_packed = self._v_cache[layer_id][:, :, :seq_len, :]
+        k_scale = self._k_scale[layer_id]
+        k_zp = self._k_zp[layer_id]
+        v_scale = self._v_scale[layer_id][:, :, :seq_len]
+        v_zp = self._v_zp[layer_id][:, :, :seq_len]
+
+        return k_packed, v_packed, k_scale, k_zp, v_scale, v_zp
+
     def get_seq_len(self) -> int:
         """Return current total sequence length (quantized + residual).
 

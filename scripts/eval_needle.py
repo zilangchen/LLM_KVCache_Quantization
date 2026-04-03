@@ -240,6 +240,13 @@ def main():
         help="V cache bit-width for int4_mixed_kv mode (4/8/16). Default: 4.",
     )
     parser.add_argument(
+        "--residual_length",
+        type=int,
+        default=0,
+        help="KIVI residual buffer length (0=disabled, 128=KIVI original). "
+             "Only affects kivi_style and int4_kivi_aligned modes.",
+    )
+    parser.add_argument(
         # EVL-140: Default False to match CLAUDE.md §9 fixed decision
         # (Mainline INT8-ours uses use_attn_temperature: false).
         # run_experiments.py explicitly passes the flag; direct CLI calls
@@ -478,6 +485,7 @@ def main():
                 quant_bits=getattr(args, 'quant_bits', None),
                 k_bits=getattr(args, 'k_bits', None),
                 v_bits=getattr(args, 'v_bits', None),
+                residual_length=getattr(args, 'residual_length', 0),
             )
         except torch.cuda.OutOfMemoryError:
             raise  # Let outer OOM handler deal with it

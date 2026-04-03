@@ -141,6 +141,7 @@ class INT8CacheWrapperContainer:
         if not (
             hasattr(cache_engine, "get_int8_tensors")
             or hasattr(cache_engine, "get_int4_tensors")
+            or hasattr(cache_engine, "get_int4_asym_tensors")
         ):
             raise TypeError(
                 "INT8CacheWrapperContainer requires an INT8/INT4 fused cache engine. "
@@ -755,7 +756,12 @@ def _fused_forward_impl(
 
     # Fetch quantized cache for this layer (includes the appended token).
     cache_kind = "int8"
-    if hasattr(cache_wrapper.engine, "get_int8_tensors"):
+    if hasattr(cache_wrapper.engine, "get_int4_asym_tensors"):
+        cache_kind = "int4_asym"
+        k_quant, v_quant, k_scale, k_zp, v_scale, v_zp = cache_wrapper.engine.get_int4_asym_tensors(
+            layer_idx
+        )
+    elif hasattr(cache_wrapper.engine, "get_int8_tensors"):
         k_quant, v_quant, k_scale, v_scale = cache_wrapper.engine.get_int8_tensors(
             layer_idx
         )
@@ -807,7 +813,12 @@ def _fused_forward_impl(
     dump_enabled = os.environ.get("KV_FUSED_DUMP_DIR", "").strip() != ""
     k_int8_for_ref = None
     v_int8_for_ref = None
-    if cache_kind == "int8":
+    if cache_kind == "int4_asym":
+        # INT4 asymmetric: k_zp/v_zp are already extracted above.
+        # No materialization needed for triton_int4_asym; torch_ref fallback
+        # would require full unpack+dequant (not supported here — use get_kv).
+        k_int8_for_ref, v_int8_for_ref = None, None
+    elif cache_kind == "int8":
         k_int8_for_ref, v_int8_for_ref = k_quant, v_quant
     elif decode_impl == "torch_ref" or dump_enabled:
         # Int4 path: materialize int8 view only when needed by torch reference
@@ -824,7 +835,21 @@ def _fused_forward_impl(
     # Full rollback is not feasible without cache-internal undo support, so we
     # warn that the cache may be in an inconsistent state and re-raise.
     try:
-        if decode_impl == "triton_fused":
+        if cache_kind == "int4_asym" and decode_impl in ("triton_fused", "triton_int4_asym"):
+            # INT4 asymmetric Triton kernel — in-kernel unpacking, no materialization
+            from src.kernels.triton_decode_attn_int4_asym import decode_attn_int4_asym
+            attn_output_val = decode_attn_int4_asym(
+                q_kernel,
+                k_quant,      # packed [B, Hkv, S, D//2]
+                v_quant,      # packed [B, Hkv, S, D//2]
+                k_scale,      # [B, Hkv, D] per-channel
+                k_zp,         # [B, Hkv, D] per-channel
+                v_scale,      # [B, Hkv, S] per-token
+                v_zp,         # [B, Hkv, S] per-token
+                context_lens,
+                sm_scale=sm_scale,
+            )
+        elif decode_impl == "triton_fused":
             # ENG-035: Use inspect.signature to detect whether the kernel accepts the
             # optional debug_stats / layer_idx kwargs, instead of relying on a broad
             # `except TypeError` which would also swallow TypeErrors raised *inside* the

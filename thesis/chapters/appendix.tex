@@ -391,6 +391,43 @@ INT4 量化模式在所有子任务上均完全失败（通过率 0\%），
 \end{table}
 
 % ============================================================
+\section{INT4-RoleAlign 批处理效率扩展}
+\label{sec:app-batch-ra-scaling}
+% ============================================================
+
+表~\ref{tab:app-batch-ra-scaling} 展示了 INT4-RoleAlign 在不同 batch size 下的
+TPOT 和 KV Cache 显存变化。
+实验在独占 GPU、seq\_len=8192 条件下进行。
+
+\begin{table}[htbp]
+  \centering
+  \caption{INT4-RoleAlign 批处理效率扩展（Qwen2.5-1.5B，seq\_len=8192，独占 GPU）}
+  \label{tab:app-batch-ra-scaling}
+  \small
+  \begin{tabular}{ccccccc}
+    \toprule
+    \multirow{2}{*}{Batch} & \multicolumn{2}{c}{TPOT (ms)} & \multicolumn{2}{c}{KV Cache (MB)} & \multirow{2}{*}{KV 压缩比} \\
+    \cmidrule(lr){2-3} \cmidrule(lr){4-5}
+    & FP16 & INT4-RA & FP16 & INT4-RA & \\
+    \midrule
+    1  & 24.78 & 60.18  & 227   & 60   & 3.78$\times$ \\
+    4  & 24.65 & 73.17  & 910   & 242  & 3.76$\times$ \\
+    8  & 24.21 & 93.07  & 1820  & 484  & 3.76$\times$ \\
+    16 & 24.23 & 134.46 & 3640  & 968  & 3.76$\times$ \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \footnotesize
+    \item 注：KV 压缩比恒定约 3.76$\times$，不随 batch 变化（由位宽决定）。
+    FP16 TPOT 随 batch 几乎不变（24.2--24.8~ms），
+    INT4-RA TPOT 随 batch 线性增长（60$\to$134~ms），
+    原因是 torch\_ref 解码路径在 batch$>$1 时需要逐序列反量化。
+    batch=16 时 INT4-RA KV 仅占 968~MB（vs FP16 3640~MB），
+    节省的 2672~MB 显存可容纳更多并发请求。
+  \end{tablenotes}
+\end{table}
+
+% ============================================================
 \section{实验预期验证详细汇总}
 \label{sec:app-claim-detail}
 % ============================================================

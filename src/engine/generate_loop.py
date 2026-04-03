@@ -42,6 +42,8 @@ from src.utils.repro import set_seed
 
 # ENG-031: Module-level constant for fused KV modes to avoid repeated hardcoding.
 _FUSED_KV_MODES = frozenset({"int8_fused", "int8_ours", "int4_fused", "int4_ours", "int4_ours_mixed"})
+# INT4 asymmetric modes that CAN use fused patch (only when decode_attn_impl is triton_*)
+_INT4_ASYM_FUSABLE = frozenset({"int4_ours_asym", "int4_ours_asym_ba", "kivi_style"})
 
 
 def _normalize_eos_token_id(eos_token_id) -> Optional[int]:
@@ -411,6 +413,7 @@ def generate_from_ids(
     quant_bits: int = 8,  # XMD-002: aligned with generate() default
     k_bits: Optional[int] = None,
     v_bits: Optional[int] = None,
+    residual_length: int = 0,
 ) -> GenerationBatchOutput:
     """
     Batched generation loop using explicit prefill + token-by-token decode.
@@ -454,10 +457,19 @@ def generate_from_ids(
             "'int4_ours_asym', 'int4_ours_asym_ba']."
         )
 
-    if decode_attn_impl not in ["triton_fused", "torch_ref"]:
+    _valid_impls = {"triton_fused", "torch_ref", "triton_int4_asym"}
+    if decode_attn_impl not in _valid_impls:
         raise ValueError(
             f"decode_attn_impl='{decode_attn_impl}' not supported. "
-            "Choose from ['triton_fused', 'torch_ref']."
+            f"Choose from {sorted(_valid_impls)}."
+        )
+    # P2 fix: triton_int4_asym only valid for INT4 asymmetric modes
+    if decode_attn_impl == "triton_int4_asym" and kv_mode not in (
+        "int4_ours_asym", "int4_ours_asym_ba", "kivi_style",
+    ):
+        raise ValueError(
+            f"decode_attn_impl='triton_int4_asym' only supports kv_mode in "
+            f"{{int4_ours_asym, int4_ours_asym_ba, kivi_style}}, got '{kv_mode}'."
         )
 
     if kv_mode == "kivi_style":
@@ -640,7 +652,12 @@ def generate_from_ids(
         reset_gpu_memory_stats()
 
         # Apply patch if needed
-        if kv_mode in _FUSED_KV_MODES:
+        # INT4 asymmetric modes only get fused patch when using triton kernel
+        _use_fused = kv_mode in _FUSED_KV_MODES or (
+            kv_mode in _INT4_ASYM_FUSABLE
+            and decode_attn_impl in ("triton_fused", "triton_int4_asym")
+        )
+        if _use_fused:
             if kv_mode == "int8_ours":
                 import warnings
 
@@ -897,9 +914,7 @@ def generate_from_ids(
                 device=model.device.type,
                 max_seq_len=max_cache_len,
                 quant_bits=int(quant_bits),
-                # residual_length: only available in generate() via runtime_config;
-                # generate_from_ids() does not have runtime_config, so default to 0.
-                residual_length=0,
+                residual_length=residual_length,
             )
         elif kv_mode == "int4_kivi_aligned":
             # KIVI INT4 skeleton + attention-aligned calibration (K-path inv_tau).
@@ -934,6 +949,7 @@ def generate_from_ids(
                 v_percentile=kivi_v_percentile,
                 inv_tau=kivi_inv_tau,
                 use_attn_temperature=use_attn_temperature,
+                residual_length=residual_length,  # P2 fix: pass residual_length
             )
         elif kv_mode in ("int4_ours_asym", "int4_ours_asym_ba"):
             # Role-Aware Asymmetric: per-channel K + per-token V with BA calibration.
@@ -994,14 +1010,18 @@ def generate_from_ids(
                 use_attn_temperature=use_temp,
                 framework=framework_tag,
             )
-            if decode_attn_impl != "torch_ref":
+            # Set decode_attn_impl on cache so _fused_forward_impl can read it
+            kv_cache.decode_attn_impl = decode_attn_impl
+            if decode_attn_impl not in ("torch_ref", "triton_fused", "triton_int4_asym"):
                 import warnings
                 warnings.warn(
-                    f"kv_mode='{kv_mode}' forces decode_attn_impl='torch_ref' "
-                    f"(requested '{decode_attn_impl}'). RoleAwareAsym uses torch_ref only.",
+                    f"kv_mode='{kv_mode}': unknown decode_attn_impl='{decode_attn_impl}', "
+                    f"falling back to 'torch_ref'.",
                     UserWarning,
                 )
                 decode_attn_impl = "torch_ref"
+            # INT4 asymmetric supports both torch_ref and triton_int4_asym.
+            # triton_fused also accepted — routes to int4_asym kernel via patch_model.
         elif kv_mode == "int4_mixed_kv":
             # K-INT8 symmetric + V-INT4 asymmetric per-token (hybrid mode).
             # k_bits/v_bits allow K/V ablation (K-only, V-only, counterfactual).
@@ -1040,9 +1060,10 @@ def generate_from_ids(
                 _kivi_inv_tau = kv_cache.inv_tau
             if _kivi_inv_tau is not None:
                 hook_handles = _register_all_temperature_hooks(model, _kivi_inv_tau)
-        elif kv_mode == "int4_ours_asym_ba" and use_attn_temperature:
-            # ours_asym_ba uses torch_ref decode (not fused), so inv_tau must
-            # be applied via hooks for BOTH prefill and decode (same as int4_kivi_aligned).
+        elif kv_mode == "int4_ours_asym_ba" and use_attn_temperature and not _use_fused:
+            # P1 fix: Only register hooks for torch_ref path. When _use_fused=True,
+            # _fused_forward_impl applies inv_tau directly — hooks would double-apply.
+            # ours_asym_ba torch_ref decode needs hooks for BOTH prefill and decode.
             _ra_inv_tau = inv_tau
             if _ra_inv_tau is None and hasattr(kv_cache, "inv_tau"):
                 _ra_inv_tau = kv_cache.inv_tau
@@ -1176,7 +1197,7 @@ def generate_from_ids(
                     # Prepare past_key_values
                     if kv_mode == "fp16" and fp16_use_model_cache and model_cache_for_decode is not None:
                         current_past_key_values = model_cache_for_decode
-                    elif kv_mode in _FUSED_KV_MODES:
+                    elif kv_mode in _FUSED_KV_MODES or _use_fused:
                         from src.engine.patch_model import INT8CacheWrapperContainer
 
                         # ENG-033: INT8CacheWrapperContainer is reconstructed each decode step. This is intentional — wrappers are lightweight (no buffer copy), and caching them would require tracking cache mutations.
@@ -1213,6 +1234,7 @@ def generate_from_ids(
                     # Update cache with NEW token's KV for non-fused modes.
                     if (
                         kv_mode not in _FUSED_KV_MODES
+                        and not _use_fused
                         and not (kv_mode == "fp16" and fp16_use_model_cache)
                     ):
                         if outputs.past_key_values is not None:

@@ -308,6 +308,7 @@ def build_kv_cache(
     quant_bits: int | None = None,
     k_bits: int | None = None,
     v_bits: int | None = None,
+    residual_length: int = 0,
 ):
     num_layers = getattr(model.config, "num_hidden_layers", 28)
     (
@@ -365,6 +366,7 @@ def build_kv_cache(
             num_layers=num_layers,
             device=model.device.type,
             quant_bits=kivi_quant_bits,
+            residual_length=residual_length,
         ), group_size, clip_percentile
 
     if kv_mode == "int4_kivi_aligned":
@@ -387,6 +389,7 @@ def build_kv_cache(
             v_percentile=kivi_v_pct,
             inv_tau=inv_tau,
             use_attn_temperature=use_attn_temperature,
+            residual_length=residual_length,
         ), group_size, clip_percentile
 
     if kv_mode == "int4_mixed_kv":
@@ -761,6 +764,13 @@ def main():
         help="V cache bit-width for int4_mixed_kv mode (4/8/16). Default: 4.",
     )
     parser.add_argument(
+        "--residual_length",
+        type=int,
+        default=0,
+        help="KIVI residual buffer length (0=disabled, 128=KIVI original). "
+             "Only affects kivi_style and int4_kivi_aligned modes.",
+    )
+    parser.add_argument(
         "--use_attn_temperature",
         dest="use_attn_temperature",
         action="store_true",
@@ -970,6 +980,7 @@ def main():
             quant_bits=args.quant_bits,
             k_bits=getattr(args, "k_bits", None),
             v_bits=getattr(args, "v_bits", None),
+            residual_length=getattr(args, "residual_length", 0),
         )
         if (
             args.use_attn_temperature
