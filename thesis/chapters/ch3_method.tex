@@ -398,12 +398,13 @@ $\tau^{-1}$ 的收益具有显著的格式依赖性。
 $\tau^{-1}$ 仅提供边际改善（第~\ref{subsec:exp-ablation-temperature}~节）。
 在 INT4-RoleAlign 的非对称格式下（16 个量化级别），
 4-bit 粗量化导致更显著的 attention 平坦化，
-$\tau^{-1}$ 温度校正恢复注意力聚焦度的效果明确：
-消融实验表明启用 $\tau^{-1}$ 使 INT4-RoleAlign 的 PPL 从 10.58 降至 10.41
-（$-$1.6\%，Needle 保持 100\%），
-详细数据见第~\ref{subsec:exp-rolealign-invtau}~节。
+$\tau^{-1}$ 温度校正的效果展现出与模型规模的强相关性：
+在 $H_{kv}=2$ 的模型上 PPL 改善 1.6\%（10.58$\to$10.41），
+但在 $H_{kv}=4$ 的模型上 PPL 反而恶化 6.0\%，
+详细消融数据见第~\ref{subsec:exp-rolealign-invtau}~节。
+该发现揭示了温度校正与 GQA 噪声稀释之间的交互关系。
 据文献调研（详见第~\ref{sec:ch2-quant-softmax}~节），
-本文是首个在 KV Cache 量化场景下提出并验证逐头温度校正机制的工作。
+本文是首个在 KV Cache 量化场景下系统验证温度校正的规模依赖效应的工作。
 该机制的完整理论推导见附录~\ref{sec:app-invtau-detail}。
 
 
