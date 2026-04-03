@@ -103,7 +103,7 @@ Step 6: 输出报告（见 §7）
 
 ```
 部分 GPU 空闲
-├─ 读取 iteration.md → Approved Plans 中的待办任务
+├─ 读取 task_plan.md + iteration.md Approved Plans → 获取待办任务
 ├─ 冲突检测（§4.3）
 │   ├─ 通过 → 组装命令 → 直接提交到空闲 GPU（无需确认）
 │   └─ 冲突 → 报告冲突原因，跳过该任务，尝试下一个
@@ -325,10 +325,10 @@ GPU 全忙的等待期**不是空闲期**——这是做深度思考和推进非
 
 ```
 Read 以下文件，构建当前项目的完整画面：
-1. iteration.md — Approved Plans + Timeline 最近 10 条
-2. review_tracker.md — open issues 概况
-3. objective.md — 当前 phase 目标和约束
-4. experiment_sop.md — 未完成的实验步骤
+1. task_plan.md — Plan Mode 生成的当前计划（阶段、步骤、依赖）
+2. iteration.md — Approved Plans + Timeline 最近 10 条
+3. review_tracker.md — open issues 概况
+4. progress.md — 如果存在，读取当前进度状态
 5. 远端正在运行的任务列表（刚采集的）
 ```
 
