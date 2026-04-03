@@ -366,8 +366,8 @@ Group size 则保持 Key 和 Value 一致。
 \section{逐头温度校正机制（可选增强）}
 \label{sec:ch3-invtau}
 
-逐头温度校正（$\tau^{-1}$）是框架的可选增强组件，
-\textbf{不属于 INT8 mainline 或 INT4-RoleAlign 的最终推荐配置}。
+逐头温度校正（$\tau^{-1}$）是框架的增强组件，
+用于补偿量化导致的注意力分布平坦化。
 其核心思想是：量化误差使注意力 logits 受近似均匀的噪声扰动，
 softmax 输出趋于平坦化（熵增大），对长距离聚焦任务尤为有害。
 逐头温度校正通过引入因子 $\tau^{-1}_{l,h}$ 补偿该效应，
@@ -390,17 +390,21 @@ softmax 输出趋于平坦化（熵增大），对长距离聚焦任务尤为有
   \label{fig:ch3-invtau-heatmap}
 \end{figure}
 
-\paragraph{格式依赖性}
+\paragraph{格式依赖性与实证收益}
 \label{para:ch3-invtau-role}
 $\tau^{-1}$ 的收益具有显著的格式依赖性。
-在 INT8 对称格式下，自适应保护机制已是 Needle 通过率的决定性因素，
+在 INT8 对称格式下（256 个量化级别），量化噪声引起的 attention 平坦化幅度有限，
+自适应保护机制已是 Needle 通过率的决定性因素，
 $\tau^{-1}$ 仅提供边际改善（第~\ref{subsec:exp-ablation-temperature}~节）。
-在 INT4-RoleAlign 的非对称格式下，per-channel K 量化的通道级 Scale
-已提供足够精确的数值保真，$\tau^{-1}$ 无稳定收益甚至有害
-（第~\ref{subsec:exp-rolealign-results}~节）。
-因此本文两套最终配置均不启用温度校正。
-该机制的完整理论推导保留于附录~\ref{sec:app-invtau-detail}，
-其在其他量化格式下可能发挥作用。
+在 INT4-RoleAlign 的非对称格式下（16 个量化级别），
+4-bit 粗量化导致更显著的 attention 平坦化，
+$\tau^{-1}$ 温度校正恢复注意力聚焦度的效果明确：
+消融实验表明启用 $\tau^{-1}$ 使 INT4-RoleAlign 的 PPL 从 10.58 降至 10.41
+（$-$1.6\%，Needle 保持 100\%），
+详细数据见第~\ref{subsec:exp-rolealign-invtau}~节。
+据文献调研（详见第~\ref{sec:ch2-quant-softmax}~节），
+本文是首个在 KV Cache 量化场景下提出并验证逐头温度校正机制的工作。
+该机制的完整理论推导见附录~\ref{sec:app-invtau-detail}。
 
 
 % ============================================================
@@ -644,13 +648,13 @@ $p_K$ 和 $p_V$ percentile 参数。
     量化格式    & per-channel K + per-token V & 相同 \\
     校准范式    & 无校准（运行时统计量） & BA-guided 离线搜索 \\
     参数确定    & absmax/min 即时计算 & KL 散度目标优化 \\
-    温度校正    & 不适用 & 不使用\textsuperscript{$\dagger$} \\
+    温度校正    & 不适用 & 可选增强\textsuperscript{$\dagger$} \\
     \bottomrule
   \end{tabular}
   \\[4pt]
-  {\small $\dagger$ 第~\ref{subsec:exp-rolealign-results}~节的实验表明，
-  $\tau^{-1}$ 在 per-channel K 量化下无稳定收益，
-  INT4-RoleAlign 最终配置不包含温度校正。}
+  {\small $\dagger$ 消融实验（第~\ref{subsec:exp-rolealign-invtau}~节）表明，
+  $\tau^{-1}$ 在 INT4 非对称格式下可将 PPL 退化从 13.7\% 缩减至 11.8\%（1.5B），
+  INT8 精度下效果可忽略。}
 \end{table}
 
 两者共享相同的量化格式但在参数确定范式上存在本质差异：

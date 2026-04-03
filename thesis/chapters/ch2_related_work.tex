@@ -387,6 +387,29 @@ INT8 路径更具跨硬件可移植性。
 FP8 KV Cache 与本文 INT8/INT4 方法的系统性对比
 列入后续工作（第~\ref{sec:conclusion-future}~节）。
 
+% ============================================================
+\subsection{量化对注意力分布的影响}
+\label{sec:ch2-quant-softmax}
+% ============================================================
+
+近期文献从不同角度观察到量化对 softmax 分布的扰动效应。
+QeRL~\cite{agarwal2025qerl}（ICLR 2026）指出
+量化固有地增加采样熵（``quantization inherently increases the sampling entropy''），
+导致输出概率分布趋于平坦化，尽管其分析针对的是 output logits 而非 attention 内部。
+KVTuner~\cite{xu2025kvtuner}（ICML 2025）通过 Lemma 1 数学证明了
+Key 量化误差在 attention score 中被放大 13.9 倍（INT8$\to$INT4），
+并观察到``高 KV cache 量化误差的注意力头通常展现非稀疏的注意力模式''。
+Softmax Bias Correction~\cite{bondarenko2023softmax}（ICCV 2023 Workshop）
+分析了 softmax 对量化的 SQNR 劣化 8 倍，指出量化后高达 99\% 的 softmax 值被舍入为零。
+
+然而，上述工作均未提出\textbf{针对 KV Cache 量化的温度校正机制}。
+QeRL 聚焦于 output logits，KVTuner 的 Lemma 1 止步于误差放大的量化分析，
+均未将因果链延伸至 attention 内部 softmax 的平坦化补偿。
+本文的行为对齐框架（第~\ref{sec:ch3-invtau}~节）填补了这一空白：
+通过逐头温度校正因子 $\tau^{-1}$ 直接补偿 Key 量化噪声导致的 attention 平坦化，
+并在消融实验中验证了该机制在 INT4 精度下的 PPL 改善效果
+（第~\ref{subsec:exp-rolealign-invtau}~节）。
+
 然而，校准策略的改进仅解决了"量化什么"的问题；
 要将量化带来的显存节省转化为实际的推理加速，还需要在计算层面进行融合优化。
 

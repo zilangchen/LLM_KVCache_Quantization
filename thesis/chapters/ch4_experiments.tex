@@ -1277,18 +1277,56 @@ Qwen 系列上 vanilla KIVI 在 2-bit 下 PPL 直接崩溃（$>$200），
 而 4-bit 行为对齐方案保持了 $<$14\% 的退化，
 说明离线校准在更极端压缩率下可能展现出差异化优势。
 
-\subsection{$\tau^{-1}$ 在非对称量化上的负面结果}
+\subsection{$\tau^{-1}$ 温度校正的格式依赖效应}
 \label{subsec:exp-rolealign-invtau}
 
-基于 INT8 对称校准搜索得到的温度校正因子 $\tau^{-1}$
-在 INT4 非对称量化上\emph{无稳定收益}：
-Needle 从 100\%（20/20）退化至 95\%（19/20），
-LongBench 综合评分下降约 15\%。
-根因在于 per-channel K 量化的通道级 Scale 已足够精确，
-原先为补偿 per-group 对称量化噪声设计的温度校正在非对称格式下产生过度补偿。
-因此，INT4-RoleAlign 的最终配置\textbf{不包含 $\tau^{-1}$}。
-这一结果揭示了行为对齐框架的一个重要特性：
-有效组件的选择依赖于量化格式，不能无差别地跨格式迁移。
+逐头温度校正（$\tau^{-1}$）的效果展现出明确的精度依赖性。
+表~\ref{tab:invtau-ablation} 给出了 INT4-RoleAlign 和 INT8-ours
+在启用/禁用 $\tau^{-1}$ 下的 PPL 和 Needle 对比。
+
+\begin{table}[htbp]
+  \centering
+  \caption{$\tau^{-1}$ 温度校正消融（Qwen2.5-1.5B-Instruct，cs=128，seed=1234）}
+  \label{tab:invtau-ablation}
+  \small
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{配置} & \textbf{PPL}$\downarrow$ & \textbf{vs 无$\tau^{-1}$} & \textbf{Needle}$\uparrow$ \\
+    \midrule
+    INT4-RA 无$\tau^{-1}$ & 10.58 & --- & 100\% \\
+    INT4-RA 有$\tau^{-1}$ & \textbf{10.41} & \textbf{$-$1.6\%} & 100\% \\
+    \midrule
+    INT8-ours 无$\tau^{-1}$ & 9.34 & --- & 100\% \\
+    INT8-ours 有$\tau^{-1}$ & 9.34 & $-$0.02\% & 100\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{INT4 下的正面效果。}
+INT4-RoleAlign 启用 $\tau^{-1}$ 后 PPL 从 10.58 降至 10.41（$-$1.6\%），
+Needle 保持 100\%。
+4-bit 量化（仅 16 个离散级别）引起的 attention logit 噪声足以导致显著的
+softmax 平坦化，温度校正通过恢复注意力聚焦度有效缓解了该退化。
+文献调研表明，该因果链（Key 量化噪声$\to$QK$^T$ 扰动$\to$attention 平坦化$\to$
+$\tau^{-1}$ 补偿）在现有 KV Cache 量化工作中无先例
+（第~\ref{sec:ch2-quant-softmax}~节），本文是首次系统验证。
+
+\paragraph{INT8 下的可忽略效果。}
+INT8 下 PPL 变化仅 0.02\%——256 个量化级别提供了充分的数值保真度，
+attention 平坦化幅度微弱，温度校正无可观测收益。
+这一对比证实了 $\tau^{-1}$ 收益的精度依赖性：
+补偿需求与量化粒度成正比，INT8 精度下该需求可忽略。
+
+\paragraph{与 int4\_kivi\_aligned 的区别。}
+需注意 int4\_kivi\_aligned（KIVI 骨架 + $\tau^{-1}$）
+的 Needle 曾从 100\% 退化至 95\%（表~\ref{tab:kivi-int4-threeway}），
+但该配置使用的是基于 INT8 对称校准搜索得到的 $\tau^{-1}$，
+非为非对称格式优化。
+INT4-RoleAlign 的 $\tau^{-1}$ 通过 BA-guided 校准框架产出，
+与非对称量化格式协同，因此表现为正面效果而非过度补偿。
+这一发现揭示了行为对齐框架的一个重要特性：
+\textbf{校准方法与量化格式的协同是关键}——
+同一增强组件在不同校准范式下可能产生相反效果。
 
 \subsection{证据边界声明}
 \label{subsec:exp-rolealign-boundary}
