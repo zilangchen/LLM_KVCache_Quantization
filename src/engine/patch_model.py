@@ -170,7 +170,15 @@ class INT8CacheWrapperContainer:
         return self.num_layers
     
     def to_legacy_cache(self):
-        # For compatibility - return tuple of (k, v) per layer
+        """Return dequantized (k, v) tuples for HF compatibility.
+
+        ENG-081: This returns DEQUANTIZED tensors (full precision), unlike
+        __iter__() which yields quantized INT8CacheWrapper objects. Callers
+        like _cache_stats_from_past_key_values will see full-size fp16 tensors,
+        negating quantization memory savings. This is by design for HF
+        interop, but internal callers should use __iter__ or get_int8_tensors
+        directly to preserve the quantized representation.
+        """
         return tuple(self.engine.get_kv(i) for i in range(self.num_layers))
     
     def get_mask_sizes(self, cache_position, layer_idx):
@@ -497,8 +505,16 @@ def _get_rope_cos_sin(
         try:
             cos, sin = position_embeddings
             return cos, sin
-        except Exception:
-            pass
+        except (TypeError, ValueError) as exc:
+            # ENG-070: Only catch expected unpack errors (wrong type or wrong
+            # length tuple), not CUDA OOM or other serious exceptions. Log the
+            # fallback so callers know position_embeddings was ignored.
+            import warnings
+            warnings.warn(
+                f"_get_rope_cos_sin: position_embeddings unpack failed "
+                f"({type(exc).__name__}: {exc}); falling back to rotary_emb.",
+                RuntimeWarning,
+            )
 
     rotary = getattr(attn_module, "rotary_emb", None)
     if rotary is None or position_ids is None:
@@ -521,12 +537,14 @@ def _get_rope_cos_sin(
         except _EXPECTED_ROPE_ERRORS:
             continue
         except Exception as exc:
+            # ENG-109: Re-raise CUDA OOM and other critical runtime errors
+            # instead of swallowing them as warnings.
+            if isinstance(exc, (torch.cuda.OutOfMemoryError, RuntimeError)):
+                raise
             import warnings
             warnings.warn(
                 f"Unexpected exception in _get_rope_cos_sin rotary call: "
-                f"{type(exc).__name__}: {exc}. This may indicate a real error "
-                f"(e.g. CUDA RuntimeError, shape mismatch) rather than an API "
-                f"incompatibility. Skipping this call variant.",
+                f"{type(exc).__name__}: {exc}. Skipping this call variant.",
                 RuntimeWarning,
             )
             continue
@@ -543,12 +561,21 @@ def _get_rope_cos_sin(
                 cos = cos.squeeze(0)
                 sin = sin.squeeze(0)
             if cos.ndim == 2:
-                cos = cos[position_ids]
-                sin = sin[position_ids]
+                # ENG-080: Ensure position_ids is 2D [B,S] for proper indexing.
+                # If position_ids is 1D [S], cos[position_ids] returns [S,D]
+                # which won't broadcast for bsz>1.
+                _pos = position_ids
+                if _pos.ndim == 1:
+                    _pos = _pos.unsqueeze(0)
+                cos = cos[_pos]
+                sin = sin[_pos]
                 return cos, sin
     except _EXPECTED_ROPE_ERRORS:
         pass
     except Exception as exc:
+        # ENG-109: Re-raise CUDA OOM and other critical runtime errors.
+        if isinstance(exc, (torch.cuda.OutOfMemoryError, RuntimeError)):
+            raise
         import warnings
         warnings.warn(
             f"Unexpected exception in _get_rope_cos_sin seq_len fallback: "
@@ -812,12 +839,14 @@ def _fused_forward_impl(
                     _int8_extra["debug_stats"] = stats
                 if "layer_idx" in _INT8_SIG_PARAMS:
                     _int8_extra["layer_idx"] = layer_idx
+                # KVC-085: cache stores scale as float32 (KVC-066), but Triton
+                # kernel requires float16 (QNT-040). Cast at the boundary.
                 attn_output_val = decode_attn_int8(
                     q_kernel,
                     k_quant,
                     v_quant,
-                    k_scale,
-                    v_scale,
+                    k_scale.to(torch.float16),
+                    v_scale.to(torch.float16),
                     context_lens,
                     sm_scale=sm_scale,
                     **_int8_extra,
@@ -828,12 +857,13 @@ def _fused_forward_impl(
                     _int4_extra["debug_stats"] = stats
                 if "layer_idx" in _INT4_SIG_PARAMS:
                     _int4_extra["layer_idx"] = layer_idx
+                # KRN-033: same fp32→fp16 cast as KVC-085 for INT4 path
                 attn_output_val = decode_attn_int4(
                     q_kernel,
                     k_quant,
                     v_quant,
-                    k_scale,
-                    v_scale,
+                    k_scale.to(torch.float16),
+                    v_scale.to(torch.float16),
                     context_lens,
                     sm_scale=sm_scale,
                     bit_packed=bool(getattr(cache_wrapper.engine, "bit_packed", True)),
@@ -888,7 +918,10 @@ def _fused_forward_impl(
     attn_output = self.o_proj(attn_output_val)
 
     # Optional debug: prove fused path executed.
-    if os.environ.get("KV_FUSED_DEBUG", "") not in ("", "0"):
+    # ENG-073: Only count once per decode step (on layer 0) instead of once
+    # per layer. Previously, a 28-layer model would increment by 28 per step,
+    # making the calls==1 "first activation" log unreachable.
+    if os.environ.get("KV_FUSED_DEBUG", "") not in ("", "0") and layer_idx == 0:
         calls = getattr(cache_wrapper.engine, "_fused_decode_calls", 0) + 1
         cache_wrapper.engine._fused_decode_calls = calls
         if calls == 1:
@@ -924,48 +957,49 @@ def apply_int8_fused_patch(model):
             "apply_int8_fused_patch requires a standard HF decoder model."
         )
 
-    if layers is not None:
-        cfg = getattr(model, "config", None)
-        cfg_q_heads = getattr(cfg, "num_attention_heads", None)
-        cfg_kv_heads = getattr(cfg, "num_key_value_heads", cfg_q_heads)
+    # ENG-071: Removed redundant `if layers is not None` guard — the raise
+    # above already ensures layers is not None at this point.
+    cfg = getattr(model, "config", None)
+    cfg_q_heads = getattr(cfg, "num_attention_heads", None)
+    cfg_kv_heads = getattr(cfg, "num_key_value_heads", cfg_q_heads)
 
-        for idx, layer in enumerate(layers):
-            attn = getattr(layer, "self_attn", None)
-            if attn is None:
-                continue
-            if not hasattr(attn, "layer_idx"):
-                setattr(attn, "layer_idx", idx)
+    for idx, layer in enumerate(layers):
+        attn = getattr(layer, "self_attn", None)
+        if attn is None:
+            continue
+        if not hasattr(attn, "layer_idx"):
+            setattr(attn, "layer_idx", idx)
 
-            head_dim = getattr(attn, "head_dim", None)
-            if head_dim is None:
-                continue
+        head_dim = getattr(attn, "head_dim", None)
+        if head_dim is None:
+            continue
 
-            q_heads = cfg_q_heads
-            kv_heads = cfg_kv_heads
-            if q_heads is None:
-                q_heads = _infer_heads_from_proj(attn, "q_proj", int(head_dim))
-            if kv_heads is None:
-                kv_heads = _infer_heads_from_proj(attn, "k_proj", int(head_dim))
-            if kv_heads is None:
-                # ENG-010: kv_heads could not be inferred from config or k_proj.
-                # Falling back to q_heads (MHA assumption, i.e. kv_heads == q_heads).
-                # This is incorrect for GQA/MQA models (e.g. Qwen2-7B uses kv_heads=4
-                # with q_heads=28). A wrong kv_heads causes shape mismatches or silent
-                # tensor expansion errors inside _fused_forward_impl. Verify that
-                # num_key_value_heads is present in model.config for your model.
-                logger.warning(
-                    "Could not infer kv_heads for layer %d; falling back to q_heads=%s. "
-                    "This is incorrect for GQA/MQA models. Set num_key_value_heads in "
-                    "model.config to suppress this warning.",
-                    idx,
-                    q_heads,
-                )
-                kv_heads = q_heads
+        q_heads = cfg_q_heads
+        kv_heads = cfg_kv_heads
+        if q_heads is None:
+            q_heads = _infer_heads_from_proj(attn, "q_proj", int(head_dim))
+        if kv_heads is None:
+            kv_heads = _infer_heads_from_proj(attn, "k_proj", int(head_dim))
+        if kv_heads is None:
+            # ENG-010: kv_heads could not be inferred from config or k_proj.
+            # Falling back to q_heads (MHA assumption, i.e. kv_heads == q_heads).
+            # This is incorrect for GQA/MQA models (e.g. Qwen2-7B uses kv_heads=4
+            # with q_heads=28). A wrong kv_heads causes shape mismatches or silent
+            # tensor expansion errors inside _fused_forward_impl. Verify that
+            # num_key_value_heads is present in model.config for your model.
+            logger.warning(
+                "Could not infer kv_heads for layer %d; falling back to q_heads=%s. "
+                "This is incorrect for GQA/MQA models. Set num_key_value_heads in "
+                "model.config to suppress this warning.",
+                idx,
+                q_heads,
+            )
+            kv_heads = q_heads
 
-            if q_heads is not None:
-                setattr(attn, "_kv_num_attention_heads", int(q_heads))
-            if kv_heads is not None:
-                setattr(attn, "_kv_num_key_value_heads", int(kv_heads))
+        if q_heads is not None:
+            setattr(attn, "_kv_num_attention_heads", int(q_heads))
+        if kv_heads is not None:
+            setattr(attn, "_kv_num_key_value_heads", int(kv_heads))
 
     # ENG-043: AttnClass is detected from layer[0] only. This assumes all
     # attention layers use the same class (homogeneous model architecture).
@@ -1076,14 +1110,19 @@ def apply_int8_fused_patch(model):
             # original forward signature accepts use_cache; the actual caller may
             # pass use_cache=False, in which case returning a 3-tuple would cause
             # unpacking errors in the HF layer aggregation.
+            # ENG-083: Pop position_embeddings/cache_position from kwargs to
+            # prevent duplicate key errors when **kwargs is expanded below in
+            # the non-fused fallback path.
+            _pos_emb = kwargs.pop("position_embeddings", None)
+            _cache_pos = kwargs.pop("cache_position", None)
             return _fused_forward_impl(
                 self,
                 hidden_states,
                 cache_wrapper,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                position_embeddings=kwargs.get("position_embeddings"),
-                cache_position=kwargs.get("cache_position"),
+                position_embeddings=_pos_emb,
+                cache_position=_cache_pos,
                 return_cache=use_cache if has_use_cache else False,
             )
 

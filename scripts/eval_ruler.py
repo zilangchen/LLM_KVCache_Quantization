@@ -97,7 +97,18 @@ def _build_noise_block(
         return ""
     lines: List[str] = []
     total_tok = 0
+    # EVL-139: Guard against infinite loop if tokenizer returns 0 tokens for
+    # all noise sentences (e.g. character-level or empty vocabulary edge case).
+    max_iters = target_tokens * 2 + 1000  # generous upper bound
+    iters = 0
     while total_tok < target_tokens:
+        iters += 1
+        if iters > max_iters:
+            raise RuntimeError(
+                f"_build_noise_block: exceeded {max_iters} iterations without "
+                f"reaching target_tokens={target_tokens} (total_tok={total_tok}). "
+                "Tokenizer may be producing 0-token outputs for noise sentences."
+            )
         line = rng.choice(_NOISE_SENTENCES)
         line_tok = len(tokenizer(line, add_special_tokens=False).input_ids)
         lines.append(line)
@@ -520,7 +531,11 @@ def _build_vt_cases(
             assignments.append(f"{var_names[0]} = {value}")
             for h in range(1, num_hops + 1):
                 assignments.append(f"{var_names[h]} = {var_names[h - 1]}")
-            chains_text.append("; ".join(assignments) + ".")
+            # EVL-073: Place each assignment on its own line so multi-hop
+            # tracking is preserved as distinct statements rather than collapsed
+            # into a single semicolon-separated line that degrades to single-point
+            # retrieval.
+            chains_text.append("\n".join(a + "." for a in assignments))
             final_vars.append(var_names[-1])
             final_values.append(value)
 
@@ -589,6 +604,12 @@ def _build_cwe_cases(
         "timber", "ultra", "venom", "whisper", "yarn", "zephyr", "anchor",
     ]
 
+    # EVL-138: guard against word_pool exhaustion when num_cw is large
+    if num_cw + 1 > len(word_pool):
+        raise ValueError(
+            f"CWE requires num_cw({num_cw}) + distractors <= word_pool({len(word_pool)}). "
+            "Increase word_pool or decrease --ruler_num_cw."
+        )
     cases: List[RulerCase] = []
     for idx in range(num_cases):
         ratio = depth_ratios[idx % len(depth_ratios)]
@@ -747,7 +768,11 @@ def _write_task_failure(
         payload["exception_type"] = type(exception).__name__
         payload["exception_repr"] = repr(exception)
         payload["traceback"] = traceback.format_exc()
-    path = out_dir / f"task_failure_{Path(__file__).stem}.json"
+    # EVL-083: Include kv_mode and seed in filename to avoid concurrent overwrites
+    # when multiple kv_mode/seed combinations run in parallel.
+    _kv = str(getattr(args, "kv_mode", "unknown"))
+    _seed = int(getattr(args, "seed", 0))
+    path = out_dir / f"task_failure_{Path(__file__).stem}_{_kv}_s{_seed}.json"
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=True), encoding="utf-8")
 
 
@@ -898,7 +923,8 @@ def main() -> None:
     parser.add_argument("--ruler_cwe_num_words", type=int, default=10,
                         help="Number of target words to identify in CWE task.")
 
-    parser.add_argument("--save_csv", action="store_true", default=True)
+    # EVL-090 symmetry: Use BooleanOptionalAction for --save_csv / --no_save_csv.
+    parser.add_argument("--save_csv", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument("--replica_id", type=int, default=0)
     parser.add_argument("--out_dir", type=str, default="results/runs")
@@ -1342,41 +1368,50 @@ def main() -> None:
     # ---- Write CSVs ----
     if args.save_csv:
         stamp = timestamp.replace(":", "-")
-
-        profile_path = out_dir / f"profile_ruler_{args.kv_mode}_{stamp}.csv"
-        with open(profile_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=list(summary_row.keys()))
-            writer.writeheader()
-            writer.writerow(summary_row)
-
-        depth_path = out_dir / f"ruler_depth_summary_{args.kv_mode}_{stamp}.csv"
-        if depth_rows:
-            with open(depth_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=list(depth_rows[0].keys()))
+        # EVL-128: Wrap CSV writes in try/except so disk/permission errors
+        # do not lose already-computed RULER scores.  On failure, dump the
+        # summary to stdout as a recoverable fallback.
+        try:
+            profile_path = out_dir / f"profile_ruler_{args.kv_mode}_{stamp}.csv"
+            with open(profile_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=list(summary_row.keys()))
                 writer.writeheader()
-                writer.writerows(depth_rows)
+                writer.writerow(summary_row)
 
-        task_path = out_dir / f"ruler_task_summary_{args.kv_mode}_{stamp}.csv"
-        if task_rows:
-            with open(task_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=list(task_rows[0].keys()))
-                writer.writeheader()
-                writer.writerows(task_rows)
+            depth_path = out_dir / f"ruler_depth_summary_{args.kv_mode}_{stamp}.csv"
+            if depth_rows:
+                with open(depth_path, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.DictWriter(f, fieldnames=list(depth_rows[0].keys()))
+                    writer.writeheader()
+                    writer.writerows(depth_rows)
 
-        details_path = out_dir / f"ruler_details_{args.kv_mode}_{stamp}.csv"
-        if details_rows:
-            with open(details_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=list(details_rows[0].keys()))
-                writer.writeheader()
-                writer.writerows(details_rows)
+            task_path = out_dir / f"ruler_task_summary_{args.kv_mode}_{stamp}.csv"
+            if task_rows:
+                with open(task_path, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.DictWriter(f, fieldnames=list(task_rows[0].keys()))
+                    writer.writeheader()
+                    writer.writerows(task_rows)
 
-        print(f"Saved summary: {profile_path}")
-        if depth_rows:
-            print(f"Saved depth:   {depth_path}")
-        if task_rows:
-            print(f"Saved tasks:   {task_path}")
-        if details_rows:
-            print(f"Saved details: {details_path}")
+            details_path = out_dir / f"ruler_details_{args.kv_mode}_{stamp}.csv"
+            if details_rows:
+                with open(details_path, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.DictWriter(f, fieldnames=list(details_rows[0].keys()))
+                    writer.writeheader()
+                    writer.writerows(details_rows)
+
+            print(f"Saved summary: {profile_path}")
+            if depth_rows:
+                print(f"Saved depth:   {depth_path}")
+            if task_rows:
+                print(f"Saved tasks:   {task_path}")
+            if details_rows:
+                print(f"Saved details: {details_path}")
+        except (OSError, IOError) as csv_exc:
+            print(
+                f"[WARN] EVL-128: CSV write failed ({csv_exc}). "
+                "Dumping summary to stdout for recovery:"
+            )
+            print(json.dumps(summary_row, indent=2, default=str))
 
     # ---- Config snapshot ----
     run_snapshot_dir = out_dir / summary_row["run_id"]

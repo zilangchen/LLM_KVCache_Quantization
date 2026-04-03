@@ -199,11 +199,23 @@ def _validate_append_commit(
     manifest = _read_json(manifest_path)
     if manifest:
         prev_commit = str(manifest.get("git_commit", "")).strip()
+        # RUN-067/RUN-078: also check git_commit_full when git_commit is empty
+        # (backward compat with older manifest formats that only stored the full hash).
+        if not prev_commit:
+            prev_commit = str(manifest.get("git_commit_full", "")).strip()
         if prev_commit and not _same_commit_prefix(prev_commit, current_git_commit):
             return (
                 False,
                 "append blocked: existing run_manifest git_commit "
                 f"({prev_commit}) != current git_commit ({current_git_commit[:8]}).",
+            )
+        # RUN-067: when manifest has no git_commit at all, warn but allow
+        # (the CSV-level check below is the second line of defense).
+        if not prev_commit:
+            print(
+                f"Warning: manifest {manifest_path} has no git_commit field; "
+                "commit consistency cannot be verified from manifest alone. "
+                "Falling back to CSV-level commit check."
             )
         prev_env_hash = str(manifest.get("env_hash", "")).strip()
         if prev_env_hash and current_env_hash and prev_env_hash != current_env_hash:
@@ -457,6 +469,12 @@ def _mark_task_status(
     # experiment runner — losing status tracking is acceptable, losing the whole
     # run is not.
     try:
+        # RUN-085: re-read manifest from disk before modifying to avoid
+        # overwriting changes written by another process in concurrent
+        # --append mode.  Falls back to the in-memory copy if disk read fails.
+        disk_manifest = _read_json(manifest_path)
+        if disk_manifest is not None:
+            manifest.update(disk_manifest)
         now = _now_iso()
         tasks = manifest.setdefault("tasks", {})
         entry = tasks.get(task, {})
@@ -569,6 +587,10 @@ def resolve_quant_params(run_entry: Dict, quant_defaults: Dict) -> Dict[str, flo
             raise ValueError(
                 f"resolve_quant_params: {_field}={_val!r} must be a positive integer."
             )
+    # RUN-087: "group_size" and "clip_percentile" aliases use the K-side value
+    # for backward compatibility.  Scripts that depend on --group_size for *both*
+    # K and V should switch to --group_size_k / --group_size_v.  The V-side
+    # value is always available as group_size_v / clip_percentile_v.
     return {
         "clip_percentile": clip_percentile_k,
         "group_size": group_size_k,
@@ -929,6 +951,11 @@ def main() -> int:
     if float(args.retry_backoff_sec) < 0:
         print("Error: --retry_backoff_sec must be >= 0.")
         return 2
+    # RUN-075: validate ppl_max_length is positive so min(seq_len, 0) doesn't
+    # produce a zero-length evaluation.
+    if int(args.ppl_max_length) <= 0:
+        print("Error: --ppl_max_length must be a positive integer.")
+        return 2
 
     config_path = Path(args.config).resolve()
     deprecated_config = (project_root / "exp_matrix.yaml").resolve()
@@ -1081,6 +1108,12 @@ def main() -> int:
                 "Allowed: letters, digits, '.', '_', '-'."
             )
             return 2
+        # RUN-064: reject '..' to prevent path traversal via run_dir construction.
+        if ".." in run_tag:
+            print(
+                "Error: --run_tag must not contain '..' (path traversal risk)."
+            )
+            return 2
 
     summary_path: Path | None = None
     if args.summary_json:
@@ -1142,6 +1175,14 @@ def main() -> int:
             continue
         if run_name_filter and run_name not in run_name_filter:
             continue
+
+        # RUN-079: validate run_name does not contain path traversal characters.
+        if ".." in str(run_name) or "/" in str(run_name) or "\\" in str(run_name):
+            print(
+                f"Error: run_name={run_name!r} contains path traversal characters "
+                "(..  / or \\). Refusing to proceed."
+            )
+            return 2
 
         kv_mode = run_entry.get("kv_mode", "fp16")
         if kv_mode not in SUPPORTED_KV_MODES:
@@ -1243,7 +1284,8 @@ def main() -> int:
 
         # RUN-050: include kivi_style in calib_file pre-validation so misconfigured
         # calib_file for kivi_style is caught early rather than silently ignored.
-        if not args.dry_run and kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused", "kivi_style", "int4_ours_asym", "int4_ours_asym_ba"]:
+        # RUN-072: include int8_fused in pre-validation so misconfigured calib is caught early.
+        if not args.dry_run and kv_mode in ["int8_ours", "int8_fused", "int4_ours", "int4_ours_mixed", "int4_fused", "kivi_style", "int4_ours_asym", "int4_ours_asym_ba"]:
             # CFG-040: check all calib strategies that require a calibration file,
             # not just kl_attn (mse also needs one).
             needs_calib = (
@@ -1271,6 +1313,9 @@ def main() -> int:
 
         multi_seed = args.seeds is not None and len(seed_list) > 0
         for replica_id, seed in enumerate(seed_list):
+            # RUN-076: when multi_seed is False, run_id = {run_name}_{run_tag}.
+            # Multiple run_entries with the same run_name/run_tag will collide.
+            # The _is_nonempty_dir check below catches this for non-append mode.
             run_id = f"{run_name}_s{seed}_{run_tag}" if multi_seed else f"{run_name}_{run_tag}"
             run_dir = out_dir / run_id
             manifest_path = run_dir / "run_manifest.json"
@@ -1335,6 +1380,22 @@ def main() -> int:
                         f"Warning: unknown task name {task!r} for run_name={run_name}; "
                         f"supported tasks are: {sorted(TASK_TO_SCRIPT.keys())}. Skipping."
                     )
+                    # RUN-065: record skipped unknown task in execution_rows so the
+                    # summary JSON reflects it (previously the skip was invisible).
+                    execution_rows.append(
+                        {
+                            "timestamp": _now_iso(),
+                            "run_id": run_id,
+                            "run_name": run_name,
+                            "seed": int(seed),
+                            "replica_id": int(replica_id),
+                            "task": task,
+                            "status": "skipped",
+                            "failure_type": "unknown_task",
+                            "returncode": None,
+                            "log_path": "",
+                        }
+                    )
                     continue
 
                 cmd = [
@@ -1389,7 +1450,7 @@ def main() -> int:
                 if kv_mode != "fp16":
                     if run_quant_bits is not None:
                         cmd.extend(["--quant_bits", str(run_quant_bits)])
-                    if kv_mode in ["int8_ours", "int4_ours", "int4_ours_mixed", "int4_fused", "int4_ours_asym", "int4_ours_asym_ba", "kivi_style"] and calib_file_path:  # RUN-062: add kivi_style
+                    if kv_mode in ["int8_ours", "int8_fused", "int4_ours", "int4_ours_mixed", "int4_fused", "int4_ours_asym", "int4_ours_asym_ba", "kivi_style", "int4_kivi_aligned"] and calib_file_path:  # RUN-062/095: +kivi_style, +int4_kivi_aligned
                         cmd.extend(["--calib_file", str(calib_file_path)])
                     if calib_params.get("calib_strategy"):
                         cmd.extend(["--calib_strategy", str(calib_params["calib_strategy"])])
@@ -1402,8 +1463,13 @@ def main() -> int:
                         cmd.append("--use_static_scales")
                     else:
                         cmd.append("--no_use_static_scales")
+                    # RUN-066: explicitly pass both --adaptive_static_scales and
+                    # --no_adaptive_static_scales to avoid silent misconfiguration
+                    # if the sub-script default value changes.
                     if calib_params.get("adaptive_static_scales") is True:
                         cmd.append("--adaptive_static_scales")
+                    else:
+                        cmd.append("--no_adaptive_static_scales")
                     adaptive_static_margin = calib_params.get("adaptive_static_margin")
                     if (
                         adaptive_static_margin is not None
@@ -1588,7 +1654,14 @@ def main() -> int:
                     log_mode = "a" if (args.append or attempt_idx > 1) else "w"
                     # RUN-022: use a configurable timeout to avoid infinite subprocess hangs.
                     # QUA-007: renamed from _timeout to timeout_sec for clarity.
-                    timeout_sec = int(args.subprocess_timeout) if int(args.subprocess_timeout) > 0 else None
+                    # RUN-086: warn when timeout is 0 (effectively infinite blocking).
+                    _raw_timeout = int(args.subprocess_timeout)
+                    if _raw_timeout == 0:
+                        logger.warning(
+                            "subprocess_timeout=0: subprocess will block indefinitely "
+                            "until completion. Set a positive value to enable timeout."
+                        )
+                    timeout_sec = _raw_timeout if _raw_timeout > 0 else None
                     # RUN-047: rotate log file if it exceeds 50 MB to prevent unbounded growth.
                     _log_size_limit_bytes = 50 * 1024 * 1024
                     if log_path.exists() and log_path.stat().st_size > _log_size_limit_bytes:
@@ -1601,6 +1674,8 @@ def main() -> int:
                             )
                         except OSError as _e:
                             print(f"Warning: failed to rotate log file {log_path}: {_e}")
+                    # RUN-074: record task start time to filter out legacy CSV artifacts.
+                    _task_start_time = time.time()
                     with open(log_path, log_mode, encoding="utf-8") as f:
                         if attempt_idx > 1:
                             # RUN-038: write separator before each retry so _classify_failure
@@ -1622,7 +1697,43 @@ def main() -> int:
                                 cwd=project_root,  # RUN-037: explicit cwd=project_root
                             )
                             try:
-                                _proc.wait(timeout=timeout_sec)
+                                # RUN-077: poll with short intervals so SIGINT is checked
+                                # between wait calls, rather than blocking until the subprocess
+                                # finishes (which could be hours for long tasks).
+                                _wait_chunk = 2.0  # seconds between interrupt checks
+                                _elapsed = 0.0
+                                while _proc.poll() is None:
+                                    _chunk = min(_wait_chunk, (timeout_sec - _elapsed) if timeout_sec else _wait_chunk)
+                                    if _chunk <= 0:
+                                        raise subprocess.TimeoutExpired(cmd, timeout_sec)
+                                    try:
+                                        _proc.wait(timeout=_chunk)
+                                    except subprocess.TimeoutExpired:
+                                        _elapsed += _chunk
+                                        if timeout_sec and _elapsed >= timeout_sec:
+                                            raise
+                                        if _interrupted[0]:
+                                            _proc.kill()
+                                            _proc.wait()
+                                            raise KeyboardInterrupt("SIGINT during wait")
+                            except KeyboardInterrupt:
+                                # Re-raise as if returncode=130 so the outer handler picks it up.
+                                returncode = 130
+                                f.write(f"\n[ERROR] Interrupted by SIGINT during subprocess wait.\n")
+                                _mark_task_status(
+                                    manifest_path,
+                                    manifest,
+                                    task=task,
+                                    status="failed",
+                                    cmd=cmd,
+                                    log_path=log_path,
+                                    returncode=130,
+                                    error="Interrupted by SIGINT",
+                                    failure_type="interrupt",
+                                    attempt_idx=attempt_idx,
+                                )
+                                _flush_summary(130)
+                                return 130
                             except subprocess.TimeoutExpired as exc:
                                 # RUN-035: kill orphaned child process after timeout to free GPU VRAM.
                                 _proc.kill()
@@ -1739,8 +1850,10 @@ def main() -> int:
                         _flush_summary(130)
                         return 130
                     if returncode == 0:
-                        # RUN-040: warn if expected CSV artifact is missing after success.
-                        if not _task_has_csv(run_dir, task):
+                        # RUN-040/RUN-074: warn if expected CSV artifact is missing after
+                        # success.  Pass _task_start_time so that legacy CSV artifacts from
+                        # prior runs are not matched as current output.
+                        if not _task_has_csv(run_dir, task, run_start_time=_task_start_time):
                             print(
                                 f"Warning: task {task} for {label} returned exit code 0 "
                                 f"but no CSV artifact was found in {run_dir}."
