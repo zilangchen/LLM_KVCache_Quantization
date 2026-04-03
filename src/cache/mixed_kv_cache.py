@@ -116,7 +116,7 @@ class MixedKVCache:
             q_k, k_scale = quantize_symmetric_int8(
                 k, percentile=self.k_clip_percentile, group_size=self.k_group_size
             )
-            return q_k, k_scale, None
+            return q_k, k_scale.to(torch.float32), None  # Codex WARN: align with KVC-066 fp32 convention
         else:  # k_bits == 4
             return quantize_asymmetric_per_token(
                 k, quant_bits=4, percentile=self.k_clip_percentile

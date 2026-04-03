@@ -1107,7 +1107,9 @@ def generate_from_ids(
                         # decode will use model_cache_for_decode exclusively. Without
                         # this, both kv_cache and model_cache_for_decode hold the same
                         # prefill KV data, doubling VRAM usage until function exit.
-                        kv_cache.clear()
+                        # Codex FAIL: clear() only resets lengths, not buffers.
+                        # Use release() to actually free the tensor memory.
+                        kv_cache.release()
 
                 next_token_logits = outputs.logits[:, -1, :]
                 next_token = torch.argmax(next_token_logits, dim=-1)  # [B]

@@ -443,7 +443,10 @@ def _load_synthetic_samples(
         # alter the samples generated for other tasks.  Previously a single RNG
         # was shared across all tasks, meaning reordering the task list would
         # shift every subsequent task's random state.
-        rng = random.Random(seed + hash(task))
+        # Use deterministic hash (not Python hash() which varies with PYTHONHASHSEED)
+        import hashlib
+        _task_hash = int(hashlib.sha256(task.encode()).hexdigest()[:8], 16)
+        rng = random.Random(seed + _task_hash)
         for idx in range(max_samples):
             answer = f"ans_{task}_{idx}_{rng.randint(1000,9999)}"
             depth = (idx % 10) / 10.0
