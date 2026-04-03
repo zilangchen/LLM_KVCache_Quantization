@@ -556,3 +556,87 @@ MiKV, SqueezeLLM, FlashAttention-3, DeepSeek-V3 MLA, FP8 量化, HF quanto/bitsa
 
 #### 缺失引用
 FlashAttention-3, FP8 KV Cache, DeepSeek-V2 MLA, AdaRound/BRECQ
+
+---
+
+## 第三轮审查（2026-04-03 Session 2，defense-review skill 执行）
+
+### 审稿人 1：系统架构教授 | 评级 B+
+
+**致命问题**：
+- F-1: INT4-RoleAlign 对 KIVI 无实质指标优势，PPL 1.5B/7B 反而更差
+- F-2: INT4 延迟 +2-2.5x，INT8 batch=1 也比 FP16 慢，"高效推理"名不副实
+
+**严重问题**：S-1 校准产物缺陷 | S-2 LongBench 合成数据 | S-3 KIVI 基线不完整 | S-4 PPL 统计检验无意义 | S-5 单卡 H20 无规模化验证
+
+**核心应答**：定位为方法论贡献（诊断驱动设计路径），不与 KIVI 做性能竞赛。batch=1 延迟→重定位为"显存高效"。
+
+---
+
+### 审稿人 2：NLP/ML 教授 | 评级 B+
+
+**CRITICAL**：
+- C1: KL 理论基础薄弱——无 attention-KL → output error 的形式化上下界
+- C2: INT4-RoleAlign vs KIVI 增量模糊（PPL 更差、Needle 持平）
+
+**HIGH**：H1 模型≤8B | H2 缺 KVQuant/QuaRot/GEAR 对比 | H3 校准产物缺陷 | H4 统计检验方法论问题
+
+**核心应答**：承认数值增量有限，强调方法论路径价值。准备 sketch proof（attention-KL → output error 上界代理）。
+
+---
+
+### 审稿人 3：顶会审稿人 | Score 5.5/10 | Recommendation: Borderline Reject
+
+**Strengths**：论证链完整 | 实验诚实度高 | K/V 消融设计精良 | 统计规范 | 检索/LM 解耦发现
+
+**Major Weaknesses**：
+- W1: INT4-RoleAlign vs KIVI 增量有限
+- W2: KL 校准 vs 诊断功能未分离
+- W3: 实验规模不足（≤8B 单 GPU）
+- W4: INT4 延迟 2-2.5x
+
+**10 个必答问题**核心：BA percentile 增量在哪？KL 诊断不可替代性？消融为何未完成？Q 向量缺陷量化？PPL 退化 vs Needle 100% 解耦机制？
+
+---
+
+### 审稿人 4：数学/统计教授 | 总体：正确自洽无根本错误
+
+**高优先级**：
+- P1: SQNR 公式适用条件（均匀分布假设 vs 实际高斯）需显式声明
+- P2: GQA 噪声稀释等权假设 + 跨模型 sigma 一致性未验证
+- P3: Bootstrap n=5 覆盖率 + 非劣性检验逻辑需集中化
+
+**中优先级**：P4 BH-FDR 族定义 | P5 sign-flip p=0.0909 离散性 | P6 KL 信息论语义映射 | P7 ε 截断影响
+
+**答辩必备**：为何 Bootstrap 非 t-test？n=5 功效多大？forward vs reverse KL？
+
+---
+
+### 审稿人 5：工业实践者 | 实用性 4.5/10
+
+**核心判断**：INT8 有条件可部署，INT4 暂不值得
+
+**关键缺陷**：
+1. 与 TRT-LLM/vLLM/SGLang 完全脱节
+2. batch=1 延迟翻倍
+3. Prefill 量化缺失
+4. INT4 PPL 13.7% 不可接受
+5. 完全未提及 FP8
+
+**最强建议**：重新定位为"分析/诊断工具论文"，INT4-RoleAlign 降级为验证性设计
+
+---
+
+### 审稿人 6：论文写作教授 | 待补充（Agent 超时未返回完整结果）
+
+---
+
+## 跨三轮审查的共识问题 TOP 5
+
+| 排名 | 问题 | 提及次数 | 严重程度 |
+|------|------|---------|---------|
+| 1 | INT4-RoleAlign vs KIVI 差异太小 | 12/12 审稿人 | 致命 |
+| 2 | 模型规模 ≤8B + 缺 SOTA 对比 | 10/12 | 严重 |
+| 3 | batch=1 延迟退化 + "高效推理"名不副实 | 8/12 | 严重 |
+| 4 | KL 校准增益未隔离（vs adaptive/Triton）| 7/12 | 严重 |
+| 5 | 评测用合成数据 + FP8 未对比 | 6/12 | 中等 |
