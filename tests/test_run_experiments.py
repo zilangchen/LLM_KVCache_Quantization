@@ -891,5 +891,32 @@ class TestWriteJsonAtomicCleanup(unittest.TestCase):
             self.assertTrue(target.exists())
 
 
+class TestResolveCalibParamsKiviStyle(unittest.TestCase):
+    """TST-039 (R12/RUN-062): kivi_style should propagate calib_file.
+
+    Before RUN-062 fix, kivi_style was not in the calib_file passthrough
+    list, so the calibration file was silently ignored.
+    """
+
+    def test_kivi_style_receives_calib_file(self):
+        """resolve_calib_params should include calib_file for kivi_style."""
+        run_entry = {"calib_file": "artifacts/kv_calib_kl.json"}
+        quant_defaults = {}
+        result = rex.resolve_calib_params(run_entry, quant_defaults, "kivi_style")
+        self.assertEqual(result["calib_file"], "artifacts/kv_calib_kl.json")
+
+    def test_kivi_style_inherits_from_defaults(self):
+        """kivi_style should inherit calib_file from quant_defaults if not in run_entry."""
+        run_entry = {}
+        quant_defaults = {"calib_file": "artifacts/default_calib.json"}
+        result = rex.resolve_calib_params(run_entry, quant_defaults, "kivi_style")
+        self.assertEqual(result["calib_file"], "artifacts/default_calib.json")
+
+    def test_kivi_style_no_calib_file_returns_none(self):
+        """When neither run_entry nor defaults have calib_file, result is None."""
+        result = rex.resolve_calib_params({}, {}, "kivi_style")
+        self.assertIsNone(result["calib_file"])
+
+
 if __name__ == "__main__":
     unittest.main()

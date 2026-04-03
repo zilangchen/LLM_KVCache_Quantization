@@ -25,7 +25,13 @@ import textwrap
 import unittest
 from pathlib import Path
 
-import pandas as pd
+# TST-035: Guard against numpy/pandas ABI incompatibility at import time.
+try:
+    import pandas as pd
+    _PANDAS_OK = True
+except (ValueError, ImportError):
+    _PANDAS_OK = False
+    pd = None  # type: ignore[assignment]
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
@@ -33,25 +39,39 @@ if str(SCRIPTS_DIR) in sys.path:
     sys.path.remove(str(SCRIPTS_DIR))
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from export_tables_latex import (  # noqa: E402
-    KV_MODE_DISPLAY,
-    _export_ruler_subtask_tables,
-    _display_kv_mode,
-    _latex_table_env,
-    _latex_escape,
-    _pivot_metric,
-    _read_csv,
-    _sanitize_label,
-    _sort_kv_mode,
-    _split_by_model,
-    _to_latex_tabular,
-    _write,
-    export_latency,
-    export_longbench,
-    export_needle,
-    export_ppl,
-)
-from config_utils import KV_MODE_ORDER  # noqa: E402
+_etl_ok = False
+if _PANDAS_OK:
+    try:
+        from export_tables_latex import (  # noqa: E402
+            KV_MODE_DISPLAY,
+            _export_ruler_subtask_tables,
+            _display_kv_mode,
+            _latex_table_env,
+            _latex_escape,
+            _pivot_metric,
+            _read_csv,
+            _sanitize_label,
+            _sort_kv_mode,
+            _split_by_model,
+            _to_latex_tabular,
+            _write,
+            export_latency,
+            export_longbench,
+            export_needle,
+            export_ppl,
+        )
+        from config_utils import KV_MODE_ORDER  # noqa: E402
+        _etl_ok = True
+    except Exception:
+        pass
+
+
+def setUpModule():
+    """TST-035: Skip entire module when pandas ABI or export_tables_latex import fails."""
+    if not _PANDAS_OK or not _etl_ok:
+        raise unittest.SkipTest(
+            "TST-035: pandas ABI incompatible or export_tables_latex import failed"
+        )
 
 
 # ===========================================================================

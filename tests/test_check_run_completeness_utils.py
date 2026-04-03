@@ -1218,5 +1218,45 @@ class TestMainEdgeCases(unittest.TestCase):
             self.assertEqual(exit_code_with_flag, 1)
 
 
+class TestDetectFailureTypeTimeoutInterrupt(unittest.TestCase):
+    """TST-041 (R12/CHK-002): Timeout and interrupt failure type detection.
+
+    _detect_failure_type should recognize manifest_failure='timeout' and
+    'interrupt' as distinct failure types, not classify them as 'unknown'.
+    """
+
+    def test_manifest_timeout_recognized(self):
+        """manifest_failure='timeout' should return 'timeout'."""
+        result = crc._detect_failure_type(
+            manifest_failure="timeout",
+            log_content="",
+        )
+        self.assertEqual(result, "timeout")
+
+    def test_manifest_interrupt_recognized(self):
+        """manifest_failure='interrupt' should return 'interrupt'."""
+        result = crc._detect_failure_type(
+            manifest_failure="interrupt",
+            log_content="",
+        )
+        self.assertEqual(result, "interrupt")
+
+    def test_timeout_overrides_traceback_in_log(self):
+        """manifest_failure='timeout' takes priority over traceback in log."""
+        result = crc._detect_failure_type(
+            manifest_failure="timeout",
+            log_content="Traceback (most recent call last):\nTimeoutError\n",
+        )
+        self.assertEqual(result, "timeout")
+
+    def test_interrupt_overrides_oom_in_log(self):
+        """manifest_failure='interrupt' takes priority over OOM keywords in log."""
+        result = crc._detect_failure_type(
+            manifest_failure="interrupt",
+            log_content="CUDA out of memory\n",
+        )
+        self.assertEqual(result, "interrupt")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1080,6 +1080,64 @@ class TestENG066Float32ScaleChain(unittest.TestCase):
         self.assertEqual(cache._v_scale[0].dtype, torch.float32)
 
 
+class TestPackInt4Validation(unittest.TestCase):
+    """TST-025/TST-026 (R12): Regression tests for pack_int4 edge cases.
+
+    TST-025 (QNT-026): pack_int4 uses ``assert D % 2 == 0`` which vanishes
+    under ``python -O``. This test verifies the odd-D case is caught.
+
+    TST-026 (QNT-027): pack_int4 does not validate [-8, 7] range on input.
+    Out-of-range values silently corrupt adjacent nibbles. This test documents
+    the expected behaviour (error or silent corruption).
+    """
+
+    def test_odd_head_dim_raises_or_corrupts(self):
+        """pack_int4 with odd last dimension should raise AssertionError.
+
+        Note: under ``python -O`` the assert is stripped and the function
+        silently produces a wrong-shape output. This test documents the
+        expected AssertionError under normal (non-optimized) execution.
+        """
+        odd_tensor = torch.randint(-8, 8, (1, 2, 4, 127), dtype=torch.int8)
+        with self.assertRaises((AssertionError, RuntimeError)):
+            pack_int4(odd_tensor)
+
+    def test_out_of_range_positive_overflow(self):
+        """pack_int4 with values > 7 should produce corrupted output.
+
+        This test documents the current behaviour: pack_int4 does NOT
+        validate the input range. Values outside [-8, 7] cause nibble
+        overflow that corrupts adjacent packed values.
+        """
+        # Create tensor with value 15 (> 7, overflows 4-bit signed range)
+        x = torch.full((1, 1, 1, 2), 15, dtype=torch.int8)
+        packed = pack_int4(x)
+        unpacked = unpack_int4(packed)
+        # Roundtrip should NOT reproduce the original because 15 overflows
+        # signed 4-bit range. This documents the silent corruption.
+        self.assertFalse(
+            torch.equal(x, unpacked),
+            "Out-of-range values should not roundtrip correctly through pack/unpack"
+        )
+
+    def test_out_of_range_negative_underflow(self):
+        """pack_int4 with values < -8 should produce corrupted output."""
+        x = torch.full((1, 1, 1, 2), -9, dtype=torch.int8)
+        packed = pack_int4(x)
+        unpacked = unpack_int4(packed)
+        self.assertFalse(
+            torch.equal(x, unpacked),
+            "Out-of-range values should not roundtrip correctly through pack/unpack"
+        )
+
+    def test_valid_boundary_values_roundtrip(self):
+        """Values exactly at [-8, 7] boundaries should roundtrip correctly."""
+        x = torch.tensor([[-8, 7, -8, 7]], dtype=torch.int8).reshape(1, 1, 1, 4)
+        packed = pack_int4(x)
+        unpacked = unpack_int4(packed)
+        self.assertTrue(torch.equal(x, unpacked))
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -19,6 +19,12 @@ project:
   model_id: meta-llama/Llama-3.1-8B-Instruct
   # Local path on AutoDL remote (used by run_experiments.py --model_path override):
   # /root/autodl-tmp/modelscope_cache/LLM-Research/Meta-Llama-3___1-8B-Instruct
+  # CFG-029: model_revision is null because the HF-pinned revision
+  # (043efdca396f2b6f4b5714d76d70df7840856ed7 from final_emnlp2026_v1.yaml) returns
+  # 404 on the HF Hub. The remote server uses a local ModelScope/HF cache snapshot.
+  # All 8B experiments use the same cached checkpoint; within-experiment reproducibility
+  # is ensured by the local cache, but cross-machine reproducibility requires the same
+  # cached model version. This is a known limitation for the LLaMA-3.1-8B model.
   model_revision: null
 
 runtime:
@@ -32,6 +38,10 @@ runtime:
   quant_defaults:
     quant_bits: 8
     calib_strategy: kl_attn
+    # CFG-026: 8B calib files (kv_calib_kl_llama31_8b_int8.json,
+    # kv_calib_kl_llama31_8b_int4.json) must be generated on the remote GPU
+    # server via calibrate_behavior.py before running 8B int8_ours/int4_ours
+    # experiments. run_experiments.py will error at precheck if missing.
     calib_file: artifacts/kv_calib_kl_llama31_8b_int8.json
     use_attn_temperature: true
     use_static_scales: true

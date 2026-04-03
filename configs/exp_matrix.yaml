@@ -3,6 +3,9 @@
 #
 # Conventions:
 # - kv_mode: fp16 | int8_baseline | int8_ours | int4_baseline | int4_fused | int4_ours | kivi_style
+#   CFG-041: int4_ours_mixed is a valid SUPPORTED_KV_MODE but is not used in this
+#   main 1.5B matrix. It was tested via dedicated configs in configs/snapshots/
+#   (exp_matrix_mixed_kv_*.yaml). This is by design — not a missing data issue.
 # - calib_strategy: none | percentile | kl_attn | kivi_asymmetric
 # - decode_attn_impl: torch_ref | triton_fused
 # - use_attn_temperature: true/false (per-head inv_tau from calib file)
@@ -1220,6 +1223,10 @@ matrix:
     batch: 16
 
   # Throughput extension (batch 24/32) — FP16 b24/b32 removed to avoid OOM on 7B/8B.
+  # CFG-038: All throughput entries within each kv_mode now use consistent config:
+  #   int8_ours: use_attn_temperature=false, adaptive_static_scales=true (b1-b32)
+  #   int4_ours: use_attn_temperature=true (b1-b32, per design for INT4 temp scaling)
+  #   int8_baseline/int4_baseline/kivi_style: no temperature (b1-b32)
   - run_name: int8_baseline_throughput_8k_b24
     kv_mode: int8_baseline
     quant_bits: 8

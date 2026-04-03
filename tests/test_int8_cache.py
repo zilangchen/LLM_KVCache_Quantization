@@ -1226,5 +1226,38 @@ class TestINT8KDecodeQuantError(unittest.TestCase):
             )
 
 
+class TestINT8KVCacheInputValidation(unittest.TestCase):
+    """TST-023 (R12): Regression tests for input shape validation (KVC-022).
+
+    FP16KVCache and KIVIStyleKVCache raise ValueError for ndim!=4 input.
+    INT8KVCache should also reject 3D tensors rather than letting them
+    silently corrupt the quantize function with shape errors.
+    """
+
+    def test_3d_tensor_append_raises(self):
+        """3D tensor (missing batch dim) should raise ValueError or similar."""
+        cache = INT8KVCache(num_layers=1, device="cpu", group_size=64)
+        k_3d = torch.randn(4, 5, 128, dtype=torch.float16)  # [H, S, D]
+        v_3d = torch.randn(4, 5, 128, dtype=torch.float16)
+        with self.assertRaises((ValueError, RuntimeError)):
+            cache.append(0, k_3d, v_3d)
+
+    def test_2d_tensor_append_raises(self):
+        """2D tensor should be rejected."""
+        cache = INT8KVCache(num_layers=1, device="cpu", group_size=64)
+        k_2d = torch.randn(5, 128, dtype=torch.float16)
+        v_2d = torch.randn(5, 128, dtype=torch.float16)
+        with self.assertRaises((ValueError, RuntimeError)):
+            cache.append(0, k_2d, v_2d)
+
+    def test_5d_tensor_append_raises(self):
+        """5D tensor should be rejected."""
+        cache = INT8KVCache(num_layers=1, device="cpu", group_size=64)
+        k_5d = torch.randn(1, 2, 4, 5, 128, dtype=torch.float16)
+        v_5d = torch.randn(1, 2, 4, 5, 128, dtype=torch.float16)
+        with self.assertRaises((ValueError, RuntimeError)):
+            cache.append(0, k_5d, v_5d)
+
+
 if __name__ == "__main__":
     unittest.main()

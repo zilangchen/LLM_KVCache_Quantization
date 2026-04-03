@@ -198,6 +198,52 @@ class TestAggregateMainE2E(unittest.TestCase):
                 mode_rows = ppl[ppl["kv_mode"] == mode]
                 self.assertGreater(len(mode_rows), 0, f"Missing {mode} in ppl_summary")
 
+    def test_basic_aggregation_content_correctness(self):
+        """TST-034: Verify output CSV content, not just file existence."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir) / "runs"
+            tables_dir = Path(tmpdir) / "tables"
+            plots_dir = Path(tmpdir) / "plots"
+
+            for seed in [1234, 1235, 1236]:
+                for kv_mode in ["fp16", "int8_ours"]:
+                    _make_ppl_csv(runs_dir, seed, kv_mode)
+                    _make_latency_csv(runs_dir, seed, kv_mode)
+                    _make_memory_csv(runs_dir, seed, kv_mode)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(_PROJECT_ROOT / "scripts" / "aggregate_results.py"),
+                    "--runs_dir", str(runs_dir),
+                    "--tables_dir", str(tables_dir),
+                    "--plots_dir", str(plots_dir),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120,
+                cwd=str(_PROJECT_ROOT),
+            )
+            self.assertEqual(result.returncode, 0, f"stderr: {result.stderr[-500:]}")
+
+            import pandas as pd
+
+            # Verify ppl_summary content
+            ppl_path = tables_dir / "ppl_summary.csv"
+            self.assertTrue(ppl_path.exists())
+            ppl = pd.read_csv(ppl_path)
+            self.assertGreater(len(ppl), 0, "ppl_summary should not be empty")
+            # Must have required columns
+            for col in ["kv_mode", "perplexity"]:
+                self.assertIn(col, ppl.columns, f"Missing column: {col}")
+            # Perplexity values should be positive numbers
+            for _, row in ppl.iterrows():
+                if pd.notna(row.get("perplexity")):
+                    self.assertGreater(
+                        float(row["perplexity"]), 0,
+                        "Perplexity must be positive"
+                    )
+
     def test_nonexistent_runs_dir_returns_2(self):
         """When runs_dir does not exist, main() should return exit code 2."""
         result = subprocess.run(

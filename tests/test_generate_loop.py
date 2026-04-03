@@ -3,7 +3,7 @@
 Covers:
   TST-023: _register_prefill_temperature_hooks (q_norm hook vs q_proj hook, seq_len guard, layout detection)
   TST-024: _cache_stats_from_past_key_values (new API / legacy tuple / to_legacy_cache conversion)
-  TST-025: _to_dynamic_cache_safely (from_legacy_cache -> ddp_cache_data -> RuntimeError fallback chain)
+  TST-025: _to_dynamic_cache_safely (from_legacy_cache -> manual DynamicCache.update() -> RuntimeError fallback chain)
   TST-027: _get_rope_cos_sin (5 fallback paths via try-except)
   TST-028: _resolve_attn_shape_meta (6 fallback paths for q_heads/kv_heads/head_dim)
 
@@ -53,7 +53,7 @@ _MODULES_TO_MOCK = {
     "src.quant.int4_basic": MagicMock(),
 }
 
-# Save originals so we can restore them later
+# Save originals so we can restore them later (TST-066: used in tearDownModule)
 _original_modules = {}
 for mod_name, mock_mod in _MODULES_TO_MOCK.items():
     _original_modules[mod_name] = sys.modules.get(mod_name)
@@ -389,9 +389,9 @@ class TestCacheStatsFromPastKeyValues(unittest.TestCase):
 class TestToDynamicCacheSafely(unittest.TestCase):
     """TST-025: Tests for _to_dynamic_cache_safely.
 
-    Fallback chain:
+    Fallback chain (ENG-058):
       1. from_legacy_cache() succeeds -> return result
-      2. DynamicCache(ddp_cache_data=...) succeeds -> return result
+      2. Manual DynamicCache() + .update(k, v, layer_idx) succeeds -> return result
       3. Both fail -> raise RuntimeError
     Plus: non-tuple input returned as-is; HAS_DYNAMIC_CACHE=False returns as-is.
     """
@@ -461,6 +461,38 @@ class TestToDynamicCacheSafely(unittest.TestCase):
             self.assertIs(result, legacy)
         finally:
             gl.HAS_DYNAMIC_CACHE = original_flag
+
+    def test_manual_fallback_update_raises_is_caught(self):
+        """TST-031 (R12/ENG-058): When from_legacy_cache fails and manual
+        DynamicCache.update() also raises, the RuntimeError message should
+        include both failure reasons for debugging.
+        """
+        legacy = (("k1", "v1"), ("k2", "v2"))
+
+        _mock_DynamicCache.from_legacy_cache = MagicMock(
+            side_effect=AttributeError("no from_legacy_cache")
+        )
+        _mock_DynamicCache.side_effect = RuntimeError("DynamicCache() failed")
+
+        with self.assertRaises(RuntimeError) as ctx:
+            _to_dynamic_cache_safely(legacy)
+
+        error_msg = str(ctx.exception)
+        # Both failure reasons should be in the message
+        self.assertIn("no from_legacy_cache", error_msg)
+        self.assertIn("DynamicCache() failed", error_msg)
+
+        # Cleanup
+        _mock_DynamicCache.side_effect = None
+
+    def test_empty_tuple_from_legacy_cache(self):
+        """TST-031: Empty tuple input should be handled gracefully."""
+        empty_legacy = ()
+        sentinel = MagicMock(name="empty_cache")
+        _mock_DynamicCache.from_legacy_cache = MagicMock(return_value=sentinel)
+
+        result = _to_dynamic_cache_safely(empty_legacy)
+        self.assertIs(result, sentinel)
 
 
 # ===========================================================================
@@ -1337,6 +1369,23 @@ class TestInferHeadsFromProj(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             _infer_heads_from_proj(attn, "q_proj", head_dim=64)
         self.assertIn("not divisible by head_dim", str(ctx.exception))
+
+
+def tearDownModule():
+    """TST-066: Restore sys.modules after all tests to prevent pollution.
+
+    Without this, the mocked torch/transformers modules leak into subsequent
+    test files collected in the same pytest session, causing spurious failures.
+    """
+    for mod_name, original in _original_modules.items():
+        if original is None:
+            sys.modules.pop(mod_name, None)
+        else:
+            sys.modules[mod_name] = original
+    # Also remove any sub-modules that were created during import
+    for mod_name in list(sys.modules.keys()):
+        if mod_name.startswith("src.engine.generate_loop") or mod_name.startswith("src.engine.patch_model"):
+            sys.modules.pop(mod_name, None)
 
 
 if __name__ == "__main__":

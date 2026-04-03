@@ -29,6 +29,10 @@ runtime:
   quant_defaults:
     quant_bits: 8
     calib_strategy: kl_attn
+    # CFG-026: 7B calib files (kv_calib_kl_qwen25_7b_int8.json,
+    # kv_calib_kl_qwen25_7b_int4.json) must be generated on the remote GPU
+    # server via calibrate_behavior.py before running 7B int8_ours/int4_ours
+    # experiments. run_experiments.py will error at precheck if missing.
     calib_file: artifacts/kv_calib_kl_qwen25_7b_int8.json
     use_attn_temperature: true
     use_static_scales: true

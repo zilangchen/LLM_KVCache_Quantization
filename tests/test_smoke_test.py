@@ -109,91 +109,76 @@ class TestGetHardwareInfo(unittest.TestCase):
 
 
 class TestSmokeTestMainCudaUnavailable(unittest.TestCase):
-    """Tests for the main() flow when CUDA is not available.
+    """TST-037/TST-067: Tests for main() when CUDA is not available.
 
-    The smoke_test.py main() imports torch and checks torch.cuda.is_available().
-    When CUDA is unavailable and --cpu-ok is set, it should exit(0).
-    When CUDA is unavailable and --cpu-ok is NOT set, it should exit(1).
+    Fixed: The original implementation returned main_fn outside the patch.dict
+    scope, so mocked modules were already restored when main() ran, causing
+    ImportError for transformers.  Now main() is called *inside* the patched
+    context.
     """
 
-    def _run_smoke_test_main(self, extra_args=None):
-        """Import and invoke the main function from smoke_test.py with mocking."""
-        # We need to mock torch inside the main() function scope.
-        # The simplest approach is to mock sys.argv and the torch import.
-        args = ["smoke_test.py"]
-        if extra_args:
-            args.extend(extra_args)
+    def _load_and_run_main(self, cli_args):
+        """Load smoke_test.py with fully mocked deps and call main().
+
+        Returns the SystemExit code, or None if main() did not call sys.exit().
+        """
+        import importlib
+        import importlib.util
 
         mock_torch = MagicMock()
         mock_torch.__version__ = "2.0.0"
         mock_torch.cuda.is_available.return_value = False
 
-        # We need to intercept the import of torch and transformers inside main()
-        # Since main() does `import torch` at runtime, we mock it at module level
-        with patch.dict("sys.modules", {"torch": mock_torch, "transformers": MagicMock()}):
-            with patch("sys.argv", args):
-                # Import the module fresh to get its main function
-                scripts_dir = PROJECT_ROOT / "scripts"
-                if str(scripts_dir) not in sys.path:
-                    sys.path.insert(0, str(scripts_dir))
+        mock_repro = MagicMock()
+        mock_repro.get_git_commit.return_value = "abc12345"
+        mock_repro.get_hardware_info.return_value = {"gpu": "N/A", "gpu_memory": "N/A"}
+        mock_repro.set_seed = MagicMock()
 
-                # Re-import by loading the module
-                import importlib
-                import importlib.util
+        mock_hf = MagicMock()
+        mock_hf.resolve_pretrained_path.return_value = "mock_path"
 
-                spec = importlib.util.spec_from_file_location(
-                    "smoke_test_mod",
-                    str(scripts_dir / "smoke_test.py"),
-                )
-                # We need to mock the imports that happen at module top-level
-                with patch.dict("sys.modules", {
-                    "torch": mock_torch,
-                    "transformers": MagicMock(),
-                }):
-                    mod = importlib.util.module_from_spec(spec)
-                    # Mock the src.utils imports that happen at import time
-                    mock_repro = MagicMock()
-                    mock_repro.get_git_commit.return_value = "abc12345"
-                    mock_repro.get_hardware_info.return_value = {"gpu": "N/A", "gpu_memory": "N/A"}
-                    mock_repro.set_seed = MagicMock()
-                    mock_hf = MagicMock()
-                    mock_hf.resolve_pretrained_path.return_value = "mock_path"
-                    with patch.dict("sys.modules", {
-                        "torch": mock_torch,
-                        "transformers": MagicMock(),
-                        "src": MagicMock(),
-                        "src.utils": MagicMock(),
-                        "src.utils.repro": mock_repro,
-                        "src.utils.hf": mock_hf,
-                    }):
-                        spec.loader.exec_module(mod)
-                        return mod.main
+        mock_config_utils = MagicMock()
+        mock_config_utils.ALLOWED_MODEL_IDS = ["Qwen/Qwen2.5-1.5B-Instruct"]
+
+        patched_modules = {
+            "torch": mock_torch,
+            "torch.nn": MagicMock(),
+            "torch.cuda": MagicMock(),
+            "transformers": MagicMock(),
+            "src": MagicMock(),
+            "src.utils": MagicMock(),
+            "src.utils.repro": mock_repro,
+            "src.utils.hf": mock_hf,
+            "scripts": MagicMock(),
+            "scripts.config_utils": mock_config_utils,
+        }
+
+        scripts_dir = PROJECT_ROOT / "scripts"
+        spec = importlib.util.spec_from_file_location(
+            "smoke_test_mod",
+            str(scripts_dir / "smoke_test.py"),
+        )
+
+        with patch.dict("sys.modules", patched_modules):
+            with patch("sys.argv", ["smoke_test.py"] + cli_args):
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                # Call main() INSIDE the patched context so mocks are active
+                try:
+                    mod.main()
+                except SystemExit as exc:
+                    return exc.code
+        return None
 
     def test_cuda_unavailable_cpu_ok_exits_zero(self):
         """With --cpu-ok and no CUDA, main should call sys.exit(0)."""
-        mock_torch = MagicMock()
-        mock_torch.__version__ = "2.0.0"
-        mock_torch.cuda.is_available.return_value = False
-
-        with patch("sys.argv", ["smoke_test.py", "--cpu-ok"]):
-            main_fn = self._run_smoke_test_main(["--cpu-ok"])
-            if main_fn is not None:
-                with self.assertRaises(SystemExit) as ctx:
-                    main_fn()
-                self.assertEqual(ctx.exception.code, 0)
+        code = self._load_and_run_main(["--cpu-ok"])
+        self.assertEqual(code, 0)
 
     def test_cuda_unavailable_no_cpu_ok_exits_one(self):
         """Without --cpu-ok and no CUDA, main should call sys.exit(1)."""
-        mock_torch = MagicMock()
-        mock_torch.__version__ = "2.0.0"
-        mock_torch.cuda.is_available.return_value = False
-
-        with patch("sys.argv", ["smoke_test.py"]):
-            main_fn = self._run_smoke_test_main()
-            if main_fn is not None:
-                with self.assertRaises(SystemExit) as ctx:
-                    main_fn()
-                self.assertEqual(ctx.exception.code, 1)
+        code = self._load_and_run_main([])
+        self.assertEqual(code, 1)
 
 
 if __name__ == "__main__":
