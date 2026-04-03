@@ -745,5 +745,135 @@ class TestKIVICacheInvTau(unittest.TestCase):
         self.assertTrue(torch.isfinite(v_out).all())
 
 
+class TestKIVIResidualBuffer(unittest.TestCase):
+    """Tests for KIVI residual buffer (§3.3 enhancement)."""
+
+    def _make_cache(self, residual_length=4, quant_bits=8):
+        return KIVIStyleKVCache(
+            num_layers=2, device="cpu", quant_bits=quant_bits,
+            residual_length=residual_length,
+        )
+
+    def test_residual_zero_is_noop(self):
+        """residual_length=0 should behave identically to original KIVI."""
+        cache = KIVIStyleKVCache(num_layers=1, device="cpu", residual_length=0)
+        B, H, S, D = 1, 2, 8, 16
+        k = torch.randn(B, H, S, D)
+        v = torch.randn(B, H, S, D)
+        cache.append(0, k, v)
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.shape, (B, H, S, D))
+        self.assertEqual(cache.get_seq_len(), S)
+
+    def test_decode_tokens_go_to_residual_first(self):
+        """First r decode tokens should stay in FP16 buffer."""
+        cache = self._make_cache(residual_length=3)
+        B, H, D = 1, 2, 16
+
+        # Prefill
+        prefill_k = torch.randn(B, H, 4, D)
+        prefill_v = torch.randn(B, H, 4, D)
+        cache.append(0, prefill_k, prefill_v)
+        self.assertEqual(cache.get_seq_len(), 4)  # all in quantized cache
+
+        # Decode 3 tokens (should go to residual buffer)
+        for i in range(3):
+            dk = torch.randn(B, H, 1, D)
+            dv = torch.randn(B, H, 1, D)
+            cache.append(0, dk, dv)
+
+        # Total seq_len should be 4 (quantized) + 3 (residual) = 7
+        self.assertEqual(cache.get_seq_len(), 7)
+
+        # get_kv should return all 7 tokens
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.shape[2], 7)
+        self.assertEqual(v_out.shape[2], 7)
+
+    def test_residual_eviction(self):
+        """When buffer is full, oldest token should be evicted to quantized cache."""
+        cache = self._make_cache(residual_length=2)
+        B, H, D = 1, 2, 16
+
+        # Prefill
+        cache.append(0, torch.randn(B, H, 4, D), torch.randn(B, H, 4, D))
+        self.assertEqual(cache.get_seq_len(), 4)
+
+        # Fill residual buffer (2 tokens)
+        cache.append(0, torch.randn(B, H, 1, D), torch.randn(B, H, 1, D))
+        cache.append(0, torch.randn(B, H, 1, D), torch.randn(B, H, 1, D))
+        self.assertEqual(cache.get_seq_len(), 6)
+
+        # 3rd decode token: evicts oldest residual → quantized cache grows by 1
+        cache.append(0, torch.randn(B, H, 1, D), torch.randn(B, H, 1, D))
+        self.assertEqual(cache.get_seq_len(), 7)
+
+        k_out, v_out = cache.get_kv(0)
+        self.assertEqual(k_out.shape[2], 7)
+
+    def test_clear_resets_residual(self):
+        """clear() should reset residual buffer."""
+        cache = self._make_cache(residual_length=3)
+        B, H, D = 1, 2, 16
+        cache.append(0, torch.randn(B, H, 4, D), torch.randn(B, H, 4, D))
+        cache.append(0, torch.randn(B, H, 1, D), torch.randn(B, H, 1, D))
+        self.assertEqual(cache.get_seq_len(), 5)
+
+        cache.clear()
+        self.assertEqual(cache.get_seq_len(), 0)
+        self.assertEqual(cache._residual_lens[0], 0)
+
+
+    def test_kvc092_single_token_prefill_initializes_scale(self):
+        """KVC-092 regression: a single-token prefill (new_seq_len=1) must go through
+        normal quantization path to initialize K scale, not into residual buffer."""
+        cache = self._make_cache(residual_length=3, quant_bits=8)
+        B, H, D = 1, 2, 16
+
+        # Single-token "prefill" — must initialize K scale, not enter residual
+        single_k = torch.randn(B, H, 1, D)
+        single_v = torch.randn(B, H, 1, D)
+        cache.append(0, single_k, single_v)
+
+        # K scale should now be initialized
+        self.assertTrue(cache._k_scale_initialized[0],
+            "Single-token prefill must initialize K scale")
+        # Seq len should be 1 (in quantized cache, not residual)
+        self.assertEqual(cache._layer_seq_lens[0], 1)
+        self.assertEqual(cache._residual_lens[0], 0)
+
+    def test_kvc090_evicted_token_is_oldest_not_shifted(self):
+        """KVC-090 regression: evicted token must be the actual oldest buffer token,
+        not the shifted slot-1 data.  Before the fix, evict_k/v were views that got
+        overwritten by the in-place shift, silently losing the oldest token."""
+        cache = self._make_cache(residual_length=2, quant_bits=8)
+        B, H, D = 1, 2, 16
+
+        # Prefill
+        cache.append(0, torch.randn(B, H, 4, D), torch.randn(B, H, 4, D))
+
+        # Decode: fill buffer with known tokens
+        token_a = torch.full((B, H, 1, D), 1.0)
+        token_b = torch.full((B, H, 1, D), 2.0)
+        cache.append(0, token_a.clone(), token_a.clone())  # slot 0
+        cache.append(0, token_b.clone(), token_b.clone())  # slot 1
+
+        # Buffer is now full [token_a, token_b].
+        # Decode one more → token_a should be evicted (quantized), buffer becomes [token_b, token_c]
+        token_c = torch.full((B, H, 1, D), 3.0)
+        cache.append(0, token_c.clone(), token_c.clone())
+
+        k_out, v_out = cache.get_kv(0)
+        # Total: 4 prefill + 1 evicted (quantized) + 2 residual = 7
+        self.assertEqual(k_out.shape[2], 7)
+
+        # The evicted quantized token (position 4) should be closest to token_a (1.0),
+        # NOT token_b (2.0).  INT8 quantize-dequantize introduces small error,
+        # so check that the mean is closer to 1.0 than to 2.0.
+        evicted_k = k_out[:, :, 4:5, :].float().mean().item()
+        self.assertAlmostEqual(evicted_k, 1.0, delta=0.3,
+            msg=f"Evicted token k mean={evicted_k:.3f}, expected ~1.0 (token_a)")
+
+
 if __name__ == "__main__":
     unittest.main()

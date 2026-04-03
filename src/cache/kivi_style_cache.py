@@ -62,6 +62,7 @@ class KIVIStyleKVCache:
         v_percentile: float = 100.0,
         inv_tau: Optional[torch.Tensor] = None,
         use_attn_temperature: bool = False,
+        residual_length: int = 0,
     ):
         if num_layers <= 0:
             raise ValueError(f"num_layers must be > 0, got {num_layers}")
@@ -99,6 +100,17 @@ class KIVIStyleKVCache:
         self.use_attn_temperature = use_attn_temperature
 
         self._min_capacity = 256
+
+        # --- Residual buffer (KIVI paper §3.3) ---
+        # Keep the most recent `residual_length` tokens in FP16 (unquantized).
+        # When the buffer is full, the oldest tokens are quantized and moved to
+        # the main INT4/INT8 cache. This preserves precision for recent tokens
+        # that contribute most to current attention.
+        self.residual_length = max(0, int(residual_length))
+        # Lazily allocated on first append (need to know batch/heads/head_dim).
+        self._fp16_k_recent: List[Optional[Tensor]] = [None] * num_layers
+        self._fp16_v_recent: List[Optional[Tensor]] = [None] * num_layers
+        self._residual_lens: List[int] = [0] * num_layers
 
         # K cache: quantized tokens + per-channel scale/zp (computed at prefill).
         # For quant_bits=4, K/V values are bit-packed as uint8 payloads in int8 tensors.
@@ -331,6 +343,60 @@ class KIVIStyleKVCache:
         old_len = self._layer_seq_lens[layer_id]
         target_len = old_len + new_seq_len
 
+        # --- Residual buffer logic (KIVI paper §3.3) ---
+        # During decode (new_seq_len == 1), if residual_length > 0, the new token
+        # goes into the FP16 buffer first. When the buffer is full, the oldest
+        # token is quantized and flushed to the main cache.
+        # During prefill (new_seq_len > 1), all tokens are quantized normally
+        # (K scale is computed from all prefill tokens), and the last
+        # min(residual_length, new_seq_len) tokens are copied to the FP16 buffer.
+        # KVC-092: Only route to residual buffer after prefill (K scale initialized).
+        # A single-token "prefill" (new_seq_len==1, scale not yet computed) must go
+        # through the normal quantization path to establish per-channel K scale.
+        if (self.residual_length > 0 and new_seq_len == 1
+                and self._k_scale_initialized[layer_id]):
+            # Decode path: route to residual buffer
+            if self._fp16_k_recent[layer_id] is None:
+                # Lazy allocation
+                self._fp16_k_recent[layer_id] = torch.zeros(
+                    batch, heads, self.residual_length, head_dim,
+                    device=target_device, dtype=self.dtype,
+                )
+                self._fp16_v_recent[layer_id] = torch.zeros(
+                    batch, heads, self.residual_length, head_dim,
+                    device=target_device, dtype=self.dtype,
+                )
+
+            rlen = self._residual_lens[layer_id]
+            if rlen < self.residual_length:
+                # Buffer not full: just add the token
+                self._fp16_k_recent[layer_id][:, :, rlen:rlen+1, :] = k.to(self.dtype)
+                self._fp16_v_recent[layer_id][:, :, rlen:rlen+1, :] = v.to(self.dtype)
+                self._residual_lens[layer_id] = rlen + 1
+                # Update seq_len tracking (total = quantized + residual)
+                if layer_id == 0:
+                    self._seq_len = self._layer_seq_lens[0] + self._residual_lens[0]
+                return
+            else:
+                # Buffer full: evict oldest token to quantized cache, then shift
+                # KVC-090 fix: must clone before shift, otherwise evict_k/v are
+                # views into slot 0 which gets overwritten by the in-place shift.
+                evict_k = self._fp16_k_recent[layer_id][:, :, 0:1, :].clone()  # [B,H,1,D]
+                evict_v = self._fp16_v_recent[layer_id][:, :, 0:1, :].clone()
+                # Shift buffer left
+                self._fp16_k_recent[layer_id][:, :, :-1, :] = \
+                    self._fp16_k_recent[layer_id][:, :, 1:, :].clone()
+                self._fp16_v_recent[layer_id][:, :, :-1, :] = \
+                    self._fp16_v_recent[layer_id][:, :, 1:, :].clone()
+                # New token goes to end of buffer
+                self._fp16_k_recent[layer_id][:, :, -1:, :] = k.to(self.dtype)
+                self._fp16_v_recent[layer_id][:, :, -1:, :] = v.to(self.dtype)
+                # Evicted token needs to be quantized — fall through to normal path
+                k = evict_k
+                v = evict_v
+                new_seq_len = 1
+                # target_len stays the same (evicted token goes to quantized cache)
+
         # --- K: per-channel quantization ---
         if not self._k_scale_initialized[layer_id]:
             # Prefill: compute per-channel scale from all incoming K tokens.
@@ -430,7 +496,10 @@ class KIVIStyleKVCache:
         # stay correct even when layers are appended out of order or
         # incrementally.  In normal sequential execution all layers have the
         # same length, so max() == any single layer's length.
-        self._seq_len = max(self._layer_seq_lens)
+        # Include residual buffer tokens in the total sequence length.
+        quantized_len = max(self._layer_seq_lens)
+        residual_len = max(self._residual_lens) if self.residual_length > 0 else 0
+        self._seq_len = quantized_len + residual_len
 
     def get_kv(self, layer_id: int) -> Tuple[Tensor, Tensor]:
         """
@@ -473,14 +542,24 @@ class KIVIStyleKVCache:
         v_zp = self._v_zp[layer_id][:, :, :seq_len]
         v = dequantize_asymmetric_per_token(q_v, v_scale, v_zp).to(self.dtype)
 
+        # Append FP16 residual buffer tokens (if any) after quantized tokens.
+        rlen = self._residual_lens[layer_id]
+        if self.residual_length > 0 and rlen > 0 and self._fp16_k_recent[layer_id] is not None:
+            k = torch.cat([k, self._fp16_k_recent[layer_id][:, :, :rlen, :]], dim=2)
+            v = torch.cat([v, self._fp16_v_recent[layer_id][:, :, :rlen, :]], dim=2)
+
         return k, v
 
     def get_seq_len(self) -> int:
-        """Return current sequence length.
+        """Return current total sequence length (quantized + residual).
 
         KVC-025/KVC-061: Use cached _seq_len (O(1)) instead of O(N) max() over
         _layer_seq_lens.  _seq_len is maintained by append() at layer_id==0
         (same pattern as INT8/INT4 caches).
+
+        KVC-091: When residual_length > 0, the returned value includes both
+        quantized tokens and FP16 residual buffer tokens, matching the seq dim
+        of tensors returned by get_kv().
         """
         return self._seq_len
 
@@ -516,6 +595,12 @@ class KIVIStyleKVCache:
             else:
                 self._v_scale[i] = None
                 self._v_zp[i] = None
+        # Reset residual buffers
+        self._residual_lens = [0] * self.num_layers
+        for i in range(self.num_layers):
+            if self._fp16_k_recent[i] is not None:
+                self._fp16_k_recent[i].zero_()
+                self._fp16_v_recent[i].zero_()
         self._seq_len = 0
 
     def release(self) -> None:
@@ -529,6 +614,9 @@ class KIVIStyleKVCache:
         self._k_scale_initialized = [False] * self.num_layers
         self._layer_seq_lens = [0] * self.num_layers
         self._layer_capacity = [0] * self.num_layers
+        self._fp16_k_recent = [None] * self.num_layers
+        self._fp16_v_recent = [None] * self.num_layers
+        self._residual_lens = [0] * self.num_layers
         self._seq_len = 0
 
     def get_memory_mb(self) -> float:

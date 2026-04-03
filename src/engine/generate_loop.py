@@ -897,6 +897,7 @@ def generate_from_ids(
                 device=model.device.type,
                 max_seq_len=max_cache_len,
                 quant_bits=int(quant_bits),
+                residual_length=int(runtime_config.get("residual_length", 0)),
             )
         elif kv_mode == "int4_kivi_aligned":
             # KIVI INT4 skeleton + attention-aligned calibration (K-path inv_tau).

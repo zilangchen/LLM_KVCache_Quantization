@@ -873,12 +873,14 @@ def _fused_forward_impl(
         elif decode_impl == "torch_ref":
             if k_int8_for_ref is None or v_int8_for_ref is None:
                 raise RuntimeError("torch_ref decode for int4 requires materialized INT8 tensors.")
+            # KVC-085 extension: torch_ref path also needs fp32→fp16 scale cast
+            # (same root cause as the Triton fused path fix above).
             attn_output_val = _decode_attn_int8_torch_ref(
                 q_kernel,
                 k_int8_for_ref,
                 v_int8_for_ref,
-                k_scale,
-                v_scale,
+                k_scale.to(torch.float16),
+                v_scale.to(torch.float16),
                 context_lens,
                 sm_scale=sm_scale,
             )

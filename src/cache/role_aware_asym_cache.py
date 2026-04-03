@@ -49,7 +49,9 @@ class RoleAwareAsymKVCache(KIVIStyleKVCache):
         inv_tau: Optional[Tensor] = None,
         use_attn_temperature: bool = False,
         framework: str = "ours_asym",
+        residual_length: int = 0,
     ):
+        # KVC-089: Forward residual_length to parent (Liskov substitution).
         super().__init__(
             num_layers=num_layers,
             device=device,
@@ -60,6 +62,7 @@ class RoleAwareAsymKVCache(KIVIStyleKVCache):
             v_percentile=v_percentile,
             inv_tau=inv_tau,
             use_attn_temperature=use_attn_temperature,
+            residual_length=residual_length,
         )
         self.framework = framework
         # KVC-084: Heuristic flag — True when either percentile deviates from the
