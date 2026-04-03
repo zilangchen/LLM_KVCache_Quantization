@@ -217,6 +217,11 @@ class FP16KVCache:
             )
 
         seq_len = self._layer_seq_lens[layer_id]
+        # KVC-035: These are mutable views into the pre-allocated buffer.
+        # All callers (generate_loop, patch_model) use them read-only for
+        # attention computation.  Cloning here would waste memory and VRAM
+        # bandwidth on every decode step.  If a future caller needs to
+        # mutate the output, it must clone explicitly at the call site.
         return (
             self._k_cache[layer_id][:, :, :seq_len, :],
             self._v_cache[layer_id][:, :, :seq_len, :],

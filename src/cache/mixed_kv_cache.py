@@ -272,3 +272,25 @@ class MixedKVCache:
 
     def get_decode_stats(self) -> Dict[str, object]:
         return self.decode_stats
+
+    # ---- KVC-078: HuggingFace past_key_values interop ----
+
+    def to_tuple(self) -> Tuple[Tuple[Tensor, Tensor], ...]:
+        """
+        Convert cache to HuggingFace past_key_values format.
+
+        Each layer's K/V is dequantized before returning, so the output is a
+        tuple of (k_float, v_float) tuples identical to ``get_kv()`` per layer.
+
+        Returns:
+            Tuple of (k, v) tuples for each layer.
+
+        Raises:
+            ValueError: If any layer cache is empty.
+        """
+        result = []
+        for i in range(self.num_layers):
+            if self._k_cache[i] is None:
+                raise ValueError(f"Layer {i} cache is empty")
+            result.append(self.get_kv(i))
+        return tuple(result)

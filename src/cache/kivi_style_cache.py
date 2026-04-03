@@ -221,7 +221,13 @@ class KIVIStyleKVCache:
         if target_len <= capacity:
             return
 
-        # Grow buffers
+        # KVC-075: Grow V buffers only.  K scale/zp are per-channel (shape
+        # [B, H, D]) and are computed once at prefill time, so they do NOT
+        # need reallocation when the sequence grows.  Only K/V quantized
+        # payload buffers and V scale/zp (which are per-token, shape
+        # [B, H, capacity]) need to grow.  Do NOT add K scale/zp realloc
+        # here — doing so would overwrite the prefill-computed per-channel
+        # scales and silently corrupt K dequantization.
         new_capacity = max(target_len, capacity * 2)
         if self.max_seq_len is not None:
             new_capacity = min(new_capacity, self.max_seq_len)

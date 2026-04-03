@@ -212,6 +212,11 @@ def dequantize_symmetric_int8(
     if scale.ndim == quantized.ndim:
         B, H, S, D = quantized.shape
         num_groups = scale.shape[-1]
+        # QNT-036: Validate num_groups and divisibility for ALL sub-paths,
+        # including the num_groups==1 fast path (Path B').  Without this
+        # check, a scale with shape [B, H, S, 1] but D not divisible by 1
+        # (impossible in practice, but D==0 would slip through) or an
+        # invalid num_groups would silently produce wrong results.
         if num_groups <= 0 or D % num_groups != 0:
             raise ValueError(
                 f"Invalid scale shape for group-wise dequantization: "

@@ -40,8 +40,10 @@ def quantize_asymmetric(
 
     Returns:
         quantized: INT8 tensor (always stored as int8, even for 4-bit)
-        scale: FP16 scale tensor
-        zero_point: FP16 zero_point tensor
+        scale: FP32 scale tensor (computed in float32 for numerical stability;
+               callers such as kivi_style_cache may cast to a different dtype
+               for storage via .to(scale_dtype))
+        zero_point: FP32 zero_point tensor (same dtype convention as scale)
     """
     _check_quantize_input(tensor, "quantize_asymmetric")
     if not tensor.is_floating_point():
@@ -92,8 +94,16 @@ def quantize_asymmetric(
         t_max = tensor_f.amax(dim=axis, keepdim=True)
 
     # Compute scale and zero_point.
-    # clamp(min=1e-5) prevents division by zero for constant-value tensors.
-    scale = (t_max - t_min).clamp(min=1e-5) / (qmax - qmin)
+    # QNT-034: The range clamp must guarantee that scale itself (after dividing
+    # by qmax-qmin) stays above fp16 minimum normal (~6e-8).  If the caller
+    # (e.g. kivi_style_cache) later casts scale to fp16 via .to(scale_dtype),
+    # values below fp16 tiny underflow to 0 and corrupt dequantization.
+    # For INT8 (qmax-qmin=255): 1e-5/255 ~ 3.9e-8 < fp16_tiny -> underflow.
+    # We clamp the range to max(1e-5, fp16_tiny * (qmax-qmin)) so that the
+    # resulting per-element scale is always >= fp16_tiny.
+    _fp16_tiny = torch.finfo(torch.float16).tiny  # ~6.1e-5
+    _range_floor = max(1e-5, _fp16_tiny * (qmax - qmin))
+    scale = (t_max - t_min).clamp(min=_range_floor) / (qmax - qmin)
     # ENG-047: zero_point is stored as a *float offset* (in the original value
     # domain), NOT as an integer code.  Convention:
     #   zero_point = t_min - qmin * scale
@@ -136,6 +146,12 @@ def dequantize_asymmetric(
 
     Returns:
         Dequantized tensor in scale.dtype
+
+    Note (QNT-035):
+        For uninitialized cache slots where quantized==0 (e.g. from torch.empty),
+        the output is ``0 * scale + zero_point = zero_point``, which is generally
+        nonzero.  Callers must mask or ignore positions beyond the actual sequence
+        length; this function does NOT zero-fill unused slots.
     """
     if quantized.dtype != torch.int8:
         raise ValueError(f"quantized must be torch.int8, got {quantized.dtype}")

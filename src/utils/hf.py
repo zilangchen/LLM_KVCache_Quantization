@@ -37,8 +37,10 @@ def resolve_pretrained_path(model_id: str, revision: Optional[str] = None) -> st
             f"{model_id!r}. Provide a HuggingFace model ID or local path."
         )
 
+    # UTL-002: Only accept local paths that are directories (model checkpoints).
+    # Plain files (e.g. "~/.ssh/id_rsa") should not be returned as model paths.
     candidate = Path(model_id).expanduser()
-    if candidate.exists():
+    if candidate.is_dir():
         return str(candidate)
 
     try:

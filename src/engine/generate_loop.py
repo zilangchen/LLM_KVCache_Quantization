@@ -596,41 +596,12 @@ def generate_from_ids(
                 f"Got batch={batch_size} kv_mode={kv_mode}."
             )
 
-    # Apply patch if needed
+    # ENG-086: Define _restore_fused_patch() BEFORE the outer try so it is
+    # always in scope for the finally block.  Strictly idempotent: checks
+    # _fused_patch_applied flag, restores after first call, further calls
+    # are no-ops.
     _fused_patch_applied = False
-    if kv_mode in _FUSED_KV_MODES:
-        if kv_mode == "int8_ours":
-            import warnings
 
-            warnings.warn(
-                "kv_mode=int8_ours uses the fused int8 path; calibration will be loaded "
-                "if calib_file is provided (or artifacts/kv_calib_kl.json exists).",
-                UserWarning,
-            )
-        from src.engine.patch_model import apply_int8_fused_patch
-
-        # ENG-086: Wrap patch in try/except so that on failure we restore
-        # the original forward method, preventing a half-patched model.
-        try:
-            apply_int8_fused_patch(model)
-            _fused_patch_applied = True
-        except Exception:
-            # Attempt to restore original forward if it was partially saved.
-            try:
-                first_attn = model.model.layers[0].self_attn
-                AttnClass = first_attn.__class__
-                if hasattr(AttnClass, "_original_forward"):
-                    AttnClass.forward = AttnClass._original_forward
-                    del AttnClass._original_forward
-            except Exception:
-                pass
-            raise
-
-    # ENG-086: Helper to unconditionally restore the fused monkeypatch.
-    # Called on every exit path (normal return AND exceptions) so the model's
-    # forward method never remains pointing at the fused proxy after this
-    # function returns or raises.  Strictly idempotent: after first
-    # successful restore, further calls are no-ops.
     def _restore_fused_patch():
         nonlocal _fused_patch_applied
         if not _fused_patch_applied:
@@ -650,12 +621,40 @@ def generate_from_ids(
             except Exception:
                 pass
 
-    # ENG-086: Wrap the entire post-patch region in try/finally so that
-    # _restore_fused_patch() is guaranteed to run on ALL exit paths,
-    # including ValueError (length check), RuntimeError/FileNotFoundError
-    # (calibration), cache construction failures, and hook registration
-    # errors that were previously uncovered.
+    # ENG-086: Outer try/finally wraps the patch call itself AND the entire
+    # post-patch region so _restore_fused_patch() is guaranteed to run on
+    # ALL exit paths — including partial-patch failures, ValueError (length
+    # check), RuntimeError/FileNotFoundError (calibration), cache
+    # construction failures, and hook registration errors.
     try:
+        # Apply patch if needed
+        if kv_mode in _FUSED_KV_MODES:
+            if kv_mode == "int8_ours":
+                import warnings
+
+                warnings.warn(
+                    "kv_mode=int8_ours uses the fused int8 path; calibration will be loaded "
+                    "if calib_file is provided (or artifacts/kv_calib_kl.json exists).",
+                    UserWarning,
+                )
+            from src.engine.patch_model import apply_int8_fused_patch
+
+            # Inner try/except handles partial-patch cleanup before re-raising.
+            try:
+                apply_int8_fused_patch(model)
+                _fused_patch_applied = True
+            except Exception:
+                # Attempt to restore original forward if it was partially saved.
+                try:
+                    first_attn = model.model.layers[0].self_attn
+                    AttnClass = first_attn.__class__
+                    if hasattr(AttnClass, "_original_forward"):
+                        AttnClass.forward = AttnClass._original_forward
+                        del AttnClass._original_forward
+                except Exception:
+                    pass
+                raise
+
         # Set seeds for reproducibility
         set_seed(seed=seed, deterministic=True)
 
@@ -1336,11 +1335,17 @@ def generate_from_ids(
         gc.collect()
         torch.cuda.empty_cache()
 
+        return output  # inside try so finally always runs before return
 
     finally:
+        # ENG-086 + ENG-103: Guarantee patch removal on ALL exit paths — normal
+        # return, exceptions, and early exits.  Without this, the monkey-patched
+        # forward_proxy persists for the process lifetime, polluting subsequent
+        # generate_from_ids calls with different kv_modes (e.g. fp16 or
+        # int8_baseline would still route through the fused proxy's isinstance
+        # checks, relying on implicit runtime detection instead of a clean model
+        # state).  This is the symmetric counterpart to apply_int8_fused_patch.
         _restore_fused_patch()
-
-    return output
 
 
 def generate(

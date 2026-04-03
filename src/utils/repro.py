@@ -25,6 +25,14 @@ def set_seed(seed: int = 1234, deterministic: bool = True) -> None:
         seed: Seed value.
         deterministic: Enable deterministic algorithms when possible.
     """
+    # UTL-001: np.random.seed() requires a non-negative integer.  Validate
+    # before calling any library so all three RNGs stay in sync on failure.
+    if not isinstance(seed, int) or seed < 0:
+        raise ValueError(
+            f"seed must be a non-negative integer, got {seed!r}. "
+            "numpy.random.seed() rejects negative values, and allowing "
+            "partial seeding (Python ok, numpy fails) breaks reproducibility."
+        )
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -72,9 +80,10 @@ def get_git_commit() -> str:
             text=True,
             check=True,
             cwd=_project_root,
+            timeout=5,  # UTL-003: prevent infinite hang on NFS/index corruption
         )
         return result.stdout.strip()[:8]
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
         return "unknown"
 
 

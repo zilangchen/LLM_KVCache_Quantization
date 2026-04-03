@@ -170,6 +170,20 @@ class INT4KVCache:
         # KVC-066: Force scale buffers to float32 for INT4 precision chain.
         # fp16 scales lose precision at the INT4 quantization boundary.
         scale_dtype = torch.float32
+        # KVC-050 / KVC-068 / KVC-070: Dimension semantics when bit_packed=True.
+        #
+        # When bit_packed=True, two INT4 values are packed into one byte, so:
+        #   head_dim = D // 2   (packed, from q_k.shape[-1] after pack_int4)
+        #   num_groups = D / group_size  (logical, from scale_k.shape[-1])
+        #
+        # These use *different dimension bases* by design:
+        #   - K/V buffer dim-3 stores the packed representation (D//2)
+        #   - Scale buffer dim-3 stores group counts based on the original D
+        #
+        # Each is internally self-consistent: every append() call passes the
+        # same (head_dim, num_groups) pair derived from the *same* quantized
+        # output, so shape checks in _ensure_capacity always compare like
+        # with like.  The mixed bases are intentional, not a bug.
         if self.max_seq_len is not None and target_len > self.max_seq_len:
             raise ValueError(
                 f"target_len {target_len} exceeds max_seq_len {self.max_seq_len} for layer {layer_id}"
@@ -328,6 +342,17 @@ class INT4KVCache:
         """
         Outlier-rescue scale adjustment for INT4:
         for the top-ratio largest group absmax values, switch to dynamic scale.
+
+        KVC-051: Interaction with mixed_rescue.
+        When both mixed_rescue=True and outlier_rescue_ratio>0, the call order
+        in append() is: (1) mixed_rescue applies torch.maximum(static, dynamic)
+        globally, then (2) outlier_rescue selectively replaces the top-ratio
+        groups with max(current_scale, dynamic).  Since mixed_rescue already
+        set scale >= dynamic everywhere, outlier_rescue becomes a no-op in
+        practice (max(X, dynamic) == X when X >= dynamic).  This is harmless
+        but the combined configuration is redundant — users should use one or
+        the other.  mixed_rescue is the more conservative option (affects all
+        groups); outlier_rescue is the selective option (affects top-ratio only).
         """
         ratio = float(self.outlier_rescue_ratio)
         if ratio <= 0.0:
@@ -500,6 +525,21 @@ class INT4KVCache:
             scale_dtype=scale_k.dtype,
         )
 
+        # KVC-070: Verify dimension invariant — when bit_packed, head_dim is
+        # D//2 (packed) while num_groups is based on the original D.  Both are
+        # derived from the quantizer output within this same append() call, so
+        # they are always self-consistent.  The assertion catches any future
+        # refactor that accidentally decouples them.
+        if self.bit_packed:
+            assert self._k_cache[layer_id].shape[3] == head_dim, (
+                f"BUG: packed K buffer dim mismatch: "
+                f"buffer={self._k_cache[layer_id].shape[3]}, head_dim={head_dim}"
+            )
+            assert self._k_scale[layer_id].shape[3] == num_groups, (
+                f"BUG: K scale group dim mismatch: "
+                f"buffer={self._k_scale[layer_id].shape[3]}, num_groups={num_groups}"
+            )
+
         self._k_cache[layer_id][:, :, old_len:target_len, :] = q_k
         self._v_cache[layer_id][:, :, old_len:target_len, :] = q_v
         self._k_scale[layer_id][:, :, old_len:target_len, :] = scale_k
@@ -620,10 +660,21 @@ class INT4KVCache:
                 )
         return total_bytes / (1024 * 1024)
 
-    def to_tuple(self):
+    # ---- KVC-019 / KVC-078: HuggingFace past_key_values interop ----
+
+    def to_tuple(self) -> Tuple[Tuple[Tensor, Tensor], ...]:
         """
         Convert cache to HuggingFace past_key_values format.
-        Returns dequantized (k, v) tuples for each layer.
+
+        Each layer's quantized K/V is dequantized before returning, so the
+        output is a tuple of (k_float, v_float) tuples identical to what
+        ``get_kv()`` returns per layer.
+
+        Returns:
+            Tuple of (k, v) tuples for each layer.
+
+        Raises:
+            ValueError: If any layer cache is empty.
         """
         result = []
         for i in range(self.num_layers):
@@ -632,3 +683,40 @@ class INT4KVCache:
             k, v = self.get_kv(i)  # Dequantize
             result.append((k, v))
         return tuple(result)
+
+    @classmethod
+    def from_tuple(
+        cls,
+        past_key_values: Tuple[Tuple[Tensor, Tensor], ...],
+        device: str = "cuda",
+        clip_percentile: float = 99.9,
+        group_size: int = 32,
+        bit_packed: bool = True,
+    ) -> "INT4KVCache":
+        """
+        Create INT4KVCache from HuggingFace past_key_values format.
+
+        Each (k, v) pair is quantized with the default dynamic-scale path
+        (no static scales) and stored.
+
+        Args:
+            past_key_values: Tuple of (k, v) tuples from model output.
+            device: Device to store tensors on.
+            clip_percentile: Clipping percentile for quantization.
+            group_size: Group size for quantization.
+            bit_packed: Whether to use INT4 bit packing.
+
+        Returns:
+            INT4KVCache instance with loaded data.
+        """
+        num_layers = len(past_key_values)
+        cache = cls(
+            num_layers=num_layers,
+            device=device,
+            clip_percentile=clip_percentile,
+            group_size=group_size,
+            bit_packed=bit_packed,
+        )
+        for layer_id, (k, v) in enumerate(past_key_values):
+            cache.append(layer_id, k.to(device), v.to(device))
+        return cache

@@ -31,6 +31,12 @@ def _materialize_int4_as_int8(
             raise ValueError(
                 f"Unpacked INT4 cache last dim mismatch: got {cache.shape[-1]}, expected {head_dim}"
             )
+        # KRN-024/029: unpacked path must be contiguous for correct kernel reshape
+        if cache.stride(-1) != 1:
+            raise ValueError(
+                f"Unpacked INT4 cache inner dim must be contiguous (stride=1), "
+                f"got stride={cache.stride(-1)}. Use .contiguous()."
+            )
         # KRN-011: Validate dtype for unpacked path. Unpacked INT4 values
         # are stored as int8 (range [-8, 7]); other dtypes indicate a caller bug.
         if cache.dtype != torch.int8:

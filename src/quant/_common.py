@@ -48,19 +48,34 @@ def _normalize_static_scale(
     elif scale.ndim == 3:
         # Several 3D layouts are supported.
         # Dispatch is by matching shape dims against (batch, heads, num_groups).
+        #
+        # QNT-032: When batch == heads (and potentially == num_groups), multiple
+        # branches could match.  We use specificity ordering (most constrained
+        # first) and emit a warning for the genuinely ambiguous case so callers
+        # can supply a 4D/5D scale to avoid it.
         d0, d1, d2 = scale.shape
-        if d2 == num_groups and d0 == batch and d1 == heads:
-            # [B, H, G] -> [B, H, 1, G, 1]
-            scale_view = scale[:, :, None, :, None]
-        elif d2 == num_groups and d0 == 1 and d1 == heads:
-            # [1, H, G] -> [1, H, 1, G, 1]; final expand handles batch.
-            scale_view = scale[:, :, None, :, None]
-        elif d2 == num_groups and d0 == heads and d1 == 1:
+
+        # Legacy layouts are tested first because they have a structural marker
+        # (a dim == 1) that makes them unambiguous even when batch == heads.
+        if d2 == num_groups and d0 == heads and d1 == 1:
             # [H, 1, G] (legacy) -> [1, H, 1, G, 1]
             scale_view = scale[:, 0, :][None, :, None, :, None]
         elif d1 == num_groups and d0 == heads and d2 == 1:
             # [H, G, 1] (legacy) -> [1, H, 1, G, 1]
             scale_view = scale[..., 0][None, :, None, :, None]
+        elif d2 == num_groups and d0 == 1 and d1 == heads:
+            # [1, H, G] -> [1, H, 1, G, 1]; final expand handles batch.
+            scale_view = scale[:, :, None, :, None]
+        elif d2 == num_groups and d0 == batch and d1 == heads:
+            # [B, H, G] -> [B, H, 1, G, 1]
+            if batch == heads and batch == num_groups:
+                warnings.warn(
+                    f"_normalize_static_scale: 3D scale shape {scale.shape} is "
+                    f"ambiguous because batch==heads==num_groups=={batch}. "
+                    "Interpreting as [B, H, G]. Use 4D/5D scale to avoid ambiguity.",
+                    stacklevel=2,
+                )
+            scale_view = scale[:, :, None, :, None]
         else:
             raise ValueError(
                 f"Unsupported 3D scale shape: {scale.shape} for "

@@ -106,6 +106,21 @@ import torch
 import triton
 import triton.language as tl
 
+# KRN-020: Triton <2.1.0 has int8→float sign-extend ambiguity (triton-lang/triton#1384)
+# and lacks tl.reshape. This kernel requires ≥2.1.0.
+_TRITON_MIN_VERSION = (2, 1, 0)
+try:
+    _tv = tuple(int(x) for x in triton.__version__.split(".")[:3])
+    if _tv < _TRITON_MIN_VERSION:
+        import warnings
+        warnings.warn(
+            f"Triton {triton.__version__} < 2.1.0: int8 sign-extend and tl.reshape "
+            "may not work correctly. Upgrade to triton >= 2.1.0.",
+            RuntimeWarning,
+        )
+except (AttributeError, ValueError):
+    pass  # version parsing failed, skip check
+
 
 @triton.jit
 def decode_attn_int8_kernel(
@@ -312,6 +327,29 @@ def decode_attn_int8(
         raise ValueError(f"k_cache must be torch.int8, got {k_cache.dtype}")
     if v_cache.dtype != torch.int8:
         raise ValueError(f"v_cache must be torch.int8, got {v_cache.dtype}")
+    # QNT-040: Scale tensors must be float16 — the Triton kernel loads them as
+    # tl.float16 pointers.  Passing float32 silently doubles register usage
+    # (halving occupancy) and some Triton versions will misinterpret the bytes.
+    if k_scale.dtype != torch.float16:
+        raise ValueError(
+            f"k_scale must be torch.float16 for Triton kernel, got {k_scale.dtype}. "
+            "Cast with k_scale.to(torch.float16) before calling."
+        )
+    if v_scale.dtype != torch.float16:
+        raise ValueError(
+            f"v_scale must be torch.float16 for Triton kernel, got {v_scale.dtype}. "
+            "Cast with v_scale.to(torch.float16) before calling."
+        )
+    # KRN-022/023: inner dim must be contiguous for correct tl.reshape group boundaries
+    if k_cache.stride(-1) != 1:
+        raise ValueError(
+            f"k_cache inner dim must be contiguous (stride=1), got stride={k_cache.stride(-1)}. "
+            "Use .contiguous() before passing to kernel."
+        )
+    if v_cache.stride(-1) != 1:
+        raise ValueError(
+            f"v_cache inner dim must be contiguous (stride=1), got stride={v_cache.stride(-1)}."
+        )
 
     batch, q_heads, head_dim = q.shape
     # KRN-007: Triton reshape/broadcast operations require HEAD_DIM to be a
@@ -380,8 +418,10 @@ def decode_attn_int8(
             f"context_lens max ({max_ctx_in_batch}) exceeds cache seq dim ({max_seq})"
         )
 
-    # ENG-016: If all context lengths are 0, return zeros immediately to avoid
-    # NaN from softmax divide-by-zero inside the kernel.
+    # ENG-016 + KRN-021: If all context lengths are 0, return zeros immediately.
+    # The kernel's online softmax has NaN propagation when all blocks are padding
+    # (exp(-inf - (-inf)) = exp(NaN)). This wrapper guard prevents that path.
+    # WARNING: Direct kernel calls bypass this guard — always use this wrapper.
     if max_ctx_in_batch == 0:
         return torch.zeros_like(q)
 

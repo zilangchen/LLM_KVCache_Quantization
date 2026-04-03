@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 _INT8_SIG_PARAMS = set(inspect.signature(decode_attn_int8).parameters)
 _INT4_SIG_PARAMS = set(inspect.signature(decode_attn_int4).parameters)
 _FUSED_DUMP_WRITTEN = set()
+# ENG-104: Track ALL patched attention classes so remove_int8_fused_patch()
+# can restore every model, not just the most-recently-patched one.
+_patched_classes: set = set()
 
 
 def _reset_fused_state() -> None:
@@ -40,10 +43,11 @@ def _reset_fused_state() -> None:
         pm._reset_fused_state()
     and restore the originals in tearDown.
     """
-    global _INT8_SIG_PARAMS, _INT4_SIG_PARAMS, _FUSED_DUMP_WRITTEN
+    global _INT8_SIG_PARAMS, _INT4_SIG_PARAMS, _FUSED_DUMP_WRITTEN, _patched_classes
     _INT8_SIG_PARAMS = set(inspect.signature(decode_attn_int8).parameters)
     _INT4_SIG_PARAMS = set(inspect.signature(decode_attn_int4).parameters)
     _FUSED_DUMP_WRITTEN = set()
+    _patched_classes = set()
 
 
 def _parse_optional_int_env(name: str) -> Optional[int]:
@@ -223,7 +227,8 @@ def _apply_rope(
     cos = cos.to(device=query_states.device, dtype=query_states.dtype)
     sin = sin.to(device=query_states.device, dtype=query_states.dtype)
 
-    # Normalize cos/sin to [B, 1, S, rotary_dim] for broadcast across heads.
+    # ENG-067: Normalize cos/sin to [B, 1, S, rotary_dim] for broadcast across heads.
+    # Explicitly handle ndim in {2, 3, 4}; reject unexpected ranks.
     if cos.ndim == 2:
         cos = cos[None, :, :]
         sin = sin[None, :, :]
@@ -233,6 +238,21 @@ def _apply_rope(
             sin = sin.expand(bsz, -1, -1)
         cos = cos.unsqueeze(1)
         sin = sin.unsqueeze(1)
+    elif cos.ndim == 4:
+        # Some HF rotary_emb versions return [B, 1, S, D] or [B, H, S, D].
+        # Ensure shape is [B, 1, S, D] for correct head broadcast.
+        if cos.shape[1] != 1:
+            # Shape is [B, H, S, D]; reduce to [B, 1, S, D] — all heads share
+            # the same RoPE, so taking [:, :1] is semantically correct.
+            cos = cos[:, :1, :, :]
+            sin = sin[:, :1, :, :]
+        if cos.shape[0] == 1 and bsz > 1:
+            cos = cos.expand(bsz, -1, -1, -1)
+            sin = sin.expand(bsz, -1, -1, -1)
+    elif cos.ndim > 4:
+        raise ValueError(
+            f"Unexpected cos/sin rank {cos.ndim} in _apply_rope; expected 2-4."
+        )
 
     rotary_dim = cos.shape[-1]
     if rotary_dim > head_dim:
@@ -364,6 +384,16 @@ def _maybe_dump_fused_decode(
     """
     Optionally dump fused decode tensors for one selected (layer, step).
 
+    ENG-068: When dump is enabled on the INT4 path, k_int8/v_int8 are
+    materialized from INT4 data via _materialize_int4_cache_as_int8.  These
+    tensors have INT4 value range [-8, 7] stored as torch.int8.  The reference
+    path (_decode_attn_int8_torch_ref) multiplies them by the INT4 scales,
+    which is correct numerically.  However, the "int8" naming in the reference
+    function is misleading in this context.  The dump comparison is still valid
+    (max_abs_diff reflects fused-vs-reference for the same quantization), but
+    users should not interpret it as an INT8 accuracy metric when cache_kind
+    is "int4".
+
     Env switches:
       - KV_FUSED_DUMP_DIR: enabled when non-empty.
       - KV_FUSED_DUMP_LAYER: optional exact layer filter.
@@ -382,6 +412,20 @@ def _maybe_dump_fused_decode(
 
     dump_key = (dump_dir_raw, int(layer_idx), int(step))
     if dump_key in _FUSED_DUMP_WRITTEN:
+        return
+
+    # ENG-068: Guard against None k_int8/v_int8 — can happen on the INT4
+    # triton_fused path when dump is not enabled (materialization skipped).
+    # Without this guard, None would reach _decode_attn_int8_torch_ref and
+    # raise an opaque AttributeError.
+    if k_int8 is None or v_int8 is None:
+        logger.debug(
+            "Skipping fused decode dump: k_int8 or v_int8 is None "
+            "(layer=%s step=%s). INT4 triton_fused path does not "
+            "materialize int8 tensors unless dump is enabled.",
+            layer_idx,
+            step,
+        )
         return
 
     dump_dir = Path(dump_dir_raw)
@@ -659,6 +703,18 @@ def _fused_forward_impl(
                 f"got shape {tuple(inv_tau_layer.shape)}. "
                 "Check calibration file format."
             )
+        # ENG-069: Validate inv_tau_layer length matches q_heads.  If the
+        # calibration was saved with kv_heads instead of q_heads, the view
+        # (1, kv_heads, 1, 1) would broadcast against query_states
+        # (B, q_heads, 1, D), silently applying wrong temperatures in GQA
+        # models (e.g. kv_heads=2 vs q_heads=16).
+        if inv_tau_layer.shape[0] != q_heads:
+            raise ValueError(
+                f"inv_tau[{layer_idx}] has {inv_tau_layer.shape[0]} elements but "
+                f"q_heads={q_heads}. inv_tau must be calibrated per query head. "
+                f"If your calibration file uses kv_heads, re-generate it with "
+                f"per-query-head granularity."
+            )
         query_states = query_states * inv_tau_layer.view(1, -1, 1, 1)
 
     # Append current KV into the INT8 cache (quantizes internally).
@@ -684,6 +740,22 @@ def _fused_forward_impl(
     else:
         raise RuntimeError(
             "Fused path requires cache engine to provide get_int8_tensors or get_int4_tensors."
+        )
+
+    # ENG-105: Verify cache tensors reside on the same device as hidden_states.
+    # In pipeline-parallel (device_map="auto"/"balanced") setups, different
+    # layers may run on different GPUs.  Cache engines that allocate all buffers
+    # on a single device (e.g. "cuda:0") will cause cross-device errors in the
+    # Triton kernel.  Fail fast with a clear message instead of an opaque CUDA
+    # runtime error.
+    _hs_device = hidden_states.device
+    if k_quant.device != _hs_device:
+        raise RuntimeError(
+            f"ENG-105: Device mismatch — cache k_quant is on {k_quant.device} "
+            f"but hidden_states is on {_hs_device}. This typically happens in "
+            f"pipeline-parallel (device_map='auto') setups where the cache "
+            f"engine allocates all buffers on a single GPU. Ensure the cache "
+            f"engine tracks per-layer devices or use single-GPU inference."
         )
 
     seq_len = int(k_quant.shape[2])
@@ -908,8 +980,25 @@ def apply_int8_fused_patch(model):
 
     logger.info("Patching %s.forward for INT8 fused decode.", AttnClass.__name__)
 
+    # ENG-066: Guard against double-patch corruption.  If _original_forward
+    # already exists, the class is already patched.  Unconditionally rebuilding
+    # forward_proxy is harmless when the captured variables are identical, but
+    # after an apply → remove → apply cycle, _original_forward has been deleted
+    # by remove_int8_fused_patch.  The critical danger is: if remove() was NOT
+    # called but apply() is called again, _original_forward already points to
+    # the real method, so re-saving AttnClass.forward (which is forward_proxy)
+    # would make _original_forward point to the proxy.  The hasattr guard
+    # prevents this.  To re-patch after remove(), remove deletes
+    # _original_forward, so the guard correctly re-saves.
     if not hasattr(AttnClass, "_original_forward"):
         AttnClass._original_forward = AttnClass.forward
+    else:
+        # Already patched — update the stored class ref and return early.
+        # ENG-104: Also register in _patched_classes set for multi-model tracking.
+        apply_int8_fused_patch._patched_class = AttnClass
+        _patched_classes.add(AttnClass)
+        logger.info("Skipping re-patch: %s._original_forward already set.", AttnClass.__name__)
+        return
 
     original_sig = inspect.signature(AttnClass._original_forward)
     has_past_key_value = "past_key_value" in original_sig.parameters
@@ -982,6 +1071,11 @@ def apply_int8_fused_patch(model):
                     UserWarning,
                     stacklevel=2,
                 )
+            # ENG-102: Use the runtime `use_cache` value, not the compile-time
+            # `has_use_cache` flag.  has_use_cache merely indicates whether the
+            # original forward signature accepts use_cache; the actual caller may
+            # pass use_cache=False, in which case returning a 3-tuple would cause
+            # unpacking errors in the HF layer aggregation.
             return _fused_forward_impl(
                 self,
                 hidden_states,
@@ -990,7 +1084,7 @@ def apply_int8_fused_patch(model):
                 position_ids=position_ids,
                 position_embeddings=kwargs.get("position_embeddings"),
                 cache_position=kwargs.get("cache_position"),
-                return_cache=has_use_cache,
+                return_cache=use_cache if has_use_cache else False,
             )
 
         kwargs_fwd = dict(
@@ -1012,6 +1106,9 @@ def apply_int8_fused_patch(model):
     # ENG-044: Store the patched class reference so remove_int8_fused_patch()
     # can restore the original forward without needing the model argument.
     apply_int8_fused_patch._patched_class = AttnClass
+    # ENG-104: Also register in the module-level set so that multi-model
+    # scenarios can restore ALL patched classes, not just the most recent.
+    _patched_classes.add(AttnClass)
     # ENG-054: forward_proxy closure captures AttnClass, original_sig, config
     # refs, etc.  These are kept alive for the process lifetime because the
     # closure is assigned to the **class** (not an instance).  Patching the
@@ -1029,33 +1126,52 @@ def remove_int8_fused_patch(model=None) -> bool:
     process lifetime, making it impossible to test the baseline forward or to
     switch KV modes mid-run. This function restores the saved _original_forward.
 
+    ENG-104: When ``model`` is provided, only that model's attention class is
+    restored.  When ``model`` is None, ALL classes tracked in ``_patched_classes``
+    are restored, so that multi-model scenarios (e.g. Qwen + LLaMA in the same
+    process) are fully cleaned up.
+
     Args:
         model: Optional. If provided, the AttnClass is detected from
                model.model.layers[0].self_attn (same as apply_int8_fused_patch).
-               If None, the class stored by the last apply_int8_fused_patch()
-               call is used (via apply_int8_fused_patch._patched_class).
+               If None, ALL tracked patched classes are restored.
 
     Returns:
-        True if the patch was removed, False if no patch was active.
+        True if at least one patch was removed, False if no patch was active.
     """
-    AttnClass = None
     if model is not None:
+        # Single-model path: restore only this model's attention class.
         try:
             AttnClass = model.model.layers[0].self_attn.__class__
         except Exception:
-            AttnClass = None
+            AttnClass = getattr(apply_int8_fused_patch, "_patched_class", None)
+        return _remove_patch_from_class(AttnClass)
 
-    if AttnClass is None:
-        AttnClass = getattr(apply_int8_fused_patch, "_patched_class", None)
-
-    if AttnClass is None:
+    # No model specified: try _patched_class first, then _patched_classes set.
+    removed_any = False
+    # ENG-104: Iterate over a snapshot of _patched_classes to restore all
+    # patched attention classes from multi-model scenarios.
+    for cls in list(_patched_classes):
+        if _remove_patch_from_class(cls):
+            removed_any = True
+    # Also try the legacy single-class reference.
+    legacy_cls = getattr(apply_int8_fused_patch, "_patched_class", None)
+    if legacy_cls is not None and legacy_cls not in _patched_classes:
+        if _remove_patch_from_class(legacy_cls):
+            removed_any = True
+    if not removed_any:
         logger.warning(
             "remove_int8_fused_patch: no patched class found. "
             "Either apply_int8_fused_patch() was never called, or the model "
             "argument is required to identify the class."
         )
-        return False
+    return removed_any
 
+
+def _remove_patch_from_class(AttnClass) -> bool:
+    """Restore _original_forward on a single attention class. Returns True on success."""
+    if AttnClass is None:
+        return False
     original = getattr(AttnClass, "_original_forward", None)
     if original is None:
         logger.warning(
@@ -1067,6 +1183,8 @@ def remove_int8_fused_patch(model=None) -> bool:
 
     AttnClass.forward = original
     del AttnClass._original_forward
-    apply_int8_fused_patch._patched_class = None
+    _patched_classes.discard(AttnClass)
+    if getattr(apply_int8_fused_patch, "_patched_class", None) is AttnClass:
+        apply_int8_fused_patch._patched_class = None
     logger.info("Removed INT8 fused patch from %s.forward.", AttnClass.__name__)
     return True
