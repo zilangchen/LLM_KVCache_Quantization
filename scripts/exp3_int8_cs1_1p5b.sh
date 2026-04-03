@@ -27,10 +27,12 @@ echo "Start: $(date)"
 
 for SEED in 1234 1235 1236 1237 1238; do
   echo ">>> seed=$SEED"
+  # max_samples=100: ~100K tokens sufficient for PPL estimate.
+  # Without this, cs=1 on full WikiText-2 (~1M tokens) takes ~26h/seed.
   python3 scripts/eval_ppl.py \
     --model_id "$MODEL_ID" --kv_mode int8_ours \
     --calib_file "$CALIB" \
-    --chunk_size 1 --max_length 1024 --seed "$SEED" \
+    --chunk_size 1 --max_length 1024 --max_samples 100 --seed "$SEED" \
     --save_csv --out_dir "$RD/runs/ppl_int8_cs1_1p5b_s${SEED}" \
     2>&1 | tee -a "$RD/logs/exp3_int8_cs1_1p5b.log"
 done
