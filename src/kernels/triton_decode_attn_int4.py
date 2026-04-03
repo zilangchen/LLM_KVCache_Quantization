@@ -8,6 +8,12 @@ applied in-kernel exactly as INT8 path.
 Notes:
 - Supports both packed and unpacked INT4 cache tensors.
 - Packed format stores 2x INT4 values per byte in last dimension.
+- KRN-027: Symmetric INT4 quantization produces values in [-7, 7] (clamp at 7),
+  while asymmetric uses the full [-8, 7] range. The kernel accepts [-8, 7] from
+  the INT8 path. A value of -8 from symmetric quantization is impossible (clamped
+  to -7), but if externally written into the cache, dequant computes -8*scale
+  which exceeds the original data range by ~14%. No runtime clamp is applied in
+  the kernel; input validity is the caller's responsibility.
 """
 
 from __future__ import annotations
@@ -82,7 +88,14 @@ def decode_attn_int4(
     if q.ndim != 3:
         raise ValueError(f"q must have shape [B, Hq, D], got {tuple(q.shape)}")
 
-    d = int(head_dim or q.shape[-1])
+    # KRN-019/KRN-030: Use `is not None` instead of `or` to prevent head_dim=0
+    # from silently falling back to q.shape[-1].  Negative head_dim is also invalid.
+    if head_dim is not None:
+        d = int(head_dim)
+        if d <= 0:
+            raise ValueError(f"head_dim must be positive, got {d}")
+    else:
+        d = q.shape[-1]
     k_cache_int8 = _materialize_int4_as_int8(
         k_cache_int4,
         head_dim=d,

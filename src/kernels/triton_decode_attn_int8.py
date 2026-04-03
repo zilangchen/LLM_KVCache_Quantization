@@ -177,6 +177,13 @@ def decode_attn_int8_kernel(
     group_indices = offs_d // GROUP_SIZE  # noqa: F841 — kept for documentation
 
     # Runtime loop avoids pathological compile-time unrolling at very long context lengths.
+    # KRN-026: When BLOCK_SIZE > ctx_len, offs_n contains out-of-bounds indices.
+    # Triton uses predicated loads (mask=False positions are NOT accessed in HW),
+    # so this is safe on CUDA. This guarantee may NOT hold on non-CUDA backends
+    # (XPU/CPU). The mask below ensures correctness.
+    # KRN-028: tl.maximum NaN semantics depend on Triton version. This kernel
+    # requires Triton >= 2.1.0 (for tl.reshape). NaN propagation in tl.max/
+    # tl.maximum is well-defined in Triton >= 2.0; earlier versions had bugs.
     for start_n in range(0, ctx_len, BLOCK_SIZE):
         # Current block indices: [start_n : start_n + BLOCK_SIZE]
         offs_n = start_n + tl.arange(0, BLOCK_SIZE)
@@ -201,6 +208,11 @@ def decode_attn_int8_kernel(
         # Then expand/broadcast to [BLOCK_SIZE, HEAD_DIM]
         
         ks_ptrs = ks_base + (offs_n[:, None] * stride_ks_s) + (offs_g[None, :] * stride_ks_g)
+        # QNT-041 / KRN-031: Masked (padding) positions load k_int8=0 (other=0.0 above)
+        # and k_scale=1.0 (other=1.0 here). The product 0 * 1.0 = 0.0 is safe.
+        # The scale other=1.0 is coupled to k_int8 other=0.0: if k_int8 other were
+        # changed to non-zero, scale other=1.0 would amplify it into garbage.
+        # Both `other` values must be maintained together.
         k_scale = tl.load(ks_ptrs, mask=mask[:, None], other=1.0) # [BLOCK, NUM_GROUPS]
         
         # Broadcast Scale to Head Dim
@@ -256,6 +268,7 @@ def decode_attn_int8_kernel(
         v_int8 = tl.load(v_ptrs, mask=mask[:, None], other=0.0)
         
         vs_ptrs = vs_base + (offs_n[:, None] * stride_vs_s) + (offs_g[None, :] * stride_vs_g)
+        # KRN-031: See k_scale comment above — v_int8 other=0.0, v_scale other=1.0 are coupled.
         v_scale = tl.load(vs_ptrs, mask=mask[:, None], other=1.0)
         
         # Dequantize V to FP32 for better precision
