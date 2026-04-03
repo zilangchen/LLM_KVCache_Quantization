@@ -27,6 +27,7 @@ logs/
 .claude/worktrees/
 .claude/hookify.*.local.md
 .claude/hooks/
+.claude/scheduled_tasks.lock
 
 # Thesis compiled outputs (keep source tracked)
 thesis/*.pdf
