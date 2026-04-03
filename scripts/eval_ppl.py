@@ -371,9 +371,10 @@ def build_kv_cache(
         # EVL-143/144: parse v_percentile from v3 calibration schema
         # (mirrors generate_loop.py L908-924)
         kivi_v_pct = 100.0
-        if calib_path and os.path.exists(calib_path):
+        # EVL-145: use calib_file (function parameter), not calib_path (undefined)
+        if calib_file and os.path.exists(calib_file):
             try:
-                with open(calib_path, "r") as _f:
+                with open(calib_file, "r") as _f:
                     _cd = json.load(_f)
                 if "v_calibration" in _cd and "v_percentile" in _cd["v_calibration"]:
                     kivi_v_pct = float(_cd["v_calibration"]["v_percentile"])
@@ -404,7 +405,9 @@ def build_kv_cache(
         ra_v_percentile = 100.0
         ra_inv_tau = None
         if calib_file is not None:
-            calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(os.getcwd(), calib_file)
+            # EVL-149: use project_root (not CWD) for relative calib paths, matching EVL-056
+            _proj = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(_proj, calib_file)
             if os.path.exists(calib_path):
                 with open(calib_path, "r") as f:
                     calib_data = json.load(f)

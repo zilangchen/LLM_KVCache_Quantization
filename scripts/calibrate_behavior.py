@@ -901,8 +901,13 @@ def calibrate_v_path_percentile(
 
                 count += 1
 
-        avg_sqnr = total_v_sqnr / max(count, 1)
-        avg_weighted_mse = total_weighted_mse / max(count, 1)
+        # CAL-054: count=0 means all samples were skipped — return inf, not 0.0
+        if count == 0:
+            avg_sqnr = float("inf")
+            avg_weighted_mse = float("inf")
+        else:
+            avg_sqnr = total_v_sqnr / count
+            avg_weighted_mse = total_weighted_mse / count
 
         results[pct] = {
             "v_percentile": pct,
@@ -1012,7 +1017,8 @@ def calibrate_k_path_percentile_asymmetric(
                 total_kl += kl
                 count += 1
 
-        avg_kl = total_kl / max(count, 1)
+        # CAL-054: count=0 → all samples skipped, return inf to poison selection
+        avg_kl = total_kl / count if count > 0 else float("inf")
         results[pct] = {
             "k_percentile": pct,
             "avg_kl": avg_kl,
