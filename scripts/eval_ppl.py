@@ -368,10 +368,22 @@ def build_kv_cache(
         ), group_size, clip_percentile
 
     if kv_mode == "int4_kivi_aligned":
+        # EVL-143/144: parse v_percentile from v3 calibration schema
+        # (mirrors generate_loop.py L908-924)
+        kivi_v_pct = 100.0
+        if calib_path and os.path.exists(calib_path):
+            try:
+                with open(calib_path, "r") as _f:
+                    _cd = json.load(_f)
+                if "v_calibration" in _cd and "v_percentile" in _cd["v_calibration"]:
+                    kivi_v_pct = float(_cd["v_calibration"]["v_percentile"])
+            except Exception:
+                pass  # calib already loaded above; this is a best-effort re-read
         return KIVIStyleKVCache(
             num_layers=num_layers,
             device=model.device.type,
             quant_bits=4,
+            v_percentile=kivi_v_pct,
             inv_tau=inv_tau,
             use_attn_temperature=use_attn_temperature,
         ), group_size, clip_percentile
