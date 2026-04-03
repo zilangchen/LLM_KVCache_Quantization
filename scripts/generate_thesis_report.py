@@ -230,8 +230,11 @@ def _nearest_seq_value(df: pd.DataFrame, target_seq_len: Optional[int]) -> Optio
     if seq.empty:
         return None
     seq_vals = sorted(int(x) for x in seq.unique())
+    # RPT-012: When target_seq_len is None (e.g. PPL claims), return None
+    # so _apply_optional_filters skips seq_len filtering entirely and uses
+    # the global aggregate, rather than arbitrarily picking the max seq_len.
     if target_seq_len is None:
-        return int(seq_vals[-1])
+        return None
     if target_seq_len in seq_vals:
         return int(target_seq_len)
     return int(min(seq_vals, key=lambda x: abs(x - int(target_seq_len))))
@@ -260,9 +263,17 @@ def _apply_optional_filters(df: pd.DataFrame, claim: ClaimSpec) -> pd.DataFrame:
 
     if claim.target_ppl_mode is not None and "ppl_mode" in out.columns:
         out = out[out["ppl_mode"].astype(str) == str(claim.target_ppl_mode)]
-    if claim.target_model_ids and "model_id" in out.columns:
+    if claim.target_model_ids:
         target_models = {str(m) for m in claim.target_model_ids}
-        out = out[out["model_id"].astype(str).isin(target_models)]
+        if "model_id" in out.columns:
+            out = out[out["model_id"].astype(str).isin(target_models)]
+        else:
+            # RPT-008: Warn instead of silently using all-model aggregate.
+            logger.warning(
+                "Claim %s targets model_ids=%s but 'model_id' column is "
+                "missing; using unfiltered aggregate data.",
+                claim.metric, target_models,
+            )
 
     if "seq_len" in out.columns:
         seq_target = _nearest_seq_value(out, claim.target_seq_len)
@@ -403,7 +414,11 @@ def _evaluate_claim_row(
         n_pairs = float(pd.to_numeric(pd.Series([sig_row.get("n_pairs")]), errors="coerce").iloc[0])
         meets_min_pairs = _to_bool(sig_row.get("meets_min_pairs", False))
         significant_q = _to_bool(sig_row.get("significant_q_alpha", False))
-        if not significant_q and np.isfinite(q_value):
+        # RPT-007: Only re-derive significant_q from raw q_value when
+        # meets_min_pairs is satisfied; otherwise a row rejected by
+        # aggregate_results for insufficient sample size could be flipped
+        # back to True here.
+        if not significant_q and meets_min_pairs and np.isfinite(q_value):
             significant_q = bool(q_value <= float(alpha))
         favors_challenger = _to_bool(sig_row.get("favors_challenger", False))
 
@@ -673,7 +688,19 @@ def build_statistical_decisions(
         out["favors_challenger"] = False
     else:
         out["favors_challenger"] = out["favors_challenger"].map(_to_bool)
-    out["practical_threshold_pct"] = out["metric"].map(practical_thresholds).fillna(0.0)
+    # RPT-009: Log a warning for metrics not in the threshold dict (previously
+    # silently defaulted to 0.0 which makes any positive gain pass).
+    if "metric" in out.columns:
+        unknown_metrics = set(out["metric"].dropna().unique()) - set(practical_thresholds.keys())
+        if unknown_metrics:
+            logger.warning(
+                "Unknown metrics with no practical_threshold_pct defined "
+                "(defaulting to NaN / FAIL): %s",
+                sorted(unknown_metrics),
+            )
+    out["practical_threshold_pct"] = out["metric"].map(practical_thresholds)
+    # Unknown metrics get NaN threshold -> practical_pass = False (conservative).
+    # This avoids the old 0.0 fallback that was overly permissive (RPT-009).
     out["practical_pass"] = (
         pd.to_numeric(out["gain_pct_mean"], errors="coerce")
         >= pd.to_numeric(out["practical_threshold_pct"], errors="coerce")
@@ -791,7 +818,9 @@ def _markdown_table(df: pd.DataFrame, columns: List[str]) -> str:
         vals = []
         for col in cols:
             val = row[col]
-            if isinstance(val, float):
+            # RPT-010: Use np.floating to also match np.float64/float32
+            # (NumPy >= 2.0 no longer makes np.float64 a subclass of float).
+            if isinstance(val, (float, np.floating)):
                 if np.isnan(val):
                     vals.append("")
                 else:
@@ -939,8 +968,14 @@ def main() -> int:
         tables_dir / "relative_gain_summary.csv",
         tables_dir / "significance_summary.csv",
     ]
+    # RPT-011: Also check execution_coverage.csv in strict mode since G1/G2
+    # gates depend on it; missing file silently produces G1=FAIL/G2=0.
+    required_strict_extra = [
+        tables_dir / "execution_coverage.csv",
+    ]
     if args.strict:
-        missing = [str(p) for p in required if not p.exists()]
+        all_required = required + required_strict_extra
+        missing = [str(p) for p in all_required if not p.exists()]
         if missing:
             print("Missing required tables:")
             for path in missing:

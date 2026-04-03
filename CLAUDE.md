@@ -26,6 +26,14 @@
 
 当用户说"这个问题先存档"时，将问题记录到 `review_tracker.md`（审查问题）或 `iteration.md`（一般待办）。
 
+**只读文件（不可修改）**：`CLAUDE.md`、`experiment_sop.md`、`.claude/agents/*.md`。
+已通过 PreToolUse hook 强制拦截。
+
+**有限写入文件**：
+- `objective.md` — 仅追加 Decision Log（修改目标/边界须先确认）
+- `iteration.md` — 仅追加 Timeline + 维护 Approved Plans
+- `review_tracker.md` — 仅标记修复 `[x]` + 新增 issue
+
 ### 1.1 持久化 Memory 维护
 
 Memory 文件位于**项目级**目录: `~/.claude/projects/-Users-chenzilang-Desktop-LLM-KVCache-Quantization/memory/`
@@ -206,14 +214,14 @@ Codex 返回 PASS 或 CONCERN/REJECT + 具体问题。
 
 #### Claude Sub-Agent 自审（审查 2）
 
-根据修改的文件类型选择 1-2 个最相关的审查维度 spawn sub-agent：
+根据修改的文件类型选择 2-4 个相关审查维度 spawn sub-agent（与 review-coord 维度选择表对齐）：
 
-| 修改类型 | spawn 的 sub-agent |
-|---------|-------------------|
-| `src/quant/` `src/cache/` `src/kernels/` | `review-numerical`（数值） |
-| `src/engine/` | `review-contract`（接口契约） |
-| `scripts/eval_*` `scripts/calibrate_*` | `review-silent`（静默失败） |
-| 跨多模块 | `review-numerical` + `review-boundary` |
+| 修改类型 | 必选维度 | 可选维度 |
+|---------|---------|---------|
+| `src/quant/` `src/cache/` `src/kernels/` | `review-numerical`(D1) + `review-boundary`(D5) | `review-silent`(D2)、`review-contract`(D4) |
+| `src/engine/` | `review-contract`(D4) + `review-silent`(D2) + `review-boundary`(D5) | `review-numerical`(D1) |
+| `scripts/eval_*` `scripts/calibrate_*` | `review-numerical`(D1) + `review-silent`(D2) | `review-test`(D6) |
+| 跨多模块 / 大范围变更 | 全部 7 个维度 | — |
 
 Sub-agent prompt 必须包含 `git diff` + 修改目的 + "请从你的维度审查这个修改是否引入了新问题"。
 
@@ -232,6 +240,21 @@ Sub-agent prompt 必须包含 `git diff` + 修改目的 + "请从你的维度审
 - **前置 smoke test**：大规模重跑（>2h GPU）前必须先跑单模型单 seed 短序列验证，确认修复生效
 - **显式参数**：所有实验命令必须显式传 `--calib_file`、`--model_id`、`--kv_mode` 等关键参数，不依赖任何隐式默认值
 - **失败样本不隐藏**：评测中样本失败时以 0 分计入（保持分母不变），并在 details CSV 中记录失败信息，不允许静默跳过导致分母缩小、分数虚高
+
+### 5.3 GPU 利用与远程执行规范（强制）
+
+**GPU 最大化利用**：3 张 GPU 不允许任何一张空闲。
+- **跨阶段流水线化**：不要等一个阶段全部完成才启动下一阶段。只要某个模型的前置条件满足，立即启动该模型的后续实验
+- **自动接续**：每张 GPU 上的任务链设计为自动衔接（tmux session 中串行 `cmd1 && cmd2`，或用监控脚本等前序 session 结束后自动启动下一个）
+- **TPOT profiling 独占**：3 卡全部无进程时才可跑 profiling
+
+**远程执行**：
+- **禁止 SSH heredoc 临时脚本**：所有远程执行的脚本必须作为仓库内的正式文件（`scripts/*.sh`），通过 rsync 同步到远程后执行。历史教训：heredoc 中 f-string/引号被破坏导致 smoke test 中途失败
+- **简单单行命令**（如 `nvidia-smi`、`ls`、`tail`）可直接 SSH 执行
+
+**不要空闲等待**：
+- 启动远程后台任务后必须设自动轮询监控
+- **轮询间歇期必须做其他工作**：推进写作任务、读论文、审查计划、更新 iteration.md——永远不能出现"什么都不做只等轮询回来"的状态
 
 ---
 

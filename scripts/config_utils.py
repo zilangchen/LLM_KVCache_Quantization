@@ -5,6 +5,7 @@ Config utilities for experiment matrix loading.
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 from pathlib import Path
@@ -96,14 +97,37 @@ def read_text(path: Path) -> str:
         return ""
     try:
         return path.read_text(encoding="utf-8", errors="replace")
-    except Exception:
+    except Exception as exc:
+        # CFG-052: Log instead of silently returning empty string.
+        _logger.warning("Error reading text file %s: %s", path, exc)
         return ""
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
-    """Load YAML config file."""
-    with open(config_path, "r") as f:
-        data = yaml.safe_load(f)
+    """Load YAML config file.
+
+    Raises
+    ------
+    FileNotFoundError
+        CFG-051: If *config_path* does not exist (with contextual message).
+    ValueError
+        If the file is empty, not a mapping, or contains invalid YAML (CFG-035).
+    """
+    p = Path(config_path)
+    # CFG-051: Explicit existence check with context, matching read_json style.
+    if not p.exists():
+        raise FileNotFoundError(
+            f"Config file not found: {config_path!r}. "
+            "Check the --config path or configs/ directory."
+        )
+    try:
+        with open(config_path, "r") as f:
+            data = yaml.safe_load(f)
+    except yaml.YAMLError as exc:
+        # CFG-035: Wrap yaml.YAMLError with path context, matching read_json style.
+        raise ValueError(
+            f"Invalid YAML in config file {config_path!r}: {exc}"
+        ) from exc
     # RUN-020: yaml.safe_load returns None for empty files; raise early with clear message.
     if data is None:
         raise ValueError(
@@ -137,22 +161,35 @@ def resolve_run_config(config: Dict[str, Any], run_name: str) -> Dict[str, Any]:
 
     run_entry = find_run_entry(config, run_name)
 
+    # CFG-034: Hardcode fallbacks (16 / 99.5) now match the project-standard
+    # quant_defaults in exp_matrix.yaml rather than the previous 128 / 99.9
+    # which diverged from actual tuned values.  A warning is emitted when
+    # fallback is actually triggered so mis-configurations are visible.
+    _FALLBACK_GROUP_SIZE = 16
+    _FALLBACK_CLIP_PERCENTILE = 99.5
     clip_percentile_k = run_entry.get(
         "clip_percentile_k",
-        run_entry.get("clip_percentile", quant_defaults.get("clip_percentile_k", 99.9)),
+        run_entry.get("clip_percentile", quant_defaults.get("clip_percentile_k", _FALLBACK_CLIP_PERCENTILE)),
     )
     clip_percentile_v = run_entry.get(
         "clip_percentile_v",
-        run_entry.get("clip_percentile", quant_defaults.get("clip_percentile_v", 99.9)),
+        run_entry.get("clip_percentile", quant_defaults.get("clip_percentile_v", _FALLBACK_CLIP_PERCENTILE)),
     )
     group_size_k = run_entry.get(
         "group_size_k",
-        run_entry.get("group_size", quant_defaults.get("group_size_k", 128)),
+        run_entry.get("group_size", quant_defaults.get("group_size_k", _FALLBACK_GROUP_SIZE)),
     )
     group_size_v = run_entry.get(
         "group_size_v",
-        run_entry.get("group_size", quant_defaults.get("group_size_v", 128)),
+        run_entry.get("group_size", quant_defaults.get("group_size_v", _FALLBACK_GROUP_SIZE)),
     )
+    # Warn if fallback was actually used (quant_defaults had no value).
+    if not quant_defaults.get("group_size_k") and "group_size" not in run_entry:
+        _logger.warning(
+            "resolve_run_config: group_size_k for run %r fell through to "
+            "hardcoded fallback %d; consider setting quant_defaults.group_size_k in YAML.",
+            run_name, _FALLBACK_GROUP_SIZE,
+        )
 
     # CFG-049: kv_mode is required, None causes silent fp16 fallback
     kv_mode = run_entry.get("kv_mode")
@@ -206,18 +243,26 @@ def resolve_run_config(config: Dict[str, Any], run_name: str) -> Dict[str, Any]:
         "k_bits": run_entry.get("k_bits"),
         "v_bits": run_entry.get("v_bits"),
     }
+
+    # CFG-053: Extract runtime.decoding section so child scripts can use
+    # centrally-defined greedy decoding parameters instead of hardcoding.
+    decoding = runtime.get("decoding", {})
+    if decoding:
+        resolved["temperature"] = decoding.get("temperature")
+        resolved["top_p"] = decoding.get("top_p")
+        resolved["top_k"] = decoding.get("top_k")
+
     return resolved
 
 
-def normalize_kv_params(args) -> None:
-    """
-    Normalize k/v group_size and clip_percentile into shared args.
-    We keep group_size/clip_percentile for backward compatibility and
-    record k/v-specific values for config snapshots.
+def normalize_kv_params(args: argparse.Namespace) -> None:
+    """Normalize k/v group_size and clip_percentile into shared args.
 
-    Mutates *args* in-place: sets group_size_k, group_size_v,
-    clip_percentile_k, clip_percentile_v, and the legacy group_size /
-    clip_percentile attributes.
+    **Mutates *args* in-place** (CFG-037): sets ``group_size_k``,
+    ``group_size_v``, ``clip_percentile_k``, ``clip_percentile_v``, and
+    the legacy ``group_size`` / ``clip_percentile`` attributes.  The
+    function is intentionally side-effect-based so that all 7+ call sites
+    get consistent attribute resolution.
     """
     # CFG-033: Use `is not None` instead of `or` to avoid falsy-value
     # short-circuit (e.g. group_size_k=0 or clip_percentile_k=0.0 would

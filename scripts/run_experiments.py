@@ -1124,31 +1124,40 @@ def main() -> int:
     execution_rows: List[Dict[str, Any]] = []
 
     def _flush_summary(exit_code: int) -> None:
+        # RUN-089: wrap in try/except so that summary write failures (e.g. disk full)
+        # do not mask the original exit code with a Python exception traceback.
         if summary_path is None:
             return
-        success_count = sum(1 for row in execution_rows if row.get("status") == "success")
-        failed_count = sum(1 for row in execution_rows if row.get("status") == "failed")
-        skipped_count = sum(1 for row in execution_rows if row.get("status") == "skipped")
-        payload = {
-            "generated_at": _now_iso(),
-            "exit_code": int(exit_code),
-            "failure_policy": str(args.failure_policy),
-            "max_retries": int(args.max_retries),
-            "retry_backoff_sec": float(args.retry_backoff_sec),
-            "append": bool(args.append),
-            "skip_completed_success": bool(args.skip_completed_success),
-            "run_tag": run_tag,
-            "config": args.config,
-            "tasks": task_list,
-            "totals": {
-                "executed": int(len(execution_rows)),
-                "success": int(success_count),
-                "failed": int(failed_count),
-                "skipped": int(skipped_count),
-            },
-            "rows": execution_rows,
-        }
-        _write_execution_summary(summary_path, payload)
+        try:
+            success_count = sum(1 for row in execution_rows if row.get("status") == "success")
+            failed_count = sum(1 for row in execution_rows if row.get("status") == "failed")
+            skipped_count = sum(1 for row in execution_rows if row.get("status") == "skipped")
+            payload = {
+                "generated_at": _now_iso(),
+                "exit_code": int(exit_code),
+                "failure_policy": str(args.failure_policy),
+                "max_retries": int(args.max_retries),
+                "retry_backoff_sec": float(args.retry_backoff_sec),
+                "append": bool(args.append),
+                "skip_completed_success": bool(args.skip_completed_success),
+                "run_tag": run_tag,
+                "config": args.config,
+                "tasks": task_list,
+                "totals": {
+                    "executed": int(len(execution_rows)),
+                    "success": int(success_count),
+                    "failed": int(failed_count),
+                    "skipped": int(skipped_count),
+                },
+                "rows": execution_rows,
+            }
+            _write_execution_summary(summary_path, payload)
+        except Exception as exc:
+            print(
+                f"Warning: failed to write execution summary to {summary_path}: "
+                f"{type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
 
     for run_entry in matrix:
         run_name = run_entry.get("run_name")
@@ -1321,6 +1330,9 @@ def main() -> int:
             manifest_path = run_dir / "run_manifest.json"
             if not args.dry_run:
                 if not args.append and _is_nonempty_dir(run_dir):
+                    # RUN-091: non-append mode blocks reuse of existing non-empty dirs,
+                    # which prevents cross-commit contamination when the dir hasn't
+                    # been manually cleared.  This is the primary safety mechanism.
                     print(
                         "Error: target run_dir already exists and is non-empty. "
                         f"Refusing to overwrite: {run_dir}"
@@ -1903,12 +1915,18 @@ def main() -> int:
                         # RUN-063/068/081: OOM failures are now retried (PyTorch CUDA
                         # caching allocator non-determinism can cause transient OOM).
                         # Only the *final* OOM attempt falls through to failure handling.
+                        # RUN-090: cap exponential backoff at 10 minutes to prevent
+                        # time.sleep(inf) with very large max_retries.
+                        _MAX_BACKOFF_SEC = 600.0
                         if failure_type == "oom":
                             print(
                                 f"Warning: task {task} for {label} failed with OOM on attempt "
                                 f"{attempt_idx}/{total_attempts}, retrying..."
                             )
-                            _backoff = float(args.retry_backoff_sec) * (2 ** (attempt_idx - 1))
+                            _backoff = min(
+                                float(args.retry_backoff_sec) * (2 ** (attempt_idx - 1)),
+                                _MAX_BACKOFF_SEC,
+                            )
                             if _backoff > 0:
                                 time.sleep(_backoff)
                             continue  # skip execution_rows append, go to next attempt
@@ -1919,7 +1937,10 @@ def main() -> int:
                                 f"failure_type={failure_type} returncode={returncode}"
                             )
                             # RUN-043: exponential backoff instead of fixed sleep.
-                            _backoff = float(args.retry_backoff_sec) * (2 ** (attempt_idx - 1))
+                            _backoff = min(
+                                float(args.retry_backoff_sec) * (2 ** (attempt_idx - 1)),
+                                _MAX_BACKOFF_SEC,
+                            )
                             if _backoff > 0:
                                 time.sleep(_backoff)
                             continue

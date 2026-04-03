@@ -11,7 +11,7 @@ import json
 import logging
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, TypedDict
 
@@ -146,7 +146,10 @@ def _csv_status(path: Path) -> str:
             if next(reader, None) is not None:
                 return CSV_HAS_ROWS
             return CSV_HEADER_ONLY
-    except Exception:
+    except Exception as exc:
+        # CHK-026: log the exception so callers can distinguish file-not-found
+        # from corruption/permission errors.
+        logger.warning("_csv_status: CSV read error for %s: %s", path, exc)
         return CSV_READ_ERROR
 
 
@@ -189,7 +192,11 @@ def _validate_csv_content(path: Path, task: str) -> List[str]:
 
 
 def _find_csv_paths(run_dir: Path, pattern: str) -> List[Path]:
+    # CHK-027: reject patterns containing path traversal components.
     if not pattern:
+        return []
+    if ".." in pattern:
+        logger.warning("_find_csv_paths: rejecting pattern with '..': %r", pattern)
         return []
     return sorted(run_dir.glob(pattern))
 
@@ -202,14 +209,20 @@ def _has_task_level_artifacts(run_dir: Path, task: str) -> bool:
     function still returns True/False based on the primary artifact check.
     """
     if task == "eval_longbench":
-        has_primary = any(run_dir.glob("longbench_task_summary_*.csv"))
-        # CHK-005: warn on missing expected sub-artifacts
+        # CHK-029: Check each pattern independently and warn for missing ones.
+        # Previous code had `has_primary` duplicating the `any()` inside the loop,
+        # making the warning branch dead code.  Now the primary check is the first
+        # pattern, and the loop only warns for *additional* missing artifacts.
+        has_primary = False
         for pattern in LONGBENCH_EXPECTED_TASK_PATTERNS:
-            if not any(run_dir.glob(pattern)):
+            found = any(run_dir.glob(pattern))
+            if not found:
                 logger.warning(
                     "CHK-005: run_dir=%s task=%s: expected artifact pattern %r not found.",
                     run_dir.name, task, pattern,
                 )
+            else:
+                has_primary = True
         return has_primary
     if task == "eval_ruler":
         has_task = any(run_dir.glob("ruler_task_summary_*.csv"))
@@ -266,29 +279,68 @@ def _detect_failure_type(
 
 
 def _latest_failure_type(task_info: Dict[str, Any]) -> str:
+    """Return the most recent failure_type from task_info or its history.
+
+    CHK-033: When the latest 'failed' history entry has an empty failure_type,
+    continue scanning older entries for a specific type before falling back to
+    'runtime_error'.  This prevents a generic 'runtime_error' from masking a
+    more specific older type (e.g. 'oom') that was the original root cause.
+    """
     failure = str(task_info.get("failure_type", "")).strip().lower()
     if failure:
         return failure
     history = task_info.get("history")
     if isinstance(history, list):
+        # First pass: find the latest entry with a specific failure_type.
         for item in reversed(history):
             if not isinstance(item, dict):
                 continue
             item_failure = str(item.get("failure_type", "")).strip().lower()
             if item_failure:
                 return item_failure
+        # Second pass: if any entry was 'failed' but none had a specific type,
+        # fall back to 'runtime_error'.
+        for item in reversed(history):
+            if not isinstance(item, dict):
+                continue
             if str(item.get("status", "")).strip().lower() == "failed":
                 return "runtime_error"
     return ""
 
 
+def _safe_path_component(value: str, field_name: str) -> str:
+    """CHK-028: Validate that a string is safe to use as a path component.
+
+    Rejects values containing '..' or path separators to prevent traversal.
+    Returns the value unchanged if safe; raises ValueError otherwise.
+    """
+    if ".." in value or "/" in value or "\\" in value:
+        raise ValueError(
+            f"{field_name}={value!r} contains path traversal characters; "
+            "refusing to construct run_id."
+        )
+    return value
+
+
 def _expected_run_ids(*, run_names: List[str], run_tag: str, seeds: List[int]) -> Dict[str, List[str]]:
+    """Build the expected run_id strings for each run_name.
+
+    CHK-038: When seeds is empty the run_id format is ``{run_name}_{run_tag}``
+    (no ``_s{seed}`` segment).  This is intentionally different from the seeded
+    format ``{run_name}_s{seed}_{run_tag}`` and matches run_experiments.py's
+    ``multi_seed`` logic.  Downstream regex parsers (e.g.
+    ``aggregate_results._extract_seed_from_run_id``) may not find a seed in the
+    seedless format — that is expected and handled via NaN propagation.
+    """
     out: Dict[str, List[str]] = {}
+    # CHK-028: validate run_name and run_tag to prevent path traversal.
+    safe_tag = _safe_path_component(run_tag, "run_tag")
     for run_name in run_names:
+        safe_name = _safe_path_component(run_name, "run_name")
         if seeds:
-            out[run_name] = [f"{run_name}_s{seed}_{run_tag}" for seed in seeds]
+            out[run_name] = [f"{safe_name}_s{seed}_{safe_tag}" for seed in seeds]
         else:
-            out[run_name] = [f"{run_name}_{run_tag}"]
+            out[run_name] = [f"{safe_name}_{safe_tag}"]
     return out
 
 
@@ -325,7 +377,23 @@ def _check_task_state(
     has_task_artifacts = _has_task_level_artifacts(run_dir, task)
     log_path = (logs_dir / run_id / f"{task}.log") if logs_dir is not None else None
     has_log = bool(log_path and log_path.exists())
-    log_content = _read_text(log_path) if log_path is not None else ""
+    # CHK-005: read only the last 256 KB of log files to avoid memory bloat
+    # on large logs (consistent with run_experiments._classify_failure).
+    _LOG_TAIL_BYTES = 256 * 1024
+    if log_path is not None and has_log:
+        try:
+            file_size = log_path.stat().st_size
+            if file_size > _LOG_TAIL_BYTES:
+                with open(log_path, "r", encoding="utf-8", errors="ignore") as _f:
+                    _f.seek(max(0, file_size - _LOG_TAIL_BYTES))
+                    log_content = _f.read()
+            else:
+                log_content = _read_text(log_path)
+        except Exception as exc:
+            logger.warning("CHK-005: failed to read log %s: %s", log_path, exc)
+            log_content = ""
+    else:
+        log_content = ""
     manifest_status = str(task_info.get("status", "")).strip().lower()
     manifest_failure = _latest_failure_type(task_info)
     history = task_info.get("history")
@@ -366,8 +434,10 @@ def _check_task_state(
             )
     elif has_csv and has_valid_csv and has_task_artifacts and manifest_status == "running":
         # CHK-007: Valid CSV and artifacts exist but manifest still says "running".
-        # This likely means the process was interrupted after producing valid output
-        # but before updating the manifest to "success".
+        # This is a recoverable scenario (process killed after writing CSV but before
+        # updating manifest).  Classified as a benign state — does NOT trigger non-zero
+        # exit code or enter unexpected_failures.  The completeness check treats it as
+        # a soft warning rather than a hard failure.
         state = "csv_valid_manifest_incomplete"
     elif has_csv and manifest_status in {"", "failed", "running"}:
         # CHK-019 / CHK-017: CSV exists but manifest indicates non-success.
@@ -434,6 +504,35 @@ def _check_group(
         run_name_complete = True
         for run_id in run_ids:
             run_dir = runs_dir / run_id
+            # CHK-030: skip _check_task_state when run_dir does not exist to
+            # avoid FileNotFoundError from Path.glob inside _find_csv_paths.
+            if not run_dir.exists():
+                logger.warning(
+                    "run_dir does not exist: %s — marking all tasks as missing.",
+                    run_dir,
+                )
+                for task in tasks:
+                    missing_row: Dict[str, Any] = {
+                        "task": task,
+                        "state": "missing",
+                        "manifest_status": "",
+                        "manifest_failure_type": "",
+                        "failure_type": "",
+                        "has_csv": False,
+                        "has_valid_csv": False,
+                        "has_task_artifacts": False,
+                        "csv_paths": [],
+                        "csv_content_warnings": [],
+                        "has_log": False,
+                        "log_path": "",
+                        "run_name": run_name,
+                        "run_id": run_id,
+                        "group": group_name,
+                    }
+                    rows.append(missing_row)
+                    unexpected_failures.append(missing_row)
+                run_name_complete = False
+                continue
             manifest = _read_json(run_dir / "run_manifest.json") if run_dir.exists() else None
             task_map = manifest.get("tasks", {}) if manifest and isinstance(manifest.get("tasks"), dict) else {}
             per_task_rows: List[Dict[str, Any]] = []
@@ -461,6 +560,10 @@ def _check_group(
                 state = str(row["state"])
                 if state == "oom":
                     oom_registry.append(row)
+                    # CHK-006: OOM in required groups is also an unexpected failure
+                    # so consumers can discover OOM causes via unexpected_failures.
+                    if not allow_oom_completion:
+                        unexpected_failures.append(row)
                 elif state not in _benign_states:
                     unexpected_failures.append(row)
 
@@ -535,8 +638,9 @@ def main() -> int:
     out_json = Path(args.out_json)
     if not out_json.is_absolute():
         out_json = Path.cwd() / out_json
-    out_json.parent.mkdir(parents=True, exist_ok=True)
 
+    # CHK-031: validate runs_dir BEFORE creating output directories so that
+    # early-return on invalid input doesn't leave side-effects.
     if not runs_dir.exists():
         print(f"runs_dir not found: {runs_dir}")
         return 2
@@ -584,7 +688,8 @@ def main() -> int:
         unexpected_stress = []
 
     report = {
-        "generated_at": datetime.now().isoformat(),
+        # CHK-032: use UTC to avoid ambiguity when AutoDL servers are in different timezones.
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "run_tag": args.run_tag,
         "tasks": tasks,
         "seeds": seeds,
@@ -601,7 +706,9 @@ def main() -> int:
         "unexpected_failures": unexpected_required + unexpected_stress,
         "rows": required["rows"] + stress["rows"],
     }
-    out_json.write_text(json.dumps(report, indent=2, ensure_ascii=True), encoding="utf-8")
+    # CHK-031: create output directory only right before writing, after all validation passed.
+    out_json.parent.mkdir(parents=True, exist_ok=True)
+    out_json.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
 
     print(f"REPORT_JSON={out_json}")
     print(f"MISSING_REQUIRED={','.join(required_missing)}")

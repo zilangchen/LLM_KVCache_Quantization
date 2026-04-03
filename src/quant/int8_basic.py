@@ -100,20 +100,11 @@ def quantize_symmetric_int8(
     # Restore shape: [B, H, S, D]
     quantized = quantized_reshaped.view(*input_shape)
     
-    # Scale shape issues:
-    # Scale is currently [B, H, S, num_groups, 1].
-    # For storage, we might want to keep it as is, or flattened.
-    # To maintain compatibility with dequantize which expects simple mul,
-    # we should check dequantize logic.
-    # If we return scale as [B, H, S, num_groups, 1], caller (Cache) needs to know.
-    # For baseline (num_groups=1), this is [B, H, S, 1, 1] which views to [B, H, S, 1].
-    
-    # Let's flatten scale to [B, H, S, num_groups] if num_groups > 1?
-    # Or keep it as [B, H, S, num_groups, 1] for easy dequantize?
-    # Our dequantize function below needs update.
-    
-    # Store scales without the trailing singleton dim for kernel compatibility:
-    # [B, H, S, num_groups, 1] -> [B, H, S, num_groups]
+    # QNT-048: Scale layout — the trailing singleton is squeezed for cache/kernel
+    # compatibility.  [B, H, S, num_groups, 1] -> [B, H, S, num_groups].
+    # QNT-031: For fp16 inputs the scale inherits fp16 dtype; the ~0.1% relative
+    # error from fp16 arithmetic is well below INT8's step size (~0.78%) so this
+    # is acceptable.  See precision note at the top of the quantize function.
     return quantized, scale.squeeze(-1)
 
 
@@ -132,7 +123,10 @@ def quantize_symmetric_int8_with_scale(
 
     Returns:
         quantized: INT8 tensor [batch, heads, seq, dim]
-        scale_expanded: Scale tensor expanded to [batch, heads, seq, num_groups]
+        scale_expanded: Scale tensor expanded to [batch, heads, seq, num_groups],
+            cast to tensor.dtype. QNT-033: If tensor.dtype is bfloat16, the
+            returned scale is bfloat16 — Triton kernels that require fp16 scale
+            must cast explicitly before calling decode_attn_int8.
     """
     if not tensor.is_floating_point():
         raise ValueError(f"Input tensor must be float, got {tensor.dtype}")
@@ -151,9 +145,18 @@ def quantize_symmetric_int8_with_scale(
     num_groups = head_dim // group_size
 
     reshaped = tensor.view(batch, heads, seq_len, num_groups, group_size)
+    # QNT-042: Catch device mismatch early — scale on CPU + tensor on GPU
+    # would fail at division time with an unclear error far from root cause.
+    if scale.device != tensor.device:
+        raise ValueError(
+            f"scale device ({scale.device}) != tensor device ({tensor.device}). "
+            "Move scale to the same device before quantization."
+        )
     scale_expanded = _normalize_static_scale(scale, batch, heads, seq_len, num_groups)
-    scale_expanded = scale_expanded.to(tensor.dtype)
-    scale_expanded = scale_expanded.clamp(min=1e-5)
+    # QNT-024/QNT-033: Clamp BEFORE dtype cast to prevent fp16 near-zero underflow.
+    # This follows the ENG-037 pattern (clamp-then-cast) consistently with the
+    # dynamic quantize path above.
+    scale_expanded = scale_expanded.clamp(min=1e-5).to(tensor.dtype)
 
     quantized = torch.round(reshaped / scale_expanded).clamp(-127, 127).to(torch.int8)
     quantized = quantized.view(batch, heads, seq_len, head_dim)
@@ -202,6 +205,12 @@ def dequantize_symmetric_int8(
     if scale.ndim == quantized.ndim + 1:
         B, H, S, D = quantized.shape
         num_groups = scale.shape[-2]
+        # QNT-046: Validate divisibility (Path B has this check; Path A was missing).
+        if num_groups <= 0 or D % num_groups != 0:
+            raise ValueError(
+                f"Invalid scale shape for group-wise dequantization (Path A): "
+                f"quantized={tuple(quantized.shape)}, scale={tuple(scale.shape)}"
+            )
         group_size = D // num_groups
 
         q_reshaped = quantized.view(B, H, S, num_groups, group_size)

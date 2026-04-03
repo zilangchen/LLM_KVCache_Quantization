@@ -113,15 +113,17 @@ def build_config_snapshot(
     all experiments use identical decoding settings for reproducibility.
     """
     # UTIL-007: Guard against objects without __dict__ (e.g. plain dicts).
+    # UTL-005: Copy args to avoid holding a live reference to __dict__.
     if isinstance(args, dict):
-        args_dict = args
+        args_dict = dict(args)
     elif hasattr(args, "__dict__"):
-        args_dict = vars(args)
+        args_dict = dict(vars(args))
     else:
         args_dict = {"_raw": str(args)}
+    # UTL-008: Use UTC timestamp for cross-timezone comparability.
     snapshot: Dict[str, Any] = {
         "script": script_name,
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.utcnow().isoformat() + "Z",
         "args": args_dict,
         "decoding": {
             "temperature": 0.0,
@@ -130,6 +132,15 @@ def build_config_snapshot(
         },
     }
     if extra:
+        # UTL-004: Warn if extra would overwrite core snapshot keys.
+        _core_keys = {"script", "timestamp", "args", "decoding"}
+        _conflicts = _core_keys & set(extra)
+        if _conflicts:
+            import warnings
+            warnings.warn(
+                f"build_config_snapshot: extra keys {_conflicts} overwrite core snapshot fields",
+                RuntimeWarning,
+            )
         snapshot.update(extra)
     return snapshot
 

@@ -141,11 +141,13 @@ def main():
         default=None,
         help="V cache bit-width for int4_mixed_kv mode (4/8/16). Default: 4.",
     )
+    # PRF-036: Default False to match CLAUDE.md §9 mainline decision.
+    # run_experiments.py explicitly passes the value from config YAML.
     parser.add_argument(
         "--use_attn_temperature",
         dest="use_attn_temperature",
         action="store_true",
-        default=True,
+        default=False,
         help="Apply per-head temperature if available (int8_ours).",
     )
     parser.add_argument(
@@ -286,8 +288,10 @@ def main():
     if torch.cuda.is_available():
         torch.cuda.synchronize()
 
+    # PRF-014: Use profiling-shape tokens for warmup so Triton JIT compiles
+    # kernels for the actual measurement shape, not a short "Hello" shape.
     print(f"Warmup ({args.warmup} runs)...")
-    warmup_ids = tokenizer("Hello", return_tensors="pt")["input_ids"].to(model.device)
+    warmup_ids = torch.tensor(tokens, dtype=torch.long, device=model.device).unsqueeze(0)
     warmup_ids = warmup_ids.repeat(int(args.batch), 1)
     warmup_mask = torch.ones_like(warmup_ids, dtype=torch.long, device=model.device)
     # PRF-020: Wrap warmup in independent try/except so warmup OOM is
@@ -414,14 +418,17 @@ def main():
             f"TPS(total)={row['tok_per_s']}, TPS/seq={row['tok_per_s_per_seq']}"
         )
 
-        run_dir = Path(args.out_dir)
-        if not run_dir.is_absolute():
-            run_dir = project_root / run_dir
-        run_snapshot_dir = run_dir / row["run_id"]
-        snapshot = build_config_snapshot(
-            script_name=Path(__file__).name,
-            args=args,
-        )
+    # PRF-027: Write config snapshot once outside the loop (config is invariant
+    # across runs). Previous code wrote one snapshot per run, creating redundant dirs.
+    run_dir = Path(args.out_dir)
+    if not run_dir.is_absolute():
+        run_dir = project_root / run_dir
+    snapshot = build_config_snapshot(
+        script_name=Path(__file__).name,
+        args=args,
+    )
+    if results:
+        run_snapshot_dir = run_dir / results[0]["run_id"]
         write_config_snapshot(str(run_snapshot_dir), snapshot)
 
     # PRF-011: Compute per-metric mean / std / 95% CI and print summary.
@@ -466,7 +473,8 @@ def main():
             "timestamp", "git_commit", "seed", "replica_id"
         ]
 
-        with open(path, "w", newline="") as f:
+        # PRF-035: explicit encoding to avoid platform-locale UnicodeEncodeError.
+        with open(path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fields)
             writer.writeheader()
             writer.writerows(results)

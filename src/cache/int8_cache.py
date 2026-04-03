@@ -70,6 +70,9 @@ class INT8KVCache:
         self.device = device
         self.clip_percentile = clip_percentile
         self.group_size = group_size
+        # KVC-037: self.dtype is the *output* dtype for get_kv() dequantization
+        # (cast applied after dequant). It does NOT control internal storage
+        # (always int8 for cache, float32 for scales).
         self.dtype = dtype
         self.max_seq_len = int(max_seq_len) if max_seq_len is not None else None
         if self.max_seq_len is not None and self.max_seq_len <= 0:
@@ -105,6 +108,7 @@ class INT8KVCache:
         self.decode_stats: Dict[str, object] = {
             "fused_decode_calls": 0,
             "triton_kernel_calls": 0,
+            "triton_decode_calls": 0,  # KVC-044: Initialize to avoid KeyError
             "torch_ref_calls": 0,
             "layer_hits": {},
             "triton_layer_hits": {},
@@ -130,12 +134,19 @@ class INT8KVCache:
         ks_buf = self._k_scale[layer_id]
         vs_buf = self._v_scale[layer_id]
 
-        if (
-            k_buf is not None
-            and v_buf is not None
-            and ks_buf is not None
-            and vs_buf is not None
-        ):
+        # KVC-067: Check all four buffers for consistency; detect partial None
+        # state (e.g. after a partial OOM that corrupted only some slots).
+        _bufs = [k_buf, v_buf, ks_buf, vs_buf]
+        _non_none = sum(b is not None for b in _bufs)
+        if _non_none not in (0, 4):
+            raise RuntimeError(
+                f"Inconsistent buffer state for layer {layer_id}: "
+                f"{_non_none}/4 buffers are not None (expected 0 or 4). "
+                f"This may indicate a partial OOM during a prior allocation. "
+                f"Call release() and retry."
+            )
+
+        if _non_none == 4:
             if (
                 k_buf.shape[0] != batch
                 or k_buf.shape[1] != heads
@@ -148,12 +159,7 @@ class INT8KVCache:
                     f"incoming=({batch}, {heads}, *, {head_dim}) with groups={num_groups}"
                 )
 
-        if (
-            k_buf is None
-            or v_buf is None
-            or ks_buf is None
-            or vs_buf is None
-        ):
+        if _non_none == 0:
             new_capacity = max(target_len, self._min_capacity)
             if self.max_seq_len is not None:
                 new_capacity = min(new_capacity, self.max_seq_len)
@@ -272,6 +278,7 @@ class INT8KVCache:
         self.decode_stats = {
             "fused_decode_calls": 0,
             "triton_kernel_calls": 0,
+            "triton_decode_calls": 0,  # KVC-044: Must match __init__
             "torch_ref_calls": 0,
             "layer_hits": {},
             "triton_layer_hits": {},
@@ -351,6 +358,21 @@ class INT8KVCache:
         """
         if layer_id < 0 or layer_id >= self.num_layers:
             raise ValueError(f"layer_id {layer_id} out of range")
+
+        # KVC-022: Validate k/v shape and ndim (matching KIVI/FP16 behavior).
+        if k.ndim != 4:
+            raise ValueError(f"k must be 4D [B,H,S,D], got ndim={k.ndim}")
+        if v.ndim != 4:
+            raise ValueError(f"v must be 4D [B,H,S,D], got ndim={v.ndim}")
+        if tuple(k.shape) != tuple(v.shape):
+            raise ValueError(f"k/v shape mismatch: k={tuple(k.shape)} vs v={tuple(v.shape)}")
+
+        # KVC-079: Validate device consistency (matching KIVI behavior).
+        target_device = torch.device(self.device)
+        if k.device.type != target_device.type or v.device.type != target_device.type:
+            raise ValueError(
+                f"Device mismatch: cache_device={target_device}, k.device={k.device}, v.device={v.device}"
+            )
 
         # KVC-034: Validate static scale layer bounds before indexing.
         if self.static_k_scale is not None and layer_id >= len(self.static_k_scale):
@@ -475,6 +497,11 @@ class INT8KVCache:
         Returns:
             Tuple of (k, v) tensors in float16
         """
+        # KVC-023: Validate layer_id bounds with descriptive error.
+        if layer_id < 0 or layer_id >= self.num_layers:
+            raise ValueError(
+                f"layer_id {layer_id} out of range [0, {self.num_layers})"
+            )
         if self._k_cache[layer_id] is None:
             raise ValueError(f"Cache for layer {layer_id} is empty")
 
@@ -516,10 +543,15 @@ class INT8KVCache:
     def get_int8_tensors(self, layer_id: int) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
         """
         Return raw INT8 KV tensors and scales.
-        
+
         Returns:
             (k_int8, v_int8, k_scale, v_scale)
         """
+        # KVC-023: Validate layer_id bounds with descriptive error.
+        if layer_id < 0 or layer_id >= self.num_layers:
+            raise ValueError(
+                f"layer_id {layer_id} out of range [0, {self.num_layers})"
+            )
         if self._k_cache[layer_id] is None:
             raise ValueError(f"Cache for layer {layer_id} is empty")
         seq_len = self._layer_seq_lens[layer_id]
@@ -533,7 +565,23 @@ class INT8KVCache:
     def get_seq_len(self) -> int:
         return self._seq_len
 
+    def __repr__(self) -> str:
+        """KVC-043: Useful debug summary including seq_len and memory."""
+        mem = self.get_memory_mb()
+        return (
+            f"INT8KVCache(num_layers={self.num_layers}, seq_len={self._seq_len}, "
+            f"group_size={self.group_size}, decode_attn_impl={self.decode_attn_impl!r}, "
+            f"memory_mb={mem:.2f}, device={self.device!r})"
+        )
+
     def clear(self) -> None:
+        """Reset sequence lengths while keeping allocated buffers for reuse.
+
+        KVC-076: Buffers retain their batch/head/head_dim shape from the
+        first append(). If the next sequence has a different batch size,
+        _ensure_capacity will raise ValueError. Call release() instead
+        of clear() when the batch size changes between sequences.
+        """
         self._layer_seq_lens = [0] * self.num_layers
         self._seq_len = 0
 
@@ -545,15 +593,19 @@ class INT8KVCache:
         self._layer_seq_lens = [0] * self.num_layers
         self._layer_capacity = [0] * self.num_layers
         self._seq_len = 0
+        # KVC-040: Release static scale / inv_tau GPU tensors so GC can reclaim.
+        self.static_k_scale = None
+        self.static_v_scale = None
+        self.inv_tau = None
 
     def get_memory_mb(self) -> float:
         """Get current memory usage in MB including scales."""
         total_bytes = 0
         for i in range(self.num_layers):
             if self._k_cache[i] is not None:
-                # INT8 tensors
-                total_bytes += self._k_cache[i].numel() * 1  # 1 byte
-                total_bytes += self._v_cache[i].numel() * 1
+                # KVC-033: Use .element_size() instead of hardcoded 1 byte.
+                total_bytes += self._k_cache[i].numel() * self._k_cache[i].element_size()
+                total_bytes += self._v_cache[i].numel() * self._v_cache[i].element_size()
                 # Scale tensors (usually FP16 or FP32)
                 total_bytes += (
                     self._k_scale[i].numel() * self._k_scale[i].element_size()
@@ -619,3 +671,11 @@ class INT8KVCache:
         for layer_id, (k, v) in enumerate(past_key_values):
             cache.append(layer_id, k.to(device), v.to(device))
         return cache
+
+    def __repr__(self) -> str:
+        # KVC-043: Provide a useful summary for debugging.
+        return (
+            f"INT8KVCache(num_layers={self.num_layers}, "
+            f"seq_len={self._seq_len}, "
+            f"memory={self.get_memory_mb():.2f}MB)"
+        )

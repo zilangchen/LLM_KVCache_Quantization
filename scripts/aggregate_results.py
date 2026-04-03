@@ -311,9 +311,15 @@ def _add_ci95_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _extract_seed_from_run_id(run_id: str) -> float | None:
+    """Extract the seed integer from a run_id string.
+
+    AGG-058: The regex now uses ``(?:_|$)`` as the trailing anchor so that
+    run_id formats ending with the seed (e.g. ``{kv_mode}_s{seed}``) are also
+    matched, not just ``{name}_s{seed}_{tag}`` which has a trailing underscore.
+    """
     if not isinstance(run_id, str):
         return None
-    m = re.search(r"_s(\d+)_", run_id)
+    m = re.search(r"_s(\d+)(?:_|$)", run_id)
     if not m:
         return None
     try:
@@ -484,6 +490,14 @@ def _strict_log_failures(runs_dir: Path, logs_dir: Path | None) -> List[str]:
             elif has_traceback:
                 issues.append(
                     "task traceback detected: "
+                    f"run_dir={run_dir.name} task={task_name} log={log_path}"
+                )
+            elif has_oom:
+                # AGG-037: OOM-only failures without CSV were previously silently
+                # ignored.  Now they are reported for consistency with
+                # _collect_execution_coverage which flags them as oom_failure.
+                issues.append(
+                    "task OOM detected (no CSV output): "
                     f"run_dir={run_dir.name} task={task_name} log={log_path}"
                 )
     return issues
@@ -1194,6 +1208,21 @@ def _significance_summary(
         if not isinstance(group_key, tuple):
             group_key = (group_key,)
         row = {col: val for col, val in zip(group_cols, group_key)}
+        # AGG-056: skip pseudo-groups formed by NaN values in condition columns
+        # (batch, gen_len, etc.) since they represent defective data, not a valid
+        # experimental condition.
+        _condition_cols = {"batch", "gen_len", "seq_len"}
+        _skip_group = False
+        for col, val in zip(group_cols, group_key):
+            if col in _condition_cols and (val is None or (isinstance(val, float) and np.isnan(val))):
+                logger.warning(
+                    "_significance_summary: skipping NaN pseudo-group for col=%s in metric=%s",
+                    col, metric_name,
+                )
+                _skip_group = True
+                break
+        if _skip_group:
+            continue
 
         _diff_s = pd.to_numeric(sub["diff"], errors="coerce")
         _gain_s = pd.to_numeric(sub["gain_pct"], errors="coerce")
@@ -1208,9 +1237,15 @@ def _significance_summary(
                 int(_diff_s.notna().sum()) - int(_joint_valid.sum()),
                 int(_joint_valid.sum()),
             )
-        favorable = pd.to_numeric(sub["favorable_diff"], errors="coerce").dropna().to_numpy(dtype=np.float64)
-        base_val = pd.to_numeric(sub["baseline_value"], errors="coerce").dropna().to_numpy(dtype=np.float64)
-        chall_val = pd.to_numeric(sub["challenger_value"], errors="coerce").dropna().to_numpy(dtype=np.float64)
+        # AGG-038: use the same _joint_valid mask for favorable/base_val/chall_val
+        # so all summary statistics are computed on exactly the same sample set.
+        _fav_s = pd.to_numeric(sub["favorable_diff"], errors="coerce")
+        _base_s = pd.to_numeric(sub["baseline_value"], errors="coerce")
+        _chall_s = pd.to_numeric(sub["challenger_value"], errors="coerce")
+        _all_valid = _joint_valid & _fav_s.notna() & _base_s.notna() & _chall_s.notna()
+        favorable = _fav_s[_all_valid].to_numpy(dtype=np.float64)
+        base_val = _base_s[_all_valid].to_numpy(dtype=np.float64)
+        chall_val = _chall_s[_all_valid].to_numpy(dtype=np.float64)
         seed_series = pd.to_numeric(sub["seed"], errors="coerce").dropna()
 
         n_pairs = int(diff.size)
@@ -1344,12 +1379,17 @@ def _build_paired_metric_rows(
         sub = work[work["kv_mode"].isin([base_mode, challenger_mode])]
         if sub.empty:
             continue
+        # AGG-067: dup_groups is counted on the combined sub (both base_mode and
+        # challenger_mode rows).  This may overcount if one mode has duplicates
+        # while the other does not.  The count is advisory — pivot_table(aggfunc="mean")
+        # handles actual dedup.
         dup_groups, dup_rows = _count_duplicate_groups(sub, keys + ["seed", "kv_mode"])
         if dup_groups > 0:
             logger.warning(
                 "Significance pairing collapsed duplicate rows by mean "
                 "(metric=%s, base=%s, challenger=%s, "
-                "duplicate_groups=%d, duplicate_extra_rows=%d).",
+                "duplicate_groups=%d, duplicate_extra_rows=%d). "
+                "Note: counts are for the combined base+challenger subset.",
                 metric_name, base_mode, challenger_mode, dup_groups, dup_rows,
             )
         pivot = sub.pivot_table(
@@ -1415,6 +1455,15 @@ def _bootstrap_ci_mean(
     ci_level: float,
     seed: int,
 ) -> Tuple[float, float]:
+    """Percentile bootstrap CI for the mean.
+
+    AGG-057: This uses the simple percentile method.  For small, skewed samples
+    (n=3-5, typical of multi-seed experiments), the actual coverage may fall
+    below the nominal 95%.  BCa (bias-corrected and accelerated) would improve
+    coverage but adds complexity.  For the current thesis, we acknowledge this
+    limitation in the methods section and use the conservative sign-flip test
+    as the primary inferential tool, not the CI alone.
+    """
     arr = np.asarray(values, dtype=np.float64)
     arr = arr[np.isfinite(arr)]
     n = int(arr.size)
@@ -1461,6 +1510,12 @@ def _paired_signflip_pvalue(
         return 1.0, "zero_effect", 0
 
     # Exact paired sign-flip test for small n; MC approximation for larger n.
+    # AGG-063: The Phipson-Smyth +1 correction (p = (exceed+1)/(n_perm+1)) is
+    # applied uniformly to both exact enumeration and MC paths.  For exact
+    # enumeration the correction is slightly conservative (e.g. n=5: p=3/33
+    # instead of 2/32) because the +1 was originally designed for MC estimation
+    # to avoid zero p-values.  We retain it for consistency between paths and
+    # because conservative p-values are acceptable in thesis context.
     if n <= _EXACT_ENUM_THRESHOLD:
         n_enum = 1 << n
         idx = np.arange(n_enum, dtype=np.uint32)[:, None]
@@ -1481,6 +1536,13 @@ def _paired_signflip_pvalue(
 
 
 def _cohens_dz(values: np.ndarray) -> float:
+    """Cohen's d_z for paired differences.
+
+    AGG-053: Effect sizes are unit-dependent and NOT directly comparable across
+    metrics with different scales (e.g. needle_pass_rate in 0-100% vs
+    longbench_score in 0-1).  Downstream tables should annotate the metric name
+    alongside d_z to prevent misinterpretation.
+    """
     arr = np.asarray(values, dtype=np.float64)
     arr = arr[np.isfinite(arr)]
     if arr.size < 2:
@@ -1497,6 +1559,15 @@ def _add_bh_fdr_qvalues(
     p_col: str = "p_value",
     q_col: str = "q_value",
 ) -> pd.DataFrame:
+    """Apply Benjamini-Hochberg FDR correction.
+
+    AGG-055: Some p-values within a family share data (e.g. kivi_style appears
+    in both kivi_style-vs-int8_ours and kivi_style-vs-int8_baseline), so the
+    independence assumption is violated.  BH is still valid under positive
+    dependence (Benjamini & Yekutieli 2001, Theorem 1.3) and remains
+    conservative, so we retain it.  The correlated structure is documented here
+    so readers do not assume full independence.
+    """
     if df.empty or p_col not in df.columns:
         return df
     out = df.copy()
@@ -1538,14 +1609,21 @@ def _add_bh_fdr_qvalues_by_metric(
     (seq_len, gen_len, batch) when present.  For latency, different
     gen_len/batch combinations produce independent test families; mixing
     them into one BH correction severely dilutes statistical power.
+
+    AGG-065: Also subdivide by model_id when present.  Different models
+    produce correlated results (shared baseline data), and mixing models
+    into one BH family inflates the family size, reducing statistical power.
     """
     if df.empty:
         return df
     if metric_col not in df.columns:
         return _add_bh_fdr_qvalues(df, p_col=p_col, q_col=q_col)
 
-    # Build the groupby key: metric + any condition columns that exist.
+    # AGG-065: include model_id in the groupby key when present.
+    # Build the groupby key: metric + model_id + any condition columns that exist.
     group_keys = [metric_col]
+    if "model_id" in df.columns:
+        group_keys.append("model_id")
     for col in condition_cols:
         if col in df.columns:
             group_keys.append(col)
@@ -1574,8 +1652,10 @@ def _apply_significance_thresholds(
     if df.empty:
         return df
     out = df.copy()
+    # AGG-054: fillna(False) before astype(bool) so NaN/None values are treated
+    # as False rather than True (which bool(NaN) would produce).
     meets_min_pairs = (
-        out["meets_min_pairs"].astype(bool)
+        out["meets_min_pairs"].fillna(False).astype(bool)
         if "meets_min_pairs" in out.columns
         else pd.Series(False, index=out.index)
     )
@@ -1644,6 +1724,11 @@ def _relative_gain_table(
         chall_val = pd.to_numeric(tmp[challenger], errors="coerce")
         delta_abs = chall_val - base_val
         denom = base_val.abs().replace(0, np.nan)
+        # AGG-041: delta_pct is the raw (challenger - baseline)/|baseline| percentage,
+        # always in "challenger minus baseline" direction regardless of metric polarity.
+        # gain_pct is direction-adjusted: positive means challenger is *better*.
+        # For higher_is_better=True, gain_pct = delta_pct.
+        # For higher_is_better=False (e.g. PPL, latency), gain_pct = -delta_pct.
         delta_pct = (delta_abs / denom) * 100.0
         if higher_is_better:
             gain_pct = delta_pct
@@ -1660,6 +1745,7 @@ def _relative_gain_table(
         row["delta_pct"] = delta_pct
         row["gain_pct"] = gain_pct
         row["gain_pct_ratio_of_means"] = gain_pct
+        row["higher_is_better"] = bool(higher_is_better)
         row["gain_method"] = "ratio_of_means"
         row["duplicate_groups_collapsed"] = int(dup_groups)
         row["duplicate_extra_rows_collapsed"] = int(dup_rows)
@@ -1736,11 +1822,16 @@ def _main_claims_32k_table(
     # PPL: choose kv_cache row with maximal tokens_evaluated for each mode.
     if not ppl.empty and "ppl_mode" in ppl.columns:
         ppl = ppl[ppl["ppl_mode"] == "kv_cache"]
-    # Determine merge keys: include model_id when available to avoid cartesian product.
-    _has_mid = "model_id" in lat.columns or "model_id" in mem.columns
+    # AGG-042: check ALL DataFrames for model_id to avoid partial merge keys.
+    # Previously only lat/mem were checked, leading to fallback merges for other DFs.
+    _all_dfs = [lat, mem, ned, ppl, lb, rul]
+    _has_mid = any("model_id" in df.columns for df in _all_dfs if not df.empty)
     merge_keys = ["model_id", "kv_mode"] if _has_mid else ["kv_mode"]
     if not ppl.empty and "tokens_evaluated_mean" in ppl.columns:
-        dedup_cols = [c for c in merge_keys if c in ppl.columns]
+        # AGG-040/AGG-066: include seq_len in dedup_cols so PPL data from
+        # different sequence lengths are not collapsed into a single row.
+        # Also include model_id when present to prevent cross-model merging.
+        dedup_cols = [c for c in merge_keys + ["seq_len"] if c in ppl.columns]
         ppl = (
             ppl.sort_values("tokens_evaluated_mean", ascending=False)
             .drop_duplicates(subset=dedup_cols, keep="first")
@@ -2757,6 +2848,14 @@ def main() -> int:
         if not paired_rows.empty:
             sig_pair_rows.append(paired_rows)
 
+    if not sig_frames:
+        # AGG-068: warn when all significance analyses produced empty results,
+        # so automated pipelines can distinguish "no data" from "all passed".
+        logger.warning(
+            "All significance analyses returned empty results; "
+            "significance_summary.csv will not be written. "
+            "Check that seed-level data exists for at least one metric/pairing."
+        )
     if sig_frames:
         significance_summary = pd.concat(sig_frames, ignore_index=True)
         significance_summary = _add_bh_fdr_qvalues_by_metric(

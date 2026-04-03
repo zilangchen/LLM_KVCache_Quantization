@@ -18,6 +18,18 @@
 # - PPL dataset is fixed in objective.md: wikitext-2-raw-v1
 # - Needle eval uses synthetic needle-in-a-haystack (方案 A)
 # - TTFT/TPOT timings synchronize around CUDA points for reliability
+#
+# KNOWN ISSUES (documented, frozen for completed experiments):
+# - CFG-022: quant_defaults.use_attn_temperature=true but mainline runs override to false.
+#   Throughput series already consistently uses false. No data affected.
+# - CFG-042: int8_ours_kl_temp_fused uses temperature=true (ablation variant) while
+#   throughput uses false. Aggregation separates by run_name. Keep for ablation record.
+# - CFG-046: runtime.seed is single 1234; multi-seed relies on --seeds CLI flag.
+#   run_experiments.py emits the seed list to results CSV; users must pass --seeds.
+# - CFG-047: int8_ours_long has two variants distinguished by _no_temp_adaptive suffix.
+#   Aggregation separates by run_name. Keep both for ablation comparison record.
+# - CFG-048: int8_baseline lacks gen_len=256 main run. Addressed by using curve points
+#   for Table 1 instead. If needed, add a dedicated run in future matrix versions.
 
 project:
   name: kv-cache-quant-qwen2p5-1p5b
@@ -26,6 +38,9 @@ project:
   model_revision: 989aa7980e4cf806f80c7fef2b1adb7bc71aa306
 
 runtime:
+  # CFG-046: This is the base seed only. Multi-seed experiments require
+  # --seeds 1234,1235,1236,1237,1238 on the run_experiments.py CLI.
+  # Forgetting --seeds silently runs 1 seed only (no CI computation).
   seed: 1234
   device: cuda
   dtype: fp16

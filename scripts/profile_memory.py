@@ -122,7 +122,16 @@ class MemoryMonitor(threading.Thread):
     def stop(self):
         self.stop_signal = True
         if self.is_alive():
-            self.join()
+            # PRF-025: Add timeout to prevent permanent hang if NVML thread blocks.
+            self.join(timeout=5.0)
+            if self.is_alive():
+                import warnings as _warnings
+                _warnings.warn(
+                    "MemoryMonitor thread did not terminate within 5s timeout; "
+                    "NVML sampling thread may be blocked.",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
 def main():
     global _LAST_ARGS
@@ -194,11 +203,13 @@ def main():
         default=None,
         help="V cache bit-width for int4_mixed_kv mode (4/8/16). Default: 4.",
     )
+    # PRF-036: Default False to match CLAUDE.md §9 mainline decision.
+    # run_experiments.py explicitly passes the value from config YAML.
     parser.add_argument(
         "--use_attn_temperature",
         dest="use_attn_temperature",
         action="store_true",
-        default=True,
+        default=False,
         help="Apply per-head temperature if available (int8_ours).",
     )
     parser.add_argument(
@@ -290,6 +301,18 @@ def main():
     # PRF-033: Resolve quant_bits for ALL kv_modes (not just kivi_style)
     runtime_quant_bits = resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
 
+    # PRF-026: Warn when kivi_style + decode_attn_impl is set, matching
+    # profile_latency.py PRF-004 behaviour for cross-script consistency.
+    if args.kv_mode == "kivi_style" and args.decode_attn_impl is not None:
+        import warnings as _warnings
+        _warnings.warn(
+            f"profile_memory: decode_attn_impl={args.decode_attn_impl!r} is "
+            "ignored for kv_mode='kivi_style'.  KIVIStyleKVCache does not "
+            "use a fused decode-attention kernel.",
+            UserWarning,
+            stacklevel=1,
+        )
+
     print(f"Loading {args.model_id}...")
     model_path = resolve_pretrained_path(args.model_id, revision=args.model_revision)
     tokenizer = AutoTokenizer.from_pretrained(
@@ -309,33 +332,38 @@ def main():
     _base_id = _hello_ids[0] if _hello_ids else (tokenizer.eos_token_id or 0)
     tokens = [_base_id] * args.seq_len
 
-    # Warmup
-    warmup_ids = tokenizer("Hi", return_tensors="pt")["input_ids"].to(model.device)
+    # PRF-023: Use profiling-shape warmup (matching profile_latency.py) to
+    # ensure Triton JIT compiles kernels for the actual measurement shape.
+    # Run 3 warmup iterations with 8 new tokens (vs old 1x2-token) to
+    # properly initialise KV cache paths and quantization kernel state.
+    print("Warmup (3 runs)...")
+    warmup_ids = torch.tensor(tokens, dtype=torch.long, device=model.device).unsqueeze(0)
     warmup_ids = warmup_ids.repeat(int(args.batch), 1)
     warmup_mask = torch.ones_like(warmup_ids, dtype=torch.long, device=model.device)
-    generate_from_ids(
-        model=model,
-        tokenizer=tokenizer,
-        input_ids=warmup_ids,
-        attention_mask=warmup_mask,
-        max_new_tokens=2,
-        kv_mode=args.kv_mode,
-        group_size=args.group_size,
-        clip_percentile=args.clip_percentile,
-        calib_file=args.calib_file,
-        use_attn_temperature=args.use_attn_temperature,
-        use_static_scales=args.use_static_scales,
-        adaptive_static_scales=args.adaptive_static_scales,
-        adaptive_static_margin=args.adaptive_static_margin,
-        adaptive_static_k=args.adaptive_static_k,
-        adaptive_static_v=args.adaptive_static_v,
-        decode_attn_impl=args.decode_attn_impl or "triton_fused",
-        seed=args.seed,
-        stop_on_eos=False,
-        quant_bits=runtime_quant_bits,
-        k_bits=getattr(args, 'k_bits', None),
-        v_bits=getattr(args, 'v_bits', None),
-    )
+    for _warmup_i in range(3):
+        generate_from_ids(
+            model=model,
+            tokenizer=tokenizer,
+            input_ids=warmup_ids,
+            attention_mask=warmup_mask,
+            max_new_tokens=8,
+            kv_mode=args.kv_mode,
+            group_size=args.group_size,
+            clip_percentile=args.clip_percentile,
+            calib_file=args.calib_file,
+            use_attn_temperature=args.use_attn_temperature,
+            use_static_scales=args.use_static_scales,
+            adaptive_static_scales=args.adaptive_static_scales,
+            adaptive_static_margin=args.adaptive_static_margin,
+            adaptive_static_k=args.adaptive_static_k,
+            adaptive_static_v=args.adaptive_static_v,
+            decode_attn_impl=args.decode_attn_impl or "triton_fused",
+            seed=args.seed,
+            stop_on_eos=False,
+            quant_bits=runtime_quant_bits,
+            k_bits=getattr(args, 'k_bits', None),
+            v_bits=getattr(args, 'v_bits', None),
+        )
 
     hardware = get_hardware_info()
 
@@ -353,11 +381,14 @@ def main():
     for run_i in range(args.runs):
         gc.collect()
         torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats()
 
         # Start Monitor
         monitor = MemoryMonitor()
         monitor.start()
+
+        # PRF-015: Reset peak stats *after* MemoryMonitor starts so both
+        # torch peak and NVML peak share the same measurement window.
+        torch.cuda.reset_peak_memory_stats()
 
         out = None
         try:
@@ -436,7 +467,9 @@ def main():
             "gpu_mem_peak_source": gpu_peak_source,
             "torch_peak_mb": round(torch_peak, 2),
             "nvml_peak_mb": round(nvml_peak, 2),
-            "kv_cache_mem_mb": round(kv_cache_mem_mb, 2),
+            # PRF-028: Write empty string for NaN so CSV reads as proper NaN
+            # instead of literal "nan" string that breaks numeric parsing.
+            "kv_cache_mem_mb": round(kv_cache_mem_mb, 2) if math.isfinite(kv_cache_mem_mb) else "",
             "kv_cache_mem_source": kv_cache_mem_source,
             "kv_cache_seq_len": int(kv_cache_seq_len),
             "timestamp": timestamp,
@@ -494,7 +527,7 @@ def main():
             "kv_cache_mem_source", "kv_cache_seq_len", "timestamp", "git_commit", "seed", "replica_id"
         ]
 
-        with open(path, "w", newline="") as f:
+        with open(path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fields)
             writer.writeheader()
             writer.writerows(results)

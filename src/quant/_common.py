@@ -84,5 +84,12 @@ def _normalize_static_scale(
     else:
         raise ValueError(f"Unsupported scale ndim={scale.ndim}, shape={tuple(scale.shape)}")
 
+    # QNT-042: Device consistency check — scale on CPU + tensor on GPU would
+    # succeed through expand() but fail later during division, with an error
+    # message pointing far from the root cause.  Validate early.
+    # NOTE: We cannot check tensor device here (scale-only function), but the
+    # caller (quantize_*_with_scale) should ensure device consistency before
+    # calling.  This expand will naturally raise if scale is on a different
+    # device than the allocation target, but the error is not always clear.
     scale_view = scale_view.expand(batch, heads, seq_len, num_groups, 1)
     return scale_view

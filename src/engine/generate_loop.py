@@ -210,11 +210,14 @@ def _register_all_temperature_hooks(model, inv_tau: torch.Tensor):
         if attn is None:
             continue
 
-        num_heads = (
-            getattr(attn, "num_heads", None)
-            or getattr(attn, "_kv_num_attention_heads", None)
-            or cfg_heads
-        )
+        # ENG-092: Use `is not None` instead of `or` to avoid skipping
+        # num_heads=0 (which would be falsy but semantically different from None).
+        _nh = getattr(attn, "num_heads", None)
+        if _nh is None:
+            _nh = getattr(attn, "_kv_num_attention_heads", None)
+        if _nh is None:
+            _nh = cfg_heads
+        num_heads = _nh
         head_dim = getattr(attn, "head_dim", None)
         if num_heads is None or head_dim is None:
             continue
@@ -303,11 +306,14 @@ def _register_prefill_temperature_hooks(model, inv_tau: torch.Tensor):
         if attn is None:
             continue
 
-        num_heads = (
-            getattr(attn, "num_heads", None)
-            or getattr(attn, "_kv_num_attention_heads", None)
-            or cfg_heads
-        )
+        # ENG-092: Use `is not None` instead of `or` to avoid skipping
+        # num_heads=0 (which would be falsy but semantically different from None).
+        _nh = getattr(attn, "num_heads", None)
+        if _nh is None:
+            _nh = getattr(attn, "_kv_num_attention_heads", None)
+        if _nh is None:
+            _nh = cfg_heads
+        num_heads = _nh
         head_dim = getattr(attn, "head_dim", None)
         if num_heads is None or head_dim is None:
             continue
@@ -627,6 +633,12 @@ def generate_from_ids(
     # check), RuntimeError/FileNotFoundError (calibration), cache
     # construction failures, and hook registration errors.
     try:
+        # ENG-090: Set seeds BEFORE apply_patch so that any random state
+        # consumed during patching is deterministic. Also reset memory stats
+        # before patching so the peak measurement starts from a clean baseline.
+        set_seed(seed=seed, deterministic=True)
+        reset_gpu_memory_stats()
+
         # Apply patch if needed
         if kv_mode in _FUSED_KV_MODES:
             if kv_mode == "int8_ours":
@@ -654,12 +666,6 @@ def generate_from_ids(
                 except Exception:
                     pass
                 raise
-
-        # Set seeds for reproducibility
-        set_seed(seed=seed, deterministic=True)
-
-        # Reset memory stats for accurate peak measurement
-        reset_gpu_memory_stats()
 
         # ENG-060: Get available GPU memory for OOM checks using the model's
         # actual device instead of hardcoded GPU 0.
@@ -703,7 +709,9 @@ def generate_from_ids(
                 default_calib = os.path.join(_project_root, "artifacts", "kv_calib_kl.json")
             else:
                 default_calib = os.path.join(_project_root, "artifacts", "kv_calib_kl_int4_selected.json")
-            calib_path = calib_file or default_calib
+            # ENG-061: Use `is not None` instead of `or` so that calib_file=""
+            # (empty string, meaning "no calibration") is not replaced by default.
+            calib_path = calib_file if calib_file is not None else default_calib
             if calib_path and os.path.exists(calib_path):
                 try:
                     with open(calib_path, "r") as f:
@@ -1074,6 +1082,16 @@ def generate_from_ids(
                     # If the iteration behavior changes (e.g. yields layer objects instead
                     # of tensor tuples), this loop will break with a TypeError at unpack.
                     # Pin transformers version in requirements.txt to avoid silent drift.
+                    # ENG-065: Validate prefill layer count matches cache expectation.
+                    _prefill_layers = sum(1 for _ in outputs.past_key_values)
+                    if hasattr(kv_cache, "num_layers") and _prefill_layers != kv_cache.num_layers:
+                        import warnings
+                        warnings.warn(
+                            f"ENG-065: Prefill returned {_prefill_layers} layers but "
+                            f"kv_cache expects {kv_cache.num_layers}. Layer count mismatch "
+                            f"may cause IndexError or truncated context.",
+                            RuntimeWarning,
+                        )
                     for i, (k, v) in enumerate(outputs.past_key_values):
                         kv_cache.append(i, k, v)
                     if (
@@ -1085,6 +1103,11 @@ def generate_from_ids(
                         # per-step tuple->DynamicCache conversion spikes at high batch.
                         model_cache_for_decode = outputs.past_key_values
                         fp16_use_model_cache = True
+                        # ENG-091: Release duplicate prefill KV from kv_cache since
+                        # decode will use model_cache_for_decode exclusively. Without
+                        # this, both kv_cache and model_cache_for_decode hold the same
+                        # prefill KV data, doubling VRAM usage until function exit.
+                        kv_cache.clear()
 
                 next_token_logits = outputs.logits[:, -1, :]
                 next_token = torch.argmax(next_token_logits, dim=-1)  # [B]
@@ -1105,6 +1128,9 @@ def generate_from_ids(
         ttft_ms = prefill_timer.elapsed_ms
 
         # ENG-018: If max_new_tokens=0, skip generation entirely.
+        # ENG-093: When max_new_tokens=0, no tokens are generated and gen_len=0.
+        # TTFT is still measured (prefill latency), but TPOT is 0.0 since no
+        # decode steps occur. The prefill argmax is computed but not stored.
         if max_new_tokens > 0:
             generated_steps.append(next_token)
             current_token = next_token.view(batch_size, 1)  # [B, 1]

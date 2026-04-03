@@ -1,11 +1,14 @@
 # Week5 snapshot for external-validity reruns.
 # Frozen from: configs/snapshots/exp_matrix_week4_final_journal_v1.yaml
+# CFG-044 note: Despite filename "external_validity", this config uses the
+# primary 1.5B model. External-validity (7B/8B) configs are in
+# exp_matrix_qwen25_7b_v1.yaml and exp_matrix_llama31_8b_v1.yaml.
 # Experiment matrix (v2) — includes KL calibration + per-head temperature and fused decode attention kernel.
 # Used by scripts/run_experiments.py
 #
 # Conventions:
 # - kv_mode: fp16 | int8_baseline | int8_ours | int4_baseline | int4_fused | int4_ours | int4_ours_mixed | kivi_style
-# - calib_strategy: none | percentile | kl_attn
+# - calib_strategy: none | percentile | kl_attn | kivi_asymmetric  # CFG-044: added missing value
 # - decode_attn_impl: torch_ref | triton_fused
 # - use_attn_temperature: true/false (per-head inv_tau from calib file)
 # - clip_percentile_{k,v}: used during calibration or as fixed percentile in percentile mode

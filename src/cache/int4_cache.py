@@ -110,6 +110,7 @@ class INT4KVCache:
         self.decode_stats: Dict[str, object] = {
             "fused_decode_calls": 0,
             "triton_kernel_calls": 0,
+            "triton_decode_calls": 0,  # KVC-072/KVC-054: Initialize to avoid KeyError
             "torch_ref_calls": 0,
             "layer_hits": {},
             "triton_layer_hits": {},
@@ -141,6 +142,7 @@ class INT4KVCache:
         self.decode_stats = {
             "fused_decode_calls": 0,
             "triton_kernel_calls": 0,
+            "triton_decode_calls": 0,  # KVC-072/KVC-054: Must match __init__
             "torch_ref_calls": 0,
             "layer_hits": {},
             "triton_layer_hits": {},
@@ -194,12 +196,19 @@ class INT4KVCache:
         ks_buf = self._k_scale[layer_id]
         vs_buf = self._v_scale[layer_id]
 
-        if (
-            k_buf is not None
-            and v_buf is not None
-            and ks_buf is not None
-            and vs_buf is not None
-        ):
+        # KVC-055: Check all four buffers for consistency; detect partial None
+        # state (e.g. after a partial OOM that corrupted only some slots).
+        _bufs = [k_buf, v_buf, ks_buf, vs_buf]
+        _non_none = sum(b is not None for b in _bufs)
+        if _non_none not in (0, 4):
+            raise RuntimeError(
+                f"Inconsistent buffer state for layer {layer_id}: "
+                f"{_non_none}/4 buffers are not None (expected 0 or 4). "
+                f"This may indicate a partial OOM during a prior allocation. "
+                f"Call release() and retry."
+            )
+
+        if _non_none == 4:
             if (
                 k_buf.shape[0] != batch
                 or k_buf.shape[1] != heads
@@ -212,12 +221,7 @@ class INT4KVCache:
                     f"incoming=({batch}, {heads}, *, {head_dim}) with groups={num_groups}"
                 )
 
-        if (
-            k_buf is None
-            or v_buf is None
-            or ks_buf is None
-            or vs_buf is None
-        ):
+        if _non_none == 0:
             new_capacity = max(target_len, self._min_capacity)
             if self.max_seq_len is not None:
                 new_capacity = min(new_capacity, self.max_seq_len)
@@ -225,26 +229,41 @@ class INT4KVCache:
                     raise ValueError(
                         f"target_len {target_len} exceeds capped capacity {new_capacity} for layer {layer_id}"
                     )
-            self._k_cache[layer_id] = torch.empty(
-                (batch, heads, new_capacity, head_dim),
-                device=self.device,
-                dtype=torch.int8,
-            )
-            self._v_cache[layer_id] = torch.empty(
-                (batch, heads, new_capacity, head_dim),
-                device=self.device,
-                dtype=torch.int8,
-            )
-            self._k_scale[layer_id] = torch.empty(
-                (batch, heads, new_capacity, num_groups),
-                device=self.device,
-                dtype=scale_dtype,
-            )
-            self._v_scale[layer_id] = torch.empty(
-                (batch, heads, new_capacity, num_groups),
-                device=self.device,
-                dtype=scale_dtype,
-            )
+            # KVC-055: Wrap initial allocation in try/except so that a partial
+            # OOM does not leave the layer in an inconsistent state.
+            try:
+                new_k = torch.empty(
+                    (batch, heads, new_capacity, head_dim),
+                    device=self.device,
+                    dtype=torch.int8,
+                )
+                new_v = torch.empty(
+                    (batch, heads, new_capacity, head_dim),
+                    device=self.device,
+                    dtype=torch.int8,
+                )
+                new_ks = torch.empty(
+                    (batch, heads, new_capacity, num_groups),
+                    device=self.device,
+                    dtype=scale_dtype,
+                )
+                new_vs = torch.empty(
+                    (batch, heads, new_capacity, num_groups),
+                    device=self.device,
+                    dtype=scale_dtype,
+                )
+            except torch.cuda.OutOfMemoryError:
+                # Roll back: ensure all four slots stay None.
+                self._k_cache[layer_id] = None
+                self._v_cache[layer_id] = None
+                self._k_scale[layer_id] = None
+                self._v_scale[layer_id] = None
+                self._layer_capacity[layer_id] = 0
+                raise
+            self._k_cache[layer_id] = new_k
+            self._v_cache[layer_id] = new_v
+            self._k_scale[layer_id] = new_ks
+            self._v_scale[layer_id] = new_vs
             self._layer_capacity[layer_id] = new_capacity
             return
 
@@ -381,6 +400,21 @@ class INT4KVCache:
         """
         if layer_id < 0 or layer_id >= self.num_layers:
             raise ValueError(f"layer_id {layer_id} out of range")
+
+        # KVC-022: Validate k/v shape and ndim (matching KIVI/FP16 behavior).
+        if k.ndim != 4:
+            raise ValueError(f"k must be 4D [B,H,S,D], got ndim={k.ndim}")
+        if v.ndim != 4:
+            raise ValueError(f"v must be 4D [B,H,S,D], got ndim={v.ndim}")
+        if tuple(k.shape) != tuple(v.shape):
+            raise ValueError(f"k/v shape mismatch: k={tuple(k.shape)} vs v={tuple(v.shape)}")
+
+        # KVC-079: Validate device consistency (matching KIVI behavior).
+        target_device = torch.device(self.device)
+        if k.device.type != target_device.type or v.device.type != target_device.type:
+            raise ValueError(
+                f"Device mismatch: cache_device={target_device}, k.device={k.device}, v.device={v.device}"
+            )
 
         # KVC-031: Warn when outlier_rescue_ratio / mixed_rescue have no effect
         # because static scales are not provided.  Check each side independently:
@@ -564,6 +598,11 @@ class INT4KVCache:
         Returns:
             Tuple of (k, v) tensors in float16
         """
+        # KVC-023: Validate layer_id bounds with descriptive error.
+        if layer_id < 0 or layer_id >= self.num_layers:
+            raise ValueError(
+                f"layer_id {layer_id} out of range [0, {self.num_layers})"
+            )
         if self._k_cache[layer_id] is None:
             raise ValueError(f"Cache for layer {layer_id} is empty")
 
@@ -618,6 +657,11 @@ class INT4KVCache:
         Returns:
             (k_int4, v_int4, k_scale, v_scale)
         """
+        # KVC-023: Validate layer_id bounds with descriptive error.
+        if layer_id < 0 or layer_id >= self.num_layers:
+            raise ValueError(
+                f"layer_id {layer_id} out of range [0, {self.num_layers})"
+            )
         if self._k_cache[layer_id] is None:
             raise ValueError(f"Cache for layer {layer_id} is empty")
         seq_len = self._layer_seq_lens[layer_id]
@@ -632,6 +676,13 @@ class INT4KVCache:
         return self._seq_len
 
     def clear(self) -> None:
+        """Reset sequence lengths while keeping allocated buffers for reuse.
+
+        KVC-076: Buffers retain their batch/head/head_dim shape from the
+        first append(). If the next sequence has a different batch size,
+        _ensure_capacity will raise ValueError. Call release() instead
+        of clear() when the batch size changes between sequences.
+        """
         self._layer_seq_lens = [0] * self.num_layers
         self._seq_len = 0
 

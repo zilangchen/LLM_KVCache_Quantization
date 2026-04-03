@@ -13,10 +13,14 @@ Usage:
     k, v = cache.get_kv(layer_id=0)
 """
 
+import logging
+import warnings
 from typing import List, Optional, Tuple
 
 import torch
 from torch import Tensor
+
+logger = logging.getLogger(__name__)
 
 
 class FP16KVCache:
@@ -217,6 +221,13 @@ class FP16KVCache:
             )
 
         seq_len = self._layer_seq_lens[layer_id]
+        # KVC-039: Warn on zero-length get_kv for consistency with INT8KVCache.
+        if seq_len == 0 and self._k_cache[layer_id] is not None:
+            logger.warning(
+                "get_kv(layer_id=%d) returning zero-length tensors. "
+                "The cache was cleared but buffers are still allocated.",
+                layer_id,
+            )
         # KVC-035: These are mutable views into the pre-allocated buffer.
         # All callers (generate_loop, patch_model) use them read-only for
         # attention computation.  Cloning here would waste memory and VRAM
@@ -300,10 +311,34 @@ class FP16KVCache:
         num_layers = len(past_key_values)
         cache = cls(num_layers=num_layers, device=device)
 
+        _ref_shape = None  # KVC-041: Track shape for cross-layer consistency
         for layer_id, (k, v) in enumerate(past_key_values):
+            # KVC-041: Validate ndim before unpacking shape.
+            if k.ndim != 4:
+                raise ValueError(
+                    f"from_tuple(): layer {layer_id} k must be 4D, got ndim={k.ndim}"
+                )
+            if v.ndim != 4:
+                raise ValueError(
+                    f"from_tuple(): layer {layer_id} v must be 4D, got ndim={v.ndim}"
+                )
+            if tuple(k.shape) != tuple(v.shape):
+                raise ValueError(
+                    f"from_tuple(): layer {layer_id} k/v shape mismatch: "
+                    f"k={tuple(k.shape)} vs v={tuple(v.shape)}"
+                )
             k = k.to(device=device, dtype=cache.dtype)
             v = v.to(device=device, dtype=cache.dtype)
             batch, heads, seq_len, head_dim = k.shape
+            # KVC-041: Cross-layer consistency (batch, heads, head_dim must match).
+            _cur = (batch, heads, head_dim)
+            if _ref_shape is None:
+                _ref_shape = _cur
+            elif _cur != _ref_shape:
+                raise ValueError(
+                    f"from_tuple(): cross-layer shape inconsistency at layer {layer_id}: "
+                    f"(batch, heads, head_dim)={_cur} vs layer 0={_ref_shape}"
+                )
             capacity = max(seq_len, cache._min_capacity)
             cache._k_cache[layer_id] = torch.empty(
                 (batch, heads, capacity, head_dim),

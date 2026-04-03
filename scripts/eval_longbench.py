@@ -100,7 +100,11 @@ def _write_task_failure(
         payload["exception_type"] = type(exception).__name__
         payload["exception_repr"] = repr(exception)
         payload["traceback"] = traceback.format_exc()
-    path = out_dir / f"task_failure_{Path(__file__).stem}.json"
+    # EVL-066: Include kv_mode and seed in filename to avoid concurrent overwrites
+    # when multiple kv_mode/seed combinations run in parallel.
+    _kv = str(getattr(args, "kv_mode", "unknown"))
+    _seed = int(getattr(args, "seed", 0))
+    path = out_dir / f"task_failure_{Path(__file__).stem}_{_kv}_s{_seed}.json"
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=True), encoding="utf-8")
 
 
@@ -119,9 +123,54 @@ def _normalize_text(text: str) -> str:
     return text
 
 
+def _has_cjk(text: str) -> bool:
+    """Check if text contains any CJK Unified Ideograph characters."""
+    for ch in text:
+        cp = ord(ch)
+        if (0x4E00 <= cp <= 0x9FFF      # CJK Unified Ideographs
+            or 0x3400 <= cp <= 0x4DBF    # CJK Unified Ideographs Extension A
+            or 0x20000 <= cp <= 0x2A6DF  # Extension B
+            or 0xF900 <= cp <= 0xFAFF):  # CJK Compatibility Ideographs
+            return True
+    return False
+
+
+def _tokenize_for_f1(text: str) -> list:
+    """Tokenize text for F1 computation.
+
+    EVL-105: For Chinese text, use character-level segmentation (each CJK
+    character becomes its own token) instead of whitespace split.  Whitespace
+    split on continuous Chinese produces a single giant token, making F1
+    degrade to exact-match (1.0 if identical, 0.0 otherwise).  Character-level
+    segmentation is the standard fallback when jieba is unavailable, and
+    matches the official LongBench evaluation for zh tasks.
+    """
+    normalized = _normalize_text(text)
+    if _has_cjk(normalized):
+        # Character-level: each CJK char is a token; non-CJK runs are
+        # whitespace-split as usual.
+        tokens = []
+        buf = []
+        for ch in normalized:
+            cp = ord(ch)
+            is_cjk = (0x4E00 <= cp <= 0x9FFF or 0x3400 <= cp <= 0x4DBF
+                       or 0x20000 <= cp <= 0x2A6DF or 0xF900 <= cp <= 0xFAFF)
+            if is_cjk:
+                if buf:
+                    tokens.extend("".join(buf).split())
+                    buf = []
+                tokens.append(ch)
+            else:
+                buf.append(ch)
+        if buf:
+            tokens.extend("".join(buf).split())
+        return tokens
+    return normalized.split()
+
+
 def _token_f1(pred: str, truth: str) -> float:
-    pred_tokens = _normalize_text(pred).split()
-    truth_tokens = _normalize_text(truth).split()
+    pred_tokens = _tokenize_for_f1(pred)
+    truth_tokens = _tokenize_for_f1(truth)
     if not pred_tokens and not truth_tokens:
         return 1.0
     if not pred_tokens or not truth_tokens:
@@ -386,11 +435,15 @@ def _load_synthetic_samples(
     max_samples: int,
     seed: int,
 ) -> List[LongBenchSample]:
-    rng = random.Random(seed)
     samples: List[LongBenchSample] = []
     if not tasks:
         tasks = ["narrativeqa", "dureader", "hotpotqa", "gov_report", "vcsum", "trec", "lcc"]
     for task in tasks:
+        # EVL-107: Create per-task RNG so that task list ordering changes do not
+        # alter the samples generated for other tasks.  Previously a single RNG
+        # was shared across all tasks, meaning reordering the task list would
+        # shift every subsequent task's random state.
+        rng = random.Random(seed + hash(task))
         for idx in range(max_samples):
             answer = f"ans_{task}_{idx}_{rng.randint(1000,9999)}"
             depth = (idx % 10) / 10.0
@@ -661,6 +714,9 @@ def _load_samples(args: argparse.Namespace) -> List[LongBenchSample]:
     except Exception:
         if args.longbench_allow_synthetic_fallback:
             print("Warning: HF LongBench loading failed; fallback to synthetic source.")
+            # EVL-063: Update longbench_source so CSV and config_snapshot
+            # correctly record that synthetic data was actually used.
+            args.longbench_source = "synthetic"
             return _load_synthetic_samples(
                 tasks=tasks,
                 max_samples=int(args.longbench_max_samples),
@@ -726,10 +782,12 @@ def main() -> None:
         help="V cache bit-width for int4_mixed_kv mode (4/8/16). Default: 4.",
     )
     parser.add_argument(
+        # EVL-064: Default False to match CLAUDE.md §9 fixed decision
+        # (Mainline INT8-ours uses use_attn_temperature: false).
         "--use_attn_temperature",
         dest="use_attn_temperature",
         action="store_true",
-        default=True,
+        default=False,
     )
     parser.add_argument(
         "--no_use_attn_temperature",
@@ -806,6 +864,13 @@ def main() -> None:
         for key, value in resolved.items():
             if value is not None:
                 setattr(args, key, value)
+
+    # EVL-065: Bridge gen_len from config to longbench_max_new_tokens.
+    # resolve_run_config sets args.gen_len but this script uses
+    # args.longbench_max_new_tokens.  If gen_len was set by config and
+    # longbench_max_new_tokens was not explicitly passed, use gen_len.
+    if getattr(args, "gen_len", None) is not None:
+        args.longbench_max_new_tokens = int(args.gen_len)
 
     normalize_kv_params(args)
     set_seed(seed=args.seed, deterministic=True)
@@ -1032,32 +1097,41 @@ def main() -> None:
     }
 
     if args.save_csv:
-        profile_path = out_dir / f"profile_longbench_{args.kv_mode}_{timestamp.replace(':','-')}.csv"
-        profile_fields = list(summary_row.keys())
-        with open(profile_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=profile_fields)
-            writer.writeheader()
-            writer.writerow(summary_row)
-
-        task_path = out_dir / f"longbench_task_summary_{args.kv_mode}_{timestamp.replace(':','-')}.csv"
-        if task_rows:
-            with open(task_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=list(task_rows[0].keys()))
+        # EVL-128 symmetry: Wrap CSV writes in try/except so IO errors
+        # do not lose already-computed LongBench scores.
+        try:
+            profile_path = out_dir / f"profile_longbench_{args.kv_mode}_{timestamp.replace(':','-')}.csv"
+            profile_fields = list(summary_row.keys())
+            with open(profile_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=profile_fields)
                 writer.writeheader()
-                writer.writerows(task_rows)
+                writer.writerow(summary_row)
 
-        detail_path = out_dir / f"longbench_details_{args.kv_mode}_{timestamp.replace(':','-')}.csv"
-        if details_rows:
-            with open(detail_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=list(details_rows[0].keys()))
-                writer.writeheader()
-                writer.writerows(details_rows)
+            task_path = out_dir / f"longbench_task_summary_{args.kv_mode}_{timestamp.replace(':','-')}.csv"
+            if task_rows:
+                with open(task_path, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.DictWriter(f, fieldnames=list(task_rows[0].keys()))
+                    writer.writeheader()
+                    writer.writerows(task_rows)
 
-        print(f"Saved to {profile_path}")
-        if task_rows:
-            print(f"Saved to {task_path}")
-        if details_rows:
-            print(f"Saved to {detail_path}")
+            detail_path = out_dir / f"longbench_details_{args.kv_mode}_{timestamp.replace(':','-')}.csv"
+            if details_rows:
+                with open(detail_path, "w", newline="", encoding="utf-8") as f:
+                    writer = csv.DictWriter(f, fieldnames=list(details_rows[0].keys()))
+                    writer.writeheader()
+                    writer.writerows(details_rows)
+
+            print(f"Saved to {profile_path}")
+            if task_rows:
+                print(f"Saved to {task_path}")
+            if details_rows:
+                print(f"Saved to {detail_path}")
+        except (OSError, IOError) as csv_exc:
+            print(
+                f"[WARN] CSV write failed ({csv_exc}). "
+                "Dumping summary to stdout for recovery:"
+            )
+            print(json.dumps(summary_row, indent=2, default=str))
 
     run_snapshot_dir = out_dir / summary_row["run_id"]
     snapshot = build_config_snapshot(

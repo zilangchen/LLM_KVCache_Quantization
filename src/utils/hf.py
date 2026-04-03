@@ -45,7 +45,9 @@ def resolve_pretrained_path(model_id: str, revision: Optional[str] = None) -> st
 
     try:
         from huggingface_hub import snapshot_download
-    except Exception:
+    except ImportError:
+        # UTL-009: Only catch ImportError — other exceptions (AttributeError,
+        # SyntaxError from corrupted installs) should propagate.
         return model_id
 
     offline = (

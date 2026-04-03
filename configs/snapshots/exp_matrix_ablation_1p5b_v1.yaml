@@ -124,6 +124,8 @@ matrix:
     batch: 1
 
   # A-4: KIVI-style baseline (asymmetric quantization, for 4-way calibration comparison)
+  # CFG-043: kivi_style does not use group_size; no group_size_k/v keys here
+  # is intentional — any group_size parameter is ignored by the KIVI path.
   - run_name: ablation_calib_kivi_4k
     kv_mode: kivi_style
     quant_bits: 8
@@ -216,6 +218,10 @@ matrix:
     batch: 1
 
   # C-4: group_size = 128
+  # CFG-045: calib v3_quick was trained with group_size=16. With gs=128
+  # num_groups=1, scales become [B,Hkv,S,1] — still valid via broadcast
+  # but the scale granularity is coarser than calibration assumed.
+  # This is by design: the ablation measures degradation from coarser groups.
   - run_name: ablation_gs128_4k
     kv_mode: int8_ours
     quant_bits: 8

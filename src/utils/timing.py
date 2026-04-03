@@ -48,8 +48,11 @@ class TimingStats:
 
     @property
     def total_ms(self) -> float:
-        """Total time in milliseconds."""
-        return sum(self.measurements)
+        """Total time in milliseconds.
+
+        UTL-007: Always returns float (sum([]) returns int 0 in Python).
+        """
+        return float(sum(self.measurements))
 
     @property
     def count(self) -> int:
@@ -92,7 +95,12 @@ class CUDATimer:
         return self
 
     def stop(self) -> float:
-        """Stop the timer and return elapsed time in milliseconds."""
+        """Stop the timer and return elapsed time in milliseconds.
+
+        UTL-006: After stop(), _start_time is cleared to prevent accidental
+        double-stop returning a longer elapsed time (from original start to
+        second stop).  Calling stop() again without start() will raise.
+        """
         if self._start_time is None:
             raise RuntimeError("Timer was not started. Call start() first.")
 
@@ -101,6 +109,7 @@ class CUDATimer:
 
         end_time = time.perf_counter()
         self._elapsed_ms = (end_time - self._start_time) * 1000.0
+        self._start_time = None  # UTL-006: prevent double-stop
         return self._elapsed_ms
 
     @property

@@ -5,6 +5,7 @@ Uses wikitext-2-raw-v1 to measure PPL.
 """
 
 import argparse
+import collections
 import csv
 import json
 import math
@@ -81,7 +82,11 @@ def _write_task_failure(
         payload["exception_type"] = type(exception).__name__
         payload["exception_repr"] = repr(exception)
         payload["traceback"] = traceback.format_exc()
-    path = out_dir / f"task_failure_{Path(__file__).stem}.json"
+    # EVL-040: Include kv_mode and seed in filename to avoid concurrent overwrites
+    # when multiple kv_mode/seed combinations run in parallel.
+    _kv = str(getattr(args, "kv_mode", "unknown"))
+    _seed = int(getattr(args, "seed", 0))
+    path = out_dir / f"task_failure_{Path(__file__).stem}_{_kv}_s{_seed}.json"
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=True), encoding="utf-8")
 
 
@@ -205,10 +210,14 @@ def load_calibration(
     # int4_ours_asym / int4_ours_asym_ba go through a separate path (L367+)
     # and are NOT handled by this function.
     if calib_file is None:
+        # EVL-056: Use project_root-relative path instead of CWD-relative path.
+        # os.path.join("artifacts", ...) depends on CWD being the project root;
+        # remote servers may launch from a different working directory, causing
+        # the default calibration file to silently not be found.
         if kv_mode == "int8_ours":
-            default_calib = os.path.join("artifacts", "kv_calib_kl.json")
+            default_calib = os.path.join(str(project_root), "artifacts", "kv_calib_kl.json")
         else:
-            default_calib = os.path.join("artifacts", "kv_calib_kl_int4_selected.json")
+            default_calib = os.path.join(str(project_root), "artifacts", "kv_calib_kl_int4_selected.json")
         warnings.warn(
             f"No --calib_file specified for calibrated mode '{kv_mode}'. "
             f"Falling back to default: {default_calib}. "
@@ -807,7 +816,9 @@ def main():
         action="store_false",
         help="Disable adaptive static-scale safeguard on V.",
     )
-    parser.add_argument("--save_csv", action="store_true", default=True)
+    # EVL-090: Use BooleanOptionalAction for --save_csv / --no_save_csv
+    # consistency (matches eval_longbench.py pattern).
+    parser.add_argument("--save_csv", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument(
         "--replica_id",
@@ -919,7 +930,9 @@ def main():
         f"TokenBudget: {max_tokens if max_tokens is not None else 'full-dataset'})..."
     )
     pbar = tqdm(desc="Evaluating PPL", unit="win")
-    buffer_tokens = []
+    # EVL-093: Use deque instead of list. buffer_tokens[stride:] on a list
+    # copies O(N) elements per window; deque popleft is O(1) amortized.
+    buffer_tokens: collections.deque[int] = collections.deque()
 
     kv_cache = None
     hook_handles = []
@@ -967,7 +980,8 @@ def main():
             buffer_tokens.extend(ids)
 
             while len(buffer_tokens) >= max_length:
-                window = buffer_tokens[:max_length]
+                # EVL-093: Extract window as list from deque (O(max_length)).
+                window = list(buffer_tokens)[:max_length]
                 end_loc = global_idx + max_length
                 trg_len = end_loc - prev_end_loc
                 if trg_len <= 0:
@@ -1009,7 +1023,9 @@ def main():
                     total_tokens += tokens
                 prev_end_loc = end_loc
                 global_idx += stride
-                buffer_tokens = buffer_tokens[stride:]
+                # EVL-093: O(stride) popleft instead of O(N) list slice.
+                for _ in range(min(stride, len(buffer_tokens))):
+                    buffer_tokens.popleft()
                 pbar.update(1)
 
         # Flush remaining tokens (short window)
@@ -1017,7 +1033,7 @@ def main():
             end_loc = global_idx + len(buffer_tokens)
             trg_len = end_loc - prev_end_loc
             if trg_len > 0:
-                input_ids = torch.tensor([buffer_tokens], device=model.device)
+                input_ids = torch.tensor([list(buffer_tokens)], device=model.device)
                 target_ids = input_ids.clone()
                 if trg_len < input_ids.size(1):
                     target_ids[:, :-trg_len] = -100

@@ -70,7 +70,11 @@ def _write_task_failure(
         payload["exception_type"] = type(exception).__name__
         payload["exception_repr"] = repr(exception)
         payload["traceback"] = traceback.format_exc()
-    path = out_dir / f"task_failure_{Path(__file__).stem}.json"
+    # EVL-066/083 symmetry: Include kv_mode and seed in filename to avoid
+    # concurrent overwrites when multiple runs execute in parallel.
+    _kv = str(getattr(args, "kv_mode", "unknown"))
+    _seed = int(getattr(args, "seed", 0))
+    path = out_dir / f"task_failure_{Path(__file__).stem}_{_kv}_s{_seed}.json"
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=True), encoding="utf-8")
 
 def generate_haystack_ids(tokenizer, context_len, needle, depth_percent):
@@ -236,10 +240,14 @@ def main():
         help="V cache bit-width for int4_mixed_kv mode (4/8/16). Default: 4.",
     )
     parser.add_argument(
+        # EVL-140: Default False to match CLAUDE.md §9 fixed decision
+        # (Mainline INT8-ours uses use_attn_temperature: false).
+        # run_experiments.py explicitly passes the flag; direct CLI calls
+        # must also default to the mainline setting.
         "--use_attn_temperature",
         dest="use_attn_temperature",
         action="store_true",
-        default=True,
+        default=False,
         help="Apply per-head temperature if available (int8_ours).",
     )
     parser.add_argument(
@@ -306,7 +314,8 @@ def main():
         action="store_false",
         help="Disable adaptive static-scale safeguard on V.",
     )
-    parser.add_argument("--save_csv", action="store_true", default=True)
+    # EVL-090 symmetry: Use BooleanOptionalAction for --save_csv / --no_save_csv.
+    parser.add_argument("--save_csv", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--seed", type=int, default=1234)
     parser.add_argument(
         "--replica_id",
@@ -443,29 +452,52 @@ def main():
         input_ids = torch.tensor(batch_prompts, dtype=torch.long, device=model.device)
         attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=model.device)
 
-        out = generate_from_ids(
-            model=model,
-            tokenizer=tokenizer,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            max_new_tokens=args.needle_max_new_tokens,
-            kv_mode=args.kv_mode,
-            group_size=args.group_size,
-            clip_percentile=args.clip_percentile,
-            calib_file=args.calib_file,
-            use_attn_temperature=args.use_attn_temperature,
-            use_static_scales=args.use_static_scales,
-            adaptive_static_scales=args.adaptive_static_scales,
-            adaptive_static_margin=args.adaptive_static_margin,
-            adaptive_static_k=args.adaptive_static_k,
-            adaptive_static_v=args.adaptive_static_v,
-            decode_attn_impl=args.decode_attn_impl or "triton_fused",
-            seed=args.seed,
-            stop_on_eos=True,
-            quant_bits=getattr(args, 'quant_bits', None),
-            k_bits=getattr(args, 'k_bits', None),
-            v_bits=getattr(args, 'v_bits', None),
-        )
+        # EVL-142: Per-batch exception isolation.  When depth_batch > 1,
+        # a non-OOM error in batch N should not discard results from
+        # batches 0..N-1.  OOM is still re-raised (handled by outer handler).
+        try:
+            out = generate_from_ids(
+                model=model,
+                tokenizer=tokenizer,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_new_tokens=args.needle_max_new_tokens,
+                kv_mode=args.kv_mode,
+                group_size=args.group_size,
+                clip_percentile=args.clip_percentile,
+                calib_file=args.calib_file,
+                use_attn_temperature=args.use_attn_temperature,
+                use_static_scales=args.use_static_scales,
+                adaptive_static_scales=args.adaptive_static_scales,
+                adaptive_static_margin=args.adaptive_static_margin,
+                adaptive_static_k=args.adaptive_static_k,
+                adaptive_static_v=args.adaptive_static_v,
+                decode_attn_impl=args.decode_attn_impl or "triton_fused",
+                seed=args.seed,
+                stop_on_eos=True,
+                quant_bits=getattr(args, 'quant_bits', None),
+                k_bits=getattr(args, 'k_bits', None),
+                v_bits=getattr(args, 'v_bits', None),
+            )
+        except torch.cuda.OutOfMemoryError:
+            raise  # Let outer OOM handler deal with it
+        except Exception as batch_exc:
+            print(
+                f"[WARN] EVL-142: Batch starting at depth index {start} failed: "
+                f"{type(batch_exc).__name__}: {batch_exc}"
+            )
+            # Record failure entries for this batch so CSV shows them as failed.
+            for j in range(len(batch_needles)):
+                results.append(
+                    {
+                        "depth": batch_depths[j],
+                        "passed": 0,
+                        "exact_match": 0,
+                        "needle": batch_needles[j],
+                        "generated_text": f"[BATCH_ERROR: {type(batch_exc).__name__}]",
+                    }
+                )
+            continue
 
         gen_ids = out.generated_ids
         for j in range(gen_ids.shape[0]):
@@ -509,7 +541,7 @@ def main():
         out_dir.mkdir(parents=True, exist_ok=True)
         path = out_dir / f"profile_needle_{args.kv_mode}_{timestamp.replace(':','-')}.csv"
         details_path = out_dir / f"needle_details_{args.kv_mode}_{timestamp.replace(':','-')}.csv"
-        
+
         row = {
             "run_id": f"needle_{timestamp}",
             "model_id": args.model_id,
@@ -526,10 +558,12 @@ def main():
             "seq_len": args.context_len,
             "gen_len": args.needle_max_new_tokens,
             "batch": int(depth_batch),
-            "ttft_ms": 0,
-            "tpot_ms": 0,
-            "tok_per_s": 0,
-            "gpu_mem_peak_mb": 0,
+            # NDL-009: Use NaN (not 0) for unused perf fields to avoid polluting
+            # aggregate_results.py numeric calculations.
+            "ttft_ms": float("nan"),
+            "tpot_ms": float("nan"),
+            "tok_per_s": float("nan"),
+            "gpu_mem_peak_mb": float("nan"),
             "timestamp": timestamp,
             "git_commit": git_commit,
             "seed": int(args.seed),
@@ -537,7 +571,7 @@ def main():
             "needle_pass_rate": pass_rate,
             "needle_exact_match_rate": exact_match_rate,
         }
-        
+
         fields = [
             "run_id", "model_id", "run_name", "kv_mode", "quant_bits", "clip_percentile", "group_size",
             "dtype", "hardware", "seq_len", "gen_len", "batch", "ttft_ms", "tpot_ms",
@@ -550,46 +584,56 @@ def main():
             "needle_pass_rate",
             "needle_exact_match_rate",
         ]
-        
-        with open(path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fields)
-            writer.writeheader()
-            writer.writerow(row)
-        print(f"Saved to {path}")
 
-        detail_fields = [
-            "run_id",
-            "run_name",
-            "seed",
-            "replica_id",
-            "kv_mode",
-            "context_len",
-            "depth",
-            "passed",
-            "exact_match",
-            "needle",
-            "generated_text",
-        ]
-        with open(details_path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=detail_fields)
-            writer.writeheader()
-            for r in results:
-                writer.writerow(
-                    {
-                        "run_id": row["run_id"],
-                        "run_name": args.run_name,
-                        "seed": int(args.seed),
-                        "replica_id": int(args.replica_id),
-                        "kv_mode": args.kv_mode,
-                        "context_len": args.context_len,
-                        "depth": r["depth"],
-                        "passed": r["passed"],
-                        "exact_match": r["exact_match"],
-                        "needle": r["needle"],
-                        "generated_text": r["generated_text"],
-                    }
-                )
-        print(f"Saved needle details to {details_path}")
+        # EVL-141: Wrap CSV writes in try/except so IO errors do not lose
+        # the already-computed pass_rate.  On failure, dump results to stdout.
+        try:
+            # NDL-006: Explicit UTF-8 encoding for cross-platform compatibility.
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=fields)
+                writer.writeheader()
+                writer.writerow(row)
+            print(f"Saved to {path}")
+
+            detail_fields = [
+                "run_id",
+                "run_name",
+                "seed",
+                "replica_id",
+                "kv_mode",
+                "context_len",
+                "depth",
+                "passed",
+                "exact_match",
+                "needle",
+                "generated_text",
+            ]
+            with open(details_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=detail_fields)
+                writer.writeheader()
+                for r in results:
+                    writer.writerow(
+                        {
+                            "run_id": row["run_id"],
+                            "run_name": args.run_name,
+                            "seed": int(args.seed),
+                            "replica_id": int(args.replica_id),
+                            "kv_mode": args.kv_mode,
+                            "context_len": args.context_len,
+                            "depth": r["depth"],
+                            "passed": r["passed"],
+                            "exact_match": r["exact_match"],
+                            "needle": r["needle"],
+                            "generated_text": r["generated_text"],
+                        }
+                    )
+            print(f"Saved needle details to {details_path}")
+        except (OSError, IOError) as csv_exc:
+            print(
+                f"[WARN] EVL-141: CSV write failed ({csv_exc}). "
+                "Dumping summary to stdout for recovery:"
+            )
+            print(json.dumps(row, indent=2, default=str))
 
         run_snapshot_dir = out_dir / row["run_id"]
         snapshot = build_config_snapshot(

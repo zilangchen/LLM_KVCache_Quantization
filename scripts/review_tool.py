@@ -24,10 +24,13 @@ from pathlib import Path
 
 TRACKER = Path(__file__).resolve().parent.parent / "review_tracker.md"
 
+# RVW-029: Match both [x] and [X] checkboxes for manually marked issues.
 ISSUE_RE = re.compile(
-    r'^- \[([ x])\] \*\*([A-Z]+-\d+)\*\* `\[(\w+)\]` (.+)$'
+    r'^- \[([ xX])\] \*\*([A-Z]+-\d+)\*\* `\[(\w+)\]` (.+)$'
 )
-SECTION_RE = re.compile(r'^### ([A-Z]{1,3})\. (.+?)(?:\s*—\s*`.+`)?$')
+# RVW-030: Support 1-5 letter section codes (was 1-3; EVAL/EMNLP would fail).
+# RVW-025: Non-greedy (.+?) stops before optional em-dash suffix.
+SECTION_RE = re.compile(r'^### ([A-Z]{1,5})\. (.+?)(?:\s*—\s*`.+`)?$')
 
 SEV_ORDER = {"CRIT": 0, "HIGH": 1, "MED": 2, "LOW": 3}
 SEV_FULL = {"CRIT": "CRITICAL", "HIGH": "HIGH", "MED": "MEDIUM", "LOW": "LOW"}
@@ -247,11 +250,21 @@ def cmd_add(path: Path, issue_id: str, sev: str, section_header: str, title: str
     """Add a new issue to the Open Issues section."""
     sev_map = {"CRITICAL": "CRIT", "HIGH": "HIGH", "MEDIUM": "MED", "LOW": "LOW"}
     sev_tag = sev_map.get(sev.upper(), sev.upper())
+    # RVW-027: Validate severity — unknown values would silently create [FOO] tags.
+    if sev_tag not in SEV_ORDER:
+        print(
+            f"ERROR: unknown severity '{sev}'. Expected one of: "
+            f"{', '.join(sev_map.keys())}",
+            file=sys.stderr,
+        )
+        return 1
 
     new_line = f"- [ ] **{issue_id}** `[{sev_tag}]` {title}"
 
     # RVW-021: Use file locking to prevent concurrent write corruption
     lock_path = path.with_suffix(".md.lock")
+    # RVW-028: Initialize lock_fd before try so finally does not NameError.
+    lock_fd = None
     lock_fd = open(lock_path, "w")
     try:
         fcntl.flock(lock_fd, fcntl.LOCK_EX)
@@ -327,8 +340,10 @@ def cmd_add(path: Path, issue_id: str, sev: str, section_header: str, title: str
         print(f"Added: {issue_id} [{sev_tag}] {title}")
         return 0
     finally:
-        fcntl.flock(lock_fd, fcntl.LOCK_UN)
-        lock_fd.close()
+        # RVW-028: Guard against lock_fd being None if open() failed.
+        if lock_fd is not None:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            lock_fd.close()
         try:
             os.unlink(lock_path)
         except OSError:

@@ -116,13 +116,13 @@ tools: Read, Edit, Write, Bash, Glob, Grep, Task, NotebookEdit, Agent
 **必须在一条消息中同时发出 7 个 Agent 调用**，实现真正的并行：
 
 ```
-Agent(subagent_type="review-numerical",  model="sonnet", prompt="审查以下文件的数值正确性: ...")
-Agent(subagent_type="review-silent",     model="sonnet", prompt="审查以下文件的静默失败: ...")
-Agent(subagent_type="review-security",   model="sonnet", prompt="审查以下文件的安全漏洞: ...")
-Agent(subagent_type="review-contract",   model="sonnet", prompt="审查以下文件的接口契约: ...")
-Agent(subagent_type="review-boundary",   model="sonnet", prompt="审查以下文件的边界鲁棒性: ...")
-Agent(subagent_type="review-test",       model="sonnet", prompt="审查以下文件的测试覆盖: ...")
-Agent(subagent_type="review-quality",    model="sonnet", prompt="审查以下文件的代码质量: ...")
+Agent(subagent_type="review-numerical",  model="opus", prompt="审查以下文件的数值正确性: ...")
+Agent(subagent_type="review-silent",     model="opus", prompt="审查以下文件的静默失败: ...")
+Agent(subagent_type="review-security",   model="opus", prompt="审查以下文件的安全漏洞: ...")
+Agent(subagent_type="review-contract",   model="opus", prompt="审查以下文件的接口契约: ...")
+Agent(subagent_type="review-boundary",   model="opus", prompt="审查以下文件的边界鲁棒性: ...")
+Agent(subagent_type="review-test",       model="opus", prompt="审查以下文件的测试覆盖: ...")
+Agent(subagent_type="review-quality",    model="opus", prompt="审查以下文件的代码质量: ...")
 ```
 
 每个 Agent 的 prompt 必须包含：

@@ -7,7 +7,9 @@ INT4 uses 4-bit signed integers. Symmetric quantization uses range [-7, 7];
 asymmetric quantization (KIVI-style) uses the full [-8, 7] range.
 
 Note:
-- Quantized values are represented as torch.int8 in [-8, 7].
+- Quantized values are represented as torch.int8.
+  Symmetric quantization uses [-7, 7]; asymmetric uses the full [-8, 7].
+  (QNT-030: The module-level range statement here covers both paths.)
 - Bit packing (2x INT4 per byte) is supported by pack_int4/unpack_int4.
   pack/unpack use an offset of +8 to map [-8, 7] to [0, 15] for nibble storage.
 """
@@ -39,7 +41,10 @@ def quantize_symmetric_int4(
     Returns:
         (quantized, scale) tuple
         - quantized: INT8 tensor (storing INT4 values in [-7, 7])
-        - scale: FP16 tensor for dequantization, shape [B, H, S, num_groups]
+        - scale: FP32 tensor for dequantization, shape [B, H, S, num_groups]
+          (QNT-037/ENG-066: always float32 regardless of input dtype to
+          preserve INT4 scale precision; Triton kernel callers must cast
+          to float16 before passing to the kernel)
     """
     if not tensor.is_floating_point():
         raise ValueError(f"Input tensor must be float, got {tensor.dtype}")
@@ -138,6 +143,12 @@ def quantize_symmetric_int4_with_scale(
     num_groups = head_dim // group_size
     reshaped = tensor.view(batch, heads, seq_len, num_groups, group_size)
 
+    # QNT-042: Catch device mismatch early (same pattern as int8_basic.py).
+    if scale.device != tensor.device:
+        raise ValueError(
+            f"scale device ({scale.device}) != tensor device ({tensor.device}). "
+            "Move scale to the same device before quantization."
+        )
     scale_expanded = _normalize_static_scale(scale, batch, heads, seq_len, num_groups)
     # ENG-066: Keep static scale in float32 for INT4 precision.
     scale_expanded = scale_expanded.to(torch.float32).clamp(min=1e-5)
@@ -179,8 +190,14 @@ def dequantize_symmetric_int4(
         # Group-wise scale [..., num_groups, 1]
         B, H, S, D = quantized.shape
         num_groups = scale.shape[-2]
+        # QNT-044: Validate divisibility (matches Path B check below).
+        if num_groups <= 0 or D % num_groups != 0:
+            raise ValueError(
+                f"Invalid scale shape for group-wise dequantization (Path A): "
+                f"quantized={tuple(quantized.shape)}, scale={tuple(scale.shape)}"
+            )
         group_size = D // num_groups
-        
+
         q_reshaped = quantized.view(B, H, S, num_groups, group_size)
         # Scale broadcasts: [..., num_groups, 1] * [..., num_groups, group_size]
         decoded_reshaped = q_reshaped.to(scale.dtype) * scale
@@ -258,6 +275,9 @@ def unpack_int4(packed: Tensor) -> Tensor:
     Returns:
         Unpacked INT8 tensor with values in [-8, 7], shape [..., N*2]
     """
+    # QNT-038: Validate input dtype — float/non-int8 input would silently corrupt nibble extraction.
+    if packed.dtype != torch.int8:
+        raise ValueError(f"unpack_int4 expects int8 packed input, got {packed.dtype}")
     # Convert to unsigned for bit operations
     unsigned = packed.to(torch.uint8)
 

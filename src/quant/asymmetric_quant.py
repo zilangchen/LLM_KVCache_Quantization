@@ -36,7 +36,11 @@ def quantize_asymmetric(
               For per-channel K: axis=-1 (head_dim), scale shared across tokens.
               For per-token V: axis=-1 (head_dim), scale per token.
         quant_bits: 8 or 4
-        percentile: Clipping percentile for outlier suppression (100.0 = no clipping)
+        percentile: Clipping percentile for outlier suppression (100.0 = no clipping).
+            QNT-045: In asymmetric mode, percentile clips *both* tails (lo/hi)
+            symmetrically around the median.  In contrast, symmetric quantization
+            (int8_basic/int4_basic) clips only the absolute maximum (single-tail).
+            The same parameter name is used for API consistency but the semantics differ.
 
     Returns:
         quantized: INT8 tensor (always stored as int8, even for 4-bit)
@@ -44,6 +48,13 @@ def quantize_asymmetric(
                callers such as kivi_style_cache may cast to a different dtype
                for storage via .to(scale_dtype))
         zero_point: FP32 zero_point tensor (same dtype convention as scale)
+
+    Warning (QNT-039):
+        If the caller casts scale/zero_point to float16, very small FP32 scale
+        values (< ~6e-8) will underflow to 0, causing all dequantized values
+        to collapse to zero_point. The _range_floor clamp below mitigates this
+        for new quantizations, but callers should store scales in float32 when
+        possible (see kivi_style_cache._scale_dtype = torch.float32).
     """
     _check_quantize_input(tensor, "quantize_asymmetric")
     if not tensor.is_floating_point():

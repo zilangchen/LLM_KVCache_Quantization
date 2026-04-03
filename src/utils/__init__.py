@@ -16,6 +16,8 @@ from src.utils.repro import (
     write_config_snapshot,
     resolve_quant_bits,
 )
+# UTL-010: Export hf utility for consistent module API.
+from src.utils.hf import resolve_pretrained_path
 
 __all__ = [
     "CUDATimer",
@@ -30,4 +32,5 @@ __all__ = [
     "ensure_dir",
     "write_config_snapshot",
     "resolve_quant_bits",
+    "resolve_pretrained_path",
 ]

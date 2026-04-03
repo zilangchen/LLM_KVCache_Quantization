@@ -87,6 +87,11 @@ def main():
             "int4_fused",
             "int4_ours",
             "int4_ours_mixed",
+            "kivi_style",              # PRF-017: was missing
+            "int4_kivi_aligned",
+            "int4_mixed_kv",
+            "int4_ours_asym",
+            "int4_ours_asym_ba",
         ],
         help="KV cache mode (default: fp16)",
     )
@@ -235,11 +240,10 @@ def main():
         print("  Make sure you're running from the project root.")
         sys.exit(1)
 
-    # Check CUDA
+    # Check CUDA — PRF-018: exit(1) on no-GPU so CI detects failure.
     if not torch.cuda.is_available():
-        print("\n⚠️  WARNING: CUDA is not available!")
-        print("  This script requires a GPU to run.")
-        sys.exit(0)
+        print("\nWARNING: CUDA is not available! This script requires a GPU to run.")
+        sys.exit(1)
 
     # Set seeds for reproducibility
     set_seed(seed=args.seed, deterministic=True)
@@ -280,13 +284,15 @@ def main():
     print(f"  Prompt preview: {prompt[:80]}...")
 
     # Step 4: Warmup
+    # PRF-019: Use the actual profiling prompt for warmup so Triton JIT
+    # compiles kernels for the correct shape, not a short "Hello" shape.
     if args.warmup > 0:
         print(f"\n[4/5] Warmup ({args.warmup} runs)...")
         for i in range(args.warmup):
             _ = generate(
                 model=model,
                 tokenizer=tokenizer,
-                prompt="Hello",
+                prompt=prompt,
                 max_new_tokens=8,
                 kv_mode=args.kv_mode,
                 group_size=args.group_size,

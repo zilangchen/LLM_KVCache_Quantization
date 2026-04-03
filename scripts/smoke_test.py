@@ -237,6 +237,8 @@ def main():
     result = {
         "run_id": f"smoke_test_{timestamp.replace(':', '-')}",
         "model_id": args.model_id,
+        "model_revision": getattr(args, "model_revision", None),  # SMK-010
+        "seed": getattr(args, "seed", 1234),  # SMK-010: record seed for reproducibility
         "prompt": args.prompt,
         "generated_text": new_text.strip(),
         "max_new_tokens": args.max_new_tokens,

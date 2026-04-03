@@ -57,7 +57,10 @@ def plot_inv_tau_heatmap(
     ax.set_xlabel("KV Head Index")
     ax.set_ylabel("Layer Index")
     ax.set_title(f"{title} ($\\tau^{{-1}}$)")
-    ax.set_xticks(range(num_heads))
+    # CAL-050: Guard xticks with a threshold matching yticks to prevent
+    # unreadable overlapping labels on models with many KV heads (32+).
+    if num_heads <= 32:
+        ax.set_xticks(range(num_heads))
     if num_layers <= 30:
         ax.set_yticks(range(num_layers))
     cbar = fig.colorbar(im, ax=ax, shrink=0.8)
@@ -125,7 +128,18 @@ def plot_scale_heatmap(
         else:
             processed.append(np.array([layer_arr.mean()]))
 
-    arr = np.array(processed)  # [L, H]
+    if not processed:
+        print(f"  SKIP scale heatmap: no scale data")
+        return
+    # CAL-051: Ragged head counts across layers (e.g. MOE/Hybrid architectures)
+    # produce an object-dtype array that imshow cannot render. Pad to max width.
+    max_h = max(len(row) for row in processed)
+    if any(len(row) != max_h for row in processed):
+        processed = [
+            np.pad(row, (0, max_h - len(row)), constant_values=np.nan)
+            for row in processed
+        ]
+    arr = np.array(processed, dtype=np.float64)  # [L, H]
     fig, ax = plt.subplots(figsize=(max(6, arr.shape[1] * 0.5), max(4, arr.shape[0] * 0.25)))
     im = ax.imshow(arr, aspect="auto", cmap="viridis", interpolation="nearest")
     ax.set_xlabel("KV Head Index")

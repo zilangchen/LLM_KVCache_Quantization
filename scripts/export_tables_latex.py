@@ -236,8 +236,10 @@ def _latex_table_env(
         tabular_latex,
     ]
     if footnote:
+        # LTX-010: Escape footnote text so _, &, % etc. don't break LaTeX.
+        safe_footnote = _latex_escape(footnote)
         lines.append(r"\vspace{1mm}")
-        lines.append(rf"\parbox{{\linewidth}}{{\footnotesize {footnote}}}")
+        lines.append(rf"\parbox{{\linewidth}}{{\footnotesize {safe_footnote}}}")
     lines.append(r"\end{table}")
     lines.append("")
     return "\n".join(lines)
@@ -246,15 +248,35 @@ def _latex_table_env(
 def _to_latex_tabular(df: pd.DataFrame, *, index: bool = False) -> str:
     if df.empty:
         return ""
-    return df.to_latex(
+    # LTX-009: Escape column names (not just cell contents) so underscores
+    # in custom columns_col values don't break LaTeX.
+    safe_cols = {c: _latex_escape(str(c)) for c in df.columns}
+    out = df.rename(columns=safe_cols)
+    # LTX-004: Render NaN cells as '---' instead of blank.
+    return out.to_latex(
         index=index,
         escape=True,
+        na_rep="---",
     )
 
 
 def _write(path: Path, content: str) -> None:
+    """Write content to *path* atomically via temp-file + rename (LTX-011)."""
+    import tempfile
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+    # Write to a temp file in the same directory, then rename for atomicity.
+    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with open(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        Path(tmp).replace(path)
+    except BaseException:
+        # Clean up temp file on failure.
+        try:
+            Path(tmp).unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
 
 
 def _export_profile_table(
@@ -283,8 +305,17 @@ def _export_profile_table(
         return paths
 
     # Default thesis tables assume batch=1 and fixed curve gen_len=64.
+    # LTX-006: Use conditional filter instead of strict equality; warn if
+    # the target value is absent rather than silently producing empty tables.
     if "batch" in df.columns:
-        df = df[pd.to_numeric(df["batch"], errors="coerce") == 1]
+        batch_series = pd.to_numeric(df["batch"], errors="coerce")
+        if (batch_series == 1).any():
+            df = df[batch_series == 1]
+        else:
+            logger.warning(
+                "%s: no rows with batch=1 found; using all %d rows.",
+                csv_name, len(df),
+            )
     if "gen_len" in df.columns:
         gen = pd.to_numeric(df["gen_len"], errors="coerce")
         if (gen == 64).any():
@@ -391,6 +422,16 @@ def export_ppl(tables_dir: Path, out_dir: Path, *, label_prefix: str) -> List[Pa
         if not cols:
             continue
         out = model_df[cols].copy()
+        # LTX-005: Deduplicate rows — if multiple seq_len entries exist for
+        # the same kv_mode, keep the one with the highest tokens_evaluated
+        # (most representative) to avoid duplicate rows in the table.
+        if "kv_mode" in out.columns and len(out) > out["kv_mode"].nunique():
+            if "tokens_evaluated_mean" in out.columns:
+                out["_te"] = pd.to_numeric(out["tokens_evaluated_mean"], errors="coerce")
+                out = out.sort_values("_te", ascending=False).drop_duplicates(subset=["kv_mode"], keep="first")
+                out = out.drop(columns=["_te"])
+            else:
+                out = out.drop_duplicates(subset=["kv_mode"], keep="first")
         if "perplexity_mean" in out.columns:
             out["perplexity_mean"] = pd.to_numeric(out["perplexity_mean"], errors="coerce").round(4)
         if "tokens_evaluated_mean" in out.columns:
@@ -612,6 +653,13 @@ def export_main_claims(tables_dir: Path, out_dir: Path, *, label_prefix: str) ->
         ]:
             if col in out.columns:
                 out[col] = pd.to_numeric(out[col], errors="coerce").round(digits)
+        # LTX-015: Format claim_seq_len as integer to avoid "32704.0" in table.
+        if "claim_seq_len" in out.columns:
+            out["claim_seq_len"] = pd.to_numeric(out["claim_seq_len"], errors="coerce")
+            try:
+                out["claim_seq_len"] = out["claim_seq_len"].astype("Int64")
+            except Exception:
+                pass
 
         tabular = _to_latex_tabular(out, index=False)
         safe_suffix = _sanitize_label(model_suffix)
@@ -650,6 +698,23 @@ def export_relative_gain(tables_dir: Path, out_dir: Path, *, label_prefix: str) 
     ]
     df = df[df["baseline_mode"].isin(["int8_baseline", "int4_baseline", "int4_fused", "kivi_style"])]
     df = df[df["challenger_mode"].isin(["int8_ours", "int4_ours", "int8_baseline"])]
+
+    # LTX-003: Remove cross-bit-width pairs (e.g. int8_baseline vs int4_ours)
+    # which produce meaningless comparisons.
+    _int8_modes = {"int8_baseline", "int8_ours", "int8_fused"}
+    _int4_modes = {"int4_baseline", "int4_fused", "int4_ours", "int4_ours_mixed", "kivi_style",
+                   "int4_kivi_aligned", "int4_mixed_kv", "int4_ours_asym", "int4_ours_asym_ba"}
+    def _same_bitwidth(row: pd.Series) -> bool:
+        b, c = row["baseline_mode"], row["challenger_mode"]
+        if b in _int8_modes and c in _int8_modes:
+            return True
+        if b in _int4_modes and c in _int4_modes:
+            return True
+        # Allow fp16 as baseline for any challenger.
+        if b == "fp16" or c == "fp16":
+            return True
+        return False
+    df = df[df.apply(_same_bitwidth, axis=1)]
     if "seq_len" in df.columns:
         seq = pd.to_numeric(df["seq_len"], errors="coerce")
         if (seq == 32704).any():
@@ -679,9 +744,32 @@ def export_relative_gain(tables_dir: Path, out_dir: Path, *, label_prefix: str) 
             if c in model_df.columns
         ]
         out = model_df[keep].copy()
-        for col, digits in [("baseline_value", 4), ("challenger_value", 4), ("gain_pct", 2)]:
-            if col in out.columns:
-                out[col] = pd.to_numeric(out[col], errors="coerce").round(digits)
+        # LTX-013: Per-metric precision instead of uniform round(4) for all
+        # value columns; large-magnitude metrics like kv_cache_mem_mb get
+        # fewer decimals for readability.
+        _metric_digits = {
+            "tpot_ms": 2, "tok_per_s": 2, "kv_cache_mem_mb": 0,
+            "perplexity": 4, "needle_pass_rate": 2, "longbench_score": 2,
+            "ruler_pass_rate": 2,
+        }
+        for col in ["baseline_value", "challenger_value"]:
+            if col not in out.columns:
+                continue
+            out[col] = pd.to_numeric(out[col], errors="coerce")
+            if "metric" in out.columns:
+                for metric_val, digits in _metric_digits.items():
+                    mask = out["metric"] == metric_val
+                    if mask.any():
+                        out.loc[mask, col] = out.loc[mask, col].round(digits)
+                # Fallback for unknown metrics: round to 2.
+                known = set(_metric_digits.keys())
+                unknown_mask = ~out["metric"].isin(known)
+                if unknown_mask.any():
+                    out.loc[unknown_mask, col] = out.loc[unknown_mask, col].round(2)
+            else:
+                out[col] = out[col].round(4)
+        if "gain_pct" in out.columns:
+            out["gain_pct"] = pd.to_numeric(out["gain_pct"], errors="coerce").round(2)
 
         tabular = _to_latex_tabular(out, index=False)
         safe_suffix = _sanitize_label(model_suffix)
@@ -731,7 +819,12 @@ def main() -> int:
         "",
     ]
     for path in written:
-        rel = path.name
+        # LTX-012: Use path relative to out_dir (not just filename) so
+        # \input works even if all_tables.tex is compiled from a parent dir.
+        try:
+            rel = path.relative_to(out_dir)
+        except ValueError:
+            rel = path.name
         lines.append(rf"\input{{{rel}}}")
     lines.append("")
     _write(all_tex, "\n".join(lines))

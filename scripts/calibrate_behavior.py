@@ -70,7 +70,13 @@ from scripts.config_utils import load_config, resolve_run_config
 
 
 def _rotate_half(x: torch.Tensor) -> torch.Tensor:
-    """Rotate half the hidden dims of the input (RoPE helper)."""
+    """Rotate half the hidden dims of the input (RoPE helper).
+
+    CAL-035: This function duplicates patch_model.py's _rotate_half (L203).
+    Both must stay in sync if either changes. A shared src/utils/rope.py
+    extraction is deferred because the calibration script runs offline and
+    the two call-sites have subtly different input shapes.
+    """
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
@@ -82,6 +88,9 @@ def _apply_rope_to_q(
     sin: torch.Tensor,
 ) -> torch.Tensor:
     """Apply rotary position embedding to query states only.
+
+    CAL-035: Near-duplicate of patch_model.py _apply_rope (L210). Both must
+    stay in sync; see _rotate_half note above.
 
     Args:
         q: [B, H, S, D] query states.
@@ -118,10 +127,16 @@ def _get_rope_for_position(attn_module, dummy_states, position_ids, model_backbo
         rotary = getattr(model_backbone, "rotary_emb", None)
     if rotary is None:
         return None, None
-    _EXPECTED = (AttributeError, KeyError, TypeError)
+    # CAL-016/023/034: Catch RuntimeError and ValueError in addition to the
+    # original three, because some rotary_emb implementations (e.g. LLaMA
+    # using shape[1] as seq_len when receiving q-shaped hidden states) raise
+    # RuntimeError on shape mismatch rather than TypeError/AttributeError.
+    _EXPECTED = (AttributeError, KeyError, TypeError, RuntimeError, ValueError)
     for call in (
         lambda: rotary(dummy_states, position_ids),
         lambda: rotary(dummy_states, position_ids=position_ids),
+        # CAL-034: keyword-only position_ids variant used by some transformers versions
+        lambda: rotary(dummy_states, seq_len=position_ids.shape[-1]),
         lambda: rotary(position_ids),
     ):
         try:
@@ -130,6 +145,15 @@ def _get_rope_for_position(attn_module, dummy_states, position_ids, model_backbo
             continue
         if isinstance(out, (tuple, list)) and len(out) == 2:
             return out[0], out[1]
+    # CAL-034: All API variants exhausted without success; warn instead of
+    # silently returning None so callers know RoPE was unavailable.
+    import warnings
+    warnings.warn(
+        "All rotary_emb API variants failed; returning (None, None). "
+        "Q vectors will not have RoPE applied during calibration.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
     return None, None
 
 
@@ -210,6 +234,12 @@ def compute_absmax_per_group(tensor: torch.Tensor, group_size: int) -> torch.Ten
     """
     # tensor: [heads, seq, head_dim]
     heads, seq_len, head_dim = tensor.shape
+    # CAL-021: Validate divisibility before view() to give a descriptive error
+    # instead of an opaque RuntimeError when called independently of upstream checks.
+    if group_size <= 0 or head_dim % group_size != 0:
+        raise ValueError(
+            f"head_dim ({head_dim}) must be divisible by group_size ({group_size})"
+        )
     num_groups = head_dim // group_size
     view = tensor.view(heads, seq_len, num_groups, group_size)
     return view.abs().amax(dim=3).amax(dim=1)  # [heads, num_groups]
@@ -221,12 +251,24 @@ def dequantize_with_scale(
     group_size: int,
     qmax: int = 127,
 ) -> torch.Tensor:
-    # k: [seq, head_dim], scale: [num_groups]
+    """Quantize-then-dequantize k using a static scale (calibration simulation).
+
+    Args:
+        k: [seq, head_dim] — key tensor for one head.
+        scale: [num_groups] — per-group scale (where num_groups = head_dim // group_size).
+               CAL-019: num_groups corresponds to *kv_heads'* head_dim groups, not num_heads.
+        group_size: elements per quantization group.
+        qmax: clipping bound (127 for INT8, 7 for INT4).
+
+    Returns:
+        Dequantized tensor, same shape as k.
+    """
     head_dim = k.shape[-1]
     num_groups = head_dim // group_size
     k_view = k.view(-1, num_groups, group_size)
-    # CAL-010: Clamp scale to prevent division-by-zero when a group has
-    # all-zero values, which would produce NaN and silently corrupt inv_tau.
+    # CAL-010 + CAL-013: Clamp scale identically to the production path
+    # (_normalize_static_scale uses clamp(min=1e-5)) to ensure calibration
+    # loss faithfully reflects true inference quantization error.
     scale = scale.clamp(min=1e-5)
     scale_view = scale.view(1, num_groups, 1)
     q = torch.round(k_view / scale_view).clamp(-int(qmax), int(qmax))
@@ -243,6 +285,12 @@ def quantize_dequantize_with_clip_stats(
 ) -> Tuple[torch.Tensor, int, int]:
     """
     Quantize/dequantize with int8 range and return clipping stats.
+
+    CAL-042: outlier_rescue_ratio is shared between K and V paths. In
+    mixed_rescue=False mode, V rescue_ratio is forced to 0 in the caller
+    (evaluate_quant_candidate). K and V have different outlier distributions
+    (K is per-head-dim, V is per-token), so a single ratio is suboptimal.
+    Independent K/V rescue optimization would require a 2D grid search.
 
     tensor: [seq, head_dim], scale: [num_groups]
     returns: dequantized tensor [seq, head_dim], clipped_count, total_count
@@ -588,6 +636,20 @@ def select_best_trial(
     if not trials:
         raise ValueError("No candidate trials found for calibration selection.")
 
+    # CAL-044: Validate that objective and loss_function are consistent.
+    # Explicit mean_kl / mean_mse objectives imply a specific loss_function;
+    # a mismatch means the trial dicts won't contain the expected keys.
+    if objective == "mean_kl" and loss_function != "kl":
+        raise ValueError(
+            f"objective='mean_kl' requires loss_function='kl', got '{loss_function}'. "
+            "Trial data does not contain 'mean_kl' keys when generated with MSE loss."
+        )
+    if objective == "mean_mse" and loss_function != "mse":
+        raise ValueError(
+            f"objective='mean_mse' requires loss_function='mse', got '{loss_function}'. "
+            "Trial data does not contain 'mean_mse' keys when generated with KL loss."
+        )
+
     # Determine loss metric key prefix based on objective and loss_function.
     # For explicit mean_kl/mean_mse objectives, the key is in the objective name.
     # For "robust", derive from loss_function.
@@ -710,8 +772,24 @@ def scales_from_absmax_samples(
     clip_percentile: float,
     qmax: int,
 ) -> List[torch.Tensor]:
+    """Compute per-layer static scales from sample-level absmax statistics.
+
+    CAL-024: The percentile operates over *sample-level* absmax values (i.e.
+    the max within each calibration sample's sequence). This differs from the
+    inference path which applies percentile clipping at the *token level*.
+    The two "populations" are inherently different and cannot be directly
+    aligned; this is a known design trade-off of static calibration.
+    """
     scales: List[torch.Tensor] = []
     for layer_idx in range(len(absmax_samples)):
+        # CAL-041: Guard against empty sample list for a layer, which would
+        # cause torch.stack([]) to raise RuntimeError.
+        if not absmax_samples[layer_idx]:
+            raise ValueError(
+                f"absmax_samples[{layer_idx}] is empty — no calibration "
+                f"samples collected for layer {layer_idx}. Check that "
+                f"num_layers matches the model."
+            )
         # torch.quantile requires float32/float64
         stack = torch.stack(absmax_samples[layer_idx], dim=0).float()
         absmax = torch.quantile(stack, clip_percentile / 100.0, dim=0)
@@ -1151,6 +1229,18 @@ def main():
     if args.int4_outlier_ratio < 0.0 or args.int4_outlier_ratio > 1.0:
         raise ValueError(
             f"--int4_outlier_ratio must be in [0,1], got {args.int4_outlier_ratio}"
+        )
+    # CAL-045: Validate clip_percentile range to avoid opaque torch.quantile errors.
+    for _cp_name in ("clip_percentile_k", "clip_percentile_v"):
+        _cp_val = getattr(args, _cp_name, 99.9)
+        if _cp_val is not None and (_cp_val < 0.0 or _cp_val > 100.0):
+            raise ValueError(f"--{_cp_name} must be in [0, 100], got {_cp_val}")
+    # CAL-046: Validate inv_tau_candidates are positive (negative inverts softmax).
+    _inv_tau_str = getattr(args, "inv_tau_candidates", "1.0")
+    _inv_tau_vals = [float(x) for x in str(_inv_tau_str).split(",") if x.strip()]
+    if any(v <= 0 for v in _inv_tau_vals):
+        raise ValueError(
+            f"All inv_tau_candidates must be positive, got {_inv_tau_vals}"
         )
 
     set_seed(seed=args.seed, deterministic=True)
@@ -1661,7 +1751,11 @@ def main():
     fd, tmp_path = tempfile.mkstemp(suffix=".json", dir=calib_out_dir)
     try:
         with os.fdopen(fd, "w") as f:
-            json.dump(calib_payload, f, indent=2)
+            # CAL-018: allow_nan=False rejects float('inf')/NaN values that
+            # produce non-standard JSON tokens (Infinity/NaN). If a trial
+            # returned inf loss (empty loss_values), this catches it here
+            # with a clear error rather than writing unparseable JSON.
+            json.dump(calib_payload, f, indent=2, allow_nan=False)
         os.replace(tmp_path, str(calib_out_path))
     except BaseException:
         os.unlink(tmp_path)
@@ -1691,6 +1785,9 @@ def main():
     plt.grid(True)
     plot_path = out_dir / "outlier_profile.png"
     plt.savefig(plot_path)
+    # CAL-022: Close figure to release memory and avoid matplotlib
+    # "too many open figures" warning in loop/test environments.
+    plt.close()
 
     hardware = get_hardware_info()
     snapshot = build_config_snapshot(

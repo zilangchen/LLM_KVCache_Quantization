@@ -228,6 +228,15 @@ class KIVIStyleKVCache:
         # [B, H, capacity]) need to grow.  Do NOT add K scale/zp realloc
         # here — doing so would overwrite the prefill-computed per-channel
         # scales and silently corrupt K dequantization.
+        #
+        # KVC-073: Defensive assertion — K scale should already be initialized
+        # by the time we reach realloc (which only happens on decode tokens
+        # after prefill has set per-channel scales).
+        assert self._k_scale_initialized[layer_id], (
+            f"BUG: realloc triggered for layer {layer_id} but K scale is not "
+            f"initialized. Per-channel K scale must be set during prefill "
+            f"before any decode-time buffer growth."
+        )
         new_capacity = max(target_len, capacity * 2)
         if self.max_seq_len is not None:
             new_capacity = min(new_capacity, self.max_seq_len)
@@ -333,6 +342,15 @@ class KIVIStyleKVCache:
             self._k_scale_initialized[layer_id] = True
         else:
             # Decode: reuse prefill scale and zero-point.
+            # KVC-060: The decode path performs manual quantization (round+clamp)
+            # rather than calling quantize_asymmetric_per_channel(), because the
+            # scale/zp are frozen from prefill.  The math is equivalent:
+            #   q = round((x - zp) / scale).clamp(qmin, qmax)
+            # The prefill path delegates this to quantize_asymmetric_per_channel
+            # which also computes scale/zp from data, whereas decode reuses them.
+            # No percentile clipping is applied in decode because the scale is
+            # already calibrated — applying it again would be a no-op since the
+            # percentile only affects scale *computation*, not the quantize step.
             # ENG-007: KIVI decode path dequant->requant accumulates precision loss; this is inherent to the KIVI design.
             # KVC-074: Assert that the per-channel K scale was actually computed
             # during prefill before we rely on it.  The outer `if/else` already
@@ -458,8 +476,13 @@ class KIVIStyleKVCache:
         return k, v
 
     def get_seq_len(self) -> int:
-        """Return current sequence length."""
-        return int(max(self._layer_seq_lens)) if self._layer_seq_lens else 0
+        """Return current sequence length.
+
+        KVC-025/KVC-061: Use cached _seq_len (O(1)) instead of O(N) max() over
+        _layer_seq_lens.  _seq_len is maintained by append() at layer_id==0
+        (same pattern as INT8/INT4 caches).
+        """
+        return self._seq_len
 
     def clear(self) -> None:
         """Clear cache contents but keep buffers allocated.
