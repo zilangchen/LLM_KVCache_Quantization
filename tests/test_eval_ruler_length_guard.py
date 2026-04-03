@@ -19,10 +19,10 @@ except Exception:  # pragma: no cover - environment dependent
 @unittest.skipIf(ruler is None, "eval_ruler dependencies are unavailable in this environment.")
 class TestEvalRulerLengthGuard(unittest.TestCase):
     def test_budget_cwe_long_32k(self):
+        # gen_len removed; base = min(seq_len + gen_tokens_case, max_model_len)
         budget, base = ruler._effective_prompt_budget(  # pylint: disable=protected-access
             requested_context_len=32704,
             seq_len=32704,
-            gen_len=64,
             gen_tokens_case=128,
             max_model_len=32768,
         )
@@ -33,7 +33,6 @@ class TestEvalRulerLengthGuard(unittest.TestCase):
         budget, base = ruler._effective_prompt_budget(  # pylint: disable=protected-access
             requested_context_len=32704,
             seq_len=32704,
-            gen_len=64,
             gen_tokens_case=64,
             max_model_len=32768,
         )
@@ -44,7 +43,6 @@ class TestEvalRulerLengthGuard(unittest.TestCase):
         budget, base = ruler._effective_prompt_budget(  # pylint: disable=protected-access
             requested_context_len=32704,
             seq_len=32704,
-            gen_len=64,
             gen_tokens_case=256,
             max_model_len=32768,
         )
@@ -52,15 +50,16 @@ class TestEvalRulerLengthGuard(unittest.TestCase):
         self.assertEqual(budget, 32512)
 
     def test_budget_respects_model_cap_even_if_model_is_larger(self):
+        # base = min(32704 + 128, 131072) = 32832
+        # budget = min(32704, 32832 - 128) = 32704
         budget, base = ruler._effective_prompt_budget(  # pylint: disable=protected-access
             requested_context_len=32704,
             seq_len=32704,
-            gen_len=64,
             gen_tokens_case=128,
             max_model_len=131072,
         )
-        self.assertEqual(base, 32768)
-        self.assertEqual(budget, 32640)
+        self.assertEqual(base, 32832)
+        self.assertEqual(budget, 32704)
 
 
 if __name__ == "__main__":

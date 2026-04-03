@@ -34,7 +34,7 @@ def _make_ppl_csv(runs_dir: Path, seed: int, kv_mode: str) -> None:
     run_dir = runs_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     _write_csv(
-        run_dir / f"ppl_summary_{run_id}.csv",
+        run_dir / f"profile_ppl_{run_id}.csv",
         [
             "run_id", "model_id", "kv_mode", "quant_bits", "seq_len",
             "gen_len", "batch", "seed", "replica_id", "perplexity",
@@ -72,7 +72,7 @@ def _make_latency_csv(runs_dir: Path, seed: int, kv_mode: str) -> None:
     run_dir = runs_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     _write_csv(
-        run_dir / f"latency_summary_{run_id}.csv",
+        run_dir / f"profile_latency_{run_id}.csv",
         [
             "run_id", "model_id", "kv_mode", "quant_bits", "seq_len",
             "gen_len", "batch", "seed", "replica_id", "tpot_ms", "ttft_ms",
@@ -106,7 +106,7 @@ def _make_memory_csv(runs_dir: Path, seed: int, kv_mode: str) -> None:
     run_dir = runs_dir / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     _write_csv(
-        run_dir / f"memory_summary_{run_id}.csv",
+        run_dir / f"profile_memory_{run_id}.csv",
         [
             "run_id", "model_id", "kv_mode", "quant_bits", "seq_len",
             "gen_len", "batch", "seed", "replica_id",
@@ -233,14 +233,14 @@ class TestAggregateMainE2E(unittest.TestCase):
             self.assertTrue(ppl_path.exists())
             ppl = pd.read_csv(ppl_path)
             self.assertGreater(len(ppl), 0, "ppl_summary should not be empty")
-            # Must have required columns
-            for col in ["kv_mode", "perplexity"]:
+            # Must have required columns (aggregate produces *_mean columns)
+            for col in ["kv_mode", "perplexity_mean"]:
                 self.assertIn(col, ppl.columns, f"Missing column: {col}")
             # Perplexity values should be positive numbers
             for _, row in ppl.iterrows():
-                if pd.notna(row.get("perplexity")):
+                if pd.notna(row.get("perplexity_mean")):
                     self.assertGreater(
-                        float(row["perplexity"]), 0,
+                        float(row["perplexity_mean"]), 0,
                         "Perplexity must be positive"
                     )
 

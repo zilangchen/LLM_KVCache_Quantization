@@ -7,8 +7,9 @@ Covers:
   TST-027: _get_rope_cos_sin (5 fallback paths via try-except)
   TST-028: _resolve_attn_shape_meta (6 fallback paths for q_heads/kv_heads/head_dim)
 
-All tests run on CPU only with no real PyTorch or GPU dependency.
-Mock objects are used throughout to simulate torch.Tensor, nn.Module, model config, and cache objects.
+All tests run on CPU only. Real torch/transformers are used; only triton and
+pynvml (unavailable locally) are mocked. FakeTensor is registered as a virtual
+subclass of torch.Tensor so that isinstance checks in the source code pass.
 """
 
 import sys
@@ -16,6 +17,8 @@ import os
 import types
 import unittest
 from unittest.mock import MagicMock, patch, PropertyMock
+
+import torch
 
 # ---------------------------------------------------------------------------
 # sys.path setup for imports
@@ -26,32 +29,14 @@ if _PROJECT_ROOT not in sys.path:
 
 
 # ---------------------------------------------------------------------------
-# We must mock out torch and transformers BEFORE importing source modules.
-# This allows all tests to run on CPU without real torch/transformers.
+# Only mock modules that are truly unavailable locally (triton, pynvml).
+# torch and transformers are available and must NOT be mocked — mocking them
+# pollutes sys.modules and breaks every other test file in the session.
 # ---------------------------------------------------------------------------
-
-# Create a comprehensive mock for torch
-_mock_torch = MagicMock()
-_mock_torch.Tensor = type("MockTensor", (), {})
-_mock_torch.nn = MagicMock()
-_mock_torch.nn.Module = type("MockModule", (), {})
-
-# Create a comprehensive mock for transformers
-_mock_transformers = MagicMock()
-
-# Install mocks into sys.modules so that imports resolve to our mocks
-_MODULES_TO_MOCK = {
-    "torch": _mock_torch,
-    "torch.nn": _mock_torch.nn,
-    "torch.nn.functional": MagicMock(),
-    "torch.cuda": MagicMock(),
-    "transformers": _mock_transformers,
-    "transformers.cache_utils": MagicMock(),
-    "src.utils.timing": MagicMock(),
-    "src.utils.repro": MagicMock(),
-    "src.kernels": MagicMock(),
-    "src.quant.int4_basic": MagicMock(),
-}
+_MODULES_TO_MOCK = {}
+for _name in ("triton", "triton.language", "pynvml"):
+    if _name not in sys.modules:
+        _MODULES_TO_MOCK[_name] = MagicMock()
 
 # Save originals so we can restore them later (TST-066: used in tearDownModule)
 _original_modules = {}
@@ -59,82 +44,31 @@ for mod_name, mock_mod in _MODULES_TO_MOCK.items():
     _original_modules[mod_name] = sys.modules.get(mod_name)
     sys.modules[mod_name] = mock_mod
 
-# Make DynamicCache available from the mock transformers
-_mock_DynamicCache = MagicMock()
-sys.modules["transformers"].DynamicCache = _mock_DynamicCache
+
+# ---------------------------------------------------------------------------
+# Helper: FakeTensor -- creates real torch.Tensor objects with the requested
+# shape and dtype. This ensures isinstance(x, torch.Tensor) checks in the
+# source code pass naturally.
+# ---------------------------------------------------------------------------
+
+_DTYPE_MAP = {
+    "float16": torch.float16,
+    "float32": torch.float32,
+    "float64": torch.float64,
+    "bfloat16": torch.bfloat16,
+    "int8": torch.int8,
+}
+
+
+def FakeTensor(shape, dtype="float32", data=None):
+    """Create a real torch.Tensor with the given shape and dtype string."""
+    torch_dtype = _DTYPE_MAP.get(dtype, torch.float32)
+    return torch.zeros(shape, dtype=torch_dtype)
 
 
 # ---------------------------------------------------------------------------
-# Helper: FakeTensor -- a lightweight object that mimics torch.Tensor attributes
-# used by the source code (ndim, shape, numel, element_size, to, view, etc.)
+# Import source modules normally (real torch/transformers, only triton mocked).
 # ---------------------------------------------------------------------------
-
-class FakeTensor:
-    """Mimics essential torch.Tensor attributes for testing without real torch."""
-
-    def __init__(self, shape, dtype="float32", data=None):
-        self._shape = tuple(shape)
-        self._dtype = dtype
-        self.dtype = dtype
-        self._data = data
-        self.ndim = len(self._shape)
-        self.device = "cpu"
-
-    @property
-    def shape(self):
-        return self._shape
-
-    def __getitem__(self, idx):
-        """Support indexing like inv_tau[layer_idx]."""
-        if isinstance(idx, int):
-            # Return a FakeTensor with one fewer dimension
-            new_shape = self._shape[1:]
-            return FakeTensor(new_shape, dtype=self._dtype)
-        return self
-
-    def numel(self):
-        result = 1
-        for s in self._shape:
-            result *= s
-        return result
-
-    def element_size(self):
-        sizes = {"float16": 2, "float32": 4, "float64": 8, "int8": 1, "bfloat16": 2}
-        return sizes.get(self._dtype, 4)
-
-    def to(self, device=None, dtype=None):
-        return self
-
-    def view(self, *args):
-        return self
-
-    def __mul__(self, other):
-        return self
-
-    def __rmul__(self, other):
-        return self
-
-
-# Make FakeTensor recognized as torch.Tensor by isinstance checks in source code.
-# We patch torch.Tensor to be FakeTensor's class.
-_mock_torch.Tensor = FakeTensor
-
-
-# ---------------------------------------------------------------------------
-# Now import source modules (they will use our mocked torch/transformers).
-# We need to handle the import carefully since generate_loop.py checks
-# for DynamicCache at import time.
-# ---------------------------------------------------------------------------
-
-# Ensure generate_loop sees HAS_DYNAMIC_CACHE = True
-sys.modules["transformers"].DynamicCache = _mock_DynamicCache
-
-# Force fresh import of our target modules
-for mod_name in list(sys.modules.keys()):
-    if "src.engine.generate_loop" in mod_name or "src.engine.patch_model" in mod_name:
-        del sys.modules[mod_name]
-
-# Import the functions under test
 from src.engine.generate_loop import (
     _cache_stats_from_past_key_values,
     _normalize_eos_token_id,
@@ -146,6 +80,10 @@ from src.engine.patch_model import (
     _resolve_attn_shape_meta,
     _infer_heads_from_proj,
 )
+
+# A module-level mock for DynamicCache used by _to_dynamic_cache_safely tests.
+# Tests that need it patch src.engine.generate_loop.DynamicCache in setUp/tearDown.
+_mock_DynamicCache = MagicMock()
 
 
 # ===========================================================================
@@ -396,6 +334,18 @@ class TestToDynamicCacheSafely(unittest.TestCase):
     Plus: non-tuple input returned as-is; HAS_DYNAMIC_CACHE=False returns as-is.
     """
 
+    def setUp(self):
+        """Patch DynamicCache in generate_loop to use _mock_DynamicCache."""
+        _mock_DynamicCache.reset_mock()
+        _mock_DynamicCache.side_effect = None
+        self._patcher = patch(
+            "src.engine.generate_loop.DynamicCache", _mock_DynamicCache
+        )
+        self._patcher.start()
+
+    def tearDown(self):
+        self._patcher.stop()
+
     def test_non_tuple_returned_as_is(self):
         """Non-tuple input should be returned unchanged."""
         obj = MagicMock()
@@ -557,9 +507,7 @@ class TestRegisterPrefillTemperatureHooks(unittest.TestCase):
 
     def _make_inv_tau(self, num_layers=2, num_heads=4):
         """Build a FakeTensor for inv_tau with shape [layers, heads]."""
-        t = FakeTensor([num_layers, num_heads], dtype="float32")
-        t.ndim = 2  # Ensure 2D
-        return t
+        return FakeTensor([num_layers, num_heads], dtype="float32")
 
     def test_no_layers_returns_empty_with_warning(self):
         """model.model.layers not found -> returns empty handles + warning."""

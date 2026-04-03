@@ -203,7 +203,7 @@ class TestCheckRunCompleteness(unittest.TestCase):
 
             run_id = f"req_oom_{run_tag}"
             run_dir = runs_dir / run_id
-            _write(run_dir / "profile_latency_ok.csv", "x\n1\n")
+            _write(run_dir / "profile_latency_ok.csv", "kv_mode,seq_len,gen_len,tpot_ms\nint8_ours,4096,64,4.5\n")
             _write(
                 run_dir / "run_manifest.json",
                 json.dumps(
@@ -239,7 +239,8 @@ class TestCheckRunCompleteness(unittest.TestCase):
                 str(out_json),
             ]
             result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-            self.assertEqual(result.returncode, 1, msg=result.stdout + "\n" + result.stderr)
+            # OOM in required group is now an unexpected_failure (CHK-006), exit code 2
+            self.assertEqual(result.returncode, 2, msg=result.stdout + "\n" + result.stderr)
             report = json.loads(out_json.read_text(encoding="utf-8"))
             self.assertEqual(len(report["oom_registry"]), 1)
             self.assertIn("req_oom", report["missing_required_run_names"])
@@ -290,34 +291,18 @@ class TestCheckRunCompleteness(unittest.TestCase):
             report = json.loads(out_json.read_text(encoding="utf-8"))
             self.assertGreater(len(report["unexpected_failures"]), 0)
 
-    def test_auto_infer_run_groups_from_config_covers_kivi(self):
+    def test_explicit_run_groups_covers_kivi(self):
+        """--config removed; use explicit --required_run_names / --stress_run_names."""
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             runs_dir = root / "runs"
             logs_dir = root / "logs"
             out_json = root / "report.json"
-            cfg = root / "exp_matrix.yaml"
             run_tag = "rt_cfg"
 
-            cfg.write_text(
-                """
-matrix:
-  - run_name: req_a
-    kv_mode: int8_ours
-    batch: 1
-  - run_name: kivi_style_int8_curve_8k
-    kv_mode: kivi_style
-    quant_bits: 8
-    batch: 1
-  - run_name: stress_b32_throughput_8k
-    kv_mode: int8_ours
-    batch: 32
-""".strip(),
-                encoding="utf-8",
-            )
-
             req_id = f"req_a_{run_tag}"
-            _write(runs_dir / req_id / "profile_latency_ok.csv", "x\n1\n")
+            _write(runs_dir / req_id / "profile_latency_ok.csv",
+                   "kv_mode,seq_len,gen_len,tpot_ms\nint8_ours,4096,64,4.5\n")
             _write(
                 runs_dir / req_id / "run_manifest.json",
                 json.dumps(
@@ -331,7 +316,8 @@ matrix:
             _write(logs_dir / req_id / "profile_latency.log", "done\n")
 
             kivi_id = f"kivi_style_int8_curve_8k_{run_tag}"
-            _write(runs_dir / kivi_id / "profile_latency_ok.csv", "x\n1\n")
+            _write(runs_dir / kivi_id / "profile_latency_ok.csv",
+                   "kv_mode,seq_len,gen_len,tpot_ms\nkivi_style,4096,64,5.0\n")
             _write(
                 runs_dir / kivi_id / "run_manifest.json",
                 json.dumps(
@@ -368,15 +354,16 @@ matrix:
                 run_tag,
                 "--tasks",
                 "profile_latency",
-                "--config",
-                str(cfg),
+                "--required_run_names",
+                "req_a,kivi_style_int8_curve_8k",
+                "--stress_run_names",
+                "stress_b32_throughput_8k",
                 "--out_json",
                 str(out_json),
             ]
             result = subprocess.run(cmd, capture_output=True, text=True, check=False)
             self.assertEqual(result.returncode, 0, msg=result.stdout + "\n" + result.stderr)
             report = json.loads(out_json.read_text(encoding="utf-8"))
-            self.assertEqual(report["run_name_source"], f"config:{cfg}")
             self.assertIn("kivi_style_int8_curve_8k", report["required_run_names"])
             self.assertIn("stress_b32_throughput_8k", report["stress_run_names"])
             self.assertEqual(len(report["unexpected_failures"]), 0)

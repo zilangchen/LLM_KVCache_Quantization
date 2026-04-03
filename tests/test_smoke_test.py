@@ -17,7 +17,25 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.utils.repro import get_git_commit, get_hardware_info
+
+# NOTE: We import src.utils.repro lazily (inside each test method) instead of
+# at module level.  Other test files (e.g. test_eval_ppl_guardrails) may
+# monkey-patch attributes on the real src.utils.repro module at collection time
+# and restore them in tearDownModule.  A module-level `from src.utils.repro
+# import get_git_commit` would capture the mock reference before tearDown runs,
+# causing spurious failures.
+
+
+def _get_git_commit():
+    """Lazy accessor that always reads the current module attribute."""
+    import src.utils.repro as _repro
+    return _repro.get_git_commit()
+
+
+def _get_hardware_info():
+    """Lazy accessor that always reads the current module attribute."""
+    import src.utils.repro as _repro
+    return _repro.get_hardware_info()
 
 
 class TestGetGitCommit(unittest.TestCase):
@@ -25,11 +43,13 @@ class TestGetGitCommit(unittest.TestCase):
 
     def test_returns_string(self):
         """get_git_commit() must always return a string."""
+        from src.utils.repro import get_git_commit
         result = get_git_commit()
         self.assertIsInstance(result, str)
 
     def test_returns_hash_or_unknown(self):
         """Return value must be either a short hex hash or 'unknown'."""
+        from src.utils.repro import get_git_commit
         result = get_git_commit()
         if result != "unknown":
             # Should be a hex string of length <= 8
@@ -42,6 +62,7 @@ class TestGetGitCommit(unittest.TestCase):
     @patch("src.utils.repro.subprocess.run")
     def test_git_available_returns_hash(self, mock_run):
         """When git succeeds, return first 8 chars of the hash."""
+        from src.utils.repro import get_git_commit
         mock_run.return_value = MagicMock(
             stdout="abcdef1234567890\n",
             returncode=0,
@@ -52,6 +73,7 @@ class TestGetGitCommit(unittest.TestCase):
     @patch("src.utils.repro.subprocess.run", side_effect=FileNotFoundError)
     def test_git_not_found_returns_unknown(self, mock_run):
         """When git is not installed (FileNotFoundError), return 'unknown'."""
+        from src.utils.repro import get_git_commit
         result = get_git_commit()
         self.assertEqual(result, "unknown")
 
@@ -61,6 +83,7 @@ class TestGetGitCommit(unittest.TestCase):
     )
     def test_not_a_repo_returns_unknown(self, mock_run):
         """When not in a git repo (CalledProcessError), return 'unknown'."""
+        from src.utils.repro import get_git_commit
         result = get_git_commit()
         self.assertEqual(result, "unknown")
 
@@ -70,17 +93,20 @@ class TestGetHardwareInfo(unittest.TestCase):
 
     def test_returns_dict(self):
         """get_hardware_info() must return a dict."""
+        from src.utils.repro import get_hardware_info
         result = get_hardware_info()
         self.assertIsInstance(result, dict)
 
     def test_has_expected_keys(self):
         """Result dict must contain 'gpu' and 'gpu_memory' keys."""
+        from src.utils.repro import get_hardware_info
         result = get_hardware_info()
         self.assertIn("gpu", result)
         self.assertIn("gpu_memory", result)
 
     def test_values_are_strings(self):
         """All values in the returned dict must be strings."""
+        from src.utils.repro import get_hardware_info
         result = get_hardware_info()
         for key, value in result.items():
             self.assertIsInstance(value, str, f"Value for key '{key}' is not a string")
@@ -88,6 +114,7 @@ class TestGetHardwareInfo(unittest.TestCase):
     @patch("src.utils.repro.torch")
     def test_no_cuda_returns_na(self, mock_torch):
         """When CUDA is not available, gpu and gpu_memory should be 'N/A'."""
+        from src.utils.repro import get_hardware_info
         mock_torch.cuda.is_available.return_value = False
         result = get_hardware_info()
         self.assertEqual(result["gpu"], "N/A")
@@ -96,6 +123,7 @@ class TestGetHardwareInfo(unittest.TestCase):
     @patch("src.utils.repro.torch")
     def test_cuda_available_returns_gpu_info(self, mock_torch):
         """When CUDA is available, gpu and gpu_memory should be populated."""
+        from src.utils.repro import get_hardware_info
         mock_torch.cuda.is_available.return_value = True
         mock_torch.cuda.get_device_name.return_value = "NVIDIA A100"
         mock_props = MagicMock()

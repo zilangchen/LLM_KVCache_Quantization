@@ -282,7 +282,8 @@ class TestGenerateThesisReport(unittest.TestCase):
         )
         self.assertEqual(len(out), 1)
         row = out.iloc[0]
-        self.assertEqual(row["status"], "PASS")
+        # Without significance data, statistical_pass=False -> INCONCLUSIVE
+        self.assertEqual(row["status"], "INCONCLUSIVE")
         self.assertAlmostEqual(float(row["observed_gain_pct"]), 1.5, places=6)
 
     def test_claim_validation_cross_model_requires_all_target_models_pass(self):
@@ -387,7 +388,8 @@ class TestGenerateThesisReport(unittest.TestCase):
         )
         self.assertEqual(len(out), 1)
         row = out.iloc[0]
-        self.assertEqual(row["status"], "PASS")
+        # Without significance data, statistical_pass=False for each model -> INCONCLUSIVE
+        self.assertEqual(row["status"], "INCONCLUSIVE")
         self.assertEqual(row["max_degradation_model"], "")
 
 

@@ -665,8 +665,8 @@ class TestCmdAdd(unittest.TestCase):
         finally:
             os.unlink(path)
 
-    def test_add_missing_open_issues_section_returns_error(self):
-        """cmd_add returns error when '## Open Issues' is missing."""
+    def test_add_missing_open_issues_section_auto_creates(self):
+        """cmd_add auto-creates '## Open Issues' when missing and succeeds."""
         content = textwrap.dedent("""\
             # Review Tracker
 
@@ -681,12 +681,15 @@ class TestCmdAdd(unittest.TestCase):
         path = _write_tracker(content)
         try:
             rc = rt.cmd_add(path, "AA-1", "HIGH", "AA. Core Module", "Test issue")
-            self.assertEqual(rc, 1, "Should fail when '## Open Issues' is missing")
+            self.assertEqual(rc, 0, "Should succeed after auto-creating '## Open Issues'")
+            updated = path.read_text(encoding="utf-8")
+            self.assertIn("## Open Issues", updated)
+            self.assertIn("AA-1", updated)
         finally:
             os.unlink(path)
 
-    def test_add_no_separator_returns_error(self):
-        """RVW-014: cmd_add returns error when no '---' separator after Open Issues."""
+    def test_add_no_separator_appends_at_end(self):
+        """RVW-014: cmd_add appends new section at end of Open Issues when no '---' separator."""
         content = textwrap.dedent("""\
             # Review Tracker
 
@@ -701,10 +704,11 @@ class TestCmdAdd(unittest.TestCase):
         """)
         path = _write_tracker(content)
         try:
-            # Adding to existing section should work (appends at end of file)
-            # But adding a NEW section with no --- separator should fail
             rc = rt.cmd_add(path, "ZZ-1", "MED", "ZZ. New Section", "Issue without separator")
-            self.assertEqual(rc, 1, "Should fail when no '---' separator for new section")
+            self.assertEqual(rc, 0, "Should succeed by appending at end of Open Issues")
+            updated = path.read_text(encoding="utf-8")
+            self.assertIn("ZZ-1", updated)
+            self.assertIn("ZZ. New Section", updated)
         finally:
             os.unlink(path)
 

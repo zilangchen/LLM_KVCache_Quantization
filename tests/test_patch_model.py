@@ -8,7 +8,28 @@ Covers:
 """
 
 import math
+import sys
 import unittest
+
+# ---------------------------------------------------------------------------
+# Triton is unavailable on macOS / non-CUDA hosts.  src.engine.patch_model
+# imports src.kernels at module level, which in turn does `import triton`.
+# Inject lightweight stubs into sys.modules *before* any src.engine import
+# so that the import chain succeeds without a real GPU.
+# ---------------------------------------------------------------------------
+if "triton" not in sys.modules:
+    try:
+        import triton as _triton_probe  # noqa: F401 – real triton available
+    except ImportError:
+        from unittest.mock import MagicMock as _MM
+
+        _triton_stub = _MM()
+        _triton_stub.__version__ = "3.0.0"
+        _triton_stub.jit = lambda fn: fn  # pass-through decorator
+        _triton_lang_stub = _MM()
+        _triton_lang_stub.constexpr = int
+        sys.modules["triton"] = _triton_stub
+        sys.modules["triton.language"] = _triton_lang_stub
 
 try:
     import torch
@@ -952,12 +973,18 @@ class TestApplyInt8FusedPatch(unittest.TestCase):
 
     def test_no_layers_raises(self):
         """If model.model.layers is inaccessible, should raise ValueError."""
-        from unittest.mock import MagicMock, PropertyMock
+        from unittest.mock import MagicMock
         from src.engine.patch_model import apply_int8_fused_patch
 
+        # Use a real class whose .layers property raises AttributeError,
+        # because MagicMock's __getattr__ intercepts PropertyMock side_effect.
+        class _BrokenInner:
+            @property
+            def layers(self):
+                raise AttributeError("no layers")
+
         model = MagicMock()
-        # Make model.model.layers raise an exception.
-        type(model.model).layers = PropertyMock(side_effect=AttributeError)
+        model.model = _BrokenInner()
         with self.assertRaises(ValueError):
             apply_int8_fused_patch(model)
 
