@@ -402,7 +402,7 @@ def generate_from_ids(
     decode_attn_impl: str = "triton_fused",
     allow_missing_calib: bool = False,
     stop_on_eos: bool = True,
-    quant_bits: Optional[int] = None,
+    quant_bits: int = 8,  # XMD-002: aligned with generate() default
     k_bits: Optional[int] = None,
     v_bits: Optional[int] = None,
 ) -> GenerationBatchOutput:
