@@ -221,15 +221,16 @@ class MixedKVCache:
         return self._seq_len
 
     def clear(self) -> None:
-        """Reset sequence lengths, keep tensor references for memory reporting.
+        """Clear all cached data and reset lengths.
 
-        KVC-083: clear() keeps buffer references (get_memory_mb() still
-        reports non-zero), release() frees them to None. Since this cache
-        uses torch.cat, "reuse" is limited, but the semantic distinction
-        matches other cache classes. Next append() will torch.cat from
-        scratch, ignoring stale data.
+        KVC-083: For torch.cat-based caches, clear() must nil out tensor
+        references because append() uses `is None` to detect first-write.
+        Keeping stale references would cause torch.cat onto old data.
+        Functionally equivalent to release() for this cache type.
         """
-        # Keep tensor references — don't nil them out
+        for i in range(self.num_layers):
+            self._k_cache[i] = self._k_scale[i] = self._k_zp[i] = None
+            self._v_cache[i] = self._v_scale[i] = self._v_zp[i] = None
         self._layer_seq_lens = [0] * self.num_layers
         self._seq_len = 0
 

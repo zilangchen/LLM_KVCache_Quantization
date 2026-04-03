@@ -589,9 +589,9 @@ def _load_hf_samples(
     return samples
 
 
-_SUMMARIZATION_TASKS = {"gov_report", "multi_news", "vcsum", "qmsum", "samsum"}  # Codex R5: added qmsum/samsum
+_SUMMARIZATION_TASKS = {"gov_report", "multi_news", "vcsum", "qmsum"}  # qmsum is summarization per LongBench
 _CODE_TASKS = {"lcc", "repobench-p"}
-_CLASSIFICATION_TASKS = {"trec", "lsht"}  # Codex R5: added lsht
+_CLASSIFICATION_TASKS = {"trec"}  # samsum/lsht are few-shot, not classification
 _PASSAGE_TASKS = {"passage_count", "passage_retrieval_en", "passage_retrieval_zh"}
 
 
