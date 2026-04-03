@@ -13,7 +13,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = PROJECT_ROOT / "src"
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 
-# Ensure project root, src/, and scripts/ are importable
-for _p in (str(PROJECT_ROOT), str(SRC_DIR), str(SCRIPTS_DIR)):
+# Only add PROJECT_ROOT — imports use "from src.xxx" style.
+# Adding SRC_DIR would create duplicate package paths (src.cache vs cache).
+for _p in (str(PROJECT_ROOT), str(SCRIPTS_DIR)):
     if _p not in sys.path:
         sys.path.insert(0, _p)

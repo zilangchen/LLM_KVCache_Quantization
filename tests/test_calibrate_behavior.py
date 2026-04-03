@@ -46,6 +46,15 @@ for _mod_name in _MOCKED_MODULES:
     else:
         _saved[_mod_name] = sys.modules[_mod_name]
 
+def tearDownModule():
+    """Restore mocked modules to prevent pollution across test files."""
+    for name, orig in _saved.items():
+        if orig is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = orig
+
+
 from scripts.calibrate_behavior import (
     resolve_kv_params,
     compute_absmax_per_group,

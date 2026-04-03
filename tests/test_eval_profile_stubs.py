@@ -26,10 +26,20 @@ if str(SCRIPTS_DIR) not in sys.path:
 # for testing their pure-Python helpers.
 # ---------------------------------------------------------------------------
 
+_injected_mocks: list = []
+
+
 def _ensure_mock(name):
     """Inject a MagicMock into sys.modules if not already present."""
     if name not in sys.modules:
         sys.modules[name] = MagicMock()
+        _injected_mocks.append(name)
+
+
+def tearDownModule():
+    """Remove injected mocks to prevent pollution."""
+    for name in _injected_mocks:
+        sys.modules.pop(name, None)
 
 
 def _setup_script_mocks():

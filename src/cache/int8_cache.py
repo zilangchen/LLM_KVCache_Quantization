@@ -534,11 +534,12 @@ class INT8KVCache:
         q_v = self._v_cache[layer_id][:, :, :seq_len, :]
         scale_v = self._v_scale[layer_id][:, :, :seq_len, :]
 
-        # Dequantize
+        # Dequantize (scale is fp32, dequant returns fp32)
         k = dequantize_symmetric_int8(q_k, scale_k)
         v = dequantize_symmetric_int8(q_v, scale_v)
 
-        return k, v
+        # Cast back to model dtype (fp16) for API compatibility
+        return k.to(self.dtype), v.to(self.dtype)
 
     def get_int8_tensors(self, layer_id: int) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
         """

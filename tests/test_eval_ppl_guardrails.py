@@ -18,26 +18,33 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 
 _MOCKED_MODULES: list[str] = []
+_ORIGINAL_MODULES: dict = {}  # preserve originals for teardown
 
 
 def _ensure_mock(module_name: str) -> None:
-    if module_name not in sys.modules:
-        sys.modules[module_name] = MagicMock()
+    if module_name in sys.modules:
+        _ORIGINAL_MODULES[module_name] = sys.modules[module_name]
+    else:
         _MOCKED_MODULES.append(module_name)
+    sys.modules[module_name] = MagicMock()
 
 
+def tearDownModule():
+    """Restore all mocked modules to prevent polluting other test files."""
+    for name in _MOCKED_MODULES:
+        sys.modules.pop(name, None)
+    for name, orig in _ORIGINAL_MODULES.items():
+        sys.modules[name] = orig
+
+
+# Only mock THIRD-PARTY modules that are unavailable locally.
+# Do NOT mock src.* packages — that breaks other test files.
 for _name in (
-    "torch",
+    "triton",
+    "triton.language",
     "tqdm",
-    "transformers",
-    "transformers.cache_utils",
     "datasets",
-    "src.cache",
-    "src.engine.patch_model",
-    "src.engine.generate_loop",
-    "src.utils.hf",
-    "src.utils.repro",
-    "scripts.config_utils",
+    "pynvml",
 ):
     _ensure_mock(_name)
 
@@ -45,14 +52,8 @@ for _name in (
 sys.modules["tqdm"].tqdm = MagicMock()
 sys.modules["datasets"].load_dataset = MagicMock()
 
-cache_mod = sys.modules["src.cache"]
-cache_mod.FP16KVCache = MagicMock()
-cache_mod.INT8KVCache = MagicMock()
-cache_mod.INT4KVCache = MagicMock()
-cache_mod.KIVIStyleKVCache = MagicMock()
-
-sys.modules["src.engine.patch_model"].apply_int8_fused_patch = MagicMock()
-sys.modules["src.engine.generate_loop"]._register_prefill_temperature_hooks = MagicMock()
+# torch is available locally — no need to mock src.* packages.
+# Only third-party (tqdm, datasets) are mocked above.
 sys.modules["src.utils.hf"].resolve_pretrained_path = MagicMock()
 
 repro_mod = sys.modules["src.utils.repro"]
