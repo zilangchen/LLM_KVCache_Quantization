@@ -1399,14 +1399,14 @@ INT4-RoleAlign 的能力呈现清晰的分层结构：
 相对 chunk\_size=128 退化约 3.6\%，
 说明自适应保护机制在全量化场景下仍基本有效，
 但存在少量超出校准范围的激活值导致额外精度损失。
-值得注意的是，KIVI-style INT4 在 chunk\_size=1 下
-PPL 从 10.43 急剧退化至 9442（$+$101{,}000\% 退化），
-呈灾难性崩溃；
-而 INT4-RoleAlign 仅从 9.42 升至 9.49（$+$0.75\%）。
-BA-guided percentile 校准的全局 Scale 估计在逐 token 粒度下仍然稳定，
-而 KIVI-style 的 per-token V Scale 基于单 token 统计量即时计算，
-在 chunk\_size=1 时方差过大导致崩溃
-（详见附录~\ref{sec:app-chunksize}）。
+值得注意的是，INT4 精度的 per-channel K Scale 在 chunk\_size=1 下
+面临共同挑战：KIVI-style PPL 从 10.43 退化至 9442，
+INT4-RoleAlign 同样出现灾难性退化（PPL $>$10{,}000）。
+根因在于 cs=1 评测中 per-channel K Scale 仅基于首个 token 建立，
+scale 范围极窄导致后续几乎所有 K 值溢出。
+INT8-ours 的退化相对温和（$+$3.6\%），因为 256 个量化级别提供了更大容错空间。
+该边界是 per-channel K Scale 策略的固有局限，
+而非特定校准方法的缺陷（详见附录~\ref{sec:app-chunksize}）。
 
 
 % [chunk_size 鲁棒性分析已移至附录 \ref{sec:app-chunksize}]
