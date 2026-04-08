@@ -380,10 +380,9 @@ FP8 KV Cache 成为一条低成本的精度-效率折中方案：
 且硬件加速的矩阵乘法无需额外的反量化步骤。
 在实际部署中，vLLM 等推理框架已默认提供 FP8 KV Cache 选项。
 本文聚焦于 INT8/INT4 整数量化而非 FP8 的原因在于：
-（1）INT 格式提供更高的压缩率选项（INT4 = 4~bit，FP8 = 8~bit），
-且行为对齐校准原则对 INT 和 FP 格式均适用；
-（2）实验平台 H20 的 FP8 tensor core 支持受限，
-INT8 路径更具跨硬件可移植性。
+（1）INT 格式提供更高的压缩率选项（INT4 $=$ 4~bit，而 FP8 仅提供 8~bit 而无 4-bit 对应格式）；
+（2）行为对齐校准原则对 INT 和 FP 格式均适用，
+INT 路径为后续 $<$8~bit 低比特场景保留了可扩展空间。
 FP8 KV Cache 与本文 INT8/INT4 方法的系统性对比
 列入后续工作（第~\ref{sec:conclusion-future}~节）。
 
@@ -402,12 +401,12 @@ Key 量化误差在 attention score 中被放大 13.9 倍（INT8$\to$INT4），
 Softmax Bias Correction~\cite{bondarenko2023softmax}（ICCV 2023 Workshop）
 分析了 softmax 对量化的 SQNR 劣化 8 倍，指出量化后高达 99\% 的 softmax 值被舍入为零。
 
-然而，上述工作均未提出\textbf{针对 KV Cache 量化的温度校正机制}。
+上述工作均未针对 KV Cache 量化场景系统报道温度校正的规模依赖性。
 QeRL 聚焦于 output logits，KVTuner 的 Lemma 1 止步于误差放大的量化分析，
-均未将因果链延伸至 attention 内部 softmax 的平坦化补偿。
-本文的行为对齐框架（第~\ref{sec:ch3-invtau}~节）填补了这一空白：
-通过逐头温度校正因子 $\tau^{-1}$ 直接补偿 Key 量化噪声导致的 attention 平坦化，
-并在消融实验中验证了该机制在 INT4 精度下的 PPL 改善效果
+均未将因果链延伸至 attention 内部 softmax 的平坦化补偿与 GQA 架构的交互。
+本文的行为对齐框架（第~\ref{sec:ch3-invtau}~节）在此基础上
+对逐头温度校正因子 $\tau^{-1}$ 进行了系统的跨模型消融，
+意外发现其有效性与 GQA 头数呈反向依赖
 （第~\ref{subsec:exp-rolealign-invtau}~节）。
 
 然而，校准策略的改进仅解决了"量化什么"的问题；
