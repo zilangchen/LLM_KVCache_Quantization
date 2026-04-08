@@ -1619,9 +1619,15 @@ Needle（单点检索）在 INT8 下完美保持，
 RULER 多目标检索处于 INT8 边缘（$-$2.64\%），
 INT4 的 15 级对几乎所有长上下文任务构成挑战。
 
-\paragraph{发现五：$\tau^{-1}$ 的格式依赖性}
-$\tau^{-1}$ 在非对称 INT4 上无收益甚至有害，
-增强机制不可跨格式迁移。
+\paragraph{发现五：$\tau^{-1}$ 的格式 $\times$ GQA 尺度双依赖性（诊断框架的意外产出）}
+$\tau^{-1}$ 的效果同时受量化格式和 GQA 头数约束：
+在 INT8 下几乎无变化（$\Delta$PPL $\approx 0.02\%$），
+在 INT4 非对称下呈现明确的 GQA 反相关——
+$H_{kv}=2$ 的 1.5B 模型 PPL 改善 1.6\%，
+而 $H_{kv} \geq 4$ 的 7B/8B 模型 PPL 恶化 3.4--6.0\%。
+该规律不是预先设计的目标，
+而是诊断框架在跨模型消融中涌现出的结构性约束
+（第~\ref{subsec:exp-rolealign-invtau}~节）。
 
 图~\ref{fig:pareto-quality-efficiency} 从质量-压缩率的 Pareto 视角
 汇总了各量化方法的综合定位。
@@ -1670,7 +1676,7 @@ $\tau^{-1}$ 在非对称 INT4 上无收益甚至有害，
     E13 & 校准样本 16--256 PPL 变化极小    & \textbf{达标} & 中等\tnote{e}  & 表~\ref{tab:b10-sensitivity} \\
     E14 & INT4-RoleAlign 检索恢复（3 模型 Needle 100\%）  & \textbf{达标} & 中等\tnote{f} & 表~\ref{tab:rolealign-results} \\
     E15 & chunk\_size=1 鲁棒性（1.5B）          & \textbf{达标} & 中\tnote{g}   & 附录表~\ref{tab:chunksize-results} \\
-    E16 & inv\_tau 在非对称 INT4 不可迁移      & \textbf{达标} & 中等  & 表~\ref{tab:kivi-int4-threeway} \\
+    E16 & inv\_tau 呈格式 $\times$ GQA 尺度双依赖性 & \textbf{达标} & 强\tnote{h}  & 表~\ref{tab:invtau-ablation} \\
     \bottomrule
   \end{tabular}
   \begin{tablenotes}
@@ -1682,6 +1688,7 @@ $\tau^{-1}$ 在非对称 INT4 上无收益甚至有害，
     \item[e] 仅在 1.5B 和 7B 两个模型上验证，推广性有待更多模型确认。
     \item[f] 三模型 Needle 从 0\%$\to$100\% 恢复；PPL 退化 2.4--13.7\%（与 KIVI-style 相当或略高），LongBench 在 1.5B/7B 略优、8B 持平。
     \item[g] 仅 Qwen2.5-1.5B 单模型单种子验证，跨模型推广性待确认。
+    \item[h] 三模型消融（$H_{kv} \in \{2,4,8\}$）一致支持 GQA 尺度反相关规律；GQA 噪声稀释直觉论证（第~\ref{subsec:exp-rolealign-invtau}~节）。
   \end{tablenotes}
   \end{threeparttable}
 \end{table}
