@@ -1,0 +1,4 @@
+{
+  "experiments": [],
+  "comment": "Populated by phase3_expert_reviews.md (queue candidates) and phase5_experiments.md (triggered). Each entry must have motivation + original_target + closure_action. See phase5_experiments.md for schema."
+}

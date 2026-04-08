@@ -1,0 +1,121 @@
+# Thesis Polish Loop — Configuration
+# 所有 phase 的可配置参数集中在这里，避免硬编码
+
+metadata:
+  skill_name: thesis-polish-loop
+  version: 1.0.0
+  primary_goal: EMNLP submission quality
+  secondary_goal: SCUT undergraduate thesis format compliance
+  target_venue: EMNLP 2026
+  thesis_baseline_tag: thesis-polish-baseline
+  worktree_branch: thesis-polish-v1
+  worktree_path: /Users/chenzilang/Desktop/LLM_KVCache_Quantization.polish
+
+schedule:
+  round_interval_min: 90          # 90 min between schedule triggers
+  max_rounds: 24                  # 硬上限 24 轮（约 36h）
+  max_wall_time_hours: 24         # 真实时间 24h 退出
+  single_round_time_box_min: 300  # 单轮不超 5h，超时中断
+
+phase_budgets:
+  phase0_housekeeping_min: 30
+  phase1_literature_min: 60
+  phase2_paper_review_min: 60
+  phase3_expert_reviews_min: 60
+  phase4_revision_min: 90
+  phase5_experiments_min: 30
+
+phase1_literature:
+  papers_per_round: 20
+  venues_per_round: 10
+  default_year_range: [2023, 2026]
+  search_engines:
+    - web_search
+    - web_fetch_arxiv
+    - web_fetch_openreview
+  summary_fields:
+    - narrative_logic
+    - core_contribution
+    - strengths
+    - relevance_to_our_work
+
+phase2_paper_review:
+  chapter_rotation:
+    - round: 1
+      targets: [abstract_en.tex, abstract_zh.tex, ch1_introduction.tex]
+    - round: 2
+      targets: [ch2_related_work.tex, ch3_method.tex]
+    - round: 3
+      targets: [ch4_experiments.tex]
+    - round: 4
+      targets: [ch5_conclusion.tex, appendix.tex]
+  review_granularity: paragraph    # paragraph / sentence / section
+  check_ai_trace: true
+  reference_docs:
+    - ~/.claude/projects/-Users-chenzilang-Desktop-LLM-KVCache-Quantization/memory/feedback_ai_trace_removal.md
+
+phase3_expert_reviews:
+  codex_review_enabled: true
+  reviewer_agents:
+    - quantization_theorist
+    - systems_efficiency
+    - nlp_evaluation
+    - statistical_methods
+    - academic_writing
+    - narrative_logic
+  parallel_execution: true
+  severity_levels: [CRITICAL, MAJOR, MINOR, NIT]
+  comment_types: [CONTENT, DATA, FORMAT, LANGUAGE]
+
+phase4_revision:
+  ai_trace_removal:
+    enabled: true
+    method: two_agent_cross_review
+    agent_a_role: "年长的人类学术研究者，判断段落是否像人写的"
+    agent_b_role: "AI 痕迹检测器，列出机械化表述"
+    require_both_pass: true
+  scut_format_check:
+    enabled: true
+    checks:
+      - chapter_naming
+      - figure_table_numbering
+      - reference_format
+      - word_count_min
+      - abstract_length_range
+      - keyword_count_range
+      - xelatex_compile
+  commit_per_milestone: true
+  pre_commit_compile_check: true
+
+phase5_experiments:
+  allow_gpu_experiments: true
+  max_experiments_per_round: 3
+  remote_host: autodl  # see docs/autodl_server.md
+  experiment_queue_file: state/rerun_queue.json
+  running_experiments_file: state/running_experiments.json
+  timeout_rounds: 3  # 超过 3 轮未完成则标记 "pending experimental evidence"
+  require_motivation: true
+  require_closure_action: true
+
+exit_conditions:
+  consecutive_clean_rounds: 3       # 连续 3 轮 0 CRITICAL 0 MAJOR
+  max_same_phase_failures: 3
+  manual_stop_command: "/thesis-polish-loop --stop"
+
+safety:
+  protect_main_branch: true
+  protect_baseline_tag: true
+  forbidden_commands:
+    - "git reset --hard"
+    - "git push --force"
+    - "rm -rf"
+  require_user_approval_for:
+    - deleting_reports
+    - modifying_baseline_tag
+    - main_branch_modifications
+
+logging:
+  iteration_md_append: true
+  commit_message_prefix: "[thesis-polish-loop Round N]"
+  reports_dir: reports/
+  state_dir: state/

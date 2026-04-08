@@ -1,0 +1,9 @@
+{
+  "round": 0,
+  "first_started": null,
+  "last_started": null,
+  "last_completed": null,
+  "total_rounds_completed": 0,
+  "consecutive_clean_rounds": 0,
+  "total_wall_time_seconds": 0
+}

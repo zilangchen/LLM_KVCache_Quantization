@@ -1,0 +1,130 @@
+# Top Venue Catalog for Literature Scan
+# Used by phase1_literature.md to ensure venue diversity across rounds
+
+nlp_main_venues:
+  - id: ACL
+    name: "Annual Meeting of the Association for Computational Linguistics"
+    years: [2023, 2024, 2025]
+    search_url: "https://aclanthology.org/venues/acl/"
+    priority: high
+    topics: [quantization, kv_cache, efficient_inference, attention, long_context]
+
+  - id: EMNLP
+    name: "Empirical Methods in Natural Language Processing"
+    years: [2023, 2024, 2025]
+    search_url: "https://aclanthology.org/venues/emnlp/"
+    priority: high
+    topics: [quantization, kv_cache, efficient_inference, model_compression]
+
+  - id: NAACL
+    name: "North American Chapter of the ACL"
+    years: [2024, 2025]
+    search_url: "https://aclanthology.org/venues/naacl/"
+    priority: high
+    topics: [quantization, kv_cache, efficient_llm]
+
+  - id: TACL
+    name: "Transactions of the ACL"
+    years: [2023, 2024, 2025]
+    search_url: "https://aclanthology.org/venues/tacl/"
+    priority: medium
+    topics: [efficient_nlp, long_context_modeling]
+
+  - id: COLING
+    name: "International Conference on Computational Linguistics"
+    years: [2024, 2025]
+    search_url: "https://aclanthology.org/venues/coling/"
+    priority: medium
+    topics: [efficient_nlp, transformer_variants]
+
+  - id: COLM
+    name: "Conference on Language Modeling"
+    years: [2024, 2025]
+    search_url: "https://colmweb.org/"
+    priority: high
+    topics: [llm_efficiency, quantization, long_context]
+
+ml_main_venues:
+  - id: NeurIPS
+    name: "Neural Information Processing Systems"
+    years: [2023, 2024, 2025]
+    search_url: "https://papers.nips.cc/"
+    priority: high
+    topics: [model_compression, quantization, efficient_transformers, kv_cache]
+
+  - id: ICML
+    name: "International Conference on Machine Learning"
+    years: [2023, 2024, 2025]
+    search_url: "https://proceedings.mlr.press/"
+    priority: high
+    topics: [quantization, efficient_ml, model_compression]
+
+  - id: ICLR
+    name: "International Conference on Learning Representations"
+    years: [2024, 2025, 2026]
+    search_url: "https://openreview.net/group?id=ICLR.cc"
+    priority: high
+    topics: [quantization, kv_cache, attention_optimization, long_context]
+
+  - id: TMLR
+    name: "Transactions on Machine Learning Research"
+    years: [2024, 2025]
+    search_url: "https://openreview.net/group?id=TMLR"
+    priority: medium
+    topics: [model_compression, efficient_ml]
+
+systems_venues:
+  - id: MLSys
+    name: "Conference on Machine Learning and Systems"
+    years: [2023, 2024, 2025]
+    search_url: "https://mlsys.org/"
+    priority: medium
+    topics: [inference_systems, kv_cache_management, llm_serving]
+
+  - id: OSDI
+    name: "USENIX Symposium on Operating Systems Design and Implementation"
+    years: [2023, 2024]
+    search_url: "https://www.usenix.org/conference/osdi"
+    priority: low
+    topics: [llm_serving_systems]
+
+  - id: HPCA
+    name: "IEEE High-Performance Computer Architecture"
+    years: [2024, 2025, 2026]
+    search_url: "https://hpca-conf.org/"
+    priority: low
+    topics: [llm_hardware, kernel_optimization]
+
+# Round rotation strategy: each round picks from different venue groups
+# to maximize diversity across literature scans
+rotation_strategy:
+  round_1: [ACL, NeurIPS]         # 2 venues × 10 papers = 20
+  round_2: [EMNLP, ICML]
+  round_3: [NAACL, ICLR]
+  round_4: [TACL, TMLR, MLSys]
+  round_5: [COLING, COLM]
+  round_6: [ACL, ICLR]  # cycle back with newer year prioritized
+  round_7: [EMNLP, NeurIPS]
+  round_8: [NAACL, ICML]
+
+# Core topic keywords for each query
+search_keywords:
+  primary:
+    - "KV cache quantization"
+    - "attention quantization"
+    - "INT4 KV cache"
+    - "LLM long context quantization"
+  secondary:
+    - "behavior alignment calibration"
+    - "asymmetric quantization key value"
+    - "group query attention quantization"
+    - "temperature correction softmax"
+  tertiary:
+    - "efficient LLM inference"
+    - "KV cache compression"
+    - "fused attention kernel INT4"
+
+# Blacklist: venues/papers to exclude (to avoid re-reading the same work)
+blacklist:
+  venues: []
+  papers: []  # Filled dynamically by state/venues_read.json
