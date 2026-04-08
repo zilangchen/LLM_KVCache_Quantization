@@ -46,12 +46,23 @@ Key quantization as the dominant quality loss factor
 with pronounced GQA architecture dependence---directly
 motivating the role-aware design of INT4-RoleAlign.
 
+Beyond this primary design, the diagnostic framework also surfaces
+an unexpected second-order finding:
+inverse temperature correction (inv\_tau) exhibits strong
+scale-dependence on GQA heads, improving PPL by 1.6\% at $H_{kv}=2$
+but degrading by 3.4--6.0\% at $H_{kv} \geq 4$.
+This regularity is consistent with a GQA noise-dilution intuition
+($\sigma_{\text{eff}} \propto \sigma / \sqrt{N_{\text{rep}}}$)
+and illustrates the second-order value of diagnostic frameworks:
+beyond their primary calibration role, they can surface architectural
+constraints that would otherwise remain implicit.
+
 Our results demonstrate that behavior-aligned calibration
 is not only a better quantization objective,
 but also reveals failure root causes, derives
 role-aware low-bit designs, and delineates their capability boundaries,
 completing the principle-to-diagnosis-to-design-to-boundary closed loop.
 
-\keywordsen{Large Language Model; Key-Value Cache; Quantization; Behavior-Aligned Calibration; Asymmetric Quantization}
+\keywordsen{Large Language Model; Key-Value Cache; Quantization; Behavior-Aligned Calibration; Asymmetric Quantization; GQA Architecture; Temperature Correction}
 
 \end{abstracten}
