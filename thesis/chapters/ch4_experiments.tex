@@ -287,6 +287,12 @@ INT8 的 256 个量化级别为检验 KL 校准效果提供了理想的受控设
     KV Mem 为 KV Cache 的显存占用。int8\_ours 质量指标取自 mainline
     配置（\code{static\_v3\_no\_temp\_adaptive\_fused}）。
     kivi\_style 此处为 INT8 精度，使用 torch\_ref 核函数（非 Triton 融合）。
+    \item int4\_fused 的 LongBench 分数（5.15）略高于 FP16 基线（4.82），但其
+    Needle 通过率为 0\%、PPL 退化至 22.04，综合质量仍属灾难性失效。
+    该反直觉现象源于 LongBench 合成任务的评测特性：分数由关键词精确匹配驱动，
+    而 int4\_fused 在 Triton 融合核中 logits 分布随机化后偶尔命中答案词典中的短字符串，
+    形成与 Needle（精确位置检索）相反的伪命中信号，不代表真实语义理解能力。
+    更准确的质量判断应以 Needle 和 PPL 为准。
   \end{tablenotes}
   \end{threeparttable}
 \end{table}
@@ -1162,6 +1168,12 @@ RULER 评测提供进一步支持性证据
 INT4-RoleAlign 与对照方法在 PPL、Needle 和 LongBench 上的对比，
 并额外列出相对 FP16 的 PPL 退化率和相对 KIVI-style 的退化缩减倍数，
 便于直观比较 BA percentile 校准的有效性。
+需要强调的是，BA percentile 是 KL 散度目标下的搜索参数化
+（第~\ref{sec:ch3-rolealign}~节公式~\eqref{eq:ch3-ba-percentile}），
+并非从 attention-KL 切换到其他校准目标：搜索目标仍为
+$D_{\KL}(\bm{p}_{\text{ref}} \| \bm{p}_{\text{asym}})$，
+只是搜索空间从对称格式的 $(p_c, g)$ 升级为非对称格式的 $(p_K, p_V)$。
+这一设计保持了与 INT8 路径在原则层面的统一性。
 
 \begin{table}[htbp]
   \centering
