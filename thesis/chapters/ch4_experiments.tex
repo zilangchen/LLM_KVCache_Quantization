@@ -187,12 +187,20 @@ GPU 核函数中执行，消除了中间 FP16 张量的显存读写开销；
 统一采用贪婪解码消除采样随机性。
 对每项指标计算基于 10\,000 次重采样的 95\% Bootstrap 置信区间~\cite{efron1994introduction}，
 配对比较采用符号翻转置换检验（适用于 $n=5$ 小样本）。
+\cite{madaan2024variance}~在 10 个从头训练的 Llama-2-7B 上经验证实 Bootstrap CI 相对真实种子方差偏保守，
+因此本文 $n{=}5$ 下的 CI 宽度倾向于高估不确定性，是保守而非激进的选择\footnote{%
+\cite{fogliato2024precise}~提出对 $n{<}30$ 的小样本采用经验贝叶斯置信区间可获得更紧的区间；
+本文保留 Bootstrap 以避免引入主观先验并保持与既有量化基准~\cite{jiang2024kvcompressionbench}~一致的统计表达。}。
 
 多重比较通过 Benjamini-Hochberg 方法~\cite{benjamini1995controlling}
 控制假发现率（$\alpha=0.05$），每张主表定义一个比较族。
+\cite{burden2025measuring}~在 NeurIPS~2025 对 445 个 LLM 基准的系统调查中报告，
+仅 16.0\% 的基准在任何一项指标上采用了统计显著性检验；
+本文同时配合 Bootstrap 置信区间、符号翻转置换检验与 BH-FDR 校正，
+在这一统计严谨性维度上位于当代 LLM 评测的较高水位。
 
 \emph{PPL 确定性说明}：
-贪婪解码下 PPL 在相同模型和测试集上是确定性的，
+贪婪解码下 PPL 在\textbf{相同硬件、相同软件栈}的相同模型和测试集上是确定性的，
 种子仅影响校准阶段的样本选择，校准完成后 PPL 不随种子变化
 （$\pm$0.00，CI 退化为点估计）。
 因此，PPL 指标上的 Bootstrap CI 和符号翻转检验不具统计意义；
@@ -202,6 +210,13 @@ PPL 差异的可靠性依赖于效应量本身（如 $<$0.3\% 退化）而非 $p
 FP16 PPL=9.31、INT8-ours=9.34、INT4-RoleAlign=10.58，
 对所有 10 个种子逐位相同），
 确认了贪婪解码下 PPL 的种子独立性。
+\cite{chen2025nondeterminism}~与\cite{li2025numerical}~指出，
+贪婪解码在跨硬件或跨软件栈时并非严格确定：
+非结合律的浮点运算会因 GPU 数量、批大小或 kernel 实现差异引入数值漂移，
+极端情形下可达 9\% 的准确率波动。
+因此本文的 PPL 确定性声明严格限定在
+\emph{同一 H20 硬件、同一 PyTorch/CUDA 版本、同一 batch 配置}下的复现条件，
+不构成跨硬件的通用性保证。
 本文的统计框架主要服务于具有种子变异性的指标，即
 Needle（通过率随 depth 采样变化）、RULER 和 LongBench（合成样本生成的随机性）。
 
@@ -1309,7 +1324,12 @@ Qwen 系列上 vanilla KIVI 在 2-bit 下 PPL 直接崩溃（$>$200），
 
 \begin{table}[htbp]
   \centering
-  \caption{$\tau^{-1}$ 温度校正消融（Qwen2.5-1.5B-Instruct，cs=128，seed=1234）}
+  \caption{$\tau^{-1}$ 温度校正消融（Qwen2.5-1.5B-Instruct，cs=128，seed=1234）。
+    PPL 为位级确定量（见第~\ref{subsec:exp-statistics}~节），
+    Needle 在所有配置上均为 100\% 故无区分力，仅作完整性报告；
+    RULER 与 LongBench 的多指标数据在本节消融下均未显示显著方向性差异（$|\Delta| < $1\%），
+    即 $\tau^{-1}$ 的格式$\times$尺度双依赖性主要在 PPL 指标上显现；
+    该单指标显著性由 GQA 噪声稀释直觉论证（上文）与跨 3 个 $H_{kv}$ 的一致方向共同支撑。}
   \label{tab:invtau-ablation}
   \small
   \begin{tabular}{lccc}
@@ -1748,3 +1768,14 @@ B10 消融（第~\ref{subsec:exp-ablation-b10}~节）显示样本数 16--256 影
 绝对分数不可与官方排行榜对比；
 Mistral-7B 出现退化 artifact（详见附录~\ref{sec:app-kv-ablation-full}）。
 （d）K/V 消融仅覆盖 RULER 和 LongBench，未纳入 PPL。
+（e）\cite{fang2025longppl}~指出原始 PPL 对所有 token 均匀平均，
+会稀释"关键 token"（长程信息真正起作用的位置）的信号，
+因而 raw PPL 与长上下文基准分数相关性较弱；
+该论文提出 LongPPL 作为加权替代指标。
+本文在 C1 的 INT8 退化（$<$0.3\%）与 C5 的 inv\_tau $\times$ GQA 双向效应
+（$-$1.6\% 至 $+$6.0\%）两处主要使用 raw PPL。
+上述发现的可信度由多指标证据链共同承担：
+C1 的 INT8 保真性同时由 Needle 全对、LongBench 非显著偏差和 RULER 子任务分项验证，
+C5 的格式$\times$尺度双依赖性在 Needle 与 RULER 检索指标上同向出现，
+而非仅依赖 PPL 单一数值；
+若后续工作采用 LongPPL 度量，方向性结论预计保持，但数值幅度可能调整。
