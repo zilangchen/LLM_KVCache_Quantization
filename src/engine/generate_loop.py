@@ -925,21 +925,30 @@ def generate_from_ids(
             kivi_inv_tau = None
             kivi_v_percentile = 100.0
             if calib_file is not None:
-                calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(os.getcwd(), calib_file)
-                if os.path.exists(calib_path):
-                    with open(calib_path, "r") as f:
-                        calib_data = json.load(f)
-                    # v3 schema: separate k_calibration / v_calibration
-                    if "k_calibration" in calib_data and "inv_tau" in calib_data["k_calibration"]:
-                        raw_tau = calib_data["k_calibration"]["inv_tau"]
-                        kivi_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
-                    elif "inv_tau" in calib_data:
-                        # v2 schema fallback
-                        raw_tau = calib_data["inv_tau"]
-                        kivi_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
-                    # v3: v_calibration with optimized v_percentile
-                    if "v_calibration" in calib_data and "v_percentile" in calib_data["v_calibration"]:
-                        kivi_v_percentile = float(calib_data["v_calibration"]["v_percentile"])
+                # ENG-113/EVL-149: resolve relative paths from project root
+                # (src/engine/generate_loop.py -> 3 dirname levels to repo root),
+                # not CWD. Fail-fast when user-provided path does not exist.
+                _proj = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(_proj, calib_file)
+                if not os.path.exists(calib_path):
+                    raise FileNotFoundError(
+                        f"int4_kivi_aligned: calib_file={calib_file!r} not found "
+                        f"(resolved to {calib_path!r}). Use an absolute path or "
+                        f"run from the project root."
+                    )
+                with open(calib_path, "r") as f:
+                    calib_data = json.load(f)
+                # v3 schema: separate k_calibration / v_calibration
+                if "k_calibration" in calib_data and "inv_tau" in calib_data["k_calibration"]:
+                    raw_tau = calib_data["k_calibration"]["inv_tau"]
+                    kivi_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
+                elif "inv_tau" in calib_data:
+                    # v2 schema fallback
+                    raw_tau = calib_data["inv_tau"]
+                    kivi_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
+                # v3: v_calibration with optimized v_percentile
+                if "v_calibration" in calib_data and "v_percentile" in calib_data["v_calibration"]:
+                    kivi_v_percentile = float(calib_data["v_calibration"]["v_percentile"])
 
             kv_cache = KIVIStyleKVCache(
                 num_layers=num_layers,
@@ -962,39 +971,48 @@ def generate_from_ids(
             ra_inv_tau = None
 
             if calib_file is not None:
-                calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(os.getcwd(), calib_file)
-                if os.path.exists(calib_path):
-                    with open(calib_path, "r") as f:
-                        calib_data = json.load(f)
-                    # Role-aware schema: k_percentile, v_percentile at top level or under role_aware
-                    if "role_aware" in calib_data:
-                        ra_section = calib_data["role_aware"]
-                        ra_k_percentile = float(ra_section.get("k_percentile", 100.0))
-                        ra_v_percentile = float(ra_section.get("v_percentile", 100.0))
-                    elif "k_calibration" in calib_data:
-                        # Fallback: v3 schema from int4_kivi_aligned calibration.
-                        # Look inside k_calibration first, then top-level.
-                        import warnings
-                        warnings.warn(
-                            f"RoleAlign mode '{kv_mode}' using k_calibration fallback schema; "
-                            "consider re-generating calibration with role_aware schema.",
-                            UserWarning,
-                        )
-                        k_cal = calib_data["k_calibration"]
-                        ra_k_percentile = float(k_cal.get("k_percentile", calib_data.get("k_percentile", 100.0)))
-                        if "v_calibration" in calib_data:
-                            ra_v_percentile = float(calib_data["v_calibration"].get("v_percentile", 100.0))
-                    # inv_tau: only for ours_asym_ba
-                    if kv_mode == "int4_ours_asym_ba":
-                        if "role_aware" in calib_data and "inv_tau" in calib_data["role_aware"]:
-                            raw_tau = calib_data["role_aware"]["inv_tau"]
-                            ra_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
-                        elif "k_calibration" in calib_data and "inv_tau" in calib_data["k_calibration"]:
-                            raw_tau = calib_data["k_calibration"]["inv_tau"]
-                            ra_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
-                        elif "inv_tau" in calib_data:
-                            raw_tau = calib_data["inv_tau"]
-                            ra_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
+                # ENG-112/EVL-149: resolve relative paths from project root
+                # (src/engine/generate_loop.py -> 3 dirname levels to repo root),
+                # not CWD. Fail-fast when user-provided path does not exist.
+                _proj = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(_proj, calib_file)
+                if not os.path.exists(calib_path):
+                    raise FileNotFoundError(
+                        f"int4_ours_asym: calib_file={calib_file!r} not found "
+                        f"(resolved to {calib_path!r}). Use an absolute path or "
+                        f"run from the project root."
+                    )
+                with open(calib_path, "r") as f:
+                    calib_data = json.load(f)
+                # Role-aware schema: k_percentile, v_percentile at top level or under role_aware
+                if "role_aware" in calib_data:
+                    ra_section = calib_data["role_aware"]
+                    ra_k_percentile = float(ra_section.get("k_percentile", 100.0))
+                    ra_v_percentile = float(ra_section.get("v_percentile", 100.0))
+                elif "k_calibration" in calib_data:
+                    # Fallback: v3 schema from int4_kivi_aligned calibration.
+                    # Look inside k_calibration first, then top-level.
+                    import warnings
+                    warnings.warn(
+                        f"RoleAlign mode '{kv_mode}' using k_calibration fallback schema; "
+                        "consider re-generating calibration with role_aware schema.",
+                        UserWarning,
+                    )
+                    k_cal = calib_data["k_calibration"]
+                    ra_k_percentile = float(k_cal.get("k_percentile", calib_data.get("k_percentile", 100.0)))
+                    if "v_calibration" in calib_data:
+                        ra_v_percentile = float(calib_data["v_calibration"].get("v_percentile", 100.0))
+                # inv_tau: only for ours_asym_ba
+                if kv_mode == "int4_ours_asym_ba":
+                    if "role_aware" in calib_data and "inv_tau" in calib_data["role_aware"]:
+                        raw_tau = calib_data["role_aware"]["inv_tau"]
+                        ra_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
+                    elif "k_calibration" in calib_data and "inv_tau" in calib_data["k_calibration"]:
+                        raw_tau = calib_data["k_calibration"]["inv_tau"]
+                        ra_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
+                    elif "inv_tau" in calib_data:
+                        raw_tau = calib_data["inv_tau"]
+                        ra_inv_tau = torch.tensor(raw_tau, dtype=torch.float32, device=model.device)
 
             use_temp = use_attn_temperature and (kv_mode == "int4_ours_asym_ba")
             framework_tag = "ours_asym_ba" if kv_mode == "int4_ours_asym_ba" else "ours_asym"

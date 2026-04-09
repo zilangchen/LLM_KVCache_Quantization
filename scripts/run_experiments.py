@@ -550,22 +550,37 @@ def _write_execution_summary(path: Path, payload: Dict[str, Any]) -> None:
 
 
 def resolve_quant_params(run_entry: Dict, quant_defaults: Dict) -> Dict[str, float]:
+    # RUN-096: Hardcode fallbacks (16 / 99.5) now match the project-standard
+    # quant_defaults in exp_matrix.yaml rather than the previous 128 / 99.9
+    # which diverged from config_utils.resolve_run_config (CFG-034 already
+    # fixed there). A warning is emitted when fallback is actually triggered
+    # so mis-configurations are visible. Same pattern as config_utils.py L164-192.
+    _FALLBACK_GROUP_SIZE = 16
+    _FALLBACK_CLIP_PERCENTILE = 99.5
     clip_percentile_k = run_entry.get(
         "clip_percentile_k",
-        run_entry.get("clip_percentile", quant_defaults.get("clip_percentile_k", 99.9)),
+        run_entry.get("clip_percentile", quant_defaults.get("clip_percentile_k", _FALLBACK_CLIP_PERCENTILE)),
     )
     clip_percentile_v = run_entry.get(
         "clip_percentile_v",
-        run_entry.get("clip_percentile", quant_defaults.get("clip_percentile_v", 99.9)),
+        run_entry.get("clip_percentile", quant_defaults.get("clip_percentile_v", _FALLBACK_CLIP_PERCENTILE)),
     )
     group_size_k = run_entry.get(
         "group_size_k",
-        run_entry.get("group_size", quant_defaults.get("group_size_k", 128)),
+        run_entry.get("group_size", quant_defaults.get("group_size_k", _FALLBACK_GROUP_SIZE)),
     )
     group_size_v = run_entry.get(
         "group_size_v",
-        run_entry.get("group_size", quant_defaults.get("group_size_v", 128)),
+        run_entry.get("group_size", quant_defaults.get("group_size_v", _FALLBACK_GROUP_SIZE)),
     )
+    # RUN-096: warn if fallback was actually used (quant_defaults had no value).
+    if not quant_defaults.get("group_size_k") and "group_size" not in run_entry and "group_size_k" not in run_entry:
+        import logging
+        logging.getLogger(__name__).warning(
+            "resolve_quant_params: group_size_k for run %r fell through to "
+            "hardcoded fallback %d; consider setting quant_defaults.group_size_k in YAML.",
+            run_entry.get("run_name"), _FALLBACK_GROUP_SIZE,
+        )
     # RUN-032: validate numeric types and ranges for quant parameters.
     for _field, _val in (("clip_percentile_k", clip_percentile_k), ("clip_percentile_v", clip_percentile_v)):
         if not isinstance(_val, (int, float)) or isinstance(_val, bool):
