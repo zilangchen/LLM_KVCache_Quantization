@@ -997,3 +997,52 @@ python scripts/export_tables_latex.py \
 其他带种子变异性的指标（Needle/RULER/LongBench）
 其 Bootstrap CI 半宽和中位数由 \code{aggregate\_results.py} 自动计算，
 CSV 文件名遵循 \code{<metric>\_<model>\_<config>.csv} 的常规命名。
+
+\section{实验预期验证状态总结}
+\label{sec:app-claim-summary}
+
+本节展开第~\ref{subsec:exp-claim-summary}~节所概括的四条核心 claim 背后
+16 项具体实验预期（E1--E16）的完整达标状态与证据强度分级
+（见表~\ref{tab:claim-summary}）。
+
+\begin{table}[htbp]
+  \centering
+  \caption{实验预期验证状态总结}
+  \label{tab:claim-summary}
+  \small
+  \begin{threeparttable}
+  \begin{tabular}{clccl}
+    \toprule
+    编号 & 实验预期 & 结论 & 证据强度 & 证据来源 \\
+    \midrule
+    E1  & INT8-ours 显著降低 TPOT              & \textbf{达标} & 强\tnote{a}   & 表~\ref{tab:main-results} \\
+    E2  & INT8-ours 保持 KV 显存优势            & \textbf{达标} & 中等  & 图~\ref{fig:main-efficiency-dashboard} \\
+    E3  & INT8-ours Needle 不劣于 baseline      & \textbf{达标} & 中等  & 图~\ref{fig:main-quality-dashboard} \\
+    E4  & INT8-ours PPL 不劣于 baseline         & \textbf{达标} & 中等  & 表~\ref{tab:main-results} \\
+    E5  & INT8-ours LongBench 不劣于 baseline   & \textbf{达标} & 中等  & 表~\ref{tab:main-results} \\
+    E6  & INT8-ours RULER 不劣于 baseline       & \textit{未达标} & 无\tnote{b}   & 表~\ref{tab:main-results} \\
+    E7  & INT4-ours Needle 不劣于 INT4-baseline & \textit{未达标} & 无\tnote{c}   & 表~\ref{tab:main-results} \\
+    E8  & INT4-ours PPL 不劣于 INT4-baseline    & \textit{未达标} & 无\tnote{c}   & 表~\ref{tab:main-results} \\
+    E9  & INT8-ours LongBench 不劣于 KIVI-style & \textbf{达标} & 中等  & 表~\ref{tab:kivi-comparison} \\
+    E10 & INT8-ours Needle 不劣于 KIVI-style    & \textbf{达标} & 中等  & 第~\ref{sec:exp-kivi}~节 \\
+    E11 & 跨模型泛化（7B + 8B LongBench）      & \textbf{达标} & 中等  & 表~\ref{tab:cross-model} \\
+    E12 & MixedKV RULER 远优于均匀 INT4           & \textbf{达标} & 中等\tnote{d}    & 表~\ref{tab:mixedkv-cross-model} \\
+    E13 & 校准样本 16--256 PPL 变化极小    & \textbf{达标} & 中等\tnote{e}  & 表~\ref{tab:b10-sensitivity} \\
+    E14 & INT4-RoleAlign 检索恢复（3 模型 Needle 100\%）  & \textbf{达标} & 中等\tnote{f} & 表~\ref{tab:rolealign-results} \\
+    E15 & chunk\_size=1 鲁棒性（1.5B）          & \textit{未达标} & 无\tnote{g}   & 附录表~\ref{tab:chunksize-results} \\
+    E16 & inv\_tau 呈格式 $\times$ GQA 尺度双依赖性 & \textbf{达标} & 中\tnote{h}  & 表~\ref{tab:invtau-ablation} \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \small
+    \item[a] BH-FDR 校正后 $q = 0.016 < 0.05$，17.27\% TPOT 增益，统计与实际显著性均满足。
+    \item[b] RULER 通过率退化 $-2.64\%$，超过 $-1\%$ 非劣性阈值；退化集中于 S-NIAH/MK-NIAH 检索子任务，受配置聚合效应放大。
+    \item[c] INT4 精度下行为对齐校准未能维持非劣效性：Needle 退化 $-2.0\%$，PPL 退化 $-15.92\%$。
+    \item[d] MixedKV(K8V4) 在 Qwen 1.5B/7B 上 RULER 分别为 24.87\%/25.16\%，远超均匀 INT4 的 0\%/0\%；在 LLaMA-8B 上 RULER 33.28\% 与均匀 INT4（27.05\%）和 FP16（31.48\%）均具竞争力。
+    \item[e] 仅在 1.5B 和 7B 两个模型上验证，推广性有待更多模型确认。
+    \item[f] 三模型 Needle 从 0\%$\to$100\% 恢复；PPL 退化 2.4--13.7\%（与 KIVI-style 相当或略高），LongBench 在 1.5B/7B 略优、8B 持平。
+    \item[g] KIVI-style 与 INT4-RoleAlign 在 cs$=$1 全量化协议下均发生灾难性退化，为 per-channel K Scale 策略的固有局限（见第~\ref{subsec:exp-int4-boundary}~节与附录~\ref{sec:app-chunksize}）；该行原"达标"判定基于早期误读，实应记为未达标。
+    \item[h] 三模型消融（$H_{kv} \in \{2,4,8\}$）一致支持 GQA 尺度反相关规律；作为启发式观察（见第~\ref{subsec:exp-rolealign-invtau}~节与独立性假设边界讨论）。
+  \end{tablenotes}
+  \end{threeparttable}
+\end{table}
