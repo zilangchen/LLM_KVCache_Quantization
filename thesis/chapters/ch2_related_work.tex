@@ -396,7 +396,7 @@ AQLM~\cite{egiazarian2024aqlm} 通过加法量化码本进一步提升了
 服务于最终的生成质量，而非仅仅追求中间表示的数值精度。
 
 KV Cache 量化方案可从两个\textbf{正交}维度刻画：
-���1）\emph{量化格式}，即对称/非对称、per-group/per-channel/per-token 等量化轴选择，
+（1）\emph{量化格式}，即对称/非对称、per-group/per-channel/per-token 等量化轴选择，
 决定了整数网格的形状和覆盖模式；
 （2）\emph{校准目标}，即 MSE、percentile、KL 散度等准则，决定了量化参数的优化方向。
 现有工作中，KIVI 在量化格式维度引入了 K/V 非对称轴的创新，
