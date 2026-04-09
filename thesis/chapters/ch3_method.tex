@@ -3,9 +3,10 @@
 % ============================================================
 \chapter{行为对齐量化框架设计}
 
-行为对齐量化框架以注意力权重分布的 KL 散度（attention-KL）为\textbf{统一原则}，
-承担双重使命：作为校准目标搜索使注意力行为偏移最小化的量化参数，
-作为诊断透镜揭示不同量化配置下的失效模式与结构性根因。
+本框架以注意力权重分布的 KL 散度（attention-KL）为\textbf{统一原则}，
+该原则同时服务于两种用途：
+作为\emph{校准目标}，它指导量化参数搜索，使注意力行为偏移最小化；
+作为\emph{诊断透镜}，它揭示不同量化配置下的失效模式与结构性根因。
 本章围绕从原则到设计的层级结构展开：
 首先阐述 attention-KL 统一原则的框架设计与校准方法
 （第~\ref{sec:ch3-overview}--\ref{sec:ch3-calibration}~节）；
@@ -140,8 +141,25 @@ Triton 融合核函数提供\textbf{部署级系统支撑}
     后续版本已修正。
     实验结果（第四章）显示该产物对 INT8 量化的影响有限
     （PPL 退化 $-$0.20\%，Needle 100\%），
-    但完整预处理后的重校准对比验证尚未完成，列为未来工作。
+    但完整预处理后的重校准对比验证尚未完成（特别是 RULER / LongBench 上的验证），列为未来工作。
+    因此本文 Finding 4 (C5) 的定量数字基于 v3\_quick 校准产物获得，
+    完整重校准后的数值可能存在小幅偏移。
     校准产物的完整版本信息和已知局限详见附录~\ref{sec:app-calib-provenance}。
+
+    \paragraph{校准-评测的 task transfer 假设}
+    本文的校准目标采用 WikiText-103 上的 attention-KL 散度作为代理损失函数，
+    而评测则跨越 WikiText-2 PPL、合成 Needle-in-a-Haystack、
+    RULER 13 子任务与 LongBench 16 真实任务等多个 domain 与任务类型。
+    两者之间存在三重 shift：(i) domain shift（general English → synthetic long-context 和 multi-domain QA），
+    (ii) 任务类型 shift（token-level 似然 → needle retrieval、multi-hop reasoning、summarization），
+    (iii) 序列长度 shift（校准典型 $<$4K → 评测至 32K）。
+    本文采用 WikiText 校准的核心假设是：
+    \emph{最小化 WikiText attention-KL 获取的量化参数对下游多任务泛化具有 approximately task-agnostic 的迁移能力}。
+    该假设未经形式化证明，仅通过第四章的 4-metric 联合评测进行间接经验支撑，
+    其严格验证留作未来工作。
+    同时，校准使用 WikiText-103 的一个子集（$n=128$ 段），
+    而 PPL 评测使用 WikiText-2 test split。
+    二者同属 WikiText 家族但分属不同 split，不存在文档级重叠，因此不构成 data contamination。
   \item \textbf{Scale 搜索}：
     在候选 clip percentile 和 group size 的网格上，
     通过量化——反量化——计算 KL 散度的流程评估每组参数的行为偏差，
@@ -842,7 +860,12 @@ Value 使用 per-token Scale（对所有 channel 共享），
 \end{enumerate}
 
 该设计在数值精度上与 PyTorch 参考实现的 max abs diff $< 10^{-2}$，
-并已通过端到端 Needle 评测验证（10/10 全 PASS）。
+并已通过端到端 Needle 评测验证（10/10 全 PASS，完整实验数据见
+第~\ref{subsec:exp-rolealign-results}~节与第~\ref{subsec:exp-rolealign-boundary}~节）。
+\emph{与 Tensor-core 路径的关系}: 本节的 split-channel 方案使用 CUDA-core
+并通过奇偶 lane 分裂规避 per-channel 反量化中的 Scale 广播冲突，验证了算法路径的数值正确性；
+其 Tensor-core 并行潜力与 BitDecoding~\cite{du2026bitdecoding} 的 NVFP4 设计互为补充，
+后者在硬件资源利用维度展示了进一步优化空间但依赖 NVFP4 数值格式与 Blackwell 架构支持。
 
 \subsection{GQA 支持机制}
 \label{subsec:ch3-gqa}

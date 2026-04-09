@@ -406,7 +406,7 @@ KV Cache 显存方面，INT8 约为 FP16 的 $1/2$，
 32K 下 int8\_ours 总峰值显存相比 FP16 节省约 4\%--6\%，
 随上下文长度增长该优势将持续扩大。
 
-综上，INT8 行为对齐量化在质量、显存和延迟三个维度上均呈现有利权衡：PPL 退化 $<$0.3\%，Needle 100\%，显存节省 44\%，延迟降低 8--38\%（RULER 退化见第~\ref{para:c6-fail}~段）。INT8 结果确认行为对齐原则成立。下一个问题是：当量化级别降至 15（INT4）时，同一原则能否诊断失效根因？
+综上，INT8 行为对齐量化在质量、显存和延迟三个维度上均呈现有利权衡：PPL 退化 $<$0.3\%，Needle 100\%，显存节省 44\%，延迟降低 8--38\%\footnote{\emph{测量条件范围}: 本文所有 TPOT 数字均在 batch$=$1、独占 GPU（single-stream decode）条件下测量，seq\_len $\in \{4096, 32768\}$ 视表格而定。多请求并发（batch $\geq$ 2）下的延迟/吞吐-batch 曲线未纳入本文范围，原因是本文的研究焦点是单请求解码阶段的量化-延迟权衡；跨 batch 的 throughput-capacity 分析留作未来工作（见附录~\ref{sec:app-batch-capacity}~的 batch$=$16 KV 显存数据）。}（RULER 退化见第~\ref{para:c6-fail}~段）。INT8 结果确认行为对齐原则成立。下一个问题是：当量化级别降至 15（INT4）时，同一原则能否诊断失效根因？
 
 
 % ============================================================
@@ -1346,17 +1346,23 @@ $H_{kv} \geq 4$ 时噪声已被 GQA 结构充分稀释，
 强行施加温度校正导致过度锐化（over-sharpening），反而损害语言建模质量。
 
 \paragraph{理论直觉与实证的一致性。}
-我们给出一个基于 GQA 噪声稀释的直觉论证（intuitive argument）：
+我们给出一个基于 GQA 噪声稀释的直觉论证（intuitive argument）——
+严格而言是\emph{在 query 交互近似独立的简化假设下成立的启发式解释}，
+并非闭式定理：
 KVTuner~\cite{xu2025kvtuner}（Lemma 1）证明 Key 量化误差
 在 attention score 中放大约 $\sqrt{d_k}$ 倍；
 由于 GQA 架构下每个 KV 头被 $N_{\text{rep}} = H_q / H_{kv}$ 个 Query 头共享，
-有效噪声规模被稀释为 $\sigma_{\text{eff}} \propto \sigma / \sqrt{N_{\text{rep}}}$。
+若不同 query 头所见量化噪声近似独立（\emph{此为关键假设}），
+有效噪声规模可近似稀释为 $\sigma_{\text{eff}} \propto \sigma / \sqrt{N_{\text{rep}}}$。
 当 $H_{kv}$ 足够大（$N_{\text{rep}}$ 较小）时，
 残余噪声低于 softmax 的非线性阈值，
 温度校正不再必要甚至有害。
-完整的形式化证明留作未来工作，
+需要指出：实际上所有 $N_{\text{rep}}$ 个 query 头在同一 KV 头上看到的是\emph{同一个}
+量化后的 K 张量，噪声存在 pairwise 结构性相关，
+这会在一定程度上削弱 $1/\sqrt{N_{\text{rep}}}$ 稀释规律；
+完整的相关噪声模型与闭式误差上界留作未来工作。
 但本文在 3 个模型规模（$H_{kv} \in \{2, 4, 8\}$）上的实证证据
-一致支持这一直觉。
+一致支持这一直觉的方向性预测。
 据文献调研（第~\ref{sec:ch2-quant-softmax}~节），
 KV Cache 量化中温度校正的 GQA 尺度依赖性此前未被系统报道。
 
