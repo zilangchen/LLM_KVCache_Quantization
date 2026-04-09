@@ -1,6 +1,47 @@
 {
-  "venues": {},
-  "total_papers_read": 0,
-  "last_updated_round": 0,
-  "comment": "Populated by phase1_literature.md. Key format: {venue_id: {years: [int], rounds_read: [int], paper_count: int}}"
+  "venues": {
+    "ICML": {
+      "years": [2024, 2025],
+      "rounds_read": [2],
+      "paper_count": 3
+    },
+    "NeurIPS": {
+      "years": [2024, 2025],
+      "rounds_read": [2],
+      "paper_count": 4
+    },
+    "ICLR": {
+      "years": [2025, 2026],
+      "rounds_read": [2],
+      "paper_count": 4
+    },
+    "ACL": {
+      "years": [2025],
+      "rounds_read": [2],
+      "paper_count": 1
+    },
+    "COLM": {
+      "years": [2024],
+      "rounds_read": [2],
+      "paper_count": 2
+    },
+    "NeurIPS_Workshop": {
+      "years": [2024],
+      "rounds_read": [2],
+      "paper_count": 1
+    },
+    "ICCV_Workshop": {
+      "years": [2023],
+      "rounds_read": [2],
+      "paper_count": 1
+    },
+    "arXiv_preprint": {
+      "years": [2024, 2025],
+      "rounds_read": [2],
+      "paper_count": 8
+    }
+  },
+  "total_papers_read": 24,
+  "last_updated_round": 2,
+  "comment": "Round 2 Phase 1 literature scout: 24 papers investigated (KV cache quant, GQA, softmax temperature, long-context compression, behavior-alignment calibration). C5 novelty defended: no published work connects GQA H_kv count with per-head temperature correction for KV quantization. 8 new SHOULD_ADD_TO_CH2 candidates identified."
 }

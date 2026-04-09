@@ -1,9 +1,10 @@
 {
-  "round": 0,
-  "first_started": null,
-  "last_started": null,
+  "round": 2,
+  "first_started": "2026-04-08T22:29:34",
+  "last_started": "2026-04-08T22:29:34",
   "last_completed": null,
-  "total_rounds_completed": 0,
+  "total_rounds_completed": 1,
   "consecutive_clean_rounds": 0,
-  "total_wall_time_seconds": 0
+  "total_wall_time_seconds": 0,
+  "_notes": "Round 1 = T1-T9 external batch on 2026-04-08 (commits 2f65927..b01eee4), executed before skill creation (dbfefe9). Round 2 starts skill-driven flow; chapter rotation mod 4 = 2 => ch2 + ch3 focus."
 }
