@@ -1232,10 +1232,15 @@ $D_{\KL}(\bm{p}_{\text{ref}} \| \bm{p}_{\text{asym}})$，
 
 \begin{table}[htbp]
   \centering
-  \caption{INT4-RoleAlign 跨模型对比（3 seeds，32K 上下文）。
-    Needle 列的 "100/100" 表示 "Needle-single-retrieval 通过率 / MK-NIAH-2 通过率"，
-    两者均为 100\% 表示单点检索与多点检索同时完整恢复；
-    LB 列为 LongBench 综合评分 $\times 100$。}
+  \caption{INT4-RoleAlign 跨模型对比（3 seeds）。
+    各指标的评测协议不同：
+    \textbf{PPL} 在 WikiText-2 测试集全量（$\sim$302K tokens，chunk\_size=128）上评测；
+    \textbf{Needle} 在 4K/8K/16K/32K 四个上下文长度点上均保持 100\%，
+    "100/100" 表示 "Needle-single-retrieval / MK-NIAH-2" 两类检索同时完整恢复；
+    \textbf{LB} 列为 LongBench 合成综合评分 $\times 100$，使用 4K 上下文合成样本
+    （复用无 bug 的 v1 数据，见附录~\ref{sec:app-data-provenance}）。
+    RULER 的跨长度（4K--32K）数据由 \texttt{emnlp\_rolealign\_v2} 独立补跑，
+    见表~\ref{tab:kivi-int4-threeway}。}
   \label{tab:rolealign-results}
   \small
   \setlength{\tabcolsep}{3pt}
