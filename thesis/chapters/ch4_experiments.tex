@@ -452,7 +452,22 @@ KV Cache 显存方面，INT8 约为 FP16 的 $1/2$，
 32K 下 int8\_ours 总峰值显存相比 FP16 节省约 4\%--6\%，
 随上下文长度增长该优势将持续扩大。
 
-综上，INT8 行为对齐量化在质量、显存和延迟三个维度上均呈现有利权衡：PPL 退化 $<$0.3\%，Needle 100\%，显存节省 44\%，延迟降低 8--38\%\footnote{\emph{测量条件范围}: 本段 "延迟降低 8--38\%" headline 数字均在 batch$=$1、独占 GPU（single-stream decode）条件下测量，seq\_len $\in \{4096, 32768\}$ 视表格而定。batch$=$4--16 的 throughput 和 capacity 数据已纳入附录~\ref{sec:app-efficiency-plots}~与 \ref{sec:app-batch-capacity}，展示随 batch 增大量化的显存节省效应释放出更多可服务并发；但跨 batch 的细粒度 throughput-capacity 曲线拟合与系统性对比留作未来工作。}（RULER 退化见第~\ref{para:c6-fail}~段）。INT8 结果确认行为对齐原则成立。下一个问题是：当量化级别降至 15（INT4）时，同一原则能否诊断失效根因？
+综上，INT8 行为对齐量化在质量、显存和延迟三个维度上呈现
+\textbf{双重对照下的诚实权衡}：PPL 退化 $<$0.3\%，Needle 100\%，显存节省 44\%。
+在延迟维度上，需要明确两个对照组的不同结论：
+\textbf{(i) 相对 FP16}：batch$=$1 条件下 INT8-ours 的绝对 TPOT 为 47.14~ms，
+高于 FP16 的 24.39~ms（1.5B 32K），
+即 \emph{量化本身引入了反量化开销}，INT8 比 FP16 慢约 93\%；
+\textbf{(ii) 相对未融合 INT8-baseline}：INT8-ours 的 Triton 融合核函数
+相对于使用 torch 参考实现的 INT8-baseline（51.43~ms）
+实现 8.3\%/17.3\%/37.6\% 的 TPOT 降低（1.5B/7B/8B，$q=0.016$），
+即 \emph{融合 kernel 抵消了一部分反量化开销}。
+这两组数字共同刻画 INT8 量化的真实延迟权衡：
+量化 + 融合 kernel 的组合尚不能超越 FP16 的单请求延迟，
+但 44\% KV 显存节省在批量场景下释放出更大并发空间
+（附录~\ref{sec:app-efficiency-plots}~与~\ref{sec:app-batch-capacity} 提供 batch$=$4--16 的吞吐数据）。
+上述 "8--38\%" 数字明确指 Triton 融合 kernel 相对 INT8-baseline 的 TPOT 降低。
+\footnote{\emph{测量条件范围}: "8--38\%" 数字在 batch$=$1、独占 GPU（single-stream decode）条件下测量，seq\_len $\in \{4096, 32768\}$ 视表格而定。}（RULER 退化见第~\ref{para:c6-fail}~段）。INT8 结果确认行为对齐原则成立。下一个问题是：当量化级别降至 15（INT4）时，同一原则能否诊断失效根因？
 
 
 % ============================================================

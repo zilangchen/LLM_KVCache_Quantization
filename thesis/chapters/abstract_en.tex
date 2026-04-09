@@ -38,7 +38,9 @@ to INT4 quantization noise than global language modeling quality.
 The design of INT4-RoleAlign follows a complete evidence chain.
 The principle is first validated on INT8---behavior-aligned calibration
 preserves quality while reducing KV cache memory by approximately 44\%
-and decode latency by 8--38\% across three model families,
+across three model families;
+through a Triton fused kernel, it further reduces decode latency by 8--38\%
+relative to the unfused INT8 baseline,
 establishing the reference baseline for low-bit diagnosis.
 The same diagnostic lens then reveals the structural root cause
 of symmetric INT4 failure---controlled K/V ablation consistently identifies

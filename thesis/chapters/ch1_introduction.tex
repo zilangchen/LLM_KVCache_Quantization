@@ -151,7 +151,10 @@ KV Cache 量化的关键不是最小化数值重建误差，
 
 \textbf{贡献二：INT8 规范验证实例。}
 在该原则下给出 INT8 的 canonical validated instance，
-在三个模型族上实现 44\% KV 显存降低与 8--38\% 延迟降低，
+在三个模型族上实现 44\% KV 显存降低；
+通过 Triton 融合核函数相对于未融合的 INT8-baseline 进一步实现 8--38\% 的解码延迟降低
+（batch$=$1 条件下 INT8-ours 的绝对 TPOT 仍高于 FP16，属于量化引入的反量化开销，
+详见第~\ref{sec:exp-main}~节），
 证明行为对齐校准的有效性，并为低比特诊断建立参照基线。
 
 \textbf{贡献三：低比特失效诊断。}
