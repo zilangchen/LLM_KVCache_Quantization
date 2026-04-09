@@ -2,9 +2,9 @@
   "round": 2,
   "first_started": "2026-04-08T22:29:34",
   "last_started": "2026-04-08T22:29:34",
-  "last_completed": null,
-  "total_rounds_completed": 1,
-  "consecutive_clean_rounds": 0,
-  "total_wall_time_seconds": 0,
-  "_notes": "Round 1 = T1-T9 external batch on 2026-04-08 (commits 2f65927..b01eee4), executed before skill creation (dbfefe9). Round 2 starts skill-driven flow; chapter rotation mod 4 = 2 => ch2 + ch3 focus."
+  "last_completed": "2026-04-09T10:38:00",
+  "total_rounds_completed": 2,
+  "consecutive_clean_rounds": 1,
+  "total_wall_time_seconds": 43706,
+  "_notes": "Round 1 = T1-T9 external batch on 2026-04-08 (commits 2f65927..b01eee4), executed before skill creation (dbfefe9). Round 2 = first skill-driven cycle, completed 2026-04-09. Chapter rotation mod 4 = 2 => ch2 + ch3 focus. Round 2 commits: f76147f + 0fa49f9 + 718ccb4 + 40b5270 + 809d69b + f4b0257 (6 commits before closing commit). Phase 3 6 reviewer all returned CONCERN/PASS (no REJECT at document level). Phase 4 resolved 32/33 issues (97%). PDF 110->115 pages. consecutive_clean_rounds=1 set because all CRITICAL findings were resolved within this round. Next round would be Round 3, mod 4 = 3, chapter focus = ch4_experiments."
 }

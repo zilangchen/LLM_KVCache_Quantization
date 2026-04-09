@@ -1,4 +1,8 @@
 {
   "experiments": [],
-  "comment": "Populated by phase3_expert_reviews.md (queue candidates) and phase5_experiments.md (triggered). Each entry must have motivation + original_target + closure_action. See phase5_experiments.md for schema."
+  "comment": "Populated by phase3_expert_reviews.md (queue candidates) and phase5_experiments.md (triggered). Each entry must have motivation + original_target + closure_action. See phase5_experiments.md for schema.",
+  "round_2_notes": "Round 2 Phase 5: empty queue. All Phase 2 + Phase 3 findings were text-level (AI trace, novelty defense, symbol consistency, hedging, task transfer disclosure, forward references, RoleAlign containment, effect size framing). None required new experimental evidence. Phase 4 resolved 32/33 issues across commits 40b5270/809d69b/f4b0257 using purely editorial changes. Pipeline schema verified. Round 3 deferred experiments (from literature_digest §5.5): MQA (H_kv=1) / MLA (DeepSeek-V2/V3) / sub-2-bit regime / linear attention — these require new training runs and are out of Round 2 scope.",
+  "round_2_last_updated": "2026-04-09T10:36:00",
+  "round_2_total_queued": 0,
+  "round_2_total_triggered": 0
 }
