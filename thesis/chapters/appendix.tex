@@ -925,3 +925,60 @@ NarrativeQA 上 INT8-ours 略低（$-$0.43 pp），
     Q 预缩放是逐元素乘法，可与 Query 投影的输出张量原地（in-place）操作融合，
     不引入额外的 GPU kernel 启动开销。
 \end{enumerate}
+
+\section{主章节实验数据溯源}
+\label{sec:app-data-provenance}
+
+表~\ref{tab:app-data-provenance} 将第~\ref{chap:experiments}~章中有独立
+\code{\textbackslash label} 的核心表格映射到实验产出目录，便于复现与审计。
+每条记录包含表标签与对应结果目录；聚合 CSV 由
+\code{aggregate\_results.py} 自动从该目录下的 \code{runs/} 生成到 \code{tables/}。
+所有目录均位于项目根路径 \code{results/} 之下。
+
+\begin{table}[htbp]
+  \centering
+  \caption{ch4 核心表格的数据溯源映射}
+  \label{tab:app-data-provenance}
+  \small
+  \begin{tabular}{ll}
+    \toprule
+    \textbf{表标签} & \textbf{实验目录（results/ 下）} \\
+    \midrule
+    tab:decoding-params      & ---（本附录新增，参数配置非实验产出）\\
+    tab:kv-modes             & emnlp\_final\_raw/ \\
+    tab:main-results         & emnlp\_final\_raw/ \\
+    tab:temp-ablation        & emnlp\_final\_raw/runs/temp\_ablation/ \\
+    tab:b10-sensitivity      & emnlp\_final\_raw/runs/calib\_b10\_ablation/ \\
+    tab:cross-model          & emnlp\_final\_raw/runs/cross\_model/ \\
+    tab:kivi-comparison      & emnlp\_final\_raw/（INT8 层面对比）\\
+    tab:kv-ablation-ppl      & emnlp\_final\_raw/runs/kv\_ablation\_ppl/ \\
+    tab:kv-ablation-ruler    & emnlp\_final\_raw/runs/kv\_ablation\_ruler/ \\
+    tab:kv-ablation-longbench & emnlp\_final\_raw/runs/kv\_ablation\_longbench/ \\
+    tab:mixedkv-cross-model  & emnlp\_final\_raw/runs/mixedkv/ \\
+    tab:rolealign-results    & emnlp\_rolealign\_v2/ \\
+    tab:invtau-ablation      & emnlp\_rolealign\_v4/runs/invtau\_ablation/ \\
+    tab:int4-tpot-cross-model & emnlp\_defense\_v1/ \\
+    tab:kivi-int4-threeway   & emnlp\_defense\_v1/（INT4 层面对比）\\
+    tab:claim-summary        & ---（元表，汇总上述所有 claim 的验证状态）\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+复现流程：给定上表中的任一实验目录 \code{<dir>}，可通过以下命令重新生成
+对应的聚合 CSV、LaTeX 表和图表：
+\begin{verbatim}
+python scripts/aggregate_results.py \
+  --runs_dir results/<dir>/runs \
+  --tables_dir results/<dir>/tables \
+  --plots_dir results/<dir>/plots
+python scripts/export_tables_latex.py \
+  --tables_dir results/<dir>/tables \
+  --out_dir results/<dir>/latex_tables
+\end{verbatim}
+
+由于贪婪解码下 PPL 在同一硬件与软件栈上是位级确定量
+（见第~\ref{subsec:exp-statistics}~节），
+重复运行的 PPL 数值与原表逐位一致；
+其他带种子变异性的指标（Needle/RULER/LongBench）
+其 Bootstrap CI 半宽和中位数由 \code{aggregate\_results.py} 自动计算，
+CSV 文件名遵循 \code{<metric>\_<model>\_<config>.csv} 的常规命名。
