@@ -22,7 +22,7 @@ INT8 下的可部署实例证实行为对齐校准的有效性（Claim~1），
 \label{subsec:exp-model-hardware}
 % ------------------------------------------------------------
 
-实验覆盖三个不同规模与架构的开源大语言模型：
+实验覆盖四个开源大语言模型（跨三个模型族）：
 
 \begin{itemize}[leftmargin=2em, itemsep=2pt]
   \item \textbf{Qwen2.5-1.5B-Instruct}~\cite{qwen2025qwen25}：
@@ -37,10 +37,11 @@ INT8 下的可部署实例证实行为对齐校准的有效性（Claim~1），
     原生支持 128K 上下文窗口。
     与 Qwen 系列在 RoPE 实现和 KV 头数上均不同，提供跨架构的适用性检验。
   \item \textbf{Mistral-7B-Instruct-v0.3}~\cite{jiang2023mistral}：
-    第三模型族对照，32 层 Transformer，GQA（8 个 KV 头），头维度 128，
+    第三个模型族，32 层 Transformer，GQA（8 个 KV 头），头维度 128，
     与 LLaMA-3.1-8B 共享相同 KV 头数但来自不同模型族。
-    在第~\ref{sec:exp-kv-sensitivity}~节的 K/V 消融和 MixedKV 实验中
-    进一步拓展跨模型族的覆盖范围。
+    主实验在 Qwen2.5-1.5B/7B 和 LLaMA-3.1-8B 三个模型上完成，
+    Mistral 仅参与第~\ref{sec:exp-kv-sensitivity}~节的 K/V 消融和 MixedKV 实验，
+    用于拓展跨模型族的覆盖范围。
 \end{itemize}
 
 所有实验在单张 NVIDIA H20 GPU（98GB 显存）上完成。
@@ -1644,18 +1645,6 @@ INT8-ours 的退化相对温和（$+$3.6\%），因为 256 个量化级别提供
 % [chunk_size 鲁棒性分析已移至附录 \ref{sec:app-chunksize}]
 
 
-\paragraph{证据边界声明。}
-本章实验结果的证据成熟度分为两个层次：
-（1）\emph{完整验证}：INT8 行为对齐量化经过 5 个种子 × 4 个模型 × 4 项基准的系统评测，
-统计检验（Bootstrap CI + 排列检验 + BH-FDR 校正）全部完成，
-构成本文的规范主证据；
-（2）\emph{扩展验证}：INT4-RoleAlign 和 MixedKV 的跨模型结果基于 3 个种子 × 3 个模型，
-PPL/Needle/LongBench/RULER 四项评测已完成聚合。
-RULER 数据来自修正 \code{seq\_len} 参数后的补跑
-（原始脚本因缺少 \code{--seq\_len} 参数导致 ctx$>$4K 被截断至 4096），
-s\_niah $\geq$99\%、mk\_niah $\geq$93\%。
-后续引用时将明确区分完整验证与扩展验证的证据等级。
-
 % ============================================================
 \section{综合讨论}
 \label{sec:exp-discussion}
@@ -1811,6 +1800,9 @@ B10 消融（第~\ref{subsec:exp-ablation-b10}~节）显示样本数 16--256 影
 对比结论仅适用于本文版本。
 （b）RULER CWE 使用自实现生成器，原始版本干扰词频约 90 倍于目标（已修复，修复后 FP16 通过率 38\%），
 影响绝对值与官方可比性。
+此外，INT4-RoleAlign 和 MixedKV 的 RULER 数据来自修正 \code{seq\_len} 参数后的补跑——
+原始脚本因缺少 \code{-{}-seq\_len} 参数导致 ctx$>$4K 被截断至 4096，
+修正后重新运行得到 s\_niah $\geq$99\%、mk\_niah $\geq$93\% 的完整 4K--32K 数据。
 （c）LongBench 使用合成数据源，测量量化后信息保持能力，
 绝对分数不可与官方排行榜对比；
 Mistral-7B 出现退化 artifact（详见附录~\ref{sec:app-kv-ablation-full}）。
