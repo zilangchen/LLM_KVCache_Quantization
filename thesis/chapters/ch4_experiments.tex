@@ -1388,7 +1388,10 @@ per-role 搜索空间是这些诊断的直接落点
 
 \begin{table}[htbp]
   \centering
-  \caption{$\tau^{-1}$ 温度校正消融（Qwen2.5-1.5B-Instruct，cs=128，seed=1234）。
+  \caption{$\tau^{-1}$ 温度校正消融。
+    INT4-RoleAlign 行覆盖 Qwen2.5-1.5B/7B、LLaMA-3.1-8B 三个模型（$H_{kv} \in \{2, 4, 8\}$），
+    最后一行提供 INT8-ours 在 Qwen2.5-1.5B 上的对照（展示 INT8 下 $\tau^{-1}$ 效果近乎可忽略）。
+    所有行均为 cs$=$128、seed$=$1234、WikiText-2 full 302K tokens 评测。
     PPL 为位级确定量（见第~\ref{subsec:exp-statistics}~节），
     Needle 在所有配置上均为 100\% 故无区分力，仅作完整性报告；
     RULER 与 LongBench 的多指标数据在本节消融下均未显示显著方向性差异（$|\Delta| < $1\%），
