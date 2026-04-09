@@ -940,29 +940,43 @@ NarrativeQA 上 INT8-ours 略低（$-$0.43 pp），
   \caption{ch4 核心表格的数据溯源映射}
   \label{tab:app-data-provenance}
   \small
-  \begin{tabular}{ll}
+  \begin{tabular}{lll}
     \toprule
-    \textbf{表标签} & \textbf{实验目录（results/ 下）} \\
+    \textbf{表标签} & \textbf{实验目录} & \textbf{状态} \\
     \midrule
-    tab:decoding-params      & ---（本附录新增，参数配置非实验产出）\\
-    tab:kv-modes             & emnlp\_final\_raw/ \\
-    tab:main-results         & emnlp\_final\_raw/ \\
-    tab:temp-ablation        & emnlp\_final\_raw/runs/temp\_ablation/ \\
-    tab:b10-sensitivity      & emnlp\_final\_raw/runs/calib\_b10\_ablation/ \\
-    tab:cross-model          & emnlp\_final\_raw/runs/cross\_model/ \\
-    tab:kivi-comparison      & emnlp\_final\_raw/（INT8 层面对比）\\
-    tab:kv-ablation-ppl      & emnlp\_final\_raw/runs/kv\_ablation\_ppl/ \\
-    tab:kv-ablation-ruler    & emnlp\_final\_raw/runs/kv\_ablation\_ruler/ \\
-    tab:kv-ablation-longbench & emnlp\_final\_raw/runs/kv\_ablation\_longbench/ \\
-    tab:mixedkv-cross-model  & emnlp\_final\_raw/runs/mixedkv/ \\
-    tab:rolealign-results    & emnlp\_rolealign\_v2/ \\
-    tab:invtau-ablation      & emnlp\_rolealign\_v4/runs/invtau\_ablation/ \\
-    tab:int4-tpot-cross-model & emnlp\_defense\_v1/ \\
-    tab:kivi-int4-threeway   & emnlp\_defense\_v1/（INT4 层面对比）\\
-    tab:claim-summary        & ---（元表，汇总上述所有 claim 的验证状态）\\
+    tab:decoding-params      & ---                                  & 参数配置非实验产出 \\
+    tab:kv-modes             & emnlp\_final\_raw/                   & canonical (tables/) \\
+    tab:main-results         & emnlp\_final\_raw/                   & canonical (tables/) \\
+    tab:temp-ablation        & emnlp\_final\_raw/runs/temp\_ablation/ & canonical \\
+    tab:b10-sensitivity      & emnlp\_final\_raw/runs/calib\_b10\_ablation/ & canonical \\
+    tab:cross-model          & emnlp\_final\_raw/runs/cross\_model/ & canonical \\
+    tab:kivi-comparison      & emnlp\_final\_raw/                   & canonical（INT8 对比）\\
+    tab:kv-ablation-ppl      & emnlp\_final\_raw/runs/kv\_ablation\_ppl/ & canonical \\
+    tab:kv-ablation-ruler    & emnlp\_final\_raw/runs/kv\_ablation\_ruler/ & canonical \\
+    tab:kv-ablation-longbench & emnlp\_final\_raw/runs/kv\_ablation\_longbench/ & canonical \\
+    tab:mixedkv-cross-model  & emnlp\_final\_raw/runs/mixedkv/      & canonical \\
+    tab:rolealign-results (PPL/Needle)   & emnlp\_rolealign\_v2/runs/ppl\_ours\_asym\_*/ & raw (tables/ pending rebuild) \\
+    tab:rolealign-results (RULER)        & emnlp\_rolealign\_v2/runs/ruler\_ours\_asym\_*/ & raw (tables/ pending rebuild) \\
+    tab:rolealign-results (LongBench)    & emnlp\_rolealign\_v1/tables/longbench\_summary.csv & v1 legacy (4K 合成样本，算法无 bug) \\
+    tab:invtau-ablation      & emnlp\_rolealign\_v2/runs/ppl\_ours\_asym\_*/ & raw \\
+    tab:int4-tpot-cross-model & emnlp\_rolealign\_v2/runs/prof\_serial\_latency\_*/ & raw \\
+    tab:kivi-int4-threeway   & emnlp\_rolealign\_v2/runs/ruler\_ours\_asym\_*/ & raw (INT4 三方对比) \\
+    tab:claim-summary        & ---（元表，汇总上述所有 claim 的验证状态）& --- \\
     \bottomrule
   \end{tabular}
 \end{table}
+
+\paragraph{v1 vs v2 的数据分工。}
+\texttt{emnlp\_rolealign\_v1} 是 2026-03-25 的第一次 INT4-RoleAlign 全量实验，
+Phase 0A 审计（见 \texttt{iteration.md} 2026-04-01 条目）发现其中 PPL 与 RULER 数据有两处 bug：
+（1）\texttt{eval\_ppl.py} 的 \texttt{build\_kv\_cache} 缺少 \texttt{int4\_ours\_asym} 分支，
+运行时静默 fallback 到 INT8，导致 v1 的 PPL 数字实际是 INT8 水平；
+（2）\texttt{eval\_ruler.py} 缺 \texttt{--seq\_len} 参数，ctx$>$4K 被截断至 4096。
+修复两处 bug 后于 2026-04-02 跑 \texttt{emnlp\_rolealign\_v2}，PPL 与 RULER 数据被完全替换为 v2 真实值。
+\texttt{Needle} 与 \texttt{LongBench} 经 \texttt{generate\_loop.py} 路由，无 bug，因此 v1 的数据保留使用。
+\texttt{v2/tables} 目录为空，是因为 v2 的 runs 直接由论文手动引用而未经 \texttt{aggregate\_results.py} 回填；
+原 raw CSV 位于各 \texttt{runs/*/profile\_ppl\_*.csv} 或 \texttt{profile\_ruler\_*.csv}，
+正文数字（如 \texttt{tab:rolealign-results} 的 PPL 10.58/7.58/6.90）已与 v2 raw 逐 seed 核对一致。
 
 复现流程：给定上表中的任一实验目录 \code{<dir>}，可通过以下命令重新生成
 对应的聚合 CSV、LaTeX 表和图表：
