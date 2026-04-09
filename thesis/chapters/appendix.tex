@@ -955,12 +955,13 @@ NarrativeQA 上 INT8-ours 略低（$-$0.43 pp），
     tab:kv-ablation-ruler    & emnlp\_final\_raw/runs/kv\_ablation\_ruler/ & canonical \\
     tab:kv-ablation-longbench & emnlp\_final\_raw/runs/kv\_ablation\_longbench/ & canonical \\
     tab:mixedkv-cross-model  & emnlp\_final\_raw/runs/mixedkv/      & canonical \\
-    tab:rolealign-results (PPL/Needle)   & emnlp\_rolealign\_v2/runs/ppl\_ours\_asym\_*/ & raw (tables/ pending rebuild) \\
-    tab:rolealign-results (RULER)        & emnlp\_rolealign\_v2/runs/ruler\_ours\_asym\_*/ & raw (tables/ pending rebuild) \\
+    tab:rolealign-results (PPL/Needle)   & emnlp\_rolealign\_v2/runs/ppl\_ours\_asym\_*/ & raw (v2 post-fix) \\
+    tab:rolealign-results (RULER 4K)     & emnlp\_rolealign\_v2/runs/ruler\_ours\_asym\_*\_ctx4096/ & raw (seq\_len=4K，bug 不影响) \\
+    tab:rolealign-results (RULER 8K-32K) & emnlp\_rolealign\_v2/runs/ruler\_v2fix\_*\_ctx\{8192,16384,32704\}/ & raw (v2fix post-seq\_len-bugfix) \\
     tab:rolealign-results (LongBench)    & emnlp\_rolealign\_v1/tables/longbench\_summary.csv & v1 legacy (4K 合成样本，算法无 bug) \\
     tab:invtau-ablation      & emnlp\_rolealign\_v2/runs/ppl\_ours\_asym\_*/ & raw \\
     tab:int4-tpot-cross-model & emnlp\_rolealign\_v2/runs/prof\_serial\_latency\_*/ & raw \\
-    tab:kivi-int4-threeway   & emnlp\_rolealign\_v2/runs/ruler\_ours\_asym\_*/ & raw (INT4 三方对比) \\
+    tab:kivi-int4-threeway   & emnlp\_rolealign\_v2/runs/ruler\_v2fix\_*\_ctx\{8192,16384,32704\}/ & raw (v2fix) \\
     tab:claim-summary        & ---（元表，汇总上述所有 claim 的验证状态）& --- \\
     \bottomrule
   \end{tabular}
