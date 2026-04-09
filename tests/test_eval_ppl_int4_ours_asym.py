@@ -122,16 +122,27 @@ class SpyRoleAwareAsymKVCache:
         SpyRoleAwareAsymKVCache.call_count += 1
 
 
-# Inject a fake src.cache.role_aware_asym_cache module exposing the spy.
-_fake_raak_module = MagicMock()
-_fake_raak_module.RoleAwareAsymKVCache = SpyRoleAwareAsymKVCache
-sys.modules["src.cache.role_aware_asym_cache"] = _fake_raak_module
+# TST-086/Codex-P1: All sys.modules mutations MUST go through _ensure_mock
+# so tearDownModule can restore original modules after this file's tests run.
+# Previously, raw assignments like `sys.modules[k] = MagicMock()` and
+# `sys.modules.setdefault(k, MagicMock())` bypassed the _MOCKED_MODULES /
+# _ORIGINAL_MODULES tracking, causing cross-test pollution when pytest runs
+# this file before test_role_aware_asym_cache.py / test_utils.py /
+# test_config_utils.py (they would import MagicMock instead of real code).
 
-# Mock src.* attribute patches needed by eval_ppl import (same as guardrails file).
-_hf_mod = sys.modules.setdefault("src.utils.hf", MagicMock())
+# Inject a fake src.cache.role_aware_asym_cache module exposing the spy.
+# Must use _ensure_mock for tracking, then install the spy class on the mock.
+_ensure_mock("src.cache.role_aware_asym_cache")
+sys.modules["src.cache.role_aware_asym_cache"].RoleAwareAsymKVCache = SpyRoleAwareAsymKVCache
+
+# Mock src.* attribute patches needed by eval_ppl import.
+# Using _ensure_mock (not setdefault) so teardown is properly registered.
+_ensure_mock("src.utils.hf")
+_hf_mod = sys.modules["src.utils.hf"]
 _patch_attr(_hf_mod, "resolve_pretrained_path", MagicMock())
 
-repro_mod = sys.modules.setdefault("src.utils.repro", MagicMock())
+_ensure_mock("src.utils.repro")
+repro_mod = sys.modules["src.utils.repro"]
 _patch_attr(repro_mod, "build_config_snapshot", MagicMock())
 _patch_attr(repro_mod, "get_git_commit", MagicMock(return_value="mock_commit"))
 _patch_attr(repro_mod, "get_hardware_info", MagicMock(return_value={"gpu": "mock", "gpu_memory": "0"}))
@@ -139,7 +150,8 @@ _patch_attr(repro_mod, "resolve_quant_bits", MagicMock(return_value=4))
 _patch_attr(repro_mod, "set_seed", MagicMock())
 _patch_attr(repro_mod, "write_config_snapshot", MagicMock())
 
-cfg_mod = sys.modules.setdefault("scripts.config_utils", MagicMock())
+_ensure_mock("scripts.config_utils")
+cfg_mod = sys.modules["scripts.config_utils"]
 _patch_attr(cfg_mod, "load_config", MagicMock(return_value={}))
 _patch_attr(cfg_mod, "normalize_kv_params", MagicMock())
 _patch_attr(cfg_mod, "resolve_run_config", MagicMock(return_value={}))

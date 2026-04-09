@@ -226,12 +226,25 @@ def load_calibration(
         )
     else:
         default_calib = None
-    calib_path = calib_file or default_calib
+    # Codex-P2: resolve user-provided relative calib_file from project_root,
+    # not CWD (matches EVL-149/EVL-152 fix in build_kv_cache). Without this,
+    # running `eval_ppl.py --calib_file artifacts/xxx.json` from outside the
+    # repo root would raise FileNotFoundError with a misleading path (shows
+    # the CWD-relative path rather than project_root-resolved path), even
+    # though build_kv_cache's int4_kivi_aligned / int4_ours_asym branches
+    # downstream already handle relative paths correctly.
+    if calib_file is not None and not os.path.isabs(calib_file):
+        _proj = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        calib_path = os.path.join(_proj, calib_file)
+    else:
+        calib_path = calib_file or default_calib
     user_explicit = calib_file is not None
     if user_explicit and not os.path.exists(calib_path):
         raise FileNotFoundError(
-            f"User-specified calibration file not found: {calib_path}. "
-            "Refusing to silently fall back to baseline."
+            f"User-specified calibration file not found: {calib_file!r} "
+            f"(resolved to {calib_path!r}). "
+            "Refusing to silently fall back to baseline. "
+            "Use an absolute path or run from the project root."
         )
     if calib_path and os.path.exists(calib_path):
         try:
