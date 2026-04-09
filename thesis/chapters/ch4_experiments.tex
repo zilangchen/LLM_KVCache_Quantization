@@ -5,12 +5,18 @@
 \chapter{实验与结果分析}
 \label{chap:experiments}
 
-第三章提出了以 attention-KL 为核心的行为对齐量化框架。
-本章围绕四个实验命题组织证据：
-INT8 下的可部署实例证实行为对齐校准的有效性（Claim~1），
-同一诊断透镜定位低比特失效的结构性根因（Claim~2），
-诊断结论直接导出 INT4-RoleAlign 的检索恢复设计（Claim~3），
-并界定该方案在 PPL 与延迟上的能力边界（Claim~4）。
+第三章给出了基于 attention-KL 的行为对齐量化框架。
+本章按三层结构组织实验证据：
+先通过 KL 与 MSE 的并行对比展示
+校准目标有效性的 bit-width 依赖
+（第~\ref{sec:exp-main}~节，贡献一），
+并在 INT8 层面建立稳定的主线参考；
+再通过受控诊断揭示 INT4 退化的 Key 主导结构与
+retrieval/PPL 解耦（第~\ref{sec:exp-int4}--\ref{sec:exp-kv-sensitivity}~节，
+贡献二）；
+最后在 KIVI-style 非对称格式上给出行为引导的实例化 RoleAlign
+并界定其 PPL 与延迟代价边界
+（第~\ref{sec:exp-rolealign}~节，贡献三）。
 
 % ============================================================
 \section{实验设置}
@@ -1034,7 +1040,7 @@ SQNR 相对 INT8 骤降 24.1~dB，留给 4-bit 的有效数值边际已经很窄
 本节通过受控消融来分离二者的独立效应。
 三个模型族的 K/V 独立消融一致表明：Key 量化噪声
 是注意力行为偏移的主要来源，Value 对 INT4 相当鲁棒。
-这一发现直接导出了 MixedKV 和 RoleAlign 两条低比特设计路径。
+这一发现启发了 MixedKV 和 RoleAlign 两条低比特设计路径。
 
 % ------------------------------------------------------------
 \paragraph{消融实验设计}
@@ -1287,21 +1293,23 @@ $H_{kv}=2$ 的 Qwen2.5-1.5B 仅 PPL 退化 4.9\%，检索保持；
 $H_{kv}=4$ 的 Qwen2.5-7B 出现 Needle 72.4\% 的中等退化。
 这一模式与前节 K/V 消融的结论一致：MixedKV 以约 6-bit 有效宽度
 在多数模型上优于均匀 INT4，但其适用性仍受 GQA 头数调制。
-更彻底的低比特检索恢复路径由下一节的 INT4-RoleAlign 给出。
+进一步的低比特检索恢复路径由下一节的 INT4-RoleAlign 给出。
 
 
 % ============================================================
-\section{诊断导出的低比特设计：INT4-RoleAlign}
+\section{KIVI-style 格式上的行为引导实例化：INT4-RoleAlign}
 \label{sec:exp-rolealign}
 % ============================================================
 
-本节给出论文的核心实验结论：诊断直接导出有效的低比特检索恢复设计。
-前两节的诊断链条
-对称 INT4 系统性失效（第~\ref{sec:exp-int4}~节）$\to$
-Key 量化主导退化 + GQA 架构依赖（第~\ref{sec:exp-kv-sensitivity}~节）
-直接指向角色感知的格式升级。
-INT4-RoleAlign 在三个模型上将 Needle 从 0\% 恢复至 100\%，
-实现 73\% KV Cache 压缩。
+本节把前两节的诊断结论——
+对称 INT4 系统性失效（第~\ref{sec:exp-int4}~节）与
+Key 量化主导退化 + GQA 架构依赖
+（第~\ref{sec:exp-kv-sensitivity}~节）——
+落地为 KIVI~\cite{liu2024kivi} 非对称格式空间上的
+一个具体实例化 INT4-RoleAlign。
+在 Qwen2.5-1.5B/7B/8B 三个模型上，
+RoleAlign 将 Needle 从 0\% 恢复至 100\%，
+并以约 73\% 的 KV Cache 压缩率运行。
 RULER 评测提供进一步支持性证据
 （s\_niah $\geq$99\%、mk\_niah $\geq$93\%，4K--32K 上下文范围）。
 然而，PPL 退化因模型规模而异（8B: 2.4\%，7B: 6.1\%，1.5B: 13.7\%），
@@ -1471,7 +1479,7 @@ RoleAlign 则走离线 KL 搜索。
 所以单看 PPL 数字去比较 RoleAlign 和 KIVI 并不是一个有信息量的判断。
 真正值得讨论的是这套非对称量化轴是怎么来的。
 在 KIVI 的原设计里它是一个工程经验；
-在本文的语境下它由 attention-KL 诊断透镜直接导出——
+在本文的语境下它由 attention-KL 诊断透镜启发——
 Key 被识别为主导失效源、GQA 架构与噪声的耦合关系也在同一把透镜下暴露出来，
 per-role 搜索空间是这些诊断的直接落点
 （第~\ref{sec:exp-rolealign}~节与第~\ref{sec:ch3-rolealign}~节）。
@@ -1853,16 +1861,28 @@ $H_{kv}=2$ 的 1.5B 模型 PPL 改善 1.6\%，
 \label{subsec:exp-claim-summary}
 % ------------------------------------------------------------
 
-综合上述四章实验证据，本文的核心 claim 验证状态可归纳为四点：
+综合上述各节的实验证据，本章的实验结论按 X-lite 的
+三主贡献 + 一观察归纳如下：
 
-\textbf{(i)} INT8 行为对齐量化在四个模型上保持质量不劣于 FP16，
-相对于未融合 INT8-baseline 实现 8--38\% 的 TPOT 降低；
-\textbf{(ii)} 对称 INT4 在长上下文下系统性失效，
-受控 K/V 消融一致指向 Key 量化为退化主导因素；
-\textbf{(iii)} INT4-RoleAlign 在三个模型上将 Needle 从 0\% 恢复至 100\%，
-KV 显存压缩 73\%，但 PPL 与 torch\_ref 路径下的 TPOT 仍付出代价；
-\textbf{(iv)} 温度校正 $\tau^{-1}$ 与 GQA 头数 $H_{kv}$ 呈反向依赖，
-在跨规模消融中作为启发式观察得到三模型一致支持。
+\textbf{(i) 贡献一：} 在 Qwen2.5-1.5B 上并行比较 KL 与 MSE
+两种校准目标后观察到明显的 bit-width 依赖——
+INT8 下 448/448 个 per-group scale bitwise 一致，
+INT4 下两目标选择不同 clip\_percentile，
+全部 scale 元素不同，中位相对差异 12.35\%；
+INT8 行为对齐量化在四个模型上保持质量不劣于 FP16，
+相对于未融合 INT8-baseline 实现 8--38\% 的 TPOT 降低。
+\textbf{(ii) 贡献二：} 对称 INT4 在长上下文下系统性失效，
+受控 K/V 消融一致指向 Key 量化为退化主导因素，
+同时 Needle retrieval 与 PPL 之间出现明显解耦。
+\textbf{(iii) 贡献三：} 在 KIVI~\cite{liu2024kivi}
+非对称格式上的行为引导实例化 RoleAlign
+在三个模型上将 Needle 从 0\% 恢复至 100\%，
+KV 显存压缩 73\%，但 PPL 与 \code{torch\_ref} 路径下的
+TPOT 仍付出代价；在 8B 65{,}536-token 上下文下
+RoleAlign 与 FP16 出现相同的 long-context 退化模式。
+\textbf{(iv) 观察：} 温度校正 $\tau^{-1}$ 与 GQA 头数 $H_{kv}$
+呈反向依赖，在跨规模消融中作为启发式观察得到四模型一致支持，
+本文将其作为可选部署启发式保留，默认关闭。
 
 逐条实验预期（E1--E16）的达标/未达标状态、证据强度分级与来源溯源，
 见附录~\ref{sec:app-claim-summary}。
