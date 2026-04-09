@@ -47,13 +47,14 @@ with pronounced GQA architecture dependence---directly
 motivating the role-aware design of INT4-RoleAlign.
 
 Beyond this primary design, the diagnostic framework also surfaces
-an unexpected second-order finding:
-inverse temperature correction (inv\_tau) exhibits strong
+an unexpected structural byproduct:
+per-head temperature correction $\tau^{-1}$ (inv\_tau) exhibits strong
 scale-dependence on GQA heads, improving PPL by 1.6\% at $H_{kv}=2$
 but degrading by 3.4--6.0\% at $H_{kv} \geq 4$.
 This regularity is consistent with a GQA noise-dilution intuition
-($\sigma_{\text{eff}} \propto \sigma / \sqrt{N_{\text{rep}}}$)
-and illustrates the second-order value of diagnostic frameworks:
+($\sigma_{\text{eff}} \propto \sigma / \sqrt{N_{\text{rep}}}$,
+under a simplifying assumption of approximately independent query-head noise)
+and illustrates the structural-byproduct value of diagnostic frameworks:
 beyond their primary calibration role, they can surface architectural
 constraints that would otherwise remain implicit.
 

@@ -10,25 +10,65 @@
       "rounds_read": [2],
       "paper_count": 4
     },
+    "NeurIPS_DB_Track": {
+      "years": [2024, 2025],
+      "rounds_read": [3],
+      "paper_count": 2,
+      "notes": "BABILong (2024), Measuring-what-Matters (2025)"
+    },
     "ICLR": {
       "years": [2025, 2026],
-      "rounds_read": [2],
-      "paper_count": 4
+      "rounds_read": [2, 3],
+      "paper_count": 7,
+      "notes": "Round 3 added LongPPL + HELMET + LongProc hits from ICLR 2025"
     },
     "ACL": {
       "years": [2025],
-      "rounds_read": [2],
-      "paper_count": 1
+      "rounds_read": [2, 3],
+      "paper_count": 4,
+      "notes": "Round 3 added LongBench-v2 (main), AbGen (main), MiniKV (findings)"
+    },
+    "EMNLP": {
+      "years": [2024, 2025],
+      "rounds_read": [3],
+      "paper_count": 5,
+      "notes": "KV-Compression-Benchmark (2024 findings), Song-Precise (2024 main), XQuant (2025 main), TokenPrecision-Tradeoff (2025 findings), DynamicKV (2025 findings)"
+    },
+    "NAACL": {
+      "years": [2025],
+      "rounds_read": [3],
+      "paper_count": 2,
+      "notes": "Chen Non-Determinism long papers, LRQ long papers"
+    },
+    "COLING": {
+      "years": [2025],
+      "rounds_read": [3],
+      "paper_count": 1,
+      "notes": "AsymKV main conference (venue confirmation for Round 2 arXiv entry)"
+    },
+    "TACL": {
+      "years": [2025],
+      "rounds_read": [3],
+      "paper_count": 1,
+      "notes": "TALE"
+    },
+    "SIGMOD": {
+      "years": [2025],
+      "rounds_read": [3],
+      "paper_count": 1,
+      "notes": "PQCache"
     },
     "COLM": {
-      "years": [2024],
-      "rounds_read": [2],
-      "paper_count": 2
+      "years": [2024, 2025],
+      "rounds_read": [2, 3],
+      "paper_count": 3,
+      "notes": "Round 3 added COLM 2025 (Sober-Look)"
     },
     "NeurIPS_Workshop": {
-      "years": [2024],
-      "rounds_read": [2],
-      "paper_count": 1
+      "years": [2024, 2025],
+      "rounds_read": [2, 3],
+      "paper_count": 2,
+      "notes": "Round 3 added NeurIPS 2025 LLM Evals Workshop (Beyond-Singular)"
     },
     "ICCV_Workshop": {
       "years": [2023],
@@ -37,11 +77,15 @@
     },
     "arXiv_preprint": {
       "years": [2024, 2025],
-      "rounds_read": [2],
-      "paper_count": 8
+      "rounds_read": [2, 3],
+      "paper_count": 13,
+      "notes": "Round 3 added 100-LongBench, Madaan-Variance, Li-NumericalNonDeterminism, PM-KVQ"
     }
   },
-  "total_papers_read": 24,
-  "last_updated_round": 2,
-  "comment": "Round 2 Phase 1 literature scout: 24 papers investigated (KV cache quant, GQA, softmax temperature, long-context compression, behavior-alignment calibration). C5 novelty defended: no published work connects GQA H_kv count with per-head temperature correction for KV quantization. 8 new SHOULD_ADD_TO_CH2 candidates identified."
+  "total_papers_read": 48,
+  "last_updated_round": 3,
+  "round_summaries": {
+    "round_2": "Round 2 Phase 1 literature scout (2026-04-08): 24 papers on KV cache quant novelty defense. C5 (inv_tau x GQA) intact. 8 new SHOULD_ADD_TO_CH2 candidates.",
+    "round_3": "Round 3 Phase 1 literature scout (2026-04-09): 24 new papers focused on ch4 experimental methodology. Venue rotation: EMNLP, NAACL, TACL, COLING, SIGMOD, NeurIPS D&B. 1 CONTRADICTS (LongPPL ICLR 2025) + 7 SHOULD_ADD_TO_CH4. Key findings: ch4 Bootstrap+sign-flip+BH-FDR stat rigor is in top 16% of 445-benchmark Burden-et-al review; PPL-for-long-context critique needs hedge; PPL-determinism claim needs within-hardware scope."
+  }
 }

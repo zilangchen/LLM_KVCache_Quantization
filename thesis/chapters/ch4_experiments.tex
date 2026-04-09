@@ -320,13 +320,14 @@ INT8 量化将 KV Cache 从 2 字节/元素压缩至 1 字节/元素，
 \paragraph{质量保持}
 INT8-ours 在全部 4 个上下文长度点（4K--32K）上均保持 100\% Needle 通过率，
 与 FP16 无统计显著差异（$p=1.0$）。
-PPL 退化幅度在 $-$0.09\% 至 $-$0.26\% 范围内，
-均未达 BH-FDR 校正后的统计显著性。
-$n=5$ 的检验功效有限，``未达显著性''不等价于``无效应''，
-但观测到的效应量（$<$0.3\%）远小于实用关切的非劣性阈值（0.5\%），
+PPL 退化幅度在 $-$0.09\% 至 $-$0.26\% 范围内
+\emph{（deterministic effect size on greedy-decoded PPL；贪婪解码下 PPL 为位级确定量，
+不再配用 $p$-值或 $q$-值，详见第~\ref{subsec:exp-statistics}~节 L194--207 方法论说明）}；
+实用关切的非劣性阈值为 0.5\%，观测效应量 $<$0.3\% 远在该阈值之内，
 表明行为对齐量化在语言建模质量上未引入具有实际意义的退化。
-LongBench 评测同样未报告显著差异
-（附录表~\ref{tab:app-sig-quality}，$q=0.144$）。
+Needle 与 LongBench 列在 BH-FDR 校正后均未达统计显著性（附录表~\ref{tab:app-sig-quality}，$q=0.144$）；
+$n=5$ 的检验功效有限，``未达显著性''不等价于``无效应''，
+但观测效应量同样远小于非劣性阈值。
 
 \paragraph{RULER 评测的退化分析}
 \label{para:c6-fail}
@@ -406,7 +407,7 @@ KV Cache 显存方面，INT8 约为 FP16 的 $1/2$，
 32K 下 int8\_ours 总峰值显存相比 FP16 节省约 4\%--6\%，
 随上下文长度增长该优势将持续扩大。
 
-综上，INT8 行为对齐量化在质量、显存和延迟三个维度上均呈现有利权衡：PPL 退化 $<$0.3\%，Needle 100\%，显存节省 44\%，延迟降低 8--38\%\footnote{\emph{测量条件范围}: 本文所有 TPOT 数字均在 batch$=$1、独占 GPU（single-stream decode）条件下测量，seq\_len $\in \{4096, 32768\}$ 视表格而定。多请求并发（batch $\geq$ 2）下的延迟/吞吐-batch 曲线未纳入本文范围，原因是本文的研究焦点是单请求解码阶段的量化-延迟权衡；跨 batch 的 throughput-capacity 分析留作未来工作（见附录~\ref{sec:app-batch-capacity}~的 batch$=$16 KV 显存数据）。}（RULER 退化见第~\ref{para:c6-fail}~段）。INT8 结果确认行为对齐原则成立。下一个问题是：当量化级别降至 15（INT4）时，同一原则能否诊断失效根因？
+综上，INT8 行为对齐量化在质量、显存和延迟三个维度上均呈现有利权衡：PPL 退化 $<$0.3\%，Needle 100\%，显存节省 44\%，延迟降低 8--38\%\footnote{\emph{测量条件范围}: 本段 "延迟降低 8--38\%" headline 数字均在 batch$=$1、独占 GPU（single-stream decode）条件下测量，seq\_len $\in \{4096, 32768\}$ 视表格而定。batch$=$4--16 的 throughput 和 capacity 数据已纳入附录~\ref{sec:app-efficiency-plots}~与 \ref{sec:app-batch-capacity}，展示随 batch 增大量化的显存节省效应释放出更多可服务并发；但跨 batch 的细粒度 throughput-capacity 曲线拟合与系统性对比留作未来工作。}（RULER 退化见第~\ref{para:c6-fail}~段）。INT8 结果确认行为对齐原则成立。下一个问题是：当量化级别降至 15（INT4）时，同一原则能否诊断失效根因？
 
 
 % ============================================================
