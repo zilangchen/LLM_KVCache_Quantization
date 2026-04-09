@@ -254,10 +254,13 @@ KL 散度优化景观可能存在多个局部最优解，
 将为校准目标的最优选择提供更完整的理论指导。
 
 \paragraph{chunk\_size=1 跨模型系统验证}
-本文在 Qwen2.5-1.5B 上观察到 KIVI-style 在 chunk\_size=1 下的灾难性退化
-与 INT4-RoleAlign 的鲁棒性。
+本文在 Qwen2.5-1.5B 上观察到 KIVI-style 与 INT4-RoleAlign 在 chunk\_size=1
+全量化压力测试下均发生灾难性退化
+（KIVI PPL 从 10.43 升至 9442，INT4-RoleAlign PPL $> 10^4$），
+根因是 per-channel K Scale 仅基于首个 token 建立时 scale 范围极窄，
+后续 K 值几乎全部溢出（详见第~\ref{subsec:exp-int4-boundary}~节与附录~\ref{sec:app-chunksize}）。
 在更多模型（尤其是不同 GQA 头数的架构）上系统验证
-chunk\_size 对不同量化方案的影响，
+chunk\_size 对不同量化方案的影响，并探索 decode 阶段动态 scale 更新机制，
 将为实际部署中的量化粒度选择提供更充分的指导。
 
 \paragraph{BA percentile 在更低比特下的可行性探索}
