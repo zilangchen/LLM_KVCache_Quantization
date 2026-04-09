@@ -219,11 +219,11 @@ GPU 核函数中执行，消除了中间 FP16 张量的显存读写开销；
 \cite{madaan2024variance}~在 10 个从头训练的 Llama-2-7B 上经验证实 Bootstrap CI 相对真实种子方差偏保守，
 因此本文 $n{=}5$ 下的 CI 宽度倾向于高估不确定性，是保守而非激进的选择\footnote{%
 \cite{fogliato2024precise}~提出对 $n{<}30$ 的小样本采用经验贝叶斯置信区间可获得更紧的区间；
-本文保留 Bootstrap 以避免引入主观先验并保持与既有量化基准~\cite{jiang2024kvcompressionbench}~一致的统计表达。}。
+本文保留 Bootstrap 以避免引入主观先验并保持与既有量化基准~\cite{yuan2024kvcompressionbench}~一致的统计表达。}。
 
 多重比较通过 Benjamini-Hochberg 方法~\cite{benjamini1995controlling}
 控制假发现率（$\alpha=0.05$），每张主表定义一个比较族。
-\cite{burden2025measuring}~在 NeurIPS~2025 对 445 个 LLM 基准的系统调查中报告，
+\cite{bean2025measuring}~在 NeurIPS~2025 对 445 个 LLM 基准的系统调查中报告，
 仅 16.0\% 的基准在任何一项指标上采用了统计显著性检验；
 本文同时配合 Bootstrap 置信区间、符号翻转置换检验与 BH-FDR 校正，
 在这一统计严谨性维度上位于当代 LLM 评测的较高水位。
@@ -239,7 +239,7 @@ PPL 差异的可靠性依赖于效应量本身（如 $<$0.3\% 退化）而非 $p
 FP16 PPL=9.31、INT8-ours=9.34、INT4-RoleAlign=10.58，
 对所有 10 个种子逐位相同），
 确认了贪婪解码下 PPL 的种子独立性。
-\cite{chen2025nondeterminism}~与\cite{li2025numerical}~指出，
+\cite{song2025nondeterminism}~与\cite{yuan2025numerical}~指出，
 贪婪解码在跨硬件或跨软件栈时并非严格确定：
 非结合律的浮点运算会因 GPU 数量、批大小或 kernel 实现差异引入数值漂移，
 极端情形下可达 9\% 的准确率波动。
