@@ -685,7 +685,7 @@ INT8-ours（对称量化 + KL 校准）与 KIVI-style（非对称量化 + 无校
     \midrule
     int8\_ours
       & 8.95{\scriptsize$\pm$0.00} & 100.0{\scriptsize$\pm$0.0}
-      & 5.00{\scriptsize$\pm$0.10} & 24.38{\scriptsize$\pm$0.65} & \textbf{47.14} & 504 \\
+      & 4.92{\scriptsize$\pm$0.10} & 24.45{\scriptsize$\pm$0.65} & \textbf{47.14} & 504 \\
     kivi\_style
       & 9.48{\scriptsize$\pm$0.02} & 99.0{\scriptsize$\pm$2.3}
       & 4.81{\scriptsize$\pm$0.05} & 24.06{\scriptsize$\pm$0.46} & 47.37 & 462 \\
@@ -704,8 +704,9 @@ INT8-ours（对称量化 + KL 校准）与 KIVI-style（非对称量化 + 无校
 \end{table}
 
 \paragraph{LongBench 对比}
-INT8-ours 的 LongBench 分数（5.00\%）高于 KIVI-style（4.81\%），
-增益 $+$1.37\%（非劣性阈值 $\geq$$-$1\%），
+INT8-ours 的 LongBench 分数（4.92\%，与表~\ref{tab:main-results}~的主表一致）
+略高于 KIVI-style（4.81\%），
+绝对增益 $+$0.11 个百分点（非劣性阈值 $\geq$$-$1 个百分点），
 符号翻转检验 $p=0.091$（$q=0.144$），差异不显著。
 KL 校准弥补了对称量化在 K/V 不对称建模上的短板，
 说明部署时选择更简单的对称方案也是可行的。
@@ -1294,7 +1295,7 @@ Qwen 系列上 vanilla KIVI 在 2-bit 下 PPL 直接崩溃（$>$200），
 而 4-bit 行为对齐方案保持了 $<$14\% 的退化，
 说明离线校准在更极端压缩率下可能展现出差异化优势。
 
-\subsection{温度校正与 GQA 尺度的交互：诊断框架的意外产出}
+\subsection{温度校正与 GQA 尺度的交互：诊断框架的结构性产出}
 \label{subsec:exp-rolealign-invtau}
 
 在执行 Claim 1--3 的诊断流程时，
@@ -1639,7 +1640,7 @@ Needle（单点检索）在 INT8 下完美保持，
 RULER 多目标检索处于 INT8 边缘（$-$2.64\%），
 INT4 的 15 级对几乎所有长上下文任务构成挑战。
 
-\paragraph{发现五：$\tau^{-1}$ 的格式 $\times$ GQA 尺度双依赖性（诊断框架的意外产出）}
+\paragraph{发现五：$\tau^{-1}$ 的格式 $\times$ GQA 尺度双依赖性（诊断框架的结构性产出）}
 $\tau^{-1}$ 的效果同时受量化格式和 GQA 头数约束：
 在 INT8 下几乎无变化（$\Delta$PPL $\approx 0.02\%$），
 在 INT4 非对称下呈现明确的 GQA 反相关——
