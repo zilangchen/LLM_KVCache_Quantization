@@ -1691,7 +1691,7 @@ Triton 融合核函数是效率收益的关键。
 受控 K/V 消融一致指向 Key 量化主导退化，Value 对 INT4 相当鲁棒。
 $H_{kv}$ 越大，量化噪声稀释越强；
 GQA 头数应作为比模型参数量更重要的量化策略考量因素。
-Coupled Quantization~\cite{liu2024coupled} 从互信息角度证实了
+Coupled Quantization~\cite{zhang2024coupled} 从互信息角度证实了
 KV 通道间的强关联结构，
 本文的 K/V 消融从另一方向（独立消融 + 架构依赖性分析）
 为 Key 主导退化提供了最清晰的 controlled ablation 证据
@@ -1704,7 +1704,7 @@ s\_niah $\geq$99\%，4K--32K），
 这两组数据的对照指向一个结论：
 \emph{局部检索能力对 INT4 量化噪声的鲁棒性远高于全局语言建模质量}。
 近期量化研究也有类似的间接观察：
-低比特模型在下游任务上的表现往往优于 PPL 所暗示的退化幅度~\cite{zhao2025lowbit}，
+低比特模型在下游任务上的表现往往优于 PPL 所暗示的退化幅度~\cite{ouyang2025lowbit}，
 而 PPL 退化的规模依赖性符合量化定标律
 $\Delta\mathrm{Loss} \propto N^{-\alpha}$（$\alpha \approx 0.23$）。
 本文的贡献在于首次在 KV Cache 量化场景下
