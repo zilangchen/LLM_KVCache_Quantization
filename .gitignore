@@ -15,7 +15,13 @@ env/.venv/
 .~*
 
 # Experiment outputs (do not commit)
-results/
+results/*
+# EXCEPTION: _canonical/ is the authoritative data index, must be tracked
+!results/_canonical/
+!results/_canonical/**
+# Also ignore results/ in archive and development_history trees (restore prior behavior)
+archive/**/results/
+development_history/**/results/
 artifacts/
 
 # Local logs
