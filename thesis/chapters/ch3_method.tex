@@ -367,21 +367,22 @@ Group size 则保持 Key 和 Value 一致。
 \section{温度校正的格式-尺度双依赖性}
 \label{sec:ch3-invtau}
 
-在执行诊断流程时，我们发现逐头温度校正（$\tau^{-1}$）
-的有效性与量化格式和 GQA 头数同时强相关，
-这是诊断框架的一个二阶产出。
-该机制的原始动机是补偿量化导致的注意力分布平坦化。
-其核心思想是：量化误差使注意力 logits 受近似均匀的噪声扰动，
-softmax 输出趋于平坦化（熵增大），对长距离聚焦任务尤为有害。
-逐头温度校正通过引入因子 $\tau^{-1}_{l,h}$ 补偿该效应，
+在 3 个模型规模（1.5B/7B/8B）上执行诊断流程时，
+我们意外观察到逐头温度校正（$\tau^{-1}$）的有效性对量化格式和 GQA 头数同时敏感。
+这是诊断框架的结构性产出：
+$\tau^{-1}$ 最初作为一个补偿工具被引入，用于对冲量化误差在注意力 logits 上叠加的噪声
+（在此假设量化误差近似独立同分布，本段随后讨论该假设的边界）。
+该噪声使 softmax 输出熵增、分布趋于平坦化，对长距离聚焦任务尤为敏感。
+我们用校正因子 $\tau^{-1}_{l,h}$ 对每个注意力头独立补偿该效应，
 校正后的注意力计算为：
 \begin{equation}
   \bm{p}_{\text{corrected}} = \softmax\!\left(\frac{\bq\hat{\bK}^T \cdot \tau^{-1}_{l,h}}{\sqrt{d_k}}\right)
   \label{eq:ch3-corrected-attn}
 \end{equation}
 其中 $\tau^{-1} > 1$ 锐化分布以补偿平坦化，$\tau^{-1} = 1$ 退化为标准基线。
-实现上，$\tau^{-1}$ 通过 Q 预缩放（$\bQ' = \bQ \cdot \tau^{-1}$）等价实现，
-无需修改注意力核函数签名（详细推导见附录~\ref{sec:app-invtau-detail}）。
+实现上，$\tau^{-1}$ 通过 Q 预缩放（$\bQ' = \bQ \cdot \tau^{-1}_{l,h}$）等价实现，
+\emph{逐头 $\tau^{-1}_{l,h}$ 沿 $\bQ$ 的 head 维独立作用于对应切片}，
+无需修改注意力核函数签名（完整等价性推导见附录~\ref{sec:app-invtau-detail}）。
 
 图~\ref{fig:ch3-invtau-heatmap} 展示了校准后的逐层逐头 $\tau^{-1}$ 分布，
 绝大多数头的 $\tau^{-1} = 1.0$（无需校正），校准具有高度稀疏性。
@@ -395,6 +396,15 @@ softmax 输出趋于平坦化（熵增大），对长距离聚焦任务尤为有
 
 \paragraph{GQA 尺度依赖性的诊断发现}
 \label{para:ch3-invtau-role}
+
+\textbf{方法论说明}. 本段呈现的 GQA 尺度依赖性是\emph{诊断发现}而非理论推导。
+其机制归因采用直觉论证（intuitive argument）呈现，
+与第~\ref{subsec:exp-statistics}~节对 deterministic PPL effect size
+的处理保持一致：所报告的跨模型百分比差异为 \emph{effect size on greedy-decoded PPL}，
+因贪婪解码下 PPL 为 bit-identical 确定量（第~\ref{subsec:exp-statistics}~节 L180--207），
+统计意义上的 $p$-value 不适用，跨模型比较仅基于 effect size 方向与量级。
+形式化证明与闭式误差上界留作未来工作。
+
 $\tau^{-1}$ 的收益具有显著的格式依赖性，
 并在非对称格式下进一步呈现 GQA 尺度的强相关性。
 在 INT8 对称格式下（256 个量化级别），量化噪声引起的 attention 平坦化幅度有限，
@@ -407,8 +417,25 @@ $\tau^{-1}$ 温度校正的效果展现出与模型规模的强相关性：
 而在 $H_{kv} \geq 4$ 的模型上 PPL 反而恶化（7B 上 $+$6.0\%，8B 上 $+$3.4\%），
 详细消融数据见第~\ref{subsec:exp-rolealign-invtau}~节。
 该发现揭示了温度校正与 GQA 噪声稀释之间的交互关系。
+
+\textbf{机制直觉与独立性假设的边界}.
+上述 "$\tau^{-1}$ 有效性随 $H_{kv}$ 衰减" 的机制归因可概括为
+$\sigma_{\text{eff}} \propto \sigma / \sqrt{N_{\text{rep}}}$，
+即 GQA 对 KV 头的共享使得 query 头平均下"有效噪声规模"被稀释。
+该 $1/\sqrt{N}$ 规律依赖一个关键简化假设：\emph{不同 query 头所见的量化噪声近似独立}。
+事实上，所有 $N_{\text{rep}}$ 个 query 头在同一 KV 头上共享\emph{同一个}量化后 K 张量，
+噪声实际存在 pairwise 结构性相关，会削弱 $1/\sqrt{N_{\text{rep}}}$ 稀释规律。
+因此本段报告的规律应理解为 \emph{在 query 交互独立性假设下的启发式解释}，
+而非严格定理。完整的相关噪声模型与形式化误差上界
+留作未来工作；现有证据来源于 3 个模型规模（$H_{kv} \in \{2, 4, 8\}$）
+的经验观察而非 closed-form 推导。
+
 据文献调研（详见第~\ref{sec:ch2-quant-softmax}~节），
-KV Cache 量化中温度校正的 GQA 尺度依赖性此前未被系统报道。
+KV Cache 量化中温度校正的 GQA 尺度依赖性此前未被系统报道；
+最相近的 principled 工作 KVTuner~\cite{xu2025kvtuner} Lemma 1
+给出 Key error 13.9$\times$ INT8$\to$INT4 的闭式放大因子，
+但停留在 layer 粒度而不涉及 GQA 架构的跨头稀释结构。
+本章节的诊断发现与 KVTuner 的层级误差分配互为正交。
 该机制的完整理论推导见附录~\ref{sec:app-invtau-detail}。
 
 
@@ -621,13 +648,34 @@ Key 决定了注意力的``看哪里''（attention logits 的排序结构），
 \end{itemize}
 
 \subsection{BA-guided Percentile 校准}
+\label{subsec:ch3-ba-percentile}
 
-INT4-RoleAlign 的主要设计区别在于参数确定范式：
-不同于 KIVI-style 完全依赖运行时统计量（absmax/min）的无校准方案，
-INT4-RoleAlign 通过行为对齐框架的离线搜索确定最优的
-$p_K$ 和 $p_V$ percentile 参数。
+INT4-RoleAlign 的核心设计区别在于参数确定范式。
+KIVI-style 完全依赖运行时统计量（absmax/min）无需离线校准，
+INT4-RoleAlign 通过行为对齐框架的离线搜索确定最优的 $p_K$ 和 $p_V$ percentile 参数。
+
+\paragraph{参数化动机}
+使用 $(p_K, p_V)$ 离散 percentile 参数化而非直接在 per-channel scale 向量上做连续优化，
+有两个理由：(1) percentile 参数化将搜索空间约束为低维离散网格，
+可穷举枚举并且在 outlier 干扰下保持鲁棒；
+(2) 离散网格为第~\ref{subsec:exp-statistics}~节的 BH-FDR
+统计框架提供可枚举的比较族。
+代价是将原始 KL 目标约束到一个 6$\times$6 离散网格上；
+相比 KVTuner~\cite{xu2025kvtuner} Lemma 1 的 closed-form layer-wise 误差分配，
+本文的 heuristic search 选择是为了与第~\ref{sec:ch3-static-scale}~节
+对称路径的 $(p_c, g)$ 搜索框架保持接口一致，代价换来部署简洁性。
+
+\paragraph{搜索空间}
+$\mathcal{P}_K = \mathcal{P}_V = \{99.0,\, 99.5,\, 99.9,\, 99.95,\, 99.99,\, 100.0\}$，
+$|\mathcal{P}_K| = |\mathcal{P}_V| = 6$，搜索采用完整笛卡尔积枚举 $|\mathcal{P}_K \times \mathcal{P}_V| = 36$ 个配置。
+特别值得指出：$(p_K, p_V) = (100.0,\, 100.0)$ 恰好对应 KIVI-style 的 absmax/min 配置，
+因此 RoleAlign 搜索空间 \emph{严格包含} KIVI-style 作为一个端点。
+这一包含关系赋予 RoleAlign vs KIVI 的比较 principled 基础：
+RoleAlign 实证优于 KIVI 等价于"搜索到非端点解"，
+而非单纯的超参数扫描或不同方法之间的 apples-to-oranges 对比。
+
 搜索目标仍为 KL 散度（公式~\eqref{eq:ch3-kl}），
-但搜索空间从对称格式的 $(p_c, g)$ 切换为非对称格式的 $(p_K, p_V)$（候选值见附录表~\ref{tab:app-search-space}）：
+但搜索空间从对称格式的 $(p_c, g)$ 切换为非对称格式的 $(p_K, p_V)$：
 \begin{equation}
   (p_K^*, p_V^*) = \argmin_{(p_K, p_V) \in \mathcal{P}_K \times \mathcal{P}_V}
   \frac{1}{|\mathcal{D}|} \sum_{(\bq, \bK, \bV) \in \mathcal{D}}
@@ -667,6 +715,9 @@ KIVI-style 的无校准设计使其部署简便，
 而 INT4-RoleAlign 通过离线 KL 搜索获取更优的 percentile 参数，
 以行为对齐校准实现更稳定的检索能力保持
 （PPL 退化因模型规模而异，详见第~\ref{subsec:exp-rolealign-results}~节）。
+如第~\ref{subsec:ch3-ba-percentile}~节所述，
+KIVI-style 的 absmax/min 配置对应 RoleAlign 搜索空间的端点 $(p_K, p_V) = (100, 100)$，
+因此二者的比较建立在"同一搜索空间的两个点"而非"两种不同方法"的基础上。
 
 
 % ============================================================
