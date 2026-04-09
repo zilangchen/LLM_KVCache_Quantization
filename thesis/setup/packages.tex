@@ -46,7 +46,12 @@
 }
 
 % --- 参考文献 ---
-\usepackage[sort&compress]{natbib}
+% 学校规范要求: 正文中按顺序在引用处右上角用[]标明, []中序号应与参考文献中序号一致
+% - numbers:       使用数字编号模式 (而非 author-year)
+% - square:        使用方括号 [1] (而非圆括号)
+% - super:         将引用标号置于右上角 (上标)
+% - sort&compress: 多个连续引用自动合并为 [1-3]
+\usepackage[numbers,square,super,sort&compress]{natbib}
 \bibliographystyle{gbt7714-numerical}
 
 % --- 绘图 ---
