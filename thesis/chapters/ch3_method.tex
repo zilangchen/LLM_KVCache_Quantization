@@ -62,8 +62,9 @@ Triton 融合核函数提供\textbf{部署级系统支撑}
 离线校准阶段的目标是在少量代表性校准数据上确定关键量化参数：
 （1）逐层逐组的静态量化 Scale $s$，用于将浮点键值张量映射到整数表示；
 （2）自适应保护参数，防止推理时超出校准范围的激活值被过度裁剪；
-以及可选的逐头温度校正因子 $\tau^{-1}$（inverse temperature），
-作为框架的候选增强机制之一。
+（3）逐头温度校正因子 $\tau^{-1}$（inverse temperature），
+作为诊断框架的结构性产出，用于揭示量化噪声在 GQA 尺度下的行为特性
+（详见第~\ref{sec:ch3-invtau}~节）。
 
 图~\ref{fig:ch3-calib-pipeline} 给出了离线校准的完整流程，
 各步骤如下：
@@ -93,7 +94,7 @@ Triton 融合核函数提供\textbf{部署级系统支撑}
   \node[search] (s2) at (3.5, -2.2) {
     \textbf{阶段 2: $\tau^{-1}$ 搜索}\\[-1pt]
     \scriptsize 逐头温度校正\\[-1pt]
-    \scriptsize （可选，格式依赖）
+    \scriptsize （诊断驱动，格式/尺度依赖）
   };
   \node[search, fill=teal!14, draw=teal!65, line width=1pt] (sra) at (7.5, -2.2) {
     \textbf{RoleAlign 路径}\\[-1pt]
