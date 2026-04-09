@@ -859,13 +859,12 @@ LLaMA-3.1-8B 的有效噪声功率仅为 Qwen2.5-1.5B 的 $(1/8)/(1/2) = 1/4$，
 这为其在 INT4 下的异常稳健表现（Needle 100\%、PPL 退化仅 $-$9.8\%）
 提供了定量解释：更多的 KV 头通过独立量化噪声的统计平均效应有效稀释了单个 KV 头的误差。
 
-综合以上分析，INT4 量化在长上下文场景下的退化源于三层叠加：
-（1）表示层：SQNR 从 49.9~dB 骤降至 25.8~dB；
-（2）任务层：序列长度放大噪声对检索信号的淹没效应；
-（3）架构层：GQA 中 $H_{kv}$ 越小，误差稀释越弱。
-第~\ref{sec:exp-kv-sensitivity}~节的 K/V 消融实验将从实证层面验证上述理论分析。
-此外，确保 scale 全链路以 float32 维护可显著改善部分模型的 INT4 PPL，
-但不足以建立跨模型一致优势（完整结果见附录第~\ref{sec:app-eng066}~节）。
+SQNR 相对 INT8 骤降 24.1~dB，留给 4-bit 的有效数值边际已经很窄。
+在这个前提下，序列越长被极值噪声淹没的检索位置就越多，
+而 $H_{kv}$ 较小的 GQA 配置提供的噪声稀释也不足以弥补；
+第~\ref{sec:exp-kv-sensitivity}~节的 K/V 消融会给出直接的实证。
+另外一个值得一提的细节是：把 scale 全链路维持在 float32 对部分模型确实能改善 INT4 PPL，
+但跨模型一致的优势并没有出现，完整数据留在附录~\ref{sec:app-eng066}。
 
 
 % ============================================================
@@ -1287,29 +1286,24 @@ BA percentile 校准的边际改善收窄。
 该结果进一步佐证了 $H_{kv}$ 是低比特量化容忍度的关键架构因素。
 
 \paragraph{INT4-RoleAlign 与 KIVI-style 的关系}
-表~\ref{tab:rolealign-results} 显示，
-INT4-RoleAlign 在 PPL 上并不优于 KIVI-style
+在 PPL 上，INT4-RoleAlign 没有跑赢 KIVI-style
 （1.5B: 13.7\% vs 12.0\%，7B: 6.1\% vs 5.5\%，8B: 2.4\% 持平），
-两者在 Needle 和 RULER 检索指标上几乎不可区分。
-这一结果需放在方法论框架中理解：
-INT4-RoleAlign 与 KIVI-style 共享相同的非对称量化格式
-（per-channel K + per-token V），
-唯一的差异在于 percentile 确定方式：
-KIVI 在运行时基于 absmax/min 动态计算，
-RoleAlign 通过离线 KL/wMSE 搜索。
-在 cs$\geq$128 的标准评测下，
-两种策略产生的 scale 差异不足以在 4-bit 的 15 个离散级别下
-产生可区分的量化映射~\cite{xu2025kvtuner}。
-
-INT4-RoleAlign 的价值不在于点性能超越 KIVI，
-而在于它串联了从原则到设计的诊断逻辑：
-（1）attention-KL 诊断透镜揭示 Key 主导退化和 GQA 架构依赖，
-（2）诊断结论直接导出非对称量化轴的设计方向，
-（3）BA percentile 校准提供了一种可与 KIVI 替换的离线确定性方案。
-KVTuner~\cite{xu2025kvtuner} 的独立评测显示
-Qwen 系列上 vanilla KIVI 在 2-bit 下 PPL 直接崩溃（$>$200），
-而 4-bit 行为对齐方案保持了 $<$14\% 的退化，
-说明离线校准在更极端压缩率下可能展现出差异化优势。
+两者在 Needle 和 RULER 上几乎看不出区别。
+这个结果其实不意外：两种方法共享同一套量化格式
+（per-channel K $+$ per-token V），
+真正的差异只在于 percentile 怎么定——KIVI 在运行时取 absmax/min，
+RoleAlign 则走离线 KL 搜索。
+4-bit 只有 15 个可用级别，cs$\geq$128 粒度下两种 scale 的数值差被量化粒度直接吸收掉，
+最终量化映射几乎看不出差异。
+所以单看 PPL 数字去比较 RoleAlign 和 KIVI 并不是一个有信息量的判断。
+真正值得讨论的是这套非对称量化轴是怎么来的。
+在 KIVI 的原设计里它是一个工程经验；
+在本文的语境下它由 attention-KL 诊断透镜直接导出——
+Key 被识别为主导失效源、GQA 架构与噪声的耦合关系也在同一把透镜下暴露出来，
+per-role 搜索空间是这些诊断的直接落点
+（第~\ref{sec:exp-rolealign}~节与第~\ref{sec:ch3-rolealign}~节）。
+至于更细评测粒度或更激进压缩率下 RoleAlign 会不会和 KIVI 产生差距，
+我们没有做这部分实验，不在本文作结论。
 
 \subsection{温度校正与 GQA 尺度的交互：诊断框架的结构性产出}
 \label{subsec:exp-rolealign-invtau}
@@ -1566,17 +1560,15 @@ INT4 Triton 融合核函数的适配将是
 INT4-RoleAlign 从``显存优化方案''升级为``全栈高效方案''的关键路径。
 
 \paragraph{边界小结。}
-INT4-RoleAlign 的能力呈现清晰的分层结构：
-\emph{检索能力完整恢复}（Needle 100\%，RULER s\_niah $\geq$99\%），
-显存压缩 73\%，
-但\emph{语言建模退化不可忽略}（PPL +2.4--13.7\%）
-且\emph{延迟优势尚未兑现}（TPOT +2--2.5$\times$）。
-上述边界的显式界定是行为对齐框架诊断能力的直接体现。
-相较于仅报告最佳结果的传统做法，
-诊断驱动的评估范式使我们能够精确识别能力的边界条件，
-为后续优化（Triton INT4 融合核函数、
-基于 $H_{kv}$ 的自适应比特分配）
-指明方向而非留下盲区。
+INT4-RoleAlign 把 Needle 拉回 100\%、RULER s\_niah 保持在 $\geq$99\%、KV 显存压缩到原始的 27\%，
+代价是 PPL 上涨 2.4--13.7\%、参考实现下 TPOT 增加 2--2.5$\times$。
+我们不回避这一代价：
+对以长文本检索为主要目标、且对 PPL 有一定容忍度的部署场景，
+RoleAlign 是可以选择的；若目标是严格保持 FP16 的语言建模质量或对延迟敏感，
+当前版本并不合适。
+TPOT 方面的差距可由第~\ref{subsec:ch3-triton-int4-asym}~节的 Triton INT4 融合核函数承接，
+PPL 方面则需要更细粒度的比特分配策略（例如按 $H_{kv}$ 自适应），
+这两点留给后续工作。
 
 量化评估粒度（chunk\_size）的鲁棒性分析
 见附录~\ref{sec:app-chunksize}。
