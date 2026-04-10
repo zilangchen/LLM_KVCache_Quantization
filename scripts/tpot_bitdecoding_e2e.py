@@ -43,49 +43,72 @@ SEED = 1234
 
 
 class BitDecodingKVCache:
-    """Manages packed INT4 KV cache in BitDecoding format for all layers."""
+    """Manages packed INT4 KV cache in BitDecoding format for all layers.
 
-    def __init__(self, num_layers, num_kv_heads, head_dim, device):
+    Uses pre-allocated buffers to avoid torch.cat fragmentation during decode.
+    """
+
+    def __init__(self, num_layers, num_kv_heads, head_dim, max_seq_len, device):
         self.num_layers = num_layers
         self.num_kv_heads = num_kv_heads
         self.head_dim = head_dim
         self.pack_dim = head_dim // 8
         self.device = device
-        self.seq_len = 0
+        self.max_seq_len = max_seq_len
 
-        # Per-layer packed caches — initialized on first append
-        self.k_packs = [None] * num_layers
-        self.v_packs = [None] * num_layers
-        self.k_params = [None] * num_layers
-        self.v_params = [None] * num_layers
+        # Pre-allocate buffers for all layers
+        self.k_packs = [
+            torch.zeros(1, max_seq_len, num_kv_heads, self.pack_dim,
+                        device=device, dtype=torch.int32)
+            for _ in range(num_layers)
+        ]
+        self.v_packs = [
+            torch.zeros(1, max_seq_len, num_kv_heads, self.pack_dim,
+                        device=device, dtype=torch.int32)
+            for _ in range(num_layers)
+        ]
+        self.k_params = [
+            torch.zeros(1, max_seq_len, num_kv_heads, 2,
+                        device=device, dtype=torch.float16)
+            for _ in range(num_layers)
+        ]
+        self.v_params = [
+            torch.zeros(1, max_seq_len, num_kv_heads, 2,
+                        device=device, dtype=torch.float16)
+            for _ in range(num_layers)
+        ]
+        # Track current length per layer (all layers advance together)
+        self.cur_len = 0
 
     def pack_and_store(self, layer_idx, k_fp16, v_fp16):
-        """Pack FP16 K/V into BitDecoding INT4 format and store.
+        """Pack FP16 K/V into BitDecoding INT4 format and write into pre-allocated buffer.
 
         Args:
             k_fp16: [B, H_kv, S_new, D] float16
             v_fp16: [B, H_kv, S_new, D] float16
         """
-        # Transpose to BitDecoding layout: [B, S, H, D]
         k_bshd = k_fp16.transpose(1, 2).contiguous()
         v_bshd = v_fp16.transpose(1, 2).contiguous()
-
         B, S_new, H, D = k_bshd.shape
 
-        k_pack = torch.zeros(B, S_new, H, self.pack_dim,
-                             device=self.device, dtype=torch.int32)
-        v_pack = torch.zeros(B, S_new, H, self.pack_dim,
-                             device=self.device, dtype=torch.int32)
-        k_par = torch.zeros(B, S_new, H, 2,
-                            device=self.device, dtype=torch.float16)
-        v_par = torch.zeros(B, S_new, H, 2,
-                            device=self.device, dtype=torch.float16)
+        start = self.cur_len if layer_idx > 0 else self.cur_len
+        end = start + S_new
+
+        # Temporary buffers for packing (small — only S_new tokens)
+        k_pack_tmp = torch.zeros(B, S_new, H, self.pack_dim,
+                                 device=self.device, dtype=torch.int32)
+        v_pack_tmp = torch.zeros(B, S_new, H, self.pack_dim,
+                                 device=self.device, dtype=torch.int32)
+        k_par_tmp = torch.zeros(B, S_new, H, 2,
+                                device=self.device, dtype=torch.float16)
+        v_par_tmp = torch.zeros(B, S_new, H, 2,
+                                device=self.device, dtype=torch.float16)
 
         cu_seqlens = torch.tensor([0, S_new], device=self.device, dtype=torch.int32)
 
         kvcache_pack_int(
-            k_bshd, k_pack, k_par,
-            v_bshd, v_pack, v_par,
+            k_bshd, k_pack_tmp, k_par_tmp,
+            v_bshd, v_pack_tmp, v_par_tmp,
             cu_seqlens_k=cu_seqlens,
             seqlen_k=S_new,
             quant_mode="k-channel",
@@ -93,27 +116,23 @@ class BitDecodingKVCache:
             num_bits=4,
         )
 
-        if self.k_packs[layer_idx] is None:
-            # First call (prefill)
-            self.k_packs[layer_idx] = k_pack
-            self.v_packs[layer_idx] = v_pack
-            self.k_params[layer_idx] = k_par
-            self.v_params[layer_idx] = v_par
-        else:
-            # Append (decode) — concatenate along sequence dimension
-            self.k_packs[layer_idx] = torch.cat(
-                [self.k_packs[layer_idx], k_pack], dim=1)
-            self.v_packs[layer_idx] = torch.cat(
-                [self.v_packs[layer_idx], v_pack], dim=1)
-            self.k_params[layer_idx] = torch.cat(
-                [self.k_params[layer_idx], k_par], dim=1)
-            self.v_params[layer_idx] = torch.cat(
-                [self.v_params[layer_idx], v_par], dim=1)
+        # Write into pre-allocated buffer (no torch.cat!)
+        self.k_packs[layer_idx][:, start:end] = k_pack_tmp
+        self.v_packs[layer_idx][:, start:end] = v_pack_tmp
+        self.k_params[layer_idx][:, start:end] = k_par_tmp
+        self.v_params[layer_idx][:, start:end] = v_par_tmp
+
+    def advance(self, n_tokens):
+        """Advance the sequence position after all layers have been written."""
+        self.cur_len += n_tokens
 
     def get_cache(self, layer_idx):
-        """Return (k_pack, k_params, v_pack, v_params) for a layer."""
-        return (self.k_packs[layer_idx], self.k_params[layer_idx],
-                self.v_packs[layer_idx], self.v_params[layer_idx])
+        """Return (k_pack, k_params, v_pack, v_params) sliced to current length."""
+        s = self.cur_len
+        return (self.k_packs[layer_idx][:, :s].contiguous(),
+                self.k_params[layer_idx][:, :s].contiguous(),
+                self.v_packs[layer_idx][:, :s].contiguous(),
+                self.v_params[layer_idx][:, :s].contiguous())
 
 
 def manual_decode_step(model, token_ids, position_ids, bd_cache, sm_scale):
@@ -138,6 +157,9 @@ def manual_decode_step(model, token_ids, position_ids, bd_cache, sm_scale):
     # Embedding
     hidden_states = model.model.embed_tokens(token_ids)  # [B, 1, hidden_size]
 
+    # RoPE: computed once at model level (Qwen2 >= transformers 4.46)
+    cos, sin = model.model.rotary_emb(hidden_states, position_ids)
+
     for i, layer in enumerate(layers):
         residual = hidden_states
 
@@ -155,15 +177,18 @@ def manual_decode_step(model, token_ids, position_ids, bd_cache, sm_scale):
         k = k.view(bsz, q_len, num_kv_heads, head_dim).transpose(1, 2)
         v = v.view(bsz, q_len, num_kv_heads, head_dim).transpose(1, 2)
 
-        # RoPE
-        cos, sin = layer.self_attn.rotary_emb(v, position_ids)
+        # RoPE (shared cos/sin from model level)
         q, k = apply_rotary_pos_emb(q, k, cos, sin)
 
-        # Pack new K/V token and append to BitDecoding cache
+        # Pack new K/V token and write into pre-allocated buffer at cur_len
         bd_cache.pack_and_store(i, k.half(), v.half())
 
-        # Get full packed cache for this layer
-        k_pack, k_params, v_pack, v_params = bd_cache.get_cache(i)
+        # Get packed cache including the just-written token (cur_len + 1)
+        s = bd_cache.cur_len + 1  # include new token not yet advanced
+        k_pack = bd_cache.k_packs[i][:, :s].contiguous()
+        k_params = bd_cache.k_params[i][:, :s].contiguous()
+        v_pack = bd_cache.v_packs[i][:, :s].contiguous()
+        v_params = bd_cache.v_params[i][:, :s].contiguous()
 
         # BitDecoding attention: q needs [B, 1, Hq, D] layout
         q_bd = q.transpose(1, 2).contiguous().half()  # [B, 1, Hq, D]
@@ -211,13 +236,19 @@ def prefill_and_pack(model, input_ids, bd_cache):
     past_kv = outputs.past_key_values
     num_layers = len(past_kv)
 
+    prefill_len = past_kv[0][0].shape[2]
     for i in range(num_layers):
         k_layer = past_kv[i][0]  # [B, H, S, D]
         v_layer = past_kv[i][1]
         bd_cache.pack_and_store(i, k_layer.half(), v_layer.half())
+    bd_cache.advance(prefill_len)
 
-    next_token = outputs.logits[:, -1, :].argmax(dim=-1, keepdim=True)
-    position = input_ids.shape[1]  # next position
+    # Free FP16 past_kv to save memory
+    del outputs, past_kv
+    torch.cuda.empty_cache()
+
+    next_token = model(input_ids, use_cache=False, return_dict=True).logits[:, -1, :].argmax(dim=-1, keepdim=True)
+    position = input_ids.shape[1]
 
     return next_token, position
 
@@ -235,11 +266,13 @@ def measure_tpot_bitdecoding_e2e(model, input_ids, gen_len, warmup, runs):
     tpots = []
 
     for trial in range(warmup + runs):
-        # Fresh cache each trial
+        # Fresh cache each trial (pre-allocate for prefill + gen_len)
+        max_seq = input_ids.shape[1] + gen_len + 16  # small margin
         bd_cache = BitDecodingKVCache(
             num_layers=num_layers,
             num_kv_heads=num_kv_heads,
             head_dim=head_dim,
+            max_seq_len=max_seq,
             device=device,
         )
 
@@ -258,6 +291,7 @@ def measure_tpot_bitdecoding_e2e(model, input_ids, gen_len, warmup, runs):
                 logits = manual_decode_step(
                     model, next_token, pos_ids, bd_cache, sm_scale
                 )
+                bd_cache.advance(1)  # new token now committed
                 next_token = logits.argmax(dim=-1, keepdim=True)
 
         torch.cuda.synchronize()
