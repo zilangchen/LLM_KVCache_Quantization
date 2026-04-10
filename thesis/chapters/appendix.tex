@@ -39,47 +39,11 @@
 \label{sec:app-calib-schema}
 % ============================================================
 
-离线校准阶段产出的 JSON 文件遵循以下 schema：
-
-\begin{lstlisting}[
-  basicstyle=\small\ttfamily,
-  frame=single,
-  breaklines=true,
-  numbers=left,
-  numberstyle=\tiny,
-  caption={校准产物 JSON schema},
-  label={lst:calib-schema}
-]
-{
-  "model_name": "Qwen/Qwen2.5-1.5B-Instruct",
-  "calib_method": "kl_selected",
-  "num_layers": 28,
-  "layers": {
-    "0": {
-      "k_scale": <float32>,
-      "v_scale": <float32>,
-      "inv_tau": [<float32>, ...],  // per-head, length = num_heads
-      "k_zero_point": <float32>,    // optional, asymmetric only
-      "v_zero_point": <float32>     // optional, asymmetric only
-    },
-    "1": { ... },
-    ...
-  },
-  "metadata": {
-    "quant_bits": 8,
-    "calibration_samples": 128,
-    "calibration_seq_len": 2048,
-    "timestamp": "2026-xx-xx"
-  }
-}
-\end{lstlisting}
-
-其中：
-\begin{itemize}[nosep]
-  \item \code{k\_scale} / \code{v\_scale}：逐层对称量化的缩放因子，始终以 float32 存储。
-  \item \code{inv\_tau}：逐头温度校正因子 $\tau^{-1}$，用于在注意力 softmax 前调节 logits 的分布锐度。
-  \item \code{k\_zero\_point} / \code{v\_zero\_point}：仅在 KIVI 风格非对称量化模式下出现。
-\end{itemize}
+离线校准阶段产出一个 JSON 文件（$<$10~KB），
+包含逐层 Key/Value 的 float32 scale、
+逐头温度校正因子 $\tau^{-1}$，
+以及非对称模式下的 zero point。
+推理时一次性加载到 GPU 显存，不引入运行时校准开销。
 
 % ============================================================
 \section{校准超参数搜索空间}
@@ -848,84 +812,32 @@ NarrativeQA 上 INT8-ours 略低（$-$0.43 pp），
 \section{逐头温度校正机制详细推导}
 \label{sec:app-invtau-detail}
 
-本节给出第~\ref{sec:ch3-invtau}~节中逐头温度校正（$\tau^{-1}$）的完整理论推导，
-包括量化导致注意力平坦化的分析、温度校正的数学描述以及 Q 预缩放等价性。
+本节给出逐头温度校正 $\tau^{-1}$ 的核心推导。
 
-\subsection{量化导致注意力分布平坦化的原因分析}
+\subsection{量化平坦化与温度校正}
 
-量化过程引入的舍入误差和裁剪误差作用于 Key 矩阵 $\bK$ 后，
-会导致注意力 logits $\bq\hat{\bK}^T / \sqrt{d_k}$ 相对于参考值 $\bq\bK^T / \sqrt{d_k}$ 发生偏移。
-由于量化误差的随机性特点，同一 Query 向量与不同 Key 向量的点积受到近似均匀的噪声扰动，
-导致 logits 之间的差异被缩小，softmax 输出的概率分布趋于平坦化。
-
-这一现象可以从信息论角度理解：
-当注意力分布从尖锐（低熵）变为平坦（高熵）时，
-模型对关键位置的聚焦能力下降，
-等价于在注意力层引入了信息丢失。
-对于需要精确捕捉长距离依赖的任务（如大海捞针检索、长文本分类等），
-这种平坦化效应尤为有害。
-
-不同层和不同注意力头受量化影响的程度各异：
-浅层头通常关注局部模式（如相邻 token），其注意力分布本身较为分散，受平坦化影响相对较小；
-深层头则可能负责全局信息汇聚，具有高度集中的注意力分布，量化导致的平坦化对其影响更为显著。
-这一观察构成了逐头（per-head）温度校正的核心动机。
-
-\subsection{温度校正的数学描述}
-
-引入逐头温度校正因子 $\tau^{-1}_{l,h}$（inverse temperature），
-校正后的注意力计算定义为：
+量化误差使 logits $\bq\hat{\bK}^T / \sqrt{d_k}$ 受到近似均匀噪声扰动，
+softmax 输出趋于平坦化（熵增），对长距离检索尤为有害。
+不同层和头受影响程度不同，构成逐头校正的动机。
+校正后的注意力计算为：
 \begin{equation}
   \bm{p}_{\text{corrected}} = \softmax\!\left(\frac{\bq\hat{\bK}^T \cdot \tau^{-1}_{l,h}}{\sqrt{d_k}}\right)
   \label{eq:app-corrected-attn}
 \end{equation}
-
-温度校正因子的物理含义如下：
-\begin{itemize}
-  \item $\tau^{-1} > 1$（等效温度 $\tau < 1$）：
-    缩放后的 logits 绝对值增大，softmax 输出更加尖锐（锐化效应），
-    可补偿量化导致的分布平坦化；
-  \item $\tau^{-1} < 1$（等效温度 $\tau > 1$）：
-    缩放后的 logits 绝对值减小，softmax 输出更加平滑（平滑化效应），
-    适用于量化后注意力分布过度集中的情形；
-  \item $\tau^{-1} = 1$：
-    不施加任何校正，退化为标准量化基线。
-\end{itemize}
+$\tau^{-1} > 1$ 锐化分布以补偿平坦化，
+$\tau^{-1} = 1$ 退化为标准基线。
 
 \subsection{Q 预缩放等价性}
 
-在实际实现中，温度校正因子 $\tau^{-1}$ 并不直接作用于 logits，
-而是通过预缩放 Query 向量来等价实现。这一设计的数学基础如下：
-
+实现上 $\tau^{-1}$ 通过预缩放 Query 向量等价实现：
 \begin{equation}
-\begin{aligned}
   \text{Attn}(\bQ \cdot \tau^{-1},\; \hat{\bK},\; \hat{\bV})
-  &= \softmax\!\left(\frac{(\bQ \cdot \tau^{-1})\hat{\bK}^T}{\sqrt{d_k}}\right) \hat{\bV} \\[6pt]
-  &= \softmax\!\left(\frac{\bQ \hat{\bK}^T \cdot \tau^{-1}}{\sqrt{d_k}}\right) \hat{\bV}
-\end{aligned}
-\label{eq:app-q-prescale}
+  = \softmax\!\left(\frac{\bQ \hat{\bK}^T \cdot \tau^{-1}}{\sqrt{d_k}}\right) \hat{\bV}
+  \label{eq:app-q-prescale}
 \end{equation}
-
-式~\eqref{eq:app-q-prescale} 表明，
-将 $\tau^{-1}$ 作用于 $\bQ$ 与将其作用于 $\bQ\hat{\bK}^T$ 在数学上完全等价，
-因为标量乘法满足结合律。
-这一等价性使得温度校正可以在 Query 投影阶段一次性完成，具有以下实现优势：
-
-\begin{enumerate}[label=(\arabic*)]
-  \item \textbf{无需修改注意力核函数签名}：
-    Q 预缩放在进入 Triton 融合核函数之前完成，
-    核函数内部的 $\bQ\hat{\bK}^T$ 计算和 online softmax 逻辑无需任何修改，
-    从而避免了核函数的代码膨胀和多版本维护成本。
-  \item \textbf{逐头独立缩放}：
-    $\tau^{-1}$ 存储为形状 $[L, H_q]$ 的张量，
-    在 prefill 和 decode 阶段通过广播（broadcast）作用于 $\bQ$ 的对应头维度：
-    \begin{equation}
-      \bQ'_{l,h,:,:} = \bQ_{l,h,:,:} \cdot \tau^{-1}_{l,h}
-      \label{eq:app-q-prescale-impl}
-    \end{equation}
-    其中 $l$ 为层索引，$h$ 为头索引。
-  \item \textbf{Prefill 阶段无额外 kernel launch}：
-    Q 预缩放是逐元素乘法，可与 Query 投影的输出张量原地（in-place）操作融合，
-    不引入额外的 GPU kernel 启动开销。
+$\bQ'_{l,h} = \bQ_{l,h} \cdot \tau^{-1}_{l,h}$（逐头广播），
+\label{eq:app-q-prescale-impl}
+无需修改注意力核函数签名，无额外 kernel launch。
 \end{enumerate}
 
 \section{主章节实验数据溯源}
