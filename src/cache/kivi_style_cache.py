@@ -473,21 +473,27 @@ class KIVIStyleKVCache:
                     )
             q_k_full = torch.round(_unscaled).clamp(qmin, qmax_val).to(torch.int8)
 
-        q_k_store = pack_int4(q_k_full) if self.bit_packed else q_k_full
-
-        # KVC-057: Verify the packed-vs-logical dimension invariant.
-        # After bit packing, stored head_dim should be D//2; scale head_dim stays D.
         if self.bit_packed:
-            assert q_k_store.shape[-1] == head_dim // 2, (
-                f"BUG: bit-packed K head_dim mismatch: "
-                f"packed={q_k_store.shape[-1]}, expected={head_dim // 2}"
-            )
+            # KVC-FUSE: Inline pack_int4 to avoid function call overhead and
+            # redundant int8→int16→uint8 cast chain. Go directly from int8 to
+            # unsigned uint8 via +8 offset, then bit-shift and pack.
+            _shifted = (q_k_full.to(torch.int16) + 8).to(torch.uint8)
+            _reshaped = _shifted.view(*q_k_full.shape[:-1], head_dim // 2, 2)
+            q_k_store = ((_reshaped[..., 0] << 4) | _reshaped[..., 1]).to(torch.int8)
+        else:
+            q_k_store = q_k_full
 
         # --- V: per-token quantization ---
         q_v_full, v_scale, v_zp = quantize_asymmetric_per_token(
             v, quant_bits=self.quant_bits, percentile=self.v_percentile
         )
-        q_v_store = pack_int4(q_v_full) if self.bit_packed else q_v_full
+        if self.bit_packed:
+            # KVC-FUSE: Inline pack_int4 for V (same as K above)
+            _v_shifted = (q_v_full.to(torch.int16) + 8).to(torch.uint8)
+            _v_reshaped = _v_shifted.view(*q_v_full.shape[:-1], head_dim // 2, 2)
+            q_v_store = ((_v_reshaped[..., 0] << 4) | _v_reshaped[..., 1]).to(torch.int8)
+        else:
+            q_v_store = q_v_full
 
         storage_head_dim = int(q_k_store.shape[-1])
         self._ensure_capacity(layer_id, batch, heads, storage_head_dim, target_len)

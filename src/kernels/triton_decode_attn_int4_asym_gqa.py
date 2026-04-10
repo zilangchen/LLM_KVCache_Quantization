@@ -2,23 +2,15 @@
 INT4 Asymmetric Fused Decode Attention Kernel with GQA-Aware Tiling.
 
 Key optimization: grid=(batch, kv_heads) instead of (batch, q_heads).
-Each thread block loads K/V cache ONCE and processes all N_REP query heads
-that share the same KV head, reducing HBM reads by N_REP×.
+Each thread block processes all N_REP query heads sharing one KV head
+IN PARALLEL using tl.dot for batched QK and V accumulation:
+  QK = Q_scaled @ K^T  :  [N_REP_PAD, PD] @ [PD, BLOCK] = [N_REP_PAD, BLOCK]
+  WV = beta    @ V_dq  :  [N_REP_PAD, BLOCK] @ [BLOCK, PD] = [N_REP_PAD, PD]
 
-Qwen2.5-1.5B:  N_REP=6 → 6× fewer HBM reads
-Qwen2.5-7B:    N_REP=7 → 7× fewer HBM reads
-LLaMA-3.1-8B:  N_REP=4 → 4× fewer HBM reads
+N_REP is padded to the next power of 2 (N_REP_PAD) for tl.arange/tl.dot.
+Padded entries are masked to -inf in softmax and excluded from output stores.
 
-Also includes v2 optimizations:
-  - K zero-point precomputation (q_scaled + zp_bias)
-  - @triton.autotune over BLOCK_SIZE × num_warps × num_stages
-
-Same quantization format:
-  K: per-channel scale/zp [B, H, D]
-  V: per-token  scale/zp [B, H, S]
-  Cache: bit-packed INT4 [B, H, S, D//2] with +8 offset
-
-Supported modes: int4_ours_asym, int4_ours_asym_ba.
+All operations are strictly 2D — no 3D broadcast tensors.
 """
 
 from __future__ import annotations
@@ -31,11 +23,21 @@ import triton
 import triton.language as tl
 
 
+def _next_power_of_2(n: int) -> int:
+    """Return the smallest power of 2 >= n."""
+    p = 1
+    while p < n:
+        p <<= 1
+    return p
+
+
+# tl.dot on sm_90 (Hopper/H20) requires M >= 16.
+_MIN_DOT_M = 16
+
+
 @triton.autotune(
     configs=[
-        triton.Config({"BLOCK_SIZE": 32}, num_warps=2, num_stages=2),
         triton.Config({"BLOCK_SIZE": 32}, num_warps=4, num_stages=2),
-        triton.Config({"BLOCK_SIZE": 64}, num_warps=2, num_stages=2),
         triton.Config({"BLOCK_SIZE": 64}, num_warps=4, num_stages=2),
         triton.Config({"BLOCK_SIZE": 128}, num_warps=4, num_stages=2),
         triton.Config({"BLOCK_SIZE": 128}, num_warps=8, num_stages=2),
@@ -76,55 +78,60 @@ def decode_attn_int4_asym_gqa_kernel(
     HEAD_DIM: tl.constexpr,
     PACKED_DIM: tl.constexpr,
     BLOCK_SIZE: tl.constexpr,
-    N_REP: tl.constexpr,        # q_heads // kv_heads
+    N_REP: tl.constexpr,
+    N_REP_PAD: tl.constexpr,   # next power of 2 of N_REP
 ):
     batch_id = tl.program_id(0)
-    # GQA change: grid over kv_heads, not q_heads
-    kv_head_id = tl.program_id(1)
+    kv_head_id = tl.program_id(1)  # grid over kv_heads
     q_head_start = kv_head_id * N_REP
 
     offs_pd = tl.arange(0, PACKED_DIM)
     offs_even = offs_pd * 2
     offs_odd = offs_pd * 2 + 1
 
-    # --- Load K per-channel scale/zp (shared by all N_REP Q heads) ---
+    # --- Q head offsets with padding mask ---
+    q_head_offs = tl.arange(0, N_REP_PAD)     # [N_REP_PAD], power of 2
+    qr_mask = q_head_offs < N_REP              # [N_REP_PAD]
+
+    # --- K per-channel scale/zp (shared by all Q heads) ---
     ks_base = K_Scale_ptr + batch_id * stride_ks_b + kv_head_id * stride_ks_h
     kz_base = K_ZP_ptr + batch_id * stride_kz_b + kv_head_id * stride_kz_h
-    ks_even = tl.load(ks_base + offs_even * stride_ks_d).to(tl.float32)  # [PD]
+    ks_even = tl.load(ks_base + offs_even * stride_ks_d).to(tl.float32)
     ks_odd = tl.load(ks_base + offs_odd * stride_ks_d).to(tl.float32)
     kz_even = tl.load(kz_base + offs_even * stride_kz_d).to(tl.float32)
     kz_odd = tl.load(kz_base + offs_odd * stride_kz_d).to(tl.float32)
 
-    # --- Load all N_REP Q vectors as 2D [N_REP, PD] ---
-    q_head_offs = tl.arange(0, N_REP)  # [N_REP]
+    # --- Load ALL N_REP Q vectors as 2D [N_REP_PAD, PD] ---
     q_ptrs_even = (Q_ptr + batch_id * stride_q_b
                    + (q_head_start + q_head_offs[:, None]) * stride_q_h
                    + offs_even[None, :] * stride_q_d)
     q_ptrs_odd = (Q_ptr + batch_id * stride_q_b
                   + (q_head_start + q_head_offs[:, None]) * stride_q_h
                   + offs_odd[None, :] * stride_q_d)
-    q_even_all = tl.load(q_ptrs_even).to(tl.float32)  # [N_REP, PD]
-    q_odd_all = tl.load(q_ptrs_odd).to(tl.float32)    # [N_REP, PD]
+    q_even_all = tl.load(q_ptrs_even, mask=qr_mask[:, None], other=0.0).to(tl.float32)
+    q_odd_all = tl.load(q_ptrs_odd, mask=qr_mask[:, None], other=0.0).to(tl.float32)
 
-    # --- Precompute q_scaled and zp_bias for all Q heads ---
-    q_scaled_even_all = q_even_all * ks_even[None, :]  # [N_REP, PD]
-    q_scaled_odd_all = q_odd_all * ks_odd[None, :]     # [N_REP, PD]
+    # --- Precompute q_scaled [N_REP_PAD, PD] and zp_bias [N_REP_PAD] ---
+    q_scaled_even_all = q_even_all * ks_even[None, :]
+    q_scaled_odd_all = q_odd_all * ks_odd[None, :]
     zp_bias_all = (tl.sum(q_even_all * kz_even[None, :], axis=1)
-                   + tl.sum(q_odd_all * kz_odd[None, :], axis=1))  # [N_REP]
+                   + tl.sum(q_odd_all * kz_odd[None, :], axis=1))
 
     ctx_len = tl.load(Context_Lens_ptr + batch_id)
 
-    # KV base pointers (same for all N_REP Q heads)
+    # KV base pointers
     k_base = K_ptr + batch_id * stride_k_b + kv_head_id * stride_k_h
     v_base = V_ptr + batch_id * stride_v_b + kv_head_id * stride_v_h
     vs_base = V_Scale_ptr + batch_id * stride_vs_b + kv_head_id * stride_vs_h
     vz_base = V_ZP_ptr + batch_id * stride_vz_b + kv_head_id * stride_vz_h
 
-    # --- 2D accumulators for all N_REP heads ---
-    acc_even_all = tl.zeros([N_REP, PACKED_DIM], dtype=tl.float32)
-    acc_odd_all = tl.zeros([N_REP, PACKED_DIM], dtype=tl.float32)
-    m_all = tl.full([N_REP], -float("inf"), dtype=tl.float32)
-    l_all = tl.zeros([N_REP], dtype=tl.float32)
+    # --- 2D accumulators ---
+    acc_even_all = tl.zeros([N_REP_PAD, PACKED_DIM], dtype=tl.float32)
+    acc_odd_all = tl.zeros([N_REP_PAD, PACKED_DIM], dtype=tl.float32)
+    # Padded heads start with l=1 to avoid div-by-zero at finalize
+    m_all = tl.full([N_REP_PAD], -float("inf"), dtype=tl.float32)
+    l_all = tl.where(qr_mask, tl.zeros([N_REP_PAD], dtype=tl.float32),
+                     tl.full([N_REP_PAD], 1.0, dtype=tl.float32))
 
     for start_n in range(0, ctx_len, BLOCK_SIZE):
         offs_n = start_n + tl.arange(0, BLOCK_SIZE)
@@ -133,22 +140,26 @@ def decode_attn_int4_asym_gqa_kernel(
         # === K: Load packed, unpack — ONCE per block ===
         k_ptrs = k_base + offs_n[:, None] * stride_k_s + offs_pd[None, :] * stride_k_pd
         k_packed = tl.load(k_ptrs, mask=mask[:, None], other=0).to(tl.uint8)
-        k_hi = ((k_packed >> 4) & 0x0F).to(tl.float32) - 8.0  # [BLOCK, PD]
-        k_lo = (k_packed & 0x0F).to(tl.float32) - 8.0          # [BLOCK, PD]
+        k_hi = ((k_packed >> 4) & 0x0F).to(tl.float32) - 8.0   # [BLOCK, PD]
+        k_lo = (k_packed & 0x0F).to(tl.float32) - 8.0
 
-        # === QK for ALL N_REP heads (3D broadcast → 2D reduce) ===
-        # [N_REP, 1, PD] × [1, BLOCK, PD] → sum(axis=2) → [N_REP, BLOCK]
-        qk_even = tl.sum(q_scaled_even_all[:, None, :] * k_hi[None, :, :], axis=2)
-        qk_odd = tl.sum(q_scaled_odd_all[:, None, :] * k_lo[None, :, :], axis=2)
-        qk_all = (qk_even + qk_odd + zp_bias_all[:, None]) * sm_scale  # [N_REP, BLOCK]
+        # === QK via tl.dot — all N_REP heads in parallel ===
+        # [N_REP_PAD, PD] @ [PD, BLOCK] = [N_REP_PAD, BLOCK]
+        # Cast to fp16 for tensor core acceleration (HMMA); accumulate in fp32.
+        # K values are small integers [-8,7] — exact in fp16.
+        qk_even = tl.dot(q_scaled_even_all.to(tl.float16), tl.trans(k_hi).to(tl.float16))
+        qk_odd = tl.dot(q_scaled_odd_all.to(tl.float16), tl.trans(k_lo).to(tl.float16))
+        qk_all = (qk_even + qk_odd + zp_bias_all[:, None]) * sm_scale
+        # Mask: invalid tokens → -inf, padded Q heads → -inf
         qk_all = tl.where(mask[None, :], qk_all, float("-inf"))
+        qk_all = tl.where(qr_mask[:, None], qk_all, float("-inf"))
 
         # === Online softmax (all 2D) ===
-        m_new = tl.max(qk_all, axis=1)              # [N_REP]
-        m_ij = tl.maximum(m_all, m_new)              # [N_REP]
-        alpha_all = tl.exp(m_all - m_ij)             # [N_REP]
-        beta_all = tl.exp(qk_all - m_ij[:, None])   # [N_REP, BLOCK]
-        l_ij = l_all * alpha_all + tl.sum(beta_all, axis=1)  # [N_REP]
+        m_new = tl.max(qk_all, axis=1)
+        m_ij = tl.maximum(m_all, m_new)
+        alpha_all = tl.exp(m_all - m_ij)
+        beta_all = tl.exp(qk_all - m_ij[:, None])
+        l_ij = l_all * alpha_all + tl.sum(beta_all, axis=1)
 
         # === V: Load packed, unpack, dequant — ONCE per block ===
         v_ptrs = v_base + offs_n[:, None] * stride_v_s + offs_pd[None, :] * stride_v_pd
@@ -164,10 +175,10 @@ def decode_attn_int4_asym_gqa_kernel(
         v_hi_dq = v_hi * v_scale_tok[:, None] + v_zp_tok[:, None]  # [BLOCK, PD]
         v_lo_dq = v_lo * v_scale_tok[:, None] + v_zp_tok[:, None]
 
-        # === V accumulation for ALL heads (3D broadcast → 2D reduce) ===
-        # [N_REP, BLOCK, 1] × [1, BLOCK, PD] → sum(axis=1) → [N_REP, PD]
-        wv_even = tl.sum(beta_all[:, :, None] * v_hi_dq[None, :, :], axis=1)
-        wv_odd = tl.sum(beta_all[:, :, None] * v_lo_dq[None, :, :], axis=1)
+        # === V accumulation via tl.dot — all heads in parallel ===
+        # [N_REP_PAD, BLOCK] @ [BLOCK, PD] = [N_REP_PAD, PD]
+        wv_even = tl.dot(beta_all.to(tl.float16), v_hi_dq.to(tl.float16))
+        wv_odd = tl.dot(beta_all.to(tl.float16), v_lo_dq.to(tl.float16))
 
         acc_even_all = acc_even_all * alpha_all[:, None] + wv_even
         acc_odd_all = acc_odd_all * alpha_all[:, None] + wv_odd
@@ -175,18 +186,19 @@ def decode_attn_int4_asym_gqa_kernel(
         l_all = l_ij
         m_all = m_ij
 
-    # --- Finalize ---
+    # --- Finalize (l_all > 0 for padded heads due to init=1.0) ---
     acc_even_all = acc_even_all / l_all[:, None]
     acc_odd_all = acc_odd_all / l_all[:, None]
 
-    # --- Store: write N_REP Q heads ---
-    for qr in tl.static_range(N_REP):
-        o_ptr = (Output_ptr + batch_id * stride_o_b
-                 + (q_head_start + qr) * stride_o_h)
-        tl.store(o_ptr + offs_even * stride_o_d,
-                 acc_even_all[qr, :].to(tl.float16))
-        tl.store(o_ptr + offs_odd * stride_o_d,
-                 acc_odd_all[qr, :].to(tl.float16))
+    # --- Store: 2D masked write for actual Q heads only ---
+    o_ptrs_even = (Output_ptr + batch_id * stride_o_b
+                   + (q_head_start + q_head_offs[:, None]) * stride_o_h
+                   + offs_even[None, :] * stride_o_d)
+    o_ptrs_odd = (Output_ptr + batch_id * stride_o_b
+                  + (q_head_start + q_head_offs[:, None]) * stride_o_h
+                  + offs_odd[None, :] * stride_o_d)
+    tl.store(o_ptrs_even, acc_even_all.to(tl.float16), mask=qr_mask[:, None])
+    tl.store(o_ptrs_odd, acc_odd_all.to(tl.float16), mask=qr_mask[:, None])
 
 
 def decode_attn_int4_asym_gqa(
@@ -204,9 +216,9 @@ def decode_attn_int4_asym_gqa(
     """
     INT4 asymmetric decode attention with GQA-aware tiling.
 
-    Grid is (batch, kv_heads) instead of (batch, q_heads). Each block
-    processes N_REP query heads sharing one KV head, loading KV data
-    only once. This reduces HBM reads by N_REP× (4-7× for target models).
+    Grid is (batch, kv_heads). Each block processes N_REP Q heads
+    in parallel using tl.dot for batched QK and V accumulation.
+    K/V loaded once per block, all Q heads computed simultaneously.
 
     Args/Returns: identical to v1/v2 decode_attn_int4_asym.
     """
@@ -245,6 +257,7 @@ def decode_attn_int4_asym_gqa(
         raise ValueError(f"q_heads={q_heads} not multiple of kv_heads={kv_heads}")
 
     n_rep = q_heads // kv_heads
+    n_rep_pad = max(_MIN_DOT_M, _next_power_of_2(n_rep))
     max_ctx = int(context_lens.max().item())
 
     if max_ctx == 0:
@@ -267,7 +280,6 @@ def decode_attn_int4_asym_gqa(
 
     ctx_len_rounded = ((max_ctx + 63) // 64) * 64
 
-    # GQA: grid over kv_heads, not q_heads
     grid = (batch, kv_heads)
 
     decode_attn_int4_asym_gqa_kernel[grid](
@@ -288,6 +300,7 @@ def decode_attn_int4_asym_gqa(
         HEAD_DIM=head_dim,
         PACKED_DIM=packed_dim,
         N_REP=n_rep,
+        N_REP_PAD=n_rep_pad,
     )
 
     min_ctx = int(context_lens.min().item())
