@@ -136,6 +136,13 @@ class KIVIStyleKVCache:
         self._layer_capacity: List[int] = [0] * num_layers
         self._seq_len: int = 0
 
+        # KVC-OOR: Out-of-range diagnostic interval. Default 0 = disabled in hot
+        # path to avoid GPU→CPU sync (.item()) that costs ~0.5ms per layer per step.
+        # Set KV_OOR_CHECK_INTERVAL=100 to enable periodic checking.
+        import os
+        self._oor_check_interval = int(os.environ.get("KV_OOR_CHECK_INTERVAL", "0"))
+        self._oor_step_counter = 0
+
         # Decode statistics (compatible with INT8KVCache interface)
         self.decode_stats: Dict[str, object] = {
             "fused_decode_calls": 0,
@@ -445,21 +452,25 @@ class KIVIStyleKVCache:
                 qmin, qmax_val = -8, 7
             s = k_scale.unsqueeze(2)  # [B, H, 1, D]
             zp = k_zp.unsqueeze(2)  # [B, H, 1, D]
-            # ENG-041: Detect when decode token K values exceed the prefill-computed
-            # scale range. In KIVI, the per-channel K scale is fixed at prefill time.
-            # Decode tokens whose values fall outside this range are silently clipped,
-            # which can degrade attention accuracy without any visible signal.
             _unscaled = (k.float() - zp) / s
-            _out_of_range = ((_unscaled < qmin) | (_unscaled > qmax_val))
-            _oor_ratio = float(_out_of_range.sum().item()) / max(_out_of_range.numel(), 1)
-            if _oor_ratio > 0.05:
-                warnings.warn(
-                    f"ENG-041: KIVI decode K clipping at layer {layer_id}: "
-                    f"{_oor_ratio:.1%} of values exceed prefill-computed scale range "
-                    f"[{qmin}, {qmax_val}]. Decode token magnitudes may have drifted "
-                    f"beyond prefill calibration. Attention accuracy may degrade.",
-                    RuntimeWarning,
-                )
+            # ENG-041 / KVC-OOR: Out-of-range diagnostic. The original code ran
+            # .sum().item() here every layer every decode step, causing a GPU→CPU
+            # sync (~0.5ms) that dominated TPOT. Now gated behind _oor_check_interval
+            # (default 0 = off). Correctness is unaffected — clamp() handles OOR values.
+            if self._oor_check_interval > 0 and layer_id == 0:
+                self._oor_step_counter += 1
+            if (self._oor_check_interval > 0
+                    and self._oor_step_counter % self._oor_check_interval == 0):
+                _out_of_range = ((_unscaled < qmin) | (_unscaled > qmax_val))
+                _oor_ratio = float(_out_of_range.sum().item()) / max(_out_of_range.numel(), 1)
+                if _oor_ratio > 0.05:
+                    warnings.warn(
+                        f"ENG-041: KIVI decode K clipping at layer {layer_id}: "
+                        f"{_oor_ratio:.1%} of values exceed prefill-computed scale range "
+                        f"[{qmin}, {qmax_val}]. Decode token magnitudes may have drifted "
+                        f"beyond prefill calibration. Attention accuracy may degrade.",
+                        RuntimeWarning,
+                    )
             q_k_full = torch.round(_unscaled).clamp(qmin, qmax_val).to(torch.int8)
 
         q_k_store = pack_int4(q_k_full) if self.bit_packed else q_k_full
