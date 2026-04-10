@@ -453,20 +453,48 @@ class KIVIStyleKVCache:
                     f"expected {expected_shape}, got scale={tuple(k_scale.shape)}, "
                     f"zp={tuple(k_zp.shape)}"
                 )
-            # KVC-FUSE-TRITON: For INT4 decode on CUDA, use fused Triton kernel
-            # that does quantize+pack in a single kernel launch (replaces ~12
-            # PyTorch eager launches). Falls back to PyTorch path for INT8 or CPU.
+            # KVC-FUSE-TRITON-INPLACE: For INT4 decode on CUDA, use inplace Triton
+            # kernels that write directly to cache buffers (zero temp alloc, zero copy).
+            _use_triton_inplace = (
+                self.bit_packed and new_seq_len == 1 and k.is_cuda
+                and self.v_percentile >= 100.0
+            )
+            if _use_triton_inplace:
+                try:
+                    from src.kernels.triton_quantize_pack_int4 import (
+                        fused_quantize_pack_k_int4_inplace,
+                        fused_quantize_pack_v_int4_inplace,
+                    )
+                    # Must ensure capacity BEFORE inplace write
+                    storage_hd = head_dim // 2
+                    self._ensure_capacity(layer_id, batch, heads, storage_hd, target_len)
+                    # K: quantize+pack directly into cache
+                    fused_quantize_pack_k_int4_inplace(
+                        k, k_scale, k_zp, self._k_cache[layer_id], old_len
+                    )
+                    # V: quantize+pack+scale+zp directly into cache
+                    fused_quantize_pack_v_int4_inplace(
+                        v, self._v_cache[layer_id],
+                        self._v_scale[layer_id], self._v_zp[layer_id], old_len
+                    )
+                    # Update bookkeeping and return early (skip the store block below)
+                    self._layer_seq_lens[layer_id] = target_len
+                    if layer_id == 0:
+                        self._seq_len = max(self._seq_len, target_len)
+                    else:
+                        self._seq_len = max(self._seq_len, target_len)
+                    return
+                except Exception:
+                    pass  # fall through to non-inplace path
+
+            # Non-inplace Triton or PyTorch fallback
             if self.bit_packed and new_seq_len == 1 and k.is_cuda:
                 try:
                     from src.kernels.triton_quantize_pack_int4 import fused_quantize_pack_k_int4
                     q_k_store = fused_quantize_pack_k_int4(k, k_scale, k_zp)
                 except Exception:
-                    q_k_store = None  # fall through to PyTorch path
-                if q_k_store is not None:
-                    # Skip the PyTorch quantize+pack below — already done in Triton
-                    pass
-                else:
-                    # Fallback: PyTorch eager path
+                    q_k_store = None
+                if q_k_store is None:
                     if self.quant_bits == 8:
                         qmin, qmax_val = -128, 127
                     else:
@@ -479,7 +507,6 @@ class KIVIStyleKVCache:
                     _reshaped = _shifted.view(*q_k_full.shape[:-1], head_dim // 2, 2)
                     q_k_store = ((_reshaped[..., 0] << 4) | _reshaped[..., 1]).to(torch.int8)
             else:
-                # PyTorch path: INT8 mode or prefill or CPU
                 if self.quant_bits == 8:
                     qmin, qmax_val = -128, 127
                 else:
@@ -487,7 +514,6 @@ class KIVIStyleKVCache:
                 s = k_scale.unsqueeze(2)
                 zp = k_zp.unsqueeze(2)
                 _unscaled = (k.float() - zp) / s
-                # ENG-041 / KVC-OOR: Out-of-range diagnostic (gated, default off)
                 if self._oor_check_interval > 0 and layer_id == 0:
                     self._oor_step_counter += 1
                 if (self._oor_check_interval > 0
@@ -510,16 +536,14 @@ class KIVIStyleKVCache:
                 else:
                     q_k_store = q_k_full
 
-        # --- V: per-token quantization ---
-        # KVC-FUSE-TRITON: For INT4 decode on CUDA, use fused Triton V kernel
+        # --- V: per-token quantization (non-inplace path) ---
         if self.bit_packed and new_seq_len == 1 and v.is_cuda and self.v_percentile >= 100.0:
             try:
                 from src.kernels.triton_quantize_pack_int4 import fused_quantize_pack_v_int4_simple
                 q_v_store, v_scale, v_zp = fused_quantize_pack_v_int4_simple(v)
             except Exception:
-                q_v_store = None  # fall through
+                q_v_store = None
             if q_v_store is None:
-                # Fallback
                 q_v_full, v_scale, v_zp = quantize_asymmetric_per_token(
                     v, quant_bits=self.quant_bits, percentile=self.v_percentile
                 )

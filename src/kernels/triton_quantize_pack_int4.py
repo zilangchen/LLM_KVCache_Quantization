@@ -235,3 +235,60 @@ def fused_quantize_pack_v_int4_simple(
     )
     # Return scale/zp as [B, H, 1] — matching quantize_asymmetric_per_token output
     return v_packed, v_scale, v_zp
+
+
+# ---------------------------------------------------------------------------
+# Inplace variants: write directly to cache buffers (zero-copy, zero-alloc)
+# ---------------------------------------------------------------------------
+
+def fused_quantize_pack_k_int4_inplace(
+    k: torch.Tensor,
+    k_scale: torch.Tensor,
+    k_zp: torch.Tensor,
+    k_cache: torch.Tensor,
+    write_offset: int,
+) -> None:
+    """Write quantized+packed K directly to cache buffer at write_offset."""
+    batch, heads, _, head_dim = k.shape
+    packed_dim = head_dim // 2
+    # Slice the cache at the write position: [B, H, 1, D//2]
+    k_out = k_cache[:, :, write_offset:write_offset + 1, :]
+    grid = (batch, heads)
+    _fused_quantize_pack_k_int4_kernel[grid](
+        k, k_scale, k_zp, k_out,
+        k.stride(0), k.stride(1), k.stride(2), k.stride(3),
+        k_scale.stride(0), k_scale.stride(1), k_scale.stride(2),
+        k_zp.stride(0), k_zp.stride(1), k_zp.stride(2),
+        k_out.stride(0), k_out.stride(1), k_out.stride(2), k_out.stride(3),
+        PACKED_DIM=packed_dim,
+    )
+
+
+def fused_quantize_pack_v_int4_inplace(
+    v: torch.Tensor,
+    v_cache: torch.Tensor,
+    v_scale_buf: torch.Tensor,
+    v_zp_buf: torch.Tensor,
+    write_offset: int,
+) -> None:
+    """Write quantized+packed V + scale/zp directly to cache buffers."""
+    batch, heads, _, head_dim = v.shape
+    packed_dim = head_dim // 2
+    v_out = v_cache[:, :, write_offset:write_offset + 1, :]
+    vs_out = v_scale_buf[:, :, write_offset:write_offset + 1]
+    vz_out = v_zp_buf[:, :, write_offset:write_offset + 1]
+
+    _fp16_tiny = torch.finfo(torch.float16).tiny
+    range_floor = max(1e-5, _fp16_tiny * 15)
+
+    grid = (batch, heads)
+    _fused_quantize_pack_v_int4_kernel[grid](
+        v, v_out, vs_out, vz_out,
+        v.stride(0), v.stride(1), v.stride(2), v.stride(3),
+        v_out.stride(0), v_out.stride(1), v_out.stride(2), v_out.stride(3),
+        vs_out.stride(0), vs_out.stride(1), vs_out.stride(2),
+        vz_out.stride(0), vz_out.stride(1), vz_out.stride(2),
+        PACKED_DIM=packed_dim,
+        HEAD_DIM=head_dim,
+        RANGE_FLOOR=range_floor,
+    )
