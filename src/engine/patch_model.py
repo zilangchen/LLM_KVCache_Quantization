@@ -849,6 +849,20 @@ def _fused_forward_impl(
                 context_lens,
                 sm_scale=sm_scale,
             )
+        elif cache_kind == "int4_asym" and decode_impl == "flashinfer":
+            # FlashInfer FP16 backend — dequant to FP16, then call FlashInfer SDPA
+            from src.kernels.adapters.flashinfer_adapter import decode_attn_flashinfer
+            attn_output_val = decode_attn_flashinfer(
+                q_kernel,
+                k_quant,      # packed [B, Hkv, S, D//2]
+                v_quant,      # packed [B, Hkv, S, D//2]
+                k_scale,      # [B, Hkv, D] per-channel
+                k_zp,         # [B, Hkv, D] per-channel
+                v_scale,      # [B, Hkv, S] per-token
+                v_zp,         # [B, Hkv, S] per-token
+                context_lens,
+                sm_scale=sm_scale,
+            )
         elif decode_impl == "triton_fused":
             # ENG-035: Use inspect.signature to detect whether the kernel accepts the
             # optional debug_stats / layer_idx kwargs, instead of relying on a broad
