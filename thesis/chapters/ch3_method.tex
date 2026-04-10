@@ -849,7 +849,7 @@ Value 使用 per-token Scale（对所有 channel 共享），
 这一格式差异使得上述``物化→调用 INT8 核函数''的方案不再适用，
 需要设计专用的非对称融合核函数。
 
-本文提出了\textbf{分通道（split-channel）}设计方案，
+本文采用\textbf{分通道（split-channel）}设计方案，
 在 kernel 内部直接对 packed INT4 字节进行 nibble 解析和非对称反量化，
 避免任何中间张量的全局显存物化。
 核心思路如下：
