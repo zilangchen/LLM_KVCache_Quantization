@@ -183,6 +183,7 @@ def main():
     parser.add_argument("--clip_percentile_k", type=float, default=None)
     parser.add_argument("--clip_percentile_v", type=float, default=None)
     parser.add_argument("--calib_strategy", type=str, default=None)
+    # Options: triton_fused, torch_ref, triton_int4_asym, triton_int4_asym_v2
     parser.add_argument("--decode_attn_impl", type=str, default=None)
     parser.add_argument("--calib_file", type=str, default=None)
     parser.add_argument(

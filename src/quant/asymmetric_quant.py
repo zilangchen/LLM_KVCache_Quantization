@@ -101,8 +101,9 @@ def quantize_asymmetric(
         t_min = torch.quantile(tensor_f, quantile_lo, dim=axis, keepdim=True)
         t_max = torch.quantile(tensor_f, quantile_hi, dim=axis, keepdim=True)
     else:
-        t_min = tensor_f.amin(dim=axis, keepdim=True)
-        t_max = tensor_f.amax(dim=axis, keepdim=True)
+        # KVC-OOR: Use aminmax to fuse min+max into a single reduction kernel.
+        # Saves 1 CUDA launch per call (28 layers × V quant = 28 launches/step).
+        t_min, t_max = torch.aminmax(tensor_f, dim=axis, keepdim=True)
 
     # Compute scale and zero_point.
     # QNT-034: The range clamp must guarantee that scale itself (after dividing

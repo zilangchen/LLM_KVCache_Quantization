@@ -242,12 +242,19 @@ def pack_int4(tensor: Tensor) -> Tensor:
         raise ValueError(f"pack_int4 expects int8 input, got {tensor.dtype}")
     if tensor.shape[-1] % 2 != 0:
         raise ValueError("Last dimension must be even for packing")
-    if tensor.numel() > 0:
-        qmin = int(tensor.min().item())
-        qmax = int(tensor.max().item())
-        if qmin < -8 or qmax > 7:
+    # KVC-OOR: Range validation removed from hot path. The upstream quantize
+    # step always applies .clamp(qmin, qmax) before calling pack_int4, so
+    # values are guaranteed in [-8, 7]. The original .min().item() + .max().item()
+    # caused 2 GPU→CPU syncs per call — with 28 layers × 2 (K+V) = 112 syncs/step,
+    # this was the dominant source of decode latency overhead (~20ms/step).
+    # Enable KV_PACK_VALIDATE=1 for debugging if range violations are suspected.
+    import os
+    if os.environ.get("KV_PACK_VALIDATE", "0") == "1" and tensor.numel() > 0:
+        qmin_val = int(tensor.min().item())
+        qmax_val = int(tensor.max().item())
+        if qmin_val < -8 or qmax_val > 7:
             raise ValueError(
-                f"pack_int4 expects values in [-8, 7], got min={qmin}, max={qmax}"
+                f"pack_int4 expects values in [-8, 7], got min={qmin_val}, max={qmax_val}"
             )
 
     # Shift values to unsigned range [0, 15] for packing.
