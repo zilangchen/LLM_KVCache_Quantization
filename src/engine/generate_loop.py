@@ -457,7 +457,7 @@ def generate_from_ids(
             "'int4_ours_asym', 'int4_ours_asym_ba']."
         )
 
-    _valid_impls = {"triton_fused", "torch_ref", "triton_int4_asym", "triton_int4_asym_v2"}
+    _valid_impls = {"triton_fused", "torch_ref", "triton_int4_asym", "triton_int4_asym_v2", "triton_int4_asym_gqa"}
     if decode_attn_impl not in _valid_impls:
         raise ValueError(
             f"decode_attn_impl='{decode_attn_impl}' not supported. "
@@ -477,6 +477,14 @@ def generate_from_ids(
     ):
         raise ValueError(
             f"decode_attn_impl='triton_int4_asym_v2' only supports kv_mode in "
+            f"{{int4_ours_asym, int4_ours_asym_ba}}, got '{kv_mode}'."
+        )
+    # GQA kernel: grid=(B,Hkv), one block per KV head, N_REP× fewer HBM reads
+    if decode_attn_impl == "triton_int4_asym_gqa" and kv_mode not in (
+        "int4_ours_asym", "int4_ours_asym_ba",
+    ):
+        raise ValueError(
+            f"decode_attn_impl='triton_int4_asym_gqa' only supports kv_mode in "
             f"{{int4_ours_asym, int4_ours_asym_ba}}, got '{kv_mode}'."
         )
 
@@ -663,7 +671,7 @@ def generate_from_ids(
         # INT4 asymmetric modes only get fused patch when using triton kernel
         _use_fused = kv_mode in _FUSED_KV_MODES or (
             kv_mode in _INT4_ASYM_FUSABLE
-            and decode_attn_impl in ("triton_fused", "triton_int4_asym", "triton_int4_asym_v2")
+            and decode_attn_impl in ("triton_fused", "triton_int4_asym", "triton_int4_asym_v2", "triton_int4_asym_gqa")
         )
         if _use_fused:
             if kv_mode == "int8_ours":
@@ -1038,7 +1046,7 @@ def generate_from_ids(
             )
             # Set decode_attn_impl on cache so _fused_forward_impl can read it
             kv_cache.decode_attn_impl = decode_attn_impl
-            if decode_attn_impl not in ("torch_ref", "triton_fused", "triton_int4_asym", "triton_int4_asym_v2"):
+            if decode_attn_impl not in ("torch_ref", "triton_fused", "triton_int4_asym", "triton_int4_asym_v2", "triton_int4_asym_gqa"):
                 import warnings
                 warnings.warn(
                     f"kv_mode='{kv_mode}': unknown decode_attn_impl='{decode_attn_impl}', "

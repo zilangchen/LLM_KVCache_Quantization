@@ -835,7 +835,21 @@ def _fused_forward_impl(
     # Full rollback is not feasible without cache-internal undo support, so we
     # warn that the cache may be in an inconsistent state and re-raise.
     try:
-        if cache_kind == "int4_asym" and decode_impl == "triton_int4_asym_v2":
+        if cache_kind == "int4_asym" and decode_impl == "triton_int4_asym_gqa":
+            # INT4 asymmetric GQA-tiled kernel — grid=(B,Hkv), N_REP× fewer HBM reads
+            from src.kernels.triton_decode_attn_int4_asym_gqa import decode_attn_int4_asym_gqa
+            attn_output_val = decode_attn_int4_asym_gqa(
+                q_kernel,
+                k_quant,      # packed [B, Hkv, S, D//2]
+                v_quant,      # packed [B, Hkv, S, D//2]
+                k_scale,      # [B, Hkv, D] per-channel
+                k_zp,         # [B, Hkv, D] per-channel
+                v_scale,      # [B, Hkv, S] per-token
+                v_zp,         # [B, Hkv, S] per-token
+                context_lens,
+                sm_scale=sm_scale,
+            )
+        elif cache_kind == "int4_asym" and decode_impl == "triton_int4_asym_v2":
             # INT4 asymmetric Triton v2 kernel — autotune + zp-precompute
             from src.kernels.triton_decode_attn_int4_asym_v2 import decode_attn_int4_asym_v2
             attn_output_val = decode_attn_int4_asym_v2(
