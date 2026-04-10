@@ -18,8 +18,8 @@
 % ------------------------------------------------------------
 
 \paragraph{我们学到的规律——bit-width 依赖的校准目标有效性。}
-在 Qwen2.5-1.5B/7B/8B/14B 上、在贪心解码与 robust selection
-（$\max~\text{clip rate} \leq 1\%$）约束下，
+在 Qwen2.5-1.5B 上、在贪心解码与 robust selection
+（$\max~\text{clip rate} \leq 1\%$）约束下的直接对比表明，
 attention-KL 与 MSE 两种校准目标的作用呈明显的 bit-width 依赖。
 在 INT8 下，二者对 $(\text{clip\_percentile}, \text{group\_size})$
 的选择完全趋同，产出的 per-group scale 在 float32 下逐位一致；
@@ -81,7 +81,9 @@ INT4-RoleAlign 的核心 PPL/Needle 结果已扩展到四个模型（Qwen2.5-1.5
 检索能力在 Needle 上完全恢复（100\%），RULER 子任务提供进一步支持（s\_niah $\geq$99\%），
 但 PPL 退化显著（8B: 2.4\%，7B: 6.1\%，1.5B: 13.7\%），
 参考实现（torch\_ref）路径下解码延迟增加约 2.4--2.6$\times$，
-但本文已实现 INT4 非对称 Triton 融合核函数（第~\ref{subsec:ch3-triton-int4-asym}~节）以缓解此问题。
+本文已验证 INT4 非对称 Triton 融合核函数的数值正确性
+（第~\ref{subsec:ch3-triton-int4-asym}~节），
+但尚未实现端到端延迟加速。
 chunk\_size=1 全量化压力测试仅在 Qwen2.5-1.5B 单模型、单种子条件下验证，
 跨模型推广仍需后续实验。此外，INT4-RoleAlign 的 PPL 对 chunk\_size 敏感：
 标准评测条件下（cs=128）PPL=10.58（1.5B），

@@ -15,9 +15,9 @@ INT4 量化理论上可将 KV Cache 压缩至原始的 $1/4$，
 以量化前后注意力分布之间的 Kullback--Leibler 散度
 （attention-KL）刻画行为偏移。
 
-在 Qwen2.5-1.5B/7B/8B/14B 上、在贪心解码与
+在 Qwen2.5-1.5B 上、在贪心解码与
 robust selection（$\max~\text{clip rate}\leq 1\%$）约束下，
-我们系统比较 attention-KL 与 MSE 两种校准目标的作用，
+我们直接比较 attention-KL 与 MSE 两种校准目标的作用，
 发现校准目标的有效性呈明显的 bit-width 依赖。
 在 INT8 下，两种目标对
 $(\text{clip\_percentile},\text{group\_size})$

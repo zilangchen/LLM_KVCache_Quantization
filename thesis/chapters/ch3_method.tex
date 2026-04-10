@@ -614,7 +614,7 @@ $m \geq 1$ 为保护裕度（protection margin），默认值为 $1.0$。
 INT4-RoleAlign 是在 KIVI~\cite{liu2024kivi} 提出的
 per-channel Key + per-token Value 非对称格式上，
 以 attention-KL 为目标的行为引导实例化。
-该方案直接基于第~\ref{sec:exp-kv-sensitivity}~节的 K/V 消融诊断结论：
+该方案受第~\ref{sec:exp-kv-sensitivity}~节的 K/V 消融诊断结果启发：
 INT4 退化呈 Key 主导、且与 GQA 头数 $H_{kv}$ 密切相关。
 以下首先阐明量化格式与校准目标的正交性，再详述具体设计。
 

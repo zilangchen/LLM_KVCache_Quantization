@@ -18,9 +18,9 @@ attention-behavior perspective, using the Kullback--Leibler
 divergence between attention distributions before and after
 quantization (attention-KL) to measure behavior deviation.
 
-Across Qwen2.5-1.5B/7B/8B/14B, under greedy decoding with a
+On Qwen2.5-1.5B, under greedy decoding with a
 robust-selection constraint ($\max~\text{clip rate}\leq 1\%$),
-we systematically compare attention-KL and MSE as calibration
+we directly compare attention-KL and MSE as calibration
 objectives and find that objective validity is bit-width
 dependent. At INT8, the two objectives converge to identical
 $(\text{clip\_percentile},\text{group\_size})$ choices,

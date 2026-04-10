@@ -1665,11 +1665,11 @@ Claim~3 已展示 INT4-RoleAlign 将 Needle 从 0\% 恢复至 100\%，
 \textbf{其一}，INT4-RoleAlign 在 Qwen2.5-1.5B 和 Qwen2.5-7B 上的 PPL 退化
 略高于 KIVI-style（13.7\% vs 12.0\%、6.1\% vs 5.5\%），
 仅在 LLaMA-3.1-8B（$H_{kv}=8$）上持平（2.4\% vs 2.4\%）。
-即 BA percentile 校准的核心优势在于检索能力恢复
-而非 PPL 缩减。在小 $H_{kv}$ 模型上，
-离线搜索的 percentile 参数
-倾向于保护对检索至关重要的注意力聚焦模式，
-而非全局概率分布的均匀保真。
+BA-guided percentile 在当前设置下提供了与诊断一致的参数化路径，
+并在 LongBench 上带来小幅改善。
+离线搜索的 percentile 参数在行为目标下
+倾向于保护注意力聚焦模式，
+但这一倾向是否构成系统性优势仍需更多消融验证。
 \textbf{其二}，尽管 PPL 退化显著，三模型的 Needle 通过率均为 100\%。
 这一``PPL 退化 vs 检索保持''的解耦现象构成本文的关键发现之一：
 \emph{局部信息检索仅依赖少数关键位置的注意力聚焦，
@@ -1745,7 +1745,7 @@ Triton 融合核函数是效率收益的关键。
 \paragraph{发现二：Key 量化主导 INT4 退化，GQA 头数决定噪声稀释幅度}
 受控 K/V 消融一致指向 Key 量化主导退化，Value 对 INT4 相当鲁棒。
 $H_{kv}$ 越大，量化噪声稀释越强；
-GQA 头数应作为比模型参数量更重要的量化策略考量因素。
+GQA 头数是低比特量化策略中一个值得关注的架构因素。
 Coupled Quantization~\cite{zhang2024coupled} 从互信息角度证实了
 KV 通道间的强关联结构，
 本文的 K/V 消融从另一方向（独立消融 + 架构依赖性分析）
