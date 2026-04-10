@@ -413,6 +413,13 @@ class KIVIStyleKVCache:
             self._k_scale[layer_id] = k_scale.to(device=target_device, dtype=self._scale_dtype)
             self._k_zp[layer_id] = k_zp.to(device=target_device, dtype=self._scale_dtype)
             self._k_scale_initialized[layer_id] = True
+            # Prefill: always use PyTorch pack (Triton fused only for decode)
+            if self.bit_packed:
+                _shifted = (q_k_full.to(torch.int16) + 8).to(torch.uint8)
+                _reshaped = _shifted.view(*q_k_full.shape[:-1], head_dim // 2, 2)
+                q_k_store = ((_reshaped[..., 0] << 4) | _reshaped[..., 1]).to(torch.int8)
+            else:
+                q_k_store = q_k_full
         else:
             # Decode: reuse prefill scale and zero-point.
             # KVC-060: The decode path performs manual quantization (round+clamp)
@@ -446,54 +453,89 @@ class KIVIStyleKVCache:
                     f"expected {expected_shape}, got scale={tuple(k_scale.shape)}, "
                     f"zp={tuple(k_zp.shape)}"
                 )
-            if self.quant_bits == 8:
-                qmin, qmax_val = -128, 127
+            # KVC-FUSE-TRITON: For INT4 decode on CUDA, use fused Triton kernel
+            # that does quantize+pack in a single kernel launch (replaces ~12
+            # PyTorch eager launches). Falls back to PyTorch path for INT8 or CPU.
+            if self.bit_packed and new_seq_len == 1 and k.is_cuda:
+                try:
+                    from src.kernels.triton_quantize_pack_int4 import fused_quantize_pack_k_int4
+                    q_k_store = fused_quantize_pack_k_int4(k, k_scale, k_zp)
+                except Exception:
+                    q_k_store = None  # fall through to PyTorch path
+                if q_k_store is not None:
+                    # Skip the PyTorch quantize+pack below — already done in Triton
+                    pass
+                else:
+                    # Fallback: PyTorch eager path
+                    if self.quant_bits == 8:
+                        qmin, qmax_val = -128, 127
+                    else:
+                        qmin, qmax_val = -8, 7
+                    s = k_scale.unsqueeze(2)
+                    zp = k_zp.unsqueeze(2)
+                    _unscaled = (k.float() - zp) / s
+                    q_k_full = torch.round(_unscaled).clamp(qmin, qmax_val).to(torch.int8)
+                    _shifted = (q_k_full.to(torch.int16) + 8).to(torch.uint8)
+                    _reshaped = _shifted.view(*q_k_full.shape[:-1], head_dim // 2, 2)
+                    q_k_store = ((_reshaped[..., 0] << 4) | _reshaped[..., 1]).to(torch.int8)
             else:
-                qmin, qmax_val = -8, 7
-            s = k_scale.unsqueeze(2)  # [B, H, 1, D]
-            zp = k_zp.unsqueeze(2)  # [B, H, 1, D]
-            _unscaled = (k.float() - zp) / s
-            # ENG-041 / KVC-OOR: Out-of-range diagnostic. The original code ran
-            # .sum().item() here every layer every decode step, causing a GPU→CPU
-            # sync (~0.5ms) that dominated TPOT. Now gated behind _oor_check_interval
-            # (default 0 = off). Correctness is unaffected — clamp() handles OOR values.
-            if self._oor_check_interval > 0 and layer_id == 0:
-                self._oor_step_counter += 1
-            if (self._oor_check_interval > 0
-                    and self._oor_step_counter % self._oor_check_interval == 0):
-                _out_of_range = ((_unscaled < qmin) | (_unscaled > qmax_val))
-                _oor_ratio = float(_out_of_range.sum().item()) / max(_out_of_range.numel(), 1)
-                if _oor_ratio > 0.05:
-                    warnings.warn(
-                        f"ENG-041: KIVI decode K clipping at layer {layer_id}: "
-                        f"{_oor_ratio:.1%} of values exceed prefill-computed scale range "
-                        f"[{qmin}, {qmax_val}]. Decode token magnitudes may have drifted "
-                        f"beyond prefill calibration. Attention accuracy may degrade.",
-                        RuntimeWarning,
-                    )
-            q_k_full = torch.round(_unscaled).clamp(qmin, qmax_val).to(torch.int8)
-
-        if self.bit_packed:
-            # KVC-FUSE: Inline pack_int4 to avoid function call overhead and
-            # redundant int8→int16→uint8 cast chain. Go directly from int8 to
-            # unsigned uint8 via +8 offset, then bit-shift and pack.
-            _shifted = (q_k_full.to(torch.int16) + 8).to(torch.uint8)
-            _reshaped = _shifted.view(*q_k_full.shape[:-1], head_dim // 2, 2)
-            q_k_store = ((_reshaped[..., 0] << 4) | _reshaped[..., 1]).to(torch.int8)
-        else:
-            q_k_store = q_k_full
+                # PyTorch path: INT8 mode or prefill or CPU
+                if self.quant_bits == 8:
+                    qmin, qmax_val = -128, 127
+                else:
+                    qmin, qmax_val = -8, 7
+                s = k_scale.unsqueeze(2)
+                zp = k_zp.unsqueeze(2)
+                _unscaled = (k.float() - zp) / s
+                # ENG-041 / KVC-OOR: Out-of-range diagnostic (gated, default off)
+                if self._oor_check_interval > 0 and layer_id == 0:
+                    self._oor_step_counter += 1
+                if (self._oor_check_interval > 0
+                        and self._oor_step_counter % self._oor_check_interval == 0):
+                    _out_of_range = ((_unscaled < qmin) | (_unscaled > qmax_val))
+                    _oor_ratio = float(_out_of_range.sum().item()) / max(_out_of_range.numel(), 1)
+                    if _oor_ratio > 0.05:
+                        warnings.warn(
+                            f"ENG-041: KIVI decode K clipping at layer {layer_id}: "
+                            f"{_oor_ratio:.1%} of values exceed prefill-computed scale range "
+                            f"[{qmin}, {qmax_val}]. Decode token magnitudes may have drifted "
+                            f"beyond prefill calibration. Attention accuracy may degrade.",
+                            RuntimeWarning,
+                        )
+                q_k_full = torch.round(_unscaled).clamp(qmin, qmax_val).to(torch.int8)
+                if self.bit_packed:
+                    _shifted = (q_k_full.to(torch.int16) + 8).to(torch.uint8)
+                    _reshaped = _shifted.view(*q_k_full.shape[:-1], head_dim // 2, 2)
+                    q_k_store = ((_reshaped[..., 0] << 4) | _reshaped[..., 1]).to(torch.int8)
+                else:
+                    q_k_store = q_k_full
 
         # --- V: per-token quantization ---
-        q_v_full, v_scale, v_zp = quantize_asymmetric_per_token(
-            v, quant_bits=self.quant_bits, percentile=self.v_percentile
-        )
-        if self.bit_packed:
-            # KVC-FUSE: Inline pack_int4 for V (same as K above)
-            _v_shifted = (q_v_full.to(torch.int16) + 8).to(torch.uint8)
-            _v_reshaped = _v_shifted.view(*q_v_full.shape[:-1], head_dim // 2, 2)
-            q_v_store = ((_v_reshaped[..., 0] << 4) | _v_reshaped[..., 1]).to(torch.int8)
+        # KVC-FUSE-TRITON: For INT4 decode on CUDA, use fused Triton V kernel
+        if self.bit_packed and new_seq_len == 1 and v.is_cuda and self.v_percentile >= 100.0:
+            try:
+                from src.kernels.triton_quantize_pack_int4 import fused_quantize_pack_v_int4_simple
+                q_v_store, v_scale, v_zp = fused_quantize_pack_v_int4_simple(v)
+            except Exception:
+                q_v_store = None  # fall through
+            if q_v_store is None:
+                # Fallback
+                q_v_full, v_scale, v_zp = quantize_asymmetric_per_token(
+                    v, quant_bits=self.quant_bits, percentile=self.v_percentile
+                )
+                _v_shifted = (q_v_full.to(torch.int16) + 8).to(torch.uint8)
+                _v_reshaped = _v_shifted.view(*q_v_full.shape[:-1], head_dim // 2, 2)
+                q_v_store = ((_v_reshaped[..., 0] << 4) | _v_reshaped[..., 1]).to(torch.int8)
         else:
-            q_v_store = q_v_full
+            q_v_full, v_scale, v_zp = quantize_asymmetric_per_token(
+                v, quant_bits=self.quant_bits, percentile=self.v_percentile
+            )
+            if self.bit_packed:
+                _v_shifted = (q_v_full.to(torch.int16) + 8).to(torch.uint8)
+                _v_reshaped = _v_shifted.view(*q_v_full.shape[:-1], head_dim // 2, 2)
+                q_v_store = ((_v_reshaped[..., 0] << 4) | _v_reshaped[..., 1]).to(torch.int8)
+            else:
+                q_v_store = q_v_full
 
         storage_head_dim = int(q_k_store.shape[-1])
         self._ensure_capacity(layer_id, batch, heads, storage_head_dim, target_len)
