@@ -28,9 +28,8 @@ producing per-group scales that are bitwise identical in
 float32. At INT4, the two objectives select
 $\text{clip\_percentile}=99.5$ and $99.0$ respectively,
 yielding per-group scales that differ on every element with
-a median relative difference of $12.35\%$. In the low-bit
-regime, numerical proxies are therefore insufficient
-substitutes for behavior alignment.
+a median relative difference of $12.35\%$. Under our INT4 setting, numerical proxies are therefore
+insufficient as stable substitutes for behavior alignment.
 
 Controlled diagnosis further reveals two structural
 properties of low-bit degradation. K-only / V-only factoring
@@ -48,21 +47,14 @@ runtime absmax/min statistics. Across all four models,
 RoleAlign preserves $100\%$ Needle retrieval at roughly $73\%$
 KV cache compression, with PPL degradation decreasing with
 model scale (1.5B: $13.7\%$; 7B: $6.1\%$; 8B: $2.4\%$;
-14B: $6.1\%$). At a $65{,}536$-token context on LLaMA-3.1-8B,
-RoleAlign exhibits the same long-context degradation pattern
-as FP16 at the same positions, indicating that the
-quantization itself does not introduce any new failure
-boundary.
+14B: $6.1\%$). At a $65{,}536$-token Needle setting on LLaMA-3.1-8B,
+RoleAlign reproduces FP16's own long-context failure mode.
 
-Beyond these experiments, we observe that the effect of
-per-head temperature correction $\tau^{-1}$ is inversely
-related to the number of GQA KV heads $H_{kv}$: at $H_{kv}=2$
-it improves PPL by about $1.6\%$, whereas at $H_{kv}\geq 4$
-it degrades PPL by $1.8\%$--$6.0\%$. This pattern is
-consistent with the noise-dilution effect induced by head
-sharing under GQA, and accordingly we disable $\tau^{-1}$ by
-default and treat it as an optional heuristic for small-model
-deployments with $H_{kv}=2$.
+We additionally observe that per-head temperature correction
+$\tau^{-1}$ exhibits GQA-head-count-dependent behavior
+(improving PPL at $H_{kv}=2$ but degrading it at
+$H_{kv}\geq 4$), and accordingly treat it as an optional
+heuristic rather than a default component.
 
 \keywordsen{Large Language Model; Key-Value Cache;
 Quantization; Behavior-Aligned Calibration; Asymmetric

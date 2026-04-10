@@ -180,9 +180,8 @@ Needle 检索 100\%，KV Cache 压缩约 73\%，
 PPL 退化随模型规模增大而减弱（1.5B: 13.7\%，7B: 6.1\%，
 8B: 2.4\%，14B: 6.1\%）；在 LLaMA-3.1-8B 的 64K 上下文
 极限长度下，INT4-RoleAlign 与 FP16 在同一位置出现相同的
-long-context 退化模式，说明量化本身没有引入新的失败边界。
-相关 Triton 融合量化解码核函数为上述实例化提供系统支撑，
-统计检验采用 Bootstrap CI + BH-FDR 框架（$\alpha=0.05$）。
+long-context failure mode，在该模型与该 Needle 设定下
+量化没有引入新的退化模式。
 
 \textbf{经验观察：$\tau^{-1}$ 的 GQA 尺度依赖。}
 在上述实验之外，我们还观察到逐头温度校正

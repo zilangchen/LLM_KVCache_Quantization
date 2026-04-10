@@ -636,7 +636,7 @@ Key 张量的通道间数值异质性可能超出对称格式的表示能力。
 且退化程度呈显著的 GQA 架构依赖特征。
 Key 决定了注意力的``看哪里''（attention logits 的排序结构），
 其通道间数值异质性在低比特下无法被对称格式有效捕捉。
-上述诊断结果直接指向角色感知的设计方向：
+上述诊断结果提示采用角色差异化量化轴是一个合理的设计方向：
 对 Key 和 Value 采用差异化的量化轴，
 以适配两者不同的数值分布特性与功能角色。
 
@@ -694,10 +694,11 @@ INT4-RoleAlign 通过行为对齐框架的离线搜索确定最优的 $p_K$ 和 
 $\mathcal{P}_K = \mathcal{P}_V = \{99.0,\, 99.5,\, 99.9,\, 99.95,\, 99.99,\, 100.0\}$，
 $|\mathcal{P}_K| = |\mathcal{P}_V| = 6$，搜索采用完整笛卡尔积枚举 $|\mathcal{P}_K \times \mathcal{P}_V| = 36$ 个配置。
 特别值得指出：$(p_K, p_V) = (100.0,\, 100.0)$ 恰好对应 KIVI-style 的 absmax/min 配置，
-因此 RoleAlign 搜索空间 \emph{严格包含} KIVI-style 作为一个端点。
-这一包含关系赋予 RoleAlign vs KIVI 的比较 principled 基础：
-RoleAlign 实证优于 KIVI 等价于"搜索到非端点解"，
-而非单纯的超参数扫描或不同方法之间的 apples-to-oranges 对比。
+因此 RoleAlign 与 KIVI-style 的比较可理解为同一非对称格式空间内的参数化比较，
+而非跨格式比较。
+当前证据表明该搜索空间允许找到与行为诊断一致的非端点配置，
+但尚不足以据此宣称 RoleAlign 在方法论上优于 KIVI-style
+（详见第~\ref{subsec:exp-rolealign-results}~节的实证讨论）。
 
 搜索目标仍为 KL 散度（公式~\eqref{eq:ch3-kl}），
 但搜索空间从对称格式的 $(p_c, g)$ 切换为非对称格式的 $(p_K, p_V)$：
