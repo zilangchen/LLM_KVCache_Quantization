@@ -101,8 +101,8 @@ class TestFlashInferEndToEnd(unittest.TestCase):
         sm_scale = 1.0 / (D ** 0.5)
 
         # --- Quantize KV to INT4 asymmetric, then call adapter ---
-        k_q, k_scale, k_zp = quantize_asymmetric_per_channel(k_fp.float())
-        v_q, v_scale, v_zp = quantize_asymmetric_per_token(v_fp.float())
+        k_q, k_scale, k_zp = quantize_asymmetric_per_channel(k_fp.float(), quant_bits=4)
+        v_q, v_scale, v_zp = quantize_asymmetric_per_token(v_fp.float(), quant_bits=4)
         k_packed = pack_int4(k_q)
         v_packed = pack_int4(v_q)
         context_lens = torch.tensor([S], dtype=torch.int32, device=device)

@@ -52,9 +52,20 @@ def decode_attn_flashinfer(
     import flashinfer  # lazy: only available on GPU hosts
 
     B, Hq, D = q.shape
+    Hkv = k_packed.shape[1]
 
     if sm_scale is None:
         sm_scale = 1.0 / math.sqrt(D)
+
+    # FlashInfer single_decode_with_kv_cache only supports certain GQA
+    # group_sizes (Hq/Hkv).  Supported in v0.6.7: {1, 2, 3, 4, 8}.
+    # For unsupported ratios (e.g. Qwen2.5-1.5B group_size=6), we
+    # repeat-interleave KV heads so Hkv==Hq (group_size=1).  This is
+    # mathematically equivalent — GQA simply shares each KV head across
+    # multiple Q heads.
+    _SUPPORTED_GROUP_SIZES = frozenset({1, 2, 3, 4, 8})
+    group_size = Hq // Hkv
+    need_kv_expand = (Hkv != Hq) and (group_size not in _SUPPORTED_GROUP_SIZES)
 
     # --- 1. Unpack INT4 → int8 values in [-8, 7] ---
     k_unpacked = unpack_int4(k_packed)  # [B, Hkv, S, D]
@@ -68,6 +79,11 @@ def decode_attn_flashinfer(
         torch.float16
     )  # [B, Hkv, S, D]
 
+    # Expand KV heads for unsupported group_sizes
+    if need_kv_expand:
+        k_fp = k_fp.repeat_interleave(group_size, dim=1)  # [B, Hq, S, D]
+        v_fp = v_fp.repeat_interleave(group_size, dim=1)  # [B, Hq, S, D]
+
     # --- 3. Per-batch FlashInfer decode ---
     outputs = []
     for b in range(B):
@@ -77,9 +93,9 @@ def decode_attn_flashinfer(
             outputs.append(torch.zeros(Hq, D, dtype=torch.float16, device=q.device))
             continue
 
-        # Layout: [Hkv, S, D] → slice valid tokens → permute to NHD [s, Hkv, D]
-        k_b = k_fp[b, :, :s, :].permute(1, 0, 2).contiguous()  # [s, Hkv, D]
-        v_b = v_fp[b, :, :s, :].permute(1, 0, 2).contiguous()  # [s, Hkv, D]
+        # Layout: [H, S, D] → slice valid tokens → permute to NHD [s, H, D]
+        k_b = k_fp[b, :, :s, :].permute(1, 0, 2).contiguous()  # [s, H, D]
+        v_b = v_fp[b, :, :s, :].permute(1, 0, 2).contiguous()  # [s, H, D]
         q_b = q[b]  # [Hq, D]
 
         out_b = flashinfer.decode.single_decode_with_kv_cache(
