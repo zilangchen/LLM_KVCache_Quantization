@@ -155,9 +155,10 @@ per-channel Key + per-token Value 非对称格式上，
     本文的校准目标采用 WikiText-103 上的 attention-KL 散度作为代理损失函数，
     而评测则跨越 WikiText-2 PPL、合成 Needle-in-a-Haystack、
     RULER 13 子任务与 LongBench 16 真实任务等多个 domain 与任务类型。
-    两者之间存在三重 shift：(i) domain shift（general English → synthetic long-context 和 multi-domain QA），
-    (ii) 任务类型 shift（token-level 似然 → needle retrieval、multi-hop reasoning、summarization），
-    (iii) 序列长度 shift（校准典型 $<$4K → 评测至 32K）。
+    两者之间存在三重 shift：
+    (i) domain shift（general English → synthetic long-context），
+    (ii) 任务类型 shift（token-level 似然 → retrieval/reasoning），
+    (iii) 序列长度 shift（校准 $<$4K → 评测 32K）。
     本文采用 WikiText 校准的核心假设是：
     \emph{最小化 WikiText attention-KL 获取的量化参数对下游多任务泛化具有 approximately task-agnostic 的迁移能力}。
     该假设未经形式化证明，仅通过第四章的 4-metric 联合评测进行间接经验支撑，
@@ -325,18 +326,22 @@ Group size 则保持 Key 和 Value 一致。
 对于第 $l$ 层第 $h$ 个注意力头，最优 $\tau^{-1}$ 的选择为：
 \begin{equation}
   \tau^{-1}_{l,h} = \argmin_{\tau^{-1} \in \mathcal{T}}
-  \frac{1}{|\mathcal{D}|} \sum_{(\bq, \bK) \in \mathcal{D}}
-  D_{\KL}\!\left(
-    \bm{p}_{\text{ref}} \,\Big\|\,
-    \softmax\!\left(\frac{\bq \hat{\bK}^T \cdot \tau^{-1}}{\sqrt{d_k}}\right)
-  \right)
+  \;\frac{1}{|\mathcal{D}|} \sum_{(\bq, \bK) \in \mathcal{D}}
+  D_{\KL}\!\bigl(
+    \bm{p}_{\text{ref}} \;\big\|\;
+    \bm{p}_{\tau}\bigr),\quad
+  \bm{p}_{\tau} = \softmax\!\Bigl(\frac{\bq \hat{\bK}^T \cdot \tau^{-1}}{\sqrt{d_k}}\Bigr)
   \label{eq:ch3-invtau-opt}
 \end{equation}
-其中 $\mathcal{D}$ 为校准样本集合，$\hat{\bK}$ 为使用第一阶段确定的 Scale 进行量化——反量化后的 Key 矩阵。
+其中 $\mathcal{D}$ 为校准样本集合，
+$\hat{\bK}$ 为使用第一阶段确定的 Scale
+进行量化与反量化后的 Key 矩阵。
 
 分组查询注意力（GQA）~\cite{ainslie2023gqa}机制下，
 多个 Query 头共享同一个 KV 头。
-设 Query 头数为 $H_q$、KV 头数为 $H_{kv}$，则第 $h$ 个 Query 头对应的 KV 头索引为 $\lfloor h / (H_q / H_{kv}) \rfloor$。
+设 Query 头数为 $H_q$、KV 头数为 $H_{kv}$，
+则第 $h$ 个 Query 头对应的 KV 头索引为
+$\lfloor h / (H_q / H_{kv}) \rfloor$。
 每个 Query 头仍然独立搜索 $\tau^{-1}$，但使用相同的量化 Key 矩阵。
 
 \subsection{算法伪代码}

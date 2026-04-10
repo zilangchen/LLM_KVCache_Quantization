@@ -172,9 +172,11 @@ INT8-ours 在所有模型上均与 FP16 基线保持可比的质量，
   \end{tabular}
   \begin{tablenotes}
     \footnotesize
-    \item 注：1.5B = Qwen2.5-1.5B-Instruct，7B = Qwen2.5-7B-Instruct，8B = LLaMA-3.1-8B-Instruct。
-    评测采用合成 LongBench 数据集（7 类子任务），各行数值为 5 个随机种子的均值。
-    LLaMA-3.1-8B INT4 方案的较高 F1 值可能与该模型在长文本任务上的固有能力差异有关。
+    \item 注：1.5B = Qwen2.5-1.5B-Instruct，
+    7B = Qwen2.5-7B-Instruct，
+    8B = LLaMA-3.1-8B-Instruct。
+    合成 LongBench（7 类子任务），5 seeds 均值。
+    8B INT4 的较高 F1 可能与模型固有能力差异有关。
   \end{tablenotes}
 \end{table}
 
@@ -939,7 +941,8 @@ NarrativeQA 上 INT8-ours 略低（$-$0.43 pp），
   \centering
   \caption{ch4 核心表格的数据溯源映射}
   \label{tab:app-data-provenance}
-  \small
+  \resizebox{\textwidth}{!}{%
+  \scriptsize
   \begin{tabular}{lll}
     \toprule
     \textbf{表标签} & \textbf{实验目录} & \textbf{状态} \\
@@ -964,39 +967,17 @@ NarrativeQA 上 INT8-ours 略低（$-$0.43 pp），
     tab:kivi-int4-threeway   & emnlp\_rolealign\_v2/runs/ruler\_v2fix\_*\_ctx\{8192,16384,32704\}/ & raw (v2fix) \\
     tab:claim-summary        & ---（元表，汇总上述所有 claim 的验证状态）& --- \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}% end resizebox
 \end{table}
 
-\paragraph{v1 vs v2 的数据分工。}
-\texttt{emnlp\_rolealign\_v1} 是 2026-03-25 的第一次 INT4-RoleAlign 全量实验，
-Phase 0A 审计（见 \texttt{iteration.md} 2026-04-01 条目）发现其中 PPL 与 RULER 数据有两处 bug：
-（1）\texttt{eval\_ppl.py} 的 \texttt{build\_kv\_cache} 缺少 \texttt{int4\_ours\_asym} 分支，
-运行时静默 fallback 到 INT8，导致 v1 的 PPL 数字实际是 INT8 水平；
-（2）\texttt{eval\_ruler.py} 缺 \texttt{--seq\_len} 参数，ctx$>$4K 被截断至 4096。
-修复两处 bug 后于 2026-04-02 跑 \texttt{emnlp\_rolealign\_v2}，PPL 与 RULER 数据被完全替换为 v2 真实值。
-\texttt{Needle} 与 \texttt{LongBench} 经 \texttt{generate\_loop.py} 路由，无 bug，因此 v1 的数据保留使用。
-\texttt{v2/tables} 目录为空，是因为 v2 的 runs 直接由论文手动引用而未经 \texttt{aggregate\_results.py} 回填；
-原 raw CSV 位于各 \texttt{runs/*/profile\_ppl\_*.csv} 或 \texttt{profile\_ruler\_*.csv}，
-正文数字（如 \texttt{tab:rolealign-results} 的 PPL 10.58/7.58/6.90）已与 v2 raw 逐 seed 核对一致。
-
-复现流程：给定上表中的任一实验目录 \code{<dir>}，可通过以下命令重新生成
-对应的聚合 CSV、LaTeX 表和图表：
-\begin{verbatim}
-python scripts/aggregate_results.py \
-  --runs_dir results/<dir>/runs \
-  --tables_dir results/<dir>/tables \
-  --plots_dir results/<dir>/plots
-python scripts/export_tables_latex.py \
-  --tables_dir results/<dir>/tables \
-  --out_dir results/<dir>/latex_tables
-\end{verbatim}
-
-由于贪婪解码下 PPL 在同一硬件与软件栈上是位级确定量
-（见第~\ref{subsec:exp-statistics}~节），
-重复运行的 PPL 数值与原表逐位一致；
-其他带种子变异性的指标（Needle/RULER/LongBench）
-其 Bootstrap CI 半宽和中位数由 \code{aggregate\_results.py} 自动计算，
-CSV 文件名遵循 \code{<metric>\_<model>\_<config>.csv} 的常规命名。
+\paragraph{数据版本说明。}
+INT4-RoleAlign 实验经历两个版本：
+v1（2026-03-25）的 PPL 和 RULER 因评测脚本 bug 无效，
+已由 v2（2026-04-02）完全替代；
+Needle 和 LongBench 无 bug，沿用 v1 数据。
+正文表格的所有数字已与 v2 原始 CSV 逐 seed 核对一致。
+贪婪解码下 PPL 为位级确定量（第~\ref{subsec:exp-statistics}~节），
+重复运行结果与原表逐位一致。
 
 \section{实验预期验证状态总结}
 \label{sec:app-claim-summary}
