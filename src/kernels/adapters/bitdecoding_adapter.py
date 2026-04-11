@@ -4,10 +4,18 @@ Strategy: dequant our packed INT4 KV → FP16 → BitDecoding re-packs to its
 own INT4 format → fused Tensor-Core attention via CUTLASS.
 
 BitDecoding (HPCA 2026) uses CUTLASS templates with in-kernel INT4 dequant
-and Tensor Core accumulation, achieving 3-9x speedup over Flash-Decoding.
+and Tensor Core accumulation.
 
-Note: the dequant→repack step adds overhead. A deeper integration would
-store KV directly in BitDecoding's pack format, eliminating this roundtrip.
+API shapes (bit_decode 1.0.0.post1, matching scripts/test_bitdecoding.py):
+  q:         [B, 1, Hq, D]                 fp16
+  k_pack:    [B, S, Hkv, D//8]              int32  (8 nibbles per int32)
+  k_params:  [B, S, Hkv, 2]                 fp16   (scale, zero_point per token)
+  v_pack:    [B, S, Hkv, D//8]              int32
+  v_params:  [B, S, Hkv, 2]                 fp16
+
+Note: BD uses per-token quantization. Our per-channel K scales are LOST
+in the dequant→repack round-trip (BD re-quantizes with its own per-token math).
+This is a system-level comparison, not "same quant different kernel".
 
 Supported kv_modes: int4_ours_asym, int4_ours_asym_ba.
 """
@@ -27,8 +35,8 @@ from src.quant.int4_basic import unpack_int4
 
 # BitDecoding constants
 _BD_NUM_BITS = 4
-_BD_PACK_NUMS = 16 // _BD_NUM_BITS  # 4 nibbles per uint16
 _BD_GROUP_SIZE = 128
+# pack_dim = head_dim // 8 (8 nibbles per int32)
 
 
 def decode_attn_bitdecoding(
@@ -46,8 +54,8 @@ def decode_attn_bitdecoding(
 
     Args:
         q:            [B, Hq, D]        fp16  — query (single decode step)
-        k_packed:     [B, Hkv, S, D//2] int8  — bit-packed INT4 K cache
-        v_packed:     [B, Hkv, S, D//2] int8  — bit-packed INT4 V cache
+        k_packed:     [B, Hkv, S, D//2] int8  — our bit-packed INT4 K cache
+        v_packed:     [B, Hkv, S, D//2] int8  — our bit-packed INT4 V cache
         k_scale:      [B, Hkv, D]       float32 — per-channel K scale
         k_zp:         [B, Hkv, D]       float32 — per-channel K zero-point
         v_scale:      [B, Hkv, S]       float32 — per-token  V scale
@@ -62,25 +70,15 @@ def decode_attn_bitdecoding(
 
     B, Hq, D = q.shape
     Hkv = k_packed.shape[1]
-    S = k_packed.shape[2] * 2  # packed D//2 → D, but S is dim 2 of packed
-
-    # Actually S is the sequence dimension (dim=2 of k_packed)
     S = k_packed.shape[2]
-    # D_packed = k_packed.shape[3] = D // 2
-    D_full = k_packed.shape[3] * 2
+    pack_dim = D // 8  # 8 nibbles per int32
 
     if sm_scale is None:
-        sm_scale = 1.0 / math.sqrt(D_full)
-
-    import os
-    if os.environ.get("BD_DEBUG", ""):
-        print(f"[BD] q={q.shape} k_packed={k_packed.shape} v_packed={v_packed.shape} "
-              f"k_scale={k_scale.shape} v_scale={v_scale.shape} "
-              f"ctx_lens={context_lens} S={S} D={D_full}")
+        sm_scale = 1.0 / math.sqrt(D)
 
     # --- 1. Unpack + dequant our INT4 → FP16 ---
-    k_unpacked = unpack_int4(k_packed)  # [B, Hkv, S, D]
-    v_unpacked = unpack_int4(v_packed)  # [B, Hkv, S, D]
+    k_unpacked = unpack_int4(k_packed)  # [B, Hkv, S, D] int8
+    v_unpacked = unpack_int4(v_packed)  # [B, Hkv, S, D] int8
 
     k_fp = dequantize_asymmetric_per_channel(k_unpacked, k_scale, k_zp).to(
         torch.float16
@@ -94,63 +92,71 @@ def decode_attn_bitdecoding(
     k_bshd = k_fp.permute(0, 2, 1, 3).contiguous()  # [B, S, Hkv, D]
     v_bshd = v_fp.permute(0, 2, 1, 3).contiguous()  # [B, S, Hkv, D]
 
-    # --- 3. Align sequence length for BitDecoding ---
-    # BitDecoding requires S to be a multiple of _BD_PACK_NUMS (4) and
-    # >= _BD_GROUP_SIZE (128).  Pad with zeros if needed.
+    # --- 3. Allocate BD buffers with test_bitdecoding.py layout ---
+    # BitDecoding requires S to be a multiple of group_size (128).
+    # Pad only when strictly necessary.
     max_s = int(context_lens.max().item())
     if max_s <= 0:
-        return torch.zeros(B, Hq, D_full, dtype=torch.float16, device=q.device)
+        return torch.zeros(B, Hq, D, dtype=torch.float16, device=q.device)
 
-    # Round up to nearest multiple of lcm(_BD_PACK_NUMS, _BD_GROUP_SIZE)
-    align = _BD_GROUP_SIZE  # 128 is already a multiple of 4
+    align = _BD_GROUP_SIZE
     padded_s = ((max_s + align - 1) // align) * align
 
-    # Pad FP16 tensors if padded_s > S
+    # If padding needed, extend with last-token repeat (avoid per-token zero-scale NaN)
     if padded_s > S:
         pad_len = padded_s - S
-        k_pad = torch.zeros(B, pad_len, Hkv, D_full, dtype=torch.float16, device=q.device)
-        v_pad = torch.zeros(B, pad_len, Hkv, D_full, dtype=torch.float16, device=q.device)
-        k_slice = torch.cat([k_bshd, k_pad], dim=1)  # [B, padded_s, Hkv, D]
-        v_slice = torch.cat([v_bshd, v_pad], dim=1)
+        # Repeat last token to fill padding (avoids scale=0 → NaN)
+        k_last = k_bshd[:, S - 1:S, :, :].expand(B, pad_len, Hkv, D)
+        v_last = v_bshd[:, S - 1:S, :, :].expand(B, pad_len, Hkv, D)
+        k_slice = torch.cat([k_bshd, k_last], dim=1).contiguous()
+        v_slice = torch.cat([v_bshd, v_last], dim=1).contiguous()
     else:
-        k_slice = k_bshd[:, :padded_s, :, :]
-        v_slice = v_bshd[:, :padded_s, :, :]
+        k_slice = k_bshd[:, :padded_s, :, :].contiguous()
+        v_slice = v_bshd[:, :padded_s, :, :].contiguous()
 
-    # --- 4. Allocate BitDecoding buffers + repack ---
+    # --- 4. Allocate BD packed buffers (matching test_bitdecoding.py) ---
     k_bd_pack = torch.zeros(
-        B, padded_s // _BD_PACK_NUMS, Hkv, D_full,
-        dtype=torch.uint16, device=q.device,
-    )
-    k_bd_params = torch.zeros(
-        B, padded_s // _BD_GROUP_SIZE, Hkv, D_full,
-        dtype=torch.float32, device=q.device,
+        B, padded_s, Hkv, pack_dim,
+        dtype=torch.int32, device=q.device,
     )
     v_bd_pack = torch.zeros(
-        B, padded_s, Hkv, D_full // _BD_PACK_NUMS,
-        dtype=torch.uint16, device=q.device,
+        B, padded_s, Hkv, pack_dim,
+        dtype=torch.int32, device=q.device,
+    )
+    k_bd_params = torch.zeros(
+        B, padded_s, Hkv, 2,
+        dtype=torch.float16, device=q.device,
     )
     v_bd_params = torch.zeros(
-        B, D_full // _BD_GROUP_SIZE, Hkv, padded_s,
-        dtype=torch.float32, device=q.device,
-    )
-    cu_seqlens_k = torch.arange(
-        0, (B + 1) * padded_s, padded_s, dtype=torch.int32, device=q.device,
+        B, padded_s, Hkv, 2,
+        dtype=torch.float16, device=q.device,
     )
 
+    cu_seqlens_k = torch.tensor(
+        [0, padded_s], dtype=torch.int32, device=q.device,
+    )
+
+    # --- 5. Pack with BD's per-token quantization ---
     kvcache_pack_int(
         k_slice, k_bd_pack, k_bd_params,
         v_slice, v_bd_pack, v_bd_params,
-        None, cu_seqlens_k, padded_s,
-        "k-channel", _BD_GROUP_SIZE, _BD_NUM_BITS,
+        cu_seqlens_k=cu_seqlens_k,
+        seqlen_k=padded_s,
+        quant_mode="k-channel",
+        group_size=_BD_GROUP_SIZE,
+        num_bits=_BD_NUM_BITS,
     )
 
-    # --- 5. Call BitDecoding fused attention ---
+    # --- 6. Call BitDecoding fused attention ---
     # q needs shape [B, 1, Hq, D] for BitDecoding
-    q_bd = q.unsqueeze(1)  # [B, 1, Hq, D]
+    q_bd = q.unsqueeze(1).contiguous()  # [B, 1, Hq, D]
 
     out = fwd_kvcache_int(
         q_bd, k_bd_pack, k_bd_params, v_bd_pack, v_bd_params,
-        None, sm_scale, "k-channel", _BD_GROUP_SIZE, _BD_NUM_BITS,
+        softmax_scale=sm_scale,
+        quant_mode="k-channel",
+        group_size=_BD_GROUP_SIZE,
+        num_bits=_BD_NUM_BITS,
     )  # [B, 1, Hq, D]
 
     return out.squeeze(1)  # [B, Hq, D]
