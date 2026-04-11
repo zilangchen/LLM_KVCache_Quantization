@@ -465,6 +465,7 @@ class KIVIStyleKVCache:
                     from src.kernels.triton_quantize_pack_int4 import (
                         fused_quantize_pack_k_int4_inplace,
                         fused_quantize_pack_v_int4_inplace,
+                        fused_quantize_pack_v_int4_pct_inplace,
                         fused_quantize_pack_v_int4_with_bounds,
                     )
                     storage_hd = head_dim // 2
@@ -477,14 +478,25 @@ class KIVIStyleKVCache:
 
                     # V: choose path based on v_percentile
                     if self.v_percentile >= 100.0:
-                        # Pure aminmax path — fully fused inplace kernel
+                        # Pure aminmax — fastest path
                         fused_quantize_pack_v_int4_inplace(
                             v, self._v_cache[layer_id],
                             self._v_scale[layer_id], self._v_zp[layer_id], old_len
                         )
+                    elif self.v_percentile >= 98.0:
+                        # KVC-FUSE-PCT: percentile in [98, 100] needs only
+                        # top-2/bottom-2 (clipping affects < 1 element). Use
+                        # in-kernel reduction (no torch.quantile, no Python).
+                        # This recovers full Triton speedup for production
+                        # calibration files (typically v_percentile=99.9).
+                        fused_quantize_pack_v_int4_pct_inplace(
+                            v, self._v_cache[layer_id],
+                            self._v_scale[layer_id], self._v_zp[layer_id], old_len,
+                            self.v_percentile,
+                        )
                     else:
-                        # Percentile clipping: compute quantile in PyTorch,
-                        # then use bounds-aware Triton kernel for the rest.
+                        # Aggressive clipping (percentile < 98): would need
+                        # top-k for k > 1, falling back to PyTorch quantile.
                         v_f = v.float()
                         q_lo = max(0.0, (100.0 - self.v_percentile) / 100.0)
                         q_hi = min(1.0, self.v_percentile / 100.0)
