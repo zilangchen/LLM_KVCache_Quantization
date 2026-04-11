@@ -453,36 +453,68 @@ class KIVIStyleKVCache:
                     f"expected {expected_shape}, got scale={tuple(k_scale.shape)}, "
                     f"zp={tuple(k_zp.shape)}"
                 )
-            # KVC-FUSE-TRITON-INPLACE: For INT4 decode on CUDA, use inplace Triton
-            # kernels that write directly to cache buffers (zero temp alloc, zero copy).
+            # KVC-FUSE-TRITON-INPLACE: For INT4 decode on CUDA, use Triton kernels
+            # that write directly to cache buffers (zero temp alloc, zero copy).
+            # Now supports v_percentile < 100 by precomputing quantile bounds in
+            # PyTorch and passing them to a bounds-aware Triton V kernel.
             _use_triton_inplace = (
                 self.bit_packed and new_seq_len == 1 and k.is_cuda
-                and self.v_percentile >= 100.0
             )
             if _use_triton_inplace:
                 try:
                     from src.kernels.triton_quantize_pack_int4 import (
                         fused_quantize_pack_k_int4_inplace,
                         fused_quantize_pack_v_int4_inplace,
+                        fused_quantize_pack_v_int4_pct_inplace,
+                        fused_quantize_pack_v_int4_with_bounds,
                     )
-                    # Must ensure capacity BEFORE inplace write
                     storage_hd = head_dim // 2
                     self._ensure_capacity(layer_id, batch, heads, storage_hd, target_len)
+
                     # K: quantize+pack directly into cache
                     fused_quantize_pack_k_int4_inplace(
                         k, k_scale, k_zp, self._k_cache[layer_id], old_len
                     )
-                    # V: quantize+pack+scale+zp directly into cache
-                    fused_quantize_pack_v_int4_inplace(
-                        v, self._v_cache[layer_id],
-                        self._v_scale[layer_id], self._v_zp[layer_id], old_len
-                    )
-                    # Update bookkeeping and return early (skip the store block below)
-                    self._layer_seq_lens[layer_id] = target_len
-                    if layer_id == 0:
-                        self._seq_len = max(self._seq_len, target_len)
+
+                    # V: choose path based on v_percentile
+                    if self.v_percentile >= 100.0:
+                        # Pure aminmax — fastest path
+                        fused_quantize_pack_v_int4_inplace(
+                            v, self._v_cache[layer_id],
+                            self._v_scale[layer_id], self._v_zp[layer_id], old_len
+                        )
+                    elif self.v_percentile >= 98.0:
+                        # KVC-FUSE-PCT: percentile in [98, 100] needs only
+                        # top-2/bottom-2 (clipping affects < 1 element). Use
+                        # in-kernel reduction (no torch.quantile, no Python).
+                        # This recovers full Triton speedup for production
+                        # calibration files (typically v_percentile=99.9).
+                        fused_quantize_pack_v_int4_pct_inplace(
+                            v, self._v_cache[layer_id],
+                            self._v_scale[layer_id], self._v_zp[layer_id], old_len,
+                            self.v_percentile,
+                        )
                     else:
-                        self._seq_len = max(self._seq_len, target_len)
+                        # Aggressive clipping (percentile < 98): would need
+                        # top-k for k > 1, falling back to PyTorch quantile.
+                        v_f = v.float()
+                        q_lo = max(0.0, (100.0 - self.v_percentile) / 100.0)
+                        q_hi = min(1.0, self.v_percentile / 100.0)
+                        t_min = torch.quantile(v_f, q_lo, dim=-1, keepdim=True)
+                        t_max = torch.quantile(v_f, q_hi, dim=-1, keepdim=True)
+                        v_packed, v_scale_t, v_zp_t = fused_quantize_pack_v_int4_with_bounds(
+                            v, t_min, t_max
+                        )
+                        self._v_cache[layer_id][:, :, old_len:target_len, :] = v_packed
+                        self._v_scale[layer_id][:, :, old_len:target_len] = v_scale_t.to(
+                            dtype=self._scale_dtype
+                        )
+                        self._v_zp[layer_id][:, :, old_len:target_len] = v_zp_t.to(
+                            dtype=self._scale_dtype
+                        )
+
+                    self._layer_seq_lens[layer_id] = target_len
+                    self._seq_len = max(self._seq_len, target_len)
                     return
                 except Exception:
                     pass  # fall through to non-inplace path

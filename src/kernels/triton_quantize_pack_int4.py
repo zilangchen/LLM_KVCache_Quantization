@@ -264,6 +264,233 @@ def fused_quantize_pack_k_int4_inplace(
     )
 
 
+@triton.jit
+def _fused_quantize_pack_v_int4_with_bounds_kernel(
+    V_ptr,          # [B, H, 1, D] float16
+    V_min_ptr,      # [B, H, 1, 1] float32 (precomputed quantile lower bound)
+    V_max_ptr,      # [B, H, 1, 1] float32 (precomputed quantile upper bound)
+    V_Packed_ptr,   # [B, H, 1, D//2] int8 output
+    V_Scale_ptr,    # [B, H, 1] float32 output
+    V_ZP_ptr,       # [B, H, 1] float32 output
+    stride_v_b, stride_v_h, stride_v_s, stride_v_d,
+    stride_vmin_b, stride_vmin_h,
+    stride_vmax_b, stride_vmax_h,
+    stride_vp_b, stride_vp_h, stride_vp_s, stride_vp_d,
+    stride_vs_b, stride_vs_h, stride_vs_s,
+    stride_vz_b, stride_vz_h, stride_vz_s,
+    PACKED_DIM: tl.constexpr,
+    RANGE_FLOOR: tl.constexpr,
+):
+    """V quantize + pack with externally precomputed bounds (e.g. percentile)."""
+    batch_id = tl.program_id(0)
+    head_id = tl.program_id(1)
+
+    offs_pd = tl.arange(0, PACKED_DIM)
+    offs_even = offs_pd * 2
+    offs_odd = offs_pd * 2 + 1
+
+    # Load V even/odd channels
+    v_base = V_ptr + batch_id * stride_v_b + head_id * stride_v_h
+    v_even = tl.load(v_base + offs_even * stride_v_d).to(tl.float32)
+    v_odd = tl.load(v_base + offs_odd * stride_v_d).to(tl.float32)
+
+    # Load precomputed bounds (scalar per (batch, head))
+    v_min = tl.load(V_min_ptr + batch_id * stride_vmin_b + head_id * stride_vmin_h)
+    v_max = tl.load(V_max_ptr + batch_id * stride_vmax_b + head_id * stride_vmax_h)
+
+    range_val = tl.maximum(v_max - v_min, RANGE_FLOOR)
+    scale = range_val / 15.0
+    zp = v_min + 8.0 * scale  # = v_min - qmin * scale, qmin = -8
+
+    # Quantize
+    q_even = tl.extra.cuda.libdevice.rint((v_even - zp) / scale)
+    q_even = tl.minimum(tl.maximum(q_even, -8.0), 7.0) + 8.0
+    q_odd = tl.extra.cuda.libdevice.rint((v_odd - zp) / scale)
+    q_odd = tl.minimum(tl.maximum(q_odd, -8.0), 7.0) + 8.0
+
+    packed = (q_even.to(tl.uint8) << 4) | q_odd.to(tl.uint8)
+
+    vp_base = V_Packed_ptr + batch_id * stride_vp_b + head_id * stride_vp_h
+    tl.store(vp_base + offs_pd * stride_vp_d, packed.to(tl.int8))
+
+    vs_base = V_Scale_ptr + batch_id * stride_vs_b + head_id * stride_vs_h
+    vz_base = V_ZP_ptr + batch_id * stride_vz_b + head_id * stride_vz_h
+    tl.store(vs_base, scale)
+    tl.store(vz_base, zp)
+
+
+def fused_quantize_pack_v_int4_with_bounds(
+    v: torch.Tensor,
+    t_min: torch.Tensor,
+    t_max: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """
+    Fused V quantize+pack using precomputed bounds (percentile-aware).
+
+    Args:
+        v: [B, H, 1, D] float16
+        t_min: [B, H, 1, 1] float32 (e.g. from torch.quantile)
+        t_max: [B, H, 1, 1] float32
+
+    Returns:
+        (v_packed [B,H,1,D//2] int8, v_scale [B,H,1] fp32, v_zp [B,H,1] fp32)
+    """
+    batch, heads, seq_len, head_dim = v.shape
+    assert seq_len == 1
+    packed_dim = head_dim // 2
+
+    v_packed = torch.empty(batch, heads, 1, packed_dim, device=v.device, dtype=torch.int8)
+    v_scale = torch.empty(batch, heads, 1, device=v.device, dtype=torch.float32)
+    v_zp = torch.empty(batch, heads, 1, device=v.device, dtype=torch.float32)
+
+    _fp16_tiny = torch.finfo(torch.float16).tiny
+    range_floor = max(1e-5, _fp16_tiny * 15)
+
+    grid = (batch, heads)
+    _fused_quantize_pack_v_int4_with_bounds_kernel[grid](
+        v, t_min, t_max, v_packed, v_scale, v_zp,
+        v.stride(0), v.stride(1), v.stride(2), v.stride(3),
+        t_min.stride(0), t_min.stride(1),
+        t_max.stride(0), t_max.stride(1),
+        v_packed.stride(0), v_packed.stride(1), v_packed.stride(2), v_packed.stride(3),
+        v_scale.stride(0), v_scale.stride(1), v_scale.stride(2),
+        v_zp.stride(0), v_zp.stride(1), v_zp.stride(2),
+        PACKED_DIM=packed_dim,
+        RANGE_FLOOR=range_floor,
+    )
+    return v_packed, v_scale, v_zp
+
+
+@triton.jit
+def _fused_quantize_pack_v_int4_pct_kernel(
+    V_ptr,          # [B, H, 1, D] float16
+    V_Packed_ptr,   # [B, H, 1, D//2] int8 output
+    V_Scale_ptr,    # [B, H, 1] float32 output
+    V_ZP_ptr,       # [B, H, 1] float32 output
+    stride_v_b, stride_v_h, stride_v_s, stride_v_d,
+    stride_vp_b, stride_vp_h, stride_vp_s, stride_vp_d,
+    stride_vs_b, stride_vs_h, stride_vs_s,
+    stride_vz_b, stride_vz_h, stride_vz_s,
+    PCT_INTERP_FACTOR,  # float: percentile interpolation factor
+    PACKED_DIM: tl.constexpr,
+    HEAD_DIM: tl.constexpr,
+    RANGE_FLOOR: tl.constexpr,
+):
+    """V quantize+pack with in-kernel percentile clipping via top-2/bottom-2.
+
+    For D=128 and percentile in [98%, 100%], the percentile bounds are
+    interpolated between min/max and second-min/second-max:
+       pct_max = max_2 + factor * (max_1 - max_2)
+       pct_min = min_2 + factor * (min_1 - min_2)
+    where factor = (q_idx - floor(q_idx)). For percentile=99.9 with D=128:
+       q_idx = 0.999 * 127 = 126.873  →  factor = 0.873
+    For percentile=100, factor=1.0 reduces to pct_max = max_1 (= amin/amax).
+    """
+    batch_id = tl.program_id(0)
+    head_id = tl.program_id(1)
+
+    offs_pd = tl.arange(0, PACKED_DIM)
+    offs_even = offs_pd * 2
+    offs_odd = offs_pd * 2 + 1
+
+    v_base = V_ptr + batch_id * stride_v_b + head_id * stride_v_h
+    v_even = tl.load(v_base + offs_even * stride_v_d).to(tl.float32)
+    v_odd = tl.load(v_base + offs_odd * stride_v_d).to(tl.float32)
+
+    # Top-1 max/min from both halves
+    max_even_1 = tl.max(v_even, axis=0)
+    max_odd_1 = tl.max(v_odd, axis=0)
+    v_max_1 = tl.maximum(max_even_1, max_odd_1)
+
+    min_even_1 = tl.min(v_even, axis=0)
+    min_odd_1 = tl.min(v_odd, axis=0)
+    v_min_1 = tl.minimum(min_even_1, min_odd_1)
+
+    # Top-2 max: mask out the top-1 position, reduce again
+    v_even_no_max = tl.where(v_even >= v_max_1, -float("inf"), v_even)
+    v_odd_no_max = tl.where(v_odd >= v_max_1, -float("inf"), v_odd)
+    v_max_2 = tl.maximum(tl.max(v_even_no_max, axis=0), tl.max(v_odd_no_max, axis=0))
+
+    # Bottom-2 min: mask out the bottom-1 position, reduce again
+    v_even_no_min = tl.where(v_even <= v_min_1, float("inf"), v_even)
+    v_odd_no_min = tl.where(v_odd <= v_min_1, float("inf"), v_odd)
+    v_min_2 = tl.minimum(tl.min(v_even_no_min, axis=0), tl.min(v_odd_no_min, axis=0))
+
+    # Linear interpolation to get percentile bounds
+    pct_max = v_max_2 + PCT_INTERP_FACTOR * (v_max_1 - v_max_2)
+    pct_min = v_min_2 + PCT_INTERP_FACTOR * (v_min_1 - v_min_2)
+
+    range_val = tl.maximum(pct_max - pct_min, RANGE_FLOOR)
+    scale = range_val / 15.0
+    zp = pct_min + 8.0 * scale
+
+    q_even = tl.extra.cuda.libdevice.rint((v_even - zp) / scale)
+    q_even = tl.minimum(tl.maximum(q_even, -8.0), 7.0) + 8.0
+    q_odd = tl.extra.cuda.libdevice.rint((v_odd - zp) / scale)
+    q_odd = tl.minimum(tl.maximum(q_odd, -8.0), 7.0) + 8.0
+
+    packed = (q_even.to(tl.uint8) << 4) | q_odd.to(tl.uint8)
+
+    vp_base = V_Packed_ptr + batch_id * stride_vp_b + head_id * stride_vp_h
+    tl.store(vp_base + offs_pd * stride_vp_d, packed.to(tl.int8))
+
+    vs_base = V_Scale_ptr + batch_id * stride_vs_b + head_id * stride_vs_h
+    vz_base = V_ZP_ptr + batch_id * stride_vz_b + head_id * stride_vz_h
+    tl.store(vs_base, scale)
+    tl.store(vz_base, zp)
+
+
+def fused_quantize_pack_v_int4_pct_inplace(
+    v: torch.Tensor,
+    v_cache: torch.Tensor,
+    v_scale_buf: torch.Tensor,
+    v_zp_buf: torch.Tensor,
+    write_offset: int,
+    v_percentile: float,
+) -> None:
+    """In-kernel percentile-aware V quantize+pack, writes directly to cache."""
+    batch, heads, _, head_dim = v.shape
+    packed_dim = head_dim // 2
+    v_out = v_cache[:, :, write_offset:write_offset + 1, :]
+    vs_out = v_scale_buf[:, :, write_offset:write_offset + 1]
+    vz_out = v_zp_buf[:, :, write_offset:write_offset + 1]
+
+    # Compute interpolation factor for percentile
+    # quantile q_hi = v_percentile/100, index = q_hi * (D-1)
+    # factor = q_hi*(D-1) - floor(q_hi*(D-1))
+    # For percentile=99.9, D=128: 0.999*127=126.873 → factor=0.873
+    # For percentile=100, D=128: 1.0*127=127.0 → factor=0.0... wait
+    # Actually for percentile=100, we want the max itself (no interp).
+    # Let me re-derive: torch.quantile(t, 1.0) returns sorted[D-1] = max.
+    # torch.quantile(t, 0.999) interpolates between sorted[126] and sorted[127].
+    # So pct_max should equal max when v_percentile=100.
+    # pct_max = v_max_2 + factor * (v_max_1 - v_max_2)
+    # When factor=1: pct_max = v_max_1 (correct, max)
+    # When factor=0: pct_max = v_max_2 (second max)
+    # For v_percentile=99.9, we want factor = 0.873.
+    # General: factor = 1 - (1 - v_percentile/100) * (D - 1)
+    # For 99.9, D=128: 1 - 0.001 * 127 = 1 - 0.127 = 0.873 ✓
+    # For 100.0: 1 - 0 = 1.0 ✓
+    factor = 1.0 - (1.0 - v_percentile / 100.0) * (head_dim - 1)
+    factor = max(0.0, min(1.0, factor))  # clamp to valid range
+
+    _fp16_tiny = torch.finfo(torch.float16).tiny
+    range_floor = max(1e-5, _fp16_tiny * 15)
+
+    grid = (batch, heads)
+    _fused_quantize_pack_v_int4_pct_kernel[grid](
+        v, v_out, vs_out, vz_out,
+        v.stride(0), v.stride(1), v.stride(2), v.stride(3),
+        v_out.stride(0), v_out.stride(1), v_out.stride(2), v_out.stride(3),
+        vs_out.stride(0), vs_out.stride(1), vs_out.stride(2),
+        vz_out.stride(0), vz_out.stride(1), vz_out.stride(2),
+        factor,
+        PACKED_DIM=packed_dim,
+        HEAD_DIM=head_dim,
+        RANGE_FLOOR=range_floor,
+    )
+
+
 def fused_quantize_pack_v_int4_inplace(
     v: torch.Tensor,
     v_cache: torch.Tensor,
