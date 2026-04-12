@@ -457,9 +457,13 @@ def generate_from_ids(
             "'int4_ours_asym', 'int4_ours_asym_ba']."
         )
 
+    # BitDecoding adapter removed: bit_decode v1.0.0.post1 has GQA-incompatible
+    # CUTLASS kernels (verified via bit_decode's own test_bitdecoding.py producing
+    # max_diff=1.23 vs FP16 reference). BD is retained only as an external TPOT
+    # reference via scripts/tpot_bitdecoding_e2e.py (standalone, not a backend).
     _valid_impls = {"triton_fused", "torch_ref", "triton_int4_asym",
                      "triton_int4_asym_v2", "triton_int4_asym_gqa",
-                     "flashinfer", "bitdecoding"}
+                     "flashinfer"}
     if decode_attn_impl not in _valid_impls:
         raise ValueError(
             f"decode_attn_impl='{decode_attn_impl}' not supported. "
@@ -496,14 +500,6 @@ def generate_from_ids(
             f"decode_attn_impl='flashinfer' only supports kv_mode in "
             f"{{int4_ours_asym, int4_ours_asym_ba}}, got '{kv_mode}'."
         )
-    if decode_attn_impl == "bitdecoding" and kv_mode not in (
-        "int4_ours_asym", "int4_ours_asym_ba",
-    ):
-        raise ValueError(
-            f"decode_attn_impl='bitdecoding' only supports kv_mode in "
-            f"{{int4_ours_asym, int4_ours_asym_ba}}, got '{kv_mode}'."
-        )
-
     if kv_mode == "kivi_style":
         import warnings
 
@@ -689,7 +685,7 @@ def generate_from_ids(
             kv_mode in _INT4_ASYM_FUSABLE
             and decode_attn_impl in ("triton_fused", "triton_int4_asym",
                                     "triton_int4_asym_v2", "triton_int4_asym_gqa",
-                                    "flashinfer", "bitdecoding")
+                                    "flashinfer")
         )
         if _use_fused:
             if kv_mode == "int8_ours":
@@ -1066,7 +1062,7 @@ def generate_from_ids(
             kv_cache.decode_attn_impl = decode_attn_impl
             if decode_attn_impl not in ("torch_ref", "triton_fused", "triton_int4_asym",
                                         "triton_int4_asym_v2", "triton_int4_asym_gqa",
-                                        "flashinfer", "bitdecoding"):
+                                        "flashinfer"):
                 import warnings
                 warnings.warn(
                     f"kv_mode='{kv_mode}': unknown decode_attn_impl='{decode_attn_impl}', "
