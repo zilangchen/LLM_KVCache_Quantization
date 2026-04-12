@@ -182,7 +182,22 @@ gen=64, runs=10, warmup=5, **数据稳定 (std < 1.5 ms)**
 
 ---
 
-## 六、论文叙事方向已确定：Option D
+## 六、论文叙事方向已确定：Option D'（经 Codex 审查修订）
+
+> **注意**: 原 Option D 经过 Codex adversarial review 修正为 D'。
+> `docs/option_d_plan.md` 已更新，所有修订点用 `[D' 修订]` 标注。
+> **核心修正**: behavior-aligned 是统一原则（不被 GQA 替换），Hkv 是解释变量。
+
+### D' 相对 D 的 8 条修正
+
+1. **主线融合不替换**：Attention-KL 统一原则 + Hkv 解释变量（保住 INT8 位置）
+2. **Hkv ≠ 模型规模**：显式区分共变 vs 因果（8B 长序列补跑中验证同 Hkv=8 crossover 一致）
+3. **hedge "首个" claim**："据我们所知" 而非绝对首创
+4. **Ch3 不泄漏数字**：cost intuition only，具体数字归 Ch4
+5. **14B 口径精确**：Needle 到 32K，RULER 只到 16K，分开写
+6. **C4 拆分 + BD 降级**：C4 聚焦 Phase Boundary，BD 降为 ~1 页 limitation
+7. **Ch2 重组 3 条线**：~60-80 行，不是 10 行
+8. **7B KL=MSE provenance**：先 aggregate 到 appendix table
 
 ### 核心转型
 
@@ -292,5 +307,15 @@ cat docs/session_findings_2026-04-12.md
 
 ---
 
-_最后更新: 2026-04-12 14:34_
-_状态: 所有实验完成, 论文方向确定, 待新 session 执行 Option D_
+### 正在补跑的实验（新 session 启动前应该已完成）
+
+**8B 长序列 TPOT** (PID=3464, ~1h, 16 测试)
+- 目的：验证 Hkv vs 模型规模的因果分离（8B Hkv=8 vs 14B Hkv=8, 同 Hkv 不同规模）
+- 如果 8B 和 14B 的 Phase Boundary crossover 一致 → Hkv 主导假设成立
+- 数据位置：`results/emnlp_p012_batch/runs/longseq_*_8b_s*`
+- 脚本：`scripts/batch_p012/stage_8b_longseq.sh`
+
+---
+
+_最后更新: 2026-04-12 14:50_
+_状态: 所有主实验完成 + 8B 长序列补跑中 (~1h), 论文方向确定 (Option D'), 待新 session 执行_

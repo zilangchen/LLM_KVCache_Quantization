@@ -1,16 +1,43 @@
-# Option D 实施计划：GQA 中心叙事重构
+# Option D' 实施计划：GQA 中心叙事重构（Codex 审查修订版）
+
+> **⚠️ 本文件已根据 Codex adversarial review 修订为 D' 版本。**
+> 原 Option D 的方向是对的（以 Hkv 为分析轴），但存在 7 个需要修正的问题。
+> 以下用 `[D' 修订]` 标注所有修改点。
+
+## D' Revision Summary (Codex 审查修正)
+
+| # | 原 Option D 问题 | D' 修正 |
+|---|-----------------|---------|
+| 1 | 主线从 behavior-aligned 替换成了纯 GQA paper | **融合不替换**：Attention-KL 是统一原则，Hkv 是解释变量 |
+| 2 | Hkv 与模型规模写成等价 | **显式区分**：两者共变但不等价。补 8B 长序列验证"同 Hkv=8 不同规模 crossover 一致" |
+| 3 | "首个/universally safe" 措辞太硬 | **hedge**："据我们所知"+"across all tested scales" |
+| 4 | Ch3 泄漏具体实验数字 | **删除数字**：Ch3 只保留 cost intuition + mechanism |
+| 5 | 14B Needle 32K + RULER 96-99% 并排 | **分开写**：Needle 到 32K，RULER 只到 16K |
+| 6 | C4 塞了 4 个子项，C5 里 BD 升为主 Finding | **拆 C4** + **降级 BD** 为 ~1 页 limitation |
+| 7 | Ch2 改 10 行偏乐观 | **重组为 3 条线** |
+| 8 | 7B KL=MSE 数据无可引用产物 | **先 aggregate 到 appendix table** |
+
+---
 
 ## 一、总体叙事转型
 
 ### 原叙事（当前论文）
 > "KV Cache 量化校准目标的有效性呈 bit-width 依赖。我们以 Attention-KL 为核心视角，在 INT8 上建立校准参考，在 INT4 上通过诊断识别 Key 主导退化，最终给出行为引导的 RoleAlign 实例化。"
 
-**问题**：这是一个"方法-诊断-修复"的工程叙事。缺乏统一的研究主线。审稿人会问："和 KIVI/KVQuant 有什么本质区别？"
+**问题**：这是一个"方法-诊断-修复"的工程叙事。缺乏统一的研究主线。
 
-### 新叙事（Option D）
-> "GQA (Grouped Query Attention) 已成为主流 LLM 架构，但其核心参数 $H_{kv}$（KV 头数）对 KV Cache 量化行为的影响**从未被系统研究**。本文以 $H_{kv}$ 为架构变量，揭示其如何同时决定校准灵敏度、Key 退化幅度、量化 kernel 效率的 crossover 点以及温度校正的有效方向。基于这些发现，我们在 KIVI-style 格式上给出行为引导的 INT4 实例化 RoleAlign，并为不同 $H_{kv}$ 的模型提供**架构感知**的部署建议。"
+### 新叙事（Option D'）
 
-**转型的核心动作**：把 $H_{kv}$ 从"附带分析变量"提升为"论文的 X 轴"——所有 finding 都沿 $H_{kv}$（或等价的模型规模/GQA 比例）变化。
+> [D' 修订] 核心句（采纳 Codex 建议版本）：
+
+> "本文研究 **GQA 架构下的 behavior-aligned KV cache quantization**。Attention-KL 是**统一的校准与诊断原则**，而 $H_{kv}$ 是解释低比特失效、温度校正分化和融合解码效率 crossover 的**关键结构变量**。INT8 提供 canonical validation，INT4-RoleAlign 是 low-bit instantiation，14B 与 BitDecoding 结果用于外部效度与边界分析。"
+
+**转型的核心动作**：把 $H_{kv}$ 从"附带分析变量"提升为"低比特行为的组织轴"——但**不替换** behavior-aligned 主线。INT8 路线保持 canonical instance 地位。
+
+> [D' 修订] 删除原文 "或等价的模型规模/GQA 比例" ← 这是概念错误。
+> Hkv 与模型规模在我们的 4 个模型中共变，但不是因果等价。
+> 论文中需要显式论证：8B (Hkv=8) 和 14B (Hkv=8) 在同 Hkv 下 Phase 1 crossover 一致
+> (Δ=-0.39 vs Δ=-0.40)，支持 Hkv 主导假设。8B 长序列数据正在补跑。
 
 ---
 
@@ -137,6 +164,17 @@ PPL 退化随模型规模减弱（1.5B: 13.7\%，7B: 6.0\%，8B: 2.4\%，14B: 7.
 % [改动点：完全新增！原"经验观察"升级 + Phase Boundary + in-kernel pct + 部署建议]
 % [数据来源：Stage 7 rerun, Session 1 commit ecc6f5f, Phase 1 TPOT]
 
+% [D' 修订] C4 太杂（4 个子项）。Codex 建议拆分：
+%   - inv_tau 保留为"经验观察"（不升为 C4 的 lead item）
+%   - Phase Boundary + deployment advice 是 C4 的核心
+%   - in-kernel percentile 作为方法贡献放 Ch3，不放 C4 bullet
+%   - 或者 C4 只保留 Phase Boundary + deployment，inv_tau 和 in-kernel pct 各归原位
+
+% [D' 修订] Codex 指出 "据我们所知" 比 "首个" 更安全。
+%   KIVI 自称 comprehensive study，ACL 2025 有 Outlier Tokens Tracing。
+%   改为："据我们所知，现有工作尚未将 Hkv 作为统一解释变量，联合分析
+%   校准目标灵敏度、K/V 退化不对称性、温度校正方向和 kernel crossover。"
+
 \textbf{贡献五：大模型长上下文的验证与外部系统局限性。}
 \begin{itemize}
   \item 14B 模型在 32K 上下文下 Needle 100\%、RULER 96.6\%，
@@ -151,6 +189,15 @@ PPL 退化随模型规模减弱（1.5B: 13.7\%，7B: 6.0\%，8B: 2.4\%，14B: 7.
     这一负面结果表明 single-shot cosine similarity 不足以验证
     INT4 attention kernel 的正确性。
 \end{itemize}
+
+% [D' 修订] Codex: BD 不该拿走 C5 的 spotlight。
+%   BD 降级为 ~1 页 limitation/engineering case study。
+%   C5 的主角应该是 "14B 外部验证"（Needle 32K 100%, RULER ≤16K 96-99%）。
+%   BD 作为"顺带发现的方法论教训"附在后面。
+
+% [D' 修订] 14B 口径精确化：
+%   ✗ "Needle 32K 100%、RULER 96--99%" 并排（读者误以为 RULER 也到 32K）
+%   ✓ "Needle 100% (4K--32K 全通过); RULER 96.6--98.5% (4K--16K, 32K 因显存限制未测)"
 
 % [改动点：完全新增！14B 验证 + FP16 baseline + BD 限制]
 % [数据来源：Stage 5, 1.5B fp16 RULER, BD diagnostic]
@@ -204,6 +251,13 @@ $H_{kv}$ 大时趋同）、Key 退化的相对幅度、温度校正 $\tau^{-1}$ 
 ### 修改点 2：相关工作表格（L365 附近）
 
 在 related work 比较表中增加列 "GQA behavior analysis"，标注所有现有方法均为 "—"（无），本文为 "$H_{kv}$ 多维度分析"。
+
+> [D' 修订] Codex: Ch2 改 10 行不够。
+> 如果论文定位变为 "behavior-aligned under GQA"，Ch2 需要重组为 3 条线：
+>   1. KV quantization / calibration methods (KIVI, KVQuant, QuIP, etc.)
+>   2. K/V asymmetry / low-bit rescue (GEAR, MixedKV, etc.)
+>   3. GQA-aware inference efficiency (FlashDecoding, PagedAttention, etc.)
+> 工作量修正：~60-80 行重组（非 10 行扩写）。
 
 ---
 
@@ -275,6 +329,13 @@ $\Delta_{\text{TPOT}}(\text{triton\_ra}) = \Delta_{\text{TPOT}}(\text{torch\_ref
 **位置**：新 subsection，在 L883 "GQA 支持机制" 之后
 **改动量**：~40 行新增
 **依赖**：Ch4 的实验数据（交叉引用）
+
+> [D' 修订] Codex 指出：Ch3 **不要写具体数字**（如 "32K 快 40%"、"TPOT -31%"、"53/53"）。
+> 以上 LaTeX 建议中的具体数字应替换为 cost intuition 描述：
+>   - "32K 快 40%" → "随序列长度增长，带宽节省效应逐渐主导"
+>   - "-31%" → "显著降低了量化步骤的延迟开销"
+>   - "53/53" → "通过单元测试验证数值正确性"
+> 所有具体数字留给 Ch4 实验章。
 
 ### 修改点 5：新增 in-kernel percentile 方法描述
 
