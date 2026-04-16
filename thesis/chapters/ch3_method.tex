@@ -147,7 +147,7 @@ per-channel Key + per-token Value 非对称格式上，
     实验结果（第四章）显示该产物对 INT8 量化的影响有限
     （PPL 退化 $-$0.20\%，Needle 100\%），
     但完整预处理后的重校准对比验证尚未完成（特别是 RULER / LongBench 上的验证），列为未来工作。
-    因此本文 Finding 4 (C5) 的定量数字基于 v3\_quick 校准产物获得，
+    因此本文温度校正消融的定量数字基于 v3\_quick 校准产物获得，
     完整重校准后的数值可能存在小幅偏移。
     校准产物使用 128 条 WikiText-103 样本离线生成，各模型独立校准。
 
@@ -890,6 +890,15 @@ Value 使用 per-token Scale（对所有 channel 共享），
 并通过奇偶 lane 分裂规避 per-channel 反量化中的 Scale 广播冲突，验证了算法路径的数值正确性；
 其 Tensor-core 并行潜力与 BitDecoding~\cite{du2026bitdecoding} 的 NVFP4 设计互为补充，
 后者在硬件资源利用维度展示了进一步优化空间但依赖 NVFP4 数值格式与 Blackwell 架构支持。
+
+\emph{与 KIVI Residual Buffer 的对比}：
+KIVI~\cite{liu2024kivi} 推荐将最近 $R$ 个 token 保持 FP16（Residual Buffer），
+仅对更早的 token 执行 INT4 量化，由此在缓存中形成 INT4/FP16 混合格式。
+融合核函数若要处理该混合布局，需要对量化区和 FP16 区分别加载、
+分别计算注意力后再合并，增加了 kernel 设计的复杂度。
+本文的 RoleAlign 采用离线校准确定静态 Scale，
+所有 token（含 decode 阶段新增 token）均以统一 INT4 格式存储，
+无需 Residual Buffer，使得单一融合核函数即可处理整个 KV Cache。
 
 \paragraph{核内近似 Percentile}
 \label{para:ch3-in-kernel-pct}

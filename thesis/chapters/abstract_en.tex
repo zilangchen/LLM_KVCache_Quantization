@@ -29,10 +29,11 @@ reconverge on a larger one ($H_{kv}=4$). Controlled
 diagnosis shows INT4 degradation is Key-dominated---on the
 14B model, preserving Key in FP16 recovers 93\% of PPL
 degradation---while Needle retrieval and PPL consistently
-decouple across all four models. Guided by these diagnostics,
-we instantiate INT4-RoleAlign on KIVI's~\cite{liu2024kivi}
-per-channel Key + per-token Value asymmetric format via
-offline attention-KL search. Across all four models,
+decouple across all four models. The diagnosis naturally points to a per-channel Key +
+per-token Value asymmetric format---the same format
+independently proposed by KIVI~\cite{liu2024kivi} from
+engineering observation. We instantiate INT4-RoleAlign on
+this format via offline attention-KL search. Across all four models,
 RoleAlign preserves 100\% Needle retrieval at roughly 73\%
 KV cache compression, with PPL degradation decreasing with
 scale (1.5B: 13.7\%; 7B: 6.0\%; 8B: 2.4\%). The 14B model
