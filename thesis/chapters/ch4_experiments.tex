@@ -694,7 +694,7 @@ $\tau^{-1}$ 仅调整分布形态。
 
 校准需要多少样本？
 在 Qwen2.5-1.5B 和 Qwen2.5-7B 上，
-分别使用 16、64、256 条 WikiText-103 样本做 KL 校准，
+分别使用 16、64、256 条 WikiText-2 样本做 KL 校准，
 对比量化后的 PPL、Needle 和 LongBench。
 
 \begin{table}[htbp]
@@ -721,7 +721,7 @@ $\tau^{-1}$ 仅调整分布形态。
   \begin{tablenotes}
     \small
     \item 注：所有配置使用相同的 KL 散度校准目标和 adaptive static scale 保护。
-    校准样本为 WikiText-103 的前 $N$ 条文本。
+    校准样本为 WikiText-2 的前 $N$ 条文本。
     LongBench 分数以 $\times$100 显示。
   \end{tablenotes}
   \end{threeparttable}
@@ -1965,7 +1965,7 @@ BitDecoding 作为工程案例记录，不纳入主 Finding。
 PPL 退化随模型规模总体减弱（1.5B: 13.7\%，7B: 6.1\%，8B: 2.4\%），
 但 14B 的退化（7.6\%）高于 8B（2.4\%），打破了单调趋势。
 可能的解释包括：
-（a）校准数据量（128 条 WikiText-103）对 14B 可能不足；
+（a）校准数据量（128 条 WikiText-2）对 14B 可能不足；
 （b）Qwen 与 LLaMA 模型族在 outlier 分布上的差异；
 （c）14B 的层数（40 层 vs 8B 的 32 层）导致量化误差更多累积机会。
 该非单调现象不影响核心结论（14B Needle 仍为 100\%），
@@ -2026,7 +2026,7 @@ $H_{kv}$ 与模型规模部分共变（1.5B/$H_{kv}$=2, 7B/4, 8B/8, 14B/8）。
 Phase Boundary 在 A100/H100 上可能因 SM 数量和带宽比不同而移位。
 
 \textbf{TTV-4：校准数据分布依赖。}
-仅用 WikiText-103（128 条样本）校准。
+仅用 WikiText-2（128 条样本）校准。
 代码、多语言等分布外数据的适用性未验证。
 
 \textbf{TTV-5：单实现威胁。}

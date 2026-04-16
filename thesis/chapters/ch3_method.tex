@@ -88,7 +88,7 @@ per-channel Key + per-token Value 非对称格式上，
     note/.style={font=\scriptsize, text=black!55},
   ]
   % Row 1: Input
-  \node[data] (wiki) at (0, 0) {校准数据\\[-2pt]\scriptsize WikiText-103};
+  \node[data] (wiki) at (0, 0) {校准数据\\[-2pt]\scriptsize WikiText-2};
   \node[proc] (fwd) at (3.5, 0) {FP16 前向传播\\[-2pt]\scriptsize 提取 Q/K/V};
 
   % Row 2: Search (two paths)
@@ -135,7 +135,7 @@ per-channel Key + per-token Value 非对称格式上，
 \end{figure}
 \begin{enumerate}[label=(\arabic*)]
   \item \textbf{校准数据采集}：
-    使用 FP16 精度的参考模型在校准数据集（如 WikiText-103~\cite{merity2016wikitext} 的子集）上执行前向传播，
+    使用 FP16 精度的参考模型在校准数据集（如 WikiText-2~\cite{merity2016wikitext} 的子集）上执行前向传播，
     逐层提取 Query 向量 $\bQ$、Key 矩阵 $\bK$ 和 Value 矩阵 $\bV$。
     其中，Query 向量需经过输入层归一化（input layer normalization）和旋转位置编码（Rotary Position Embedding, RoPE）~\cite{su2024rope} 处理，
     使校准时的 $\bQ \bK^T$ 点积与实际推理时一致。
@@ -149,10 +149,10 @@ per-channel Key + per-token Value 非对称格式上，
     但完整预处理后的重校准对比验证尚未完成（特别是 RULER / LongBench 上的验证），列为未来工作。
     因此本文温度校正消融的定量数字基于 v3\_quick 校准产物获得，
     完整重校准后的数值可能存在小幅偏移。
-    校准产物使用 128 条 WikiText-103 样本离线生成，各模型独立校准。
+    校准产物使用 128 条 WikiText-2 样本离线生成，各模型独立校准。
 
     \paragraph{校准-评测的 task transfer 假设}
-    本文的校准目标采用 WikiText-103 上的 attention-KL 散度作为代理损失函数，
+    本文的校准目标采用 WikiText-2 上的 attention-KL 散度作为代理损失函数，
     而评测则跨越 WikiText-2 PPL、合成 Needle-in-a-Haystack、
     RULER 13 子任务与 LongBench 16 真实任务等多个 domain 与任务类型。
     两者之间存在三重 shift：
@@ -163,9 +163,14 @@ per-channel Key + per-token Value 非对称格式上，
     \emph{最小化 WikiText attention-KL 获取的量化参数对下游多任务泛化具有 approximately task-agnostic 的迁移能力}。
     该假设未经形式化证明，仅通过第四章的 4-metric 联合评测进行间接经验支撑，
     其严格验证留作未来工作。
-    同时，校准使用 WikiText-103 的一个子集（$n=128$ 段），
-    而 PPL 评测使用 WikiText-2 test split。
-    二者同属 WikiText 家族但分属不同 split，不存在文档级重叠，因此不构成 data contamination。
+    同时，校准与 PPL 评测均从 WikiText-2 raw \texttt{test} split 加载数据，但使用方式不同：
+    校准仅取前 $n=128$ 段长度 $\leq 512$ token 的样本（累计约 1.5K\,token，
+    占 test split 总量约 0.03\%），用于离线提取 attention 分布 KL 作为代理损失；
+    PPL 评测则使用 test split 全量（约 302K\,token）以滑动窗口方式计算困惑度。
+    由于校准不涉及 token-level 预测目标，且使用量远小于评测样本，
+    此共用 split 带来的 potential contamination 影响限于 attention 分布的统计估计，
+    不直接泄漏 PPL 评测的 teacher-forcing 目标。
+    本文未对此作严格消融验证，是已披露的方法学局限。
   \item \textbf{Scale 搜索}：
     在候选 clip percentile 和 group size 的网格上，
     通过量化——反量化——计算 KL 散度的流程评估每组参数的行为偏差，
