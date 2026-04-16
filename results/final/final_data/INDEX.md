@@ -20,7 +20,6 @@
 | tab:kl-mse-bitwidth-comparison | int8_mainline/runs/ | isolation_{kl,mse}_*/ | KL vs MSE 对比 |
 | tab:main-results | int8_mainline/runs/ | 各评测 profile_*.csv | INT8 主表 (1.5B 全量) |
 | tab:temp-ablation | int8_mainline/runs/temp_ablation/ | profile_*.csv | 温度消融 |
-| tab:b10-sensitivity | kv_ablation/runs/int8_ours_b10_s{16,64,256}_long_s*_exp_b10_{1p5b,7b}/ | profile_ppl*.csv | B10 校准消融 |
 | tab:cross-model | int8_mainline/runs/cross_model/ | profile_*.csv | 跨模型泛化 |
 | tab:kivi-comparison | int8_mainline/ | 对比 kivi 相关 runs | INT8 vs KIVI |
 | **7B KL=MSE 趋同** | backend_comparison/runs/ppl_{kl,mse,fp16}_7b_*/ | profile_ppl*.csv | PPL=7.1121 |

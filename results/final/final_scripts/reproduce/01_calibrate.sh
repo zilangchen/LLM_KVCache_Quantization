@@ -12,11 +12,8 @@
 set -euo pipefail
 export CUDA_VISIBLE_DEVICES=0
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FINAL_SCRIPTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_ROOT="$(cd "$FINAL_SCRIPTS_DIR/../../.." && pwd)"
-CALIB_SCRIPT="$REPO_ROOT/scripts/calibrate_behavior.py"
-ARTIFACTS_DIR="$REPO_ROOT/artifacts"
+CALIB_SCRIPT="scripts/calibrate_behavior.py"
+ARTIFACTS_DIR="artifacts"
 
 # --- 1.5B INT8 KL 校准（fused 友好主线） ---
 python3 "$CALIB_SCRIPT" \

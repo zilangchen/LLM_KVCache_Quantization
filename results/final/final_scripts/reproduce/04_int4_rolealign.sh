@@ -9,12 +9,9 @@
 set -euo pipefail
 export CUDA_VISIBLE_DEVICES=0
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FINAL_SCRIPTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-REPO_ROOT="$(cd "$FINAL_SCRIPTS_DIR/../../.." && pwd)"
-RUN_SCRIPT="$REPO_ROOT/scripts/run_experiments.py"
-CONFIG="$FINAL_SCRIPTS_DIR/configs/exp_matrix_rolealign.yaml"
-OUT="$REPO_ROOT/results/final/final_data/int4_rolealign/runs"
+RUN_SCRIPT="scripts/run_experiments.py"
+CONFIG="configs/exp_matrix_rolealign.yaml"
+OUT="results/final/final_data/int4_rolealign/runs"
 QUALITY_RUNS="int4_ours_sym_ref,int4_ours_asym_long,int4_ours_asym_ba_long,kivi_style_int4_ref"
 PROFILE_RUNS="int4_ours_sym_ref,int4_ours_asym_long,int4_ours_asym_ba_long"
 
