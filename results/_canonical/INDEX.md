@@ -1,8 +1,9 @@
-# Results Canonical Index
+# Results Canonical Index（已由 results/final/ 替代）
 
-> **用途**：所有 agent 查找实验数据的**唯一入口**。不要再去 `emnlp_*/` 或 `phase5v2/` 等历史目录考古。
-> **最后更新**：2026-04-09
-> **来源**：本 INDEX 指向 `emnlp_defense_v1/` 和 `emnlp_rolealign_v2/` 两个当前权威目录。
+> **⚠️ 本文件为旧版索引，已于 2026-04-17 被 `results/final/final_data/INDEX.md` 替代。**
+> **请使用 `results/final/` 作为唯一权威数据入口。**
+>
+> ~~**来源**：本 INDEX 指向 `emnlp_defense_v1/` 和 `emnlp_rolealign_v2/` 两个当前权威目录。~~
 
 ---
 
