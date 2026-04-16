@@ -82,6 +82,12 @@ decode 阶段新 K 值若超出该范围则量化误差无缓冲空间。
 （eval\_ppl.py 缺少 int4\_ours\_asym 分支导致静默使用 INT8 路径），
 导致早期版本的 INT4-RoleAlign PPL 数据（9.42）实为 INT8 结果。
 该问题在后续验证中发现并修正，更正后的 PPL 为 10.58。
+修复 bug 后，\textbf{PPL（1.5B/7B/8B/14B 四模型）、RULER 与 LongBench
+均以 int4\_ours\_asym 作为独立 kv\_mode 完整重跑}，
+对应结果分别汇总于第~\ref{subsec:exp-rolealign-results}~节
+（PPL / Needle / LongBench）、表~\ref{tab:kivi-int4-threeway}
+（RULER 4K--32K）及附录~\ref{sec:app-longbench-official}
+（LongBench v2 bug 验证），论文所有公开数据均为修复后的结果。
 推理引擎中此类"静默错误"虽报告率低但危害严重：
 脚本正常完成、数据格式正确，唯一异常是量化精度不匹配。
 本文的教训是：KV Cache 量化评测必须在结果 CSV 中记录实际使用的
@@ -99,8 +105,14 @@ LongBench 评测基于自行实现的合成数据源而非官方数据集，
 但仍需官方基准进一步校准。
 Mistral-7B 的 LongBench 数据因合成源问题在正文核心对比中已排除
 （Mistral 在 PPL、Needle、RULER 上的评测均正常有效）。
-K/V 消融实验覆盖了 RULER、LongBench 和 PPL
-（表~\ref{tab:kv-ablation-ppl}），但仅在 Qwen2.5-1.5B 单模型上验证。
+单指标 K/V 消融（保持一端 FP16、另一端量化）的完整 PPL 评测
+（表~\ref{tab:kv-ablation-ppl}）仅在 Qwen2.5-1.5B 单模型上以 1 seed 验证；
+但 K/V 角色差异化的扩展形式 \emph{非对称 MixedKV（K@INT8 + V@INT4）}
+已在第~\ref{subsec:exp-mixedkv}~节横跨 Qwen2.5-1.5B / 7B、
+LLaMA-3.1-8B 与 Mistral-7B 四模型以 3 seeds 验证，
+因此"K/V 精度不对称"这一机制结论具有跨模型外部效度，
+单 seed 只影响 FP16-基线受控消融的 PPL 数值精度，
+不影响 Key 主导退化的方向性判断。
 
 \paragraph{校准框架局限}
 1.5B 主模型校准产物的 Q 向量预处理缺少 input\_layernorm 和 RoPE 变换

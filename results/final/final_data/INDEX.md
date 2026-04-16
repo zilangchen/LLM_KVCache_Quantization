@@ -71,3 +71,7 @@
 1. **1.5B RULER "<1% gap" claim**：此比较使用 **FlashInfer 后端** (`ruler_fi_1p5b_*`)，不是 torch_ref 后端 (`ruler_ours_asym_*`)。后者因 seq_len bug 和后端差异导致数值不同。
 2. **14B 所有数据**均来自 `backend_comparison/`（原 emnlp_p012_batch），不在 int4_rolealign/ 中。
 3. **PPL 标准值**: 1.5B 13.7%, 7B 6.0%(散文)/6.1%(表格), 8B 2.4%, 14B 7.6%
+4. **14B FP16 PPL 双权威值**（TR-0303）：
+   - **4.685**（`backend_comparison/ppl_fp16_14b_s1234`，tokens_evaluated=32767，WikiText-2 test split 前 32767 tokens 的固定 prefix，约占全量 10%）— **论文 tab:rolealign-results / tab:14b-kv-ablation 使用此值**，tnote b 已披露；
+   - **5.455**（`int8_mainline/ppl_fp16_14b_s1234`，tokens_evaluated=301827，WikiText-2 test split 全量）— 非论文正文使用值，仅作审计保留。
+   - 退化率 7.58% = (5.0399 − 4.685) / 4.685 × 100，INT4-RoleAlign 与 FP16 使用同一 32K subset 评测协议以保证可比性，避免跨长度采样偏差。
