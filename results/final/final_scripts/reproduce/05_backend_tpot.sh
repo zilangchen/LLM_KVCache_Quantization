@@ -14,9 +14,11 @@ export TRANSFORMERS_OFFLINE=1
 RD="results/final/final_data/backend_comparison/runs"
 TPOT_COMMON="--seq_len 4096 --gen_len 128 --runs 8 --warmup 3 --seed 1234"
 
-CALIB_1P5B="artifacts/kv_calib_rolealign_1p5b_v3.json"
-CALIB_7B="artifacts/kv_calib_rolealign_7b_v3.json"
-CALIB_8B="artifacts/kv_calib_rolealign_8b_v3.json"
+# TR-0010: 校准产物命名对齐 01_calibrate.sh 的实际产出（去掉 _v3 后缀）。
+# 14B 保留 _v3 是因为其冻结产物历史命名带该后缀。
+CALIB_1P5B="artifacts/kv_calib_rolealign_1p5b.json"
+CALIB_7B="artifacts/kv_calib_rolealign_7b.json"
+CALIB_8B="artifacts/kv_calib_rolealign_8b.json"
 CALIB_14B="artifacts/kv_calib_rolealign_14b_v3.json"
 
 run_one() {

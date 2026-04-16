@@ -13,7 +13,8 @@ export TRANSFORMERS_OFFLINE=1
 
 RD="results/final/final_data/backend_comparison/runs"
 MODEL="meta-llama/Llama-3.1-8B-Instruct"
-CALIB="artifacts/kv_calib_rolealign_8b_v3.json"
+# TR-0010: 校准产物命名对齐 01_calibrate.sh 的实际产出（去掉 _v3 后缀）。
+CALIB="artifacts/kv_calib_rolealign_8b.json"
 TPOT_COMMON="--gen_len 64 --runs 10 --warmup 5 --seed 1234"
 
 run_one() {
