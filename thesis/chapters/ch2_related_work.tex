@@ -392,7 +392,7 @@ AQLM~\cite{egiazarian2024aqlm} 通过加法量化码本进一步提升了
 与上述工作相比，本文的核心特征在于以 GQA 头数 $H_{kv}$ 为结构性关联变量，
 在同一框架中联合分析校准目标灵敏度、K/V 退化不对称性、温度校正方向
 与融合解码核函数的效率特征。
-据我们所知，现有工作尚未在同一框架中将上述四个维度与 $H_{kv}$ 显式关联。
+在目前公开文献中，现有工作尚未在同一框架中将上述四个维度与 $H_{kv}$ 显式关联。
 
 在方法层面，KV Cache 量化方案可从两个\textbf{正交}维度刻画：
 （1）\emph{量化格式}，即对称/非对称、per-group/per-channel/per-token 等量化轴选择，
@@ -415,7 +415,7 @@ vLLM（自 v0.4 起）和 TensorRT-LLM 均默认提供 FP8 KV Cache 选项作为
 INT4 $=$ 4 bit 相对 FP8 = 8 bit 存在 2$\times$ 压缩率差距，
 使 INT4 在 KV Cache 显存占用维度上 Pareto 地优于 FP8；
 （NVIDIA Blackwell 架构新引入的 NVFP4 格式提供了 4 bit 浮点可能性，
-BitDecoding~\cite{du2026bitdecoding} 的 Tensor-core 实验已展示其硬件吞吐优势，
+BitDecoding~\cite{du2026bitdecoding} 的 Tensor Core 实验已展示其硬件吞吐优势，
 但当前尚未在主流推理栈中普及。）
 （2）行为对齐校准原则以 KL 散度为目标函数，与数值量化格式解耦；
 本文第~\ref{sec:ch3-calibration}~节的校准流程可直接迁移至 FP 路径而无需修改原则本身，
@@ -452,7 +452,7 @@ Softmax Bias Correction~\cite{bondarenko2023softmax}（ICCV 2023 Workshop）
 QeRL 聚焦于 output logits，KVTuner 的 Lemma 1 止步于误差放大的量化分析，
 Softmax-Not-Enough 着眼于 LM head，AhaKV 用于驱逐打分；
 四者均未将因果链延伸至 attention 内部 softmax 的平坦化补偿与 GQA 架构的交互。
-据我们所知，
+在目前公开文献中，
 尚无工作系统报告 KV Cache 量化中逐头温度校正 $\tau^{-1}$ 与 GQA 头数 $H_{kv}$
 之间的尺度依赖反转（$H_{kv}=2$ 改善、$H_{kv}\geq 4$ 恶化）。
 本文的行为对齐框架（第~\ref{sec:ch3-invtau}~节）在此基础上
@@ -519,7 +519,7 @@ DSL），旨在降低高性能 GPU kernel 编写的门槛。与直接使用 CUDA
 在 Tensor Core 路径上，BitDecoding~\cite{du2026bitdecoding}（HPCA 2026）
 通过专门的布局重组与 NVFP4 数值格式解锁了低比特 KV Cache 解码的 Tensor Core 吞吐，
 证明了低比特 KV 解码在硬件效率维度的可达上限；
-本文的 CUDA-core Triton 实现与 BitDecoding 的 Tensor-core 设计互为补充，
+本文的 CUDA Core Triton 实现与 BitDecoding 的 Tensor Core 设计互为补充，
 前者验证了算法路径的可行性，后者展示了硬件资源利用的进一步优化空间。
 
 \subsection{推理服务与长上下文扩展}

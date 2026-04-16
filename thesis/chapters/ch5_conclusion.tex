@@ -23,7 +23,7 @@ INT8 下两者完全趋同，产生逐位一致的校准产物；
 INT4 下在 1.5B（$H_{kv}=2$）上分化
 （percentile 99.5 vs 99.0，scale 差异 12.35\%），
 而在 7B（$H_{kv}=4$）上再次趋同。
-在我们测试的模型规模与协议下，
+在本文所测试的模型规模与协议下，
 KL 至少不劣于 MSE，并在小模型 INT4 设置下表现更优。
 
 \paragraph{Finding 2：Key 主导退化、$H_{kv}$ 结构性关联与低比特实例化验证（回应 RQ2--3）。}
@@ -122,7 +122,7 @@ LLaMA-3.1-8B 的 INT8 校准在 $n{=}10$ 种子验证中展现一定次优性
 结果应理解为对核心算法思想的验证。
 
 \paragraph{BitDecoding 融合核的 GQA 兼容性}
-在探索 Tensor-core 级别的 INT4 解码加速时，
+在探索 Tensor Core 级别的 INT4 解码加速时，
 本文评测了 BitDecoding~\cite{du2026bitdecoding} 的 CUTLASS 内核。
 测试发现其在 GQA 架构下的数值输出与 FP16 参考存在显著偏差，
 无法通过数值验证。

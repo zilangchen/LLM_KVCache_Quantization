@@ -35,6 +35,52 @@
 所有实验均采用确定性设置：固定随机种子（主实验 1234--1238，吞吐实验 1234--1241），贪心解码策略（\code{temperature=0.0}, \code{top\_p=1.0}, \code{top\_k=0}），以确保结果的可复现性。
 
 % ============================================================
+\section{复现脚本与覆盖范围}
+\label{sec:app-reproduce}
+% ============================================================
+
+本文主线实验的冻结复现入口位于仓库根目录 \code{REPRODUCE.md}，
+其对应的 10 个编号脚本在 \code{results/final/final\_scripts/reproduce/} 目录下。
+\code{REPRODUCE.md} 记录了 one-click 执行顺序、GPU 时间预算与输出位置契约。
+
+\paragraph{主线 subset 冻结入口。}
+\code{reproduce/01\_calibrate.sh} $\sim$ \code{10\_7b\_kl\_vs\_mse.sh} 是**冻结编排入口**，
+固定 \code{run\_tag} 与输出目录层级（统一落在 \code{results/final/final\_data/*/runs/} 下），
+覆盖正文 Ch4 §4.2（C1 校准依赖）、§4.3（C2 诊断）、§4.4（C2 实例化 + 14B 外部效度）、
+§4.5.1--4（C3 融合核效率）以及附录 \ref{subsec:app-7b-kl-mse} 的 7B KL=MSE 趋同溯源。
+
+\paragraph{非复现数据（数据冻结但不由 reproduce 脚本产出）。}
+以下数据保留在 \code{results/final/final\_data/} 下以供审计，
+但不在 \code{reproduce/} 的复现保证范围内：
+\begin{itemize}[leftmargin=2em, itemsep=2pt]
+  \item \textbf{BitDecoding 工程案例}（\code{*\_bd\_*} 系列 runs）：
+    依赖外部 CUTLASS 库特定版本与 NVFP4 数值格式；
+    第~\ref{subsec:exp-phase1-tpot}~节 BitDecoding 工程案例讨论引用这组数据，
+    但数值不保证可复现（与 Blackwell 架构支持情况相关）。
+  \item \textbf{官方 LongBench v2}（\code{longbench\_official\_*} 系列）：
+    仅作 EVL-042 bug 修复验证之用（详见第~\ref{sec:app-longbench-official}~节），
+    正文主结果使用自研 LongBench-style 合成评测。
+\end{itemize}
+
+\paragraph{运行时依赖说明。}
+\code{reproduce/*.sh} 并非独立 runtime bundle：
+脚本仍调用仓库根目录 \code{scripts/*} 作为真实 runner，
+\code{final\_scripts/core|eval|configs} 为审计冻结快照而非替代实现。
+这一设计使论文主线复现与日常开发共享同一套 runner 代码，
+避免出现"论文版脚本"与"开发版脚本"两份漂移实现。
+
+\paragraph{v3\_quick 校准样本数量说明。}
+正文第~\ref{sec:ch3-calibration}~节与本附录表~\ref{tab:app-search-space}
+引用 $N=128$ 作为标准校准样本规模，
+而 \code{reproduce/01\_calibrate.sh} 实际执行的校准样本数为
+INT8=16、INT4=32、RoleAlign=16。
+这一差异经 B10 校准样本数量敏感性消融
+（表~\ref{tab:b10-sensitivity}，覆盖 $s\in\{16,64,256\}$）确认
+对 PPL/Needle/RULER/LongBench 四类指标均不敏感，
+$N=16$ 已进入校准目标的平坦收敛域，
+$N=128$ 的正文引用与 $N=16$ 的实际实参指向同一校准参数配置。
+
+% ============================================================
 \section{校准产物格式}
 \label{sec:app-calib-schema}
 % ============================================================
@@ -733,7 +779,7 @@ $v\_\text{percentile}=99.9$），PPL 结果在贪婪解码下逐位一致。
   \end{tabular}
   \begin{tablenotes}
     \scriptsize
-    \item 数据位置：\code{results/emnlp\_p012\_batch/runs/ppl\_\{kl,mse,fp16\}\_7b\_s*/}。
+    \item 数据位置：\code{results/final/final\_data/backend\_comparison/runs/ppl\_\{kl,mse,fp16\}\_7b\_s*/}。
     贪婪解码下 PPL 为确定量，多 seed 验证一致性而非统计方差。
     7B ($H_{kv}=4$) 趋同与 1.5B ($H_{kv}=2$) 分歧形成对比，
     表明校准 landscape 的平坦度随模型冗余度增大。
