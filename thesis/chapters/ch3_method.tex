@@ -671,26 +671,44 @@ Key 决定了注意力的``看哪里''（attention logits 的排序结构），
 升级为角色感知的非对称格式：
 
 \begin{itemize}[leftmargin=2em, itemsep=2pt]
-  \item \textbf{Key：per-channel 量化}。
-    沿序列维度（across tokens）为每个通道独立计算 Scale，
+  \item \textbf{Key：per-channel 非对称量化}。
+    沿序列维度（across tokens）为每个通道独立计算 Scale 与零点偏移，
     捕捉 Key 矩阵中通道间的数值异质性。
     形式化地，对于第 $l$ 层的 Key 矩阵 $\bK \in \mathbb{R}^{S \times d_k}$，
-    per-channel Scale 为：
+    记 $p_K$ 为 Key 的双端截断 percentile（由离线 BA 校准搜索确定），
+    per-channel 量化参数为：
     \begin{equation}
-      s^K_{l,j} = \frac{\text{percentile}\!\left(|K_{:,j}|,\; p_K\right)}{q_{\max}},
-      \quad j = 1, \dots, d_k
+      \begin{aligned}
+        m^K_{l,j} &= \mathrm{percentile}\!\left(K_{:,j},\; 100 - p_K\right), \;\;
+        M^K_{l,j}  = \mathrm{percentile}\!\left(K_{:,j},\; p_K\right), \\
+        s^K_{l,j} &= \frac{M^K_{l,j} - m^K_{l,j}}{q_{\max} - q_{\min}}, \;\;
+        z^K_{l,j}  = m^K_{l,j} - q_{\min}\cdot s^K_{l,j},
+      \end{aligned}
+      \;\; j = 1, \dots, d_k
       \label{eq:ch3-perchannel-k}
     \end{equation}
-    其中 $p_K$ 为 Key percentile 参数，由离线 BA 校准搜索确定。
-  \item \textbf{Value：per-token 量化}。
-    沿特征维度（across channels）为每个 token 独立计算 Scale，
+    其中 $q_{\min}, q_{\max}$ 为量化比特宽度下的最小/最大整数值
+    （INT4：$q_{\min}=-8, q_{\max}=7$；INT8：$q_{\min}=-128, q_{\max}=127$）。
+    量化与反量化规则为
+    $q = \mathrm{clamp}(\mathrm{round}((x - z)/s),\, q_{\min},\, q_{\max})$，
+    $\hat{x} = q\cdot s + z$。
+  \item \textbf{Value：per-token 非对称量化}。
+    沿特征维度（across channels）为每个 token 独立计算 Scale 与零点，
     适配 Value 矩阵中 token 间的动态范围差异：
     \begin{equation}
-      s^V_{l,t} = \frac{\text{percentile}\!\left(|V_{t,:}|,\; p_V\right)}{q_{\max}},
-      \quad t = 1, \dots, S
+      \begin{aligned}
+        m^V_{l,t} &= \mathrm{percentile}\!\left(V_{t,:},\; 100 - p_V\right), \;\;
+        M^V_{l,t}  = \mathrm{percentile}\!\left(V_{t,:},\; p_V\right), \\
+        s^V_{l,t} &= \frac{M^V_{l,t} - m^V_{l,t}}{q_{\max} - q_{\min}}, \;\;
+        z^V_{l,t}  = m^V_{l,t} - q_{\min}\cdot s^V_{l,t},
+      \end{aligned}
+      \;\; t = 1, \dots, S
       \label{eq:ch3-pertoken-v}
     \end{equation}
     其中 $p_V$ 为 Value percentile 参数。
+    特别地，$(p_K, p_V) = (100, 100)$ 时退化为标准 min-max 非对称量化
+    （即 KIVI-style absmin/absmax 配置）；$p_K, p_V < 100$ 时以对称
+    双端截断缓解极端 outlier 对 scale 的放大。
 \end{itemize}
 
 \subsection{BA-guided Percentile 校准}
