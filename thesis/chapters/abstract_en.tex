@@ -36,7 +36,7 @@ engineering observation. We instantiate INT4-RoleAlign on
 this format via offline attention-KL search. Across all four models,
 RoleAlign preserves 100\% Needle retrieval at roughly 73\%
 KV cache compression, with PPL degradation decreasing with
-scale (1.5B: 13.7\%; 7B: 6.0\%; 8B: 2.4\%). The 14B model
+scale (1.5B: 13.7\%; 7B: 6.1\%; 8B: 2.4\%). The 14B model
 provides external validity: Needle passes at 4K--32K; RULER
 reaches 96.6\%--98.5\% at 4K--16K. The efficiency gains of
 fused quantized decoding kernels exhibit pronounced

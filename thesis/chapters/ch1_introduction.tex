@@ -176,7 +176,7 @@ Needle retrieval 与 PPL 在 1.5B 至 14B 范围内一致解耦——
 我们在该格式上以离线 attention-KL 搜索替代运行时 absmax/min，
 得到行为引导的实例化 INT4-RoleAlign，
 在四个模型上保持 Needle 100\%，KV Cache 压缩约 73\%，
-PPL 退化随模型规模减弱（1.5B: 13.7\%，7B: 6.0\%，8B: 2.4\%）。
+PPL 退化随模型规模减弱（1.5B: 13.7\%，7B: 6.1\%，8B: 2.4\%）。
 14B 提供外部效度：Needle 在 4K--32K 全通过，
 RULER 在 4K--16K 达到 96.6\%--98.5\%。
 
