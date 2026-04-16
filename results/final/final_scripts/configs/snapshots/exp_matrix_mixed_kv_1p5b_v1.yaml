@@ -1,0 +1,118 @@
+# MixedKV (K-INT8/V-INT4) experiment config — Qwen2.5-1.5B-Instruct
+# Includes: MixedKV main, K/V ablation (K-only, V-only), KIVI INT4 matched rerun
+# Seeds: PPL=1 (deterministic), Needle/LongBench/RULER=5 (1234-1238)
+# Created: 2026-03-17
+
+project:
+  name: kv-cache-quant-mixed-kv-1p5b
+  model_id: Qwen/Qwen2.5-1.5B-Instruct
+  model_revision: 989aa7980e4cf806f80c7fef2b1adb7bc71aa306
+
+runtime:
+  seed: 1234
+  device: cuda
+  dtype: fp16
+  decoding:
+    temperature: 0.0
+    top_p: 1.0
+    top_k: 0
+  quant_defaults:
+    quant_bits: 4
+    calib_strategy: none
+    use_static_scales: false
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 100.0
+    group_size_k: 128
+    group_size_v: 128
+  kernel_defaults:
+    decode_attn_impl: torch_ref
+
+matrix:
+  # =========================================================================
+  # MixedKV main: K@INT8 / V@INT4 (default k_bits=8, v_bits=4)
+  # =========================================================================
+  - run_name: mixed_kv_long
+    kv_mode: int4_mixed_kv
+    quant_bits: 4
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # PPL curves at varying context lengths
+  - run_name: mixed_kv_curve_4k
+    kv_mode: int4_mixed_kv
+    quant_bits: 4
+    decode_attn_impl: torch_ref
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  - run_name: mixed_kv_curve_8k
+    kv_mode: int4_mixed_kv
+    quant_bits: 4
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 64
+    batch: 1
+
+  - run_name: mixed_kv_curve_16k
+    kv_mode: int4_mixed_kv
+    quant_bits: 4
+    decode_attn_impl: torch_ref
+    seq_len: 16384
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # K/V Ablation: K-only (K@INT8, V@FP16)
+  # =========================================================================
+  - run_name: k_only_int8_long
+    kv_mode: int4_mixed_kv
+    quant_bits: 8
+    k_bits: 8
+    v_bits: 16
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # K/V Ablation: V-only (K@FP16, V@INT4)
+  # =========================================================================
+  - run_name: v_only_int4_long
+    kv_mode: int4_mixed_kv
+    quant_bits: 4
+    k_bits: 16
+    v_bits: 4
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # Counterfactual B8: K@INT4, V@INT8 (expect worse — proves K>V sensitivity)
+  # =========================================================================
+  - run_name: k_int4_v_int8_long
+    kv_mode: int4_mixed_kv
+    quant_bits: 4
+    k_bits: 4
+    v_bits: 8
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # KIVI INT4 matched rerun (same commit, same eval pipeline)
+  # =========================================================================
+  - run_name: kivi_int4_matched_long
+    kv_mode: kivi_style
+    quant_bits: 4
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1

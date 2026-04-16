@@ -54,6 +54,12 @@ final_scripts/
 
 详见 `../final_data/INDEX.md`。
 
+## 覆盖范围说明
+
+本复现包覆盖论文主线数据。以下冻结数据**不在复现范围内**：
+- `tpot_bd_*` / `tpot_bd_standalone_1p5b` — BitDecoding 因 GQA kernel bug 已废弃，仅保留 TPOT 参考值
+- `longbench_official_*` — 官方 LongBench 因 HF_HUB_OFFLINE 限制未完成
+
 ## 注意事项
 
 - TPOT profiling (05/07/08) 需**独占 GPU**，不能与其他实验并行

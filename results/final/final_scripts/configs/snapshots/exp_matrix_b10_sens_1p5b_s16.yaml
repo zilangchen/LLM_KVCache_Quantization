@@ -1,0 +1,54 @@
+# B10 Calibration Sensitivity — Qwen2.5-1.5B, samples=16
+# Purpose: Test whether calibration sample count affects downstream quality
+# Base: mainline int8_ours_long (static_v3 + adaptive + no_temp + fused)
+# Only calib_file differs from mainline
+# Created: 2026-03-19
+
+project:
+  name: kv-cache-quant-b10-sens-1p5b-s16
+  model_id: Qwen/Qwen2.5-1.5B-Instruct
+  model_revision: 989aa7980e4cf806f80c7fef2b1adb7bc71aa306
+
+runtime:
+  seed: 1234
+  device: cuda
+  dtype: fp16
+  decoding:
+    temperature: 0.0
+    top_p: 1.0
+    top_k: 0
+  quant_defaults:
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_b10_1p5b_s16.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    clip_percentile_k: 99.5
+    clip_percentile_v: 99.5
+    group_size_k: 16
+    group_size_v: 16
+  kernel_defaults:
+    decode_attn_impl: triton_fused
+
+matrix:
+  - run_name: int8_ours_b10_s16_long
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_b10_1p5b_s16.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: triton_fused
+    seq_len: 32704
+    gen_len: 64
+    batch: 1

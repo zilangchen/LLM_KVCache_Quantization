@@ -1,0 +1,102 @@
+# KIVI INT4 + Attention-Aligned (KV-RoleAlign) experiment config
+# Phase 1A: KIVI INT4 plain vs KIVI INT4 + inv_tau (int4_kivi_aligned)
+# Phase 1B: + V-path token-CE calibrated v_percentile
+# Model: Qwen2.5-1.5B-Instruct (single model minimal validation)
+# Seeds: 1234, 1235, 1236 (3 seeds)
+# Eval: PPL(32K) + Needle(32K)
+# Created: 2026-03-17
+
+project:
+  name: kv-cache-quant-kivi-aligned-1p5b
+  model_id: Qwen/Qwen2.5-1.5B-Instruct
+  model_revision: 989aa7980e4cf806f80c7fef2b1adb7bc71aa306
+
+runtime:
+  seed: 1234
+  device: cuda
+  dtype: fp16
+  decoding:
+    temperature: 0.0
+    top_p: 1.0
+    top_k: 0
+  quant_defaults:
+    quant_bits: 4
+    calib_strategy: kl_attn
+    use_static_scales: false
+    use_attn_temperature: false
+    clip_percentile_k: 100.0
+    clip_percentile_v: 100.0
+    group_size_k: 128
+    group_size_v: 128
+  kernel_defaults:
+    decode_attn_impl: torch_ref
+
+matrix:
+  # =========================================================================
+  # Baseline: KIVI INT4 plain (no calibration, no inv_tau)
+  # Reuses existing kivi_style mode with quant_bits=4.
+  # =========================================================================
+  - run_name: kivi_style_int4_long
+    kv_mode: kivi_style
+    quant_bits: 4
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # Phase 1A: KIVI INT4 + inv_tau (K-path attention-aligned)
+  # Uses int4_kivi_aligned mode with calibration file providing inv_tau.
+  # inv_tau is applied to Q via hooks during both prefill and decode.
+  # =========================================================================
+  - run_name: kivi_aligned_inv_tau_long
+    kv_mode: int4_kivi_aligned
+    quant_bits: 4
+    calib_file: artifacts/kv_calib_kl_kivi_aligned_v3.json
+    use_attn_temperature: true
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # Phase 1B: KIVI INT4 + token-CE V-calib only (V-path token-aligned)
+  # Uses int4_kivi_aligned mode with v3 calibration file providing
+  # optimized v_percentile but NO inv_tau.
+  # =========================================================================
+  - run_name: kivi_aligned_vpath_only_long
+    kv_mode: int4_kivi_aligned
+    quant_bits: 4
+    calib_file: artifacts/kv_calib_token_ce_kivi_v3.json
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # Phase 1A+1B: KV-RoleAlign (K-path inv_tau + V-path token-CE)
+  # Full method: both K-path and V-path calibrated independently.
+  # =========================================================================
+  - run_name: kv_rolealign_full_long
+    kv_mode: int4_kivi_aligned
+    quant_bits: 4
+    calib_file: artifacts/kv_calib_kv_rolealign_v3.json
+    use_attn_temperature: true
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # Phase 2 (fallback): K-INT8 / V-INT4 mixed precision
+  # =========================================================================
+  - run_name: mixed_kv_int8k_int4v_long
+    kv_mode: int4_mixed_kv
+    quant_bits: 4
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1

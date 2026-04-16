@@ -1,0 +1,156 @@
+# INT4 rescue config: Qwen2.5-7B-Instruct
+# Derived from: configs/snapshots/exp_matrix_qwen25_7b_v1.yaml
+# Purpose: Tier 0 smoke test — 2×2 configuration grid for INT4-ours rescue.
+# Does NOT modify the frozen historical snapshot.
+# Used by scripts/run_experiments.py
+
+project:
+  name: kv-cache-quant-qwen2p5-7b
+  model_id: Qwen/Qwen2.5-7B-Instruct
+  model_revision: a09a35458c702b33eeacc393d103063234e8bc28
+
+runtime:
+  seed: 1234
+  device: cuda
+  dtype: fp16
+  decoding:
+    temperature: 0.0
+    top_p: 1.0
+    top_k: 0
+  quant_defaults:
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int8.json
+    use_attn_temperature: true
+    use_static_scales: true
+    adaptive_static_scales: false
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    clip_percentile_k: 99.5
+    clip_percentile_v: 99.5
+    group_size_k: 16
+    group_size_v: 16
+  kernel_defaults:
+    decode_attn_impl: triton_fused
+
+matrix:
+  # =========================================================================
+  # INT4 rescue: 2×2 configuration grid (Tier 0 smoke test)
+  # Tests adaptive_static_scales × use_attn_temperature.
+  # T0-D (adaptive=false, temp=true) = existing int4_ours_long in *_qwen25_7b_v1.yaml.
+  # =========================================================================
+
+  # T0-A: adaptive=true, temp=true
+  - run_name: int4_rescue_adaptive_temp_long
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: true
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # T0-B: adaptive=true, temp=false (aligned with INT8-ours mainline strategy)
+  - run_name: int4_rescue_adaptive_notemp_long
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # T0-C: adaptive=false, temp=false (temperature-only ablation)
+  - run_name: int4_rescue_noadapt_notemp_long
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: false
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # INT4 baseline entries (copied from exp_matrix_qwen25_7b_v1.yaml)
+  # ENG-066: Must re-run baseline with float32 scale fix — old data invalid.
+  # =========================================================================
+  - run_name: int4_baseline_long
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  - run_name: int4_baseline_curve_4k
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  - run_name: int4_baseline_curve_8k
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 64
+    batch: 1
+
+  - run_name: int4_baseline_curve_16k
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 16384
+    gen_len: 64
+    batch: 1

@@ -1,0 +1,116 @@
+# final_emnlp2026_v1.yaml — EMNLP 2026 论文主结论唯一引用配置
+#
+# Snapshot governance: 论文主结论必须引用且仅引用此配置。
+# 变更点: 首次创建，合并 Phase 0-5 全部实验定义。
+# 前序版本: 无（首版）。
+# 创建日期: 2026-02-23
+#
+# 本文件为 meta-config，定义论文全部实验的配置引用关系。
+# run_experiments.py 需按 per-model config 分别调用（各 config 含独立 project.model_id）。
+#
+# 用法:
+#   # 1.5B 主模型（含消融）
+#   python scripts/run_experiments.py --config configs/exp_matrix.yaml ...
+#   python scripts/run_experiments.py --config configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml ...
+#
+#   # 7B 扩展模型
+#   python scripts/run_experiments.py --config configs/snapshots/exp_matrix_qwen25_7b_v1.yaml ...
+#
+#   # 8B 跨架构验证
+#   python scripts/run_experiments.py --config configs/snapshots/exp_matrix_llama31_8b_v1.yaml ...
+
+meta:
+  version: v1
+  created: "2026-02-23"
+  target_venue: "EMNLP 2026 (ARR May 2026 cycle)"
+  description: >
+    Unified experiment definition for the Behavior-Aligned KV Cache Quantization paper.
+    Covers 3 models × 7 kv_modes × 4 benchmarks + ablation + throughput + profiling.
+
+models:
+  - name: "Qwen2.5-1.5B-Instruct"
+    role: "primary (full ablation + full matrix)"
+    config: "configs/exp_matrix.yaml"
+    ablation_config: "configs/snapshots/exp_matrix_ablation_1p5b_v1.yaml"
+    calibration_artifacts:
+      int8_kl: "artifacts/kv_calib_kl_selected_v3_quick.json"
+      int4_kl: "artifacts/kv_calib_kl_int4_selected.json"
+    model_revision: "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
+
+  - name: "Qwen2.5-7B-Instruct"
+    role: "scale-up validation (same architecture)"
+    config: "configs/snapshots/exp_matrix_qwen25_7b_v1.yaml"
+    calibration_artifacts:
+      int8_kl: "artifacts/kv_calib_kl_qwen25_7b_int8.json"
+      int4_kl: "artifacts/kv_calib_kl_qwen25_7b_int4.json"
+    model_revision: "a09a35458c702b33eeacc393d103063234e8bc28"
+
+  - name: "Llama-3.1-8B-Instruct"
+    role: "cross-architecture validation"
+    config: "configs/snapshots/exp_matrix_llama31_8b_v1.yaml"
+    calibration_artifacts:
+      int8_kl: "artifacts/kv_calib_kl_llama31_8b_int8.json"
+      int4_kl: "artifacts/kv_calib_kl_llama31_8b_int4.json"
+    hf_model_id: "meta-llama/Llama-3.1-8B-Instruct"
+    local_model_path: "/root/autodl-tmp/modelscope_cache/LLM-Research/Meta-Llama-3___1-8B-Instruct"
+    model_revision: "043efdca396f2b6f4b5714d76d70df7840856ed7"  # pinned from remote modelscope cache metadata
+
+kv_modes:
+  - fp16
+  - int8_baseline
+  - int8_ours
+  - int4_baseline
+  - int4_ours
+  - int4_fused
+  - kivi_style
+
+benchmarks:
+  - needle    # Needle-in-a-Haystack (4K/8K/16K/32K)
+  - ppl       # PPL WikiText-2 (chunk=128, target_tokens=1M)
+  - longbench # LongBench 7-task official-metric macro
+  - ruler     # RULER 4-subtask macro-accuracy
+  - latency   # TTFT/TPOT
+  - memory    # gpu_mem_peak_mb / kv_cache_mem_mb
+  - throughput # tok/s vs batch scaling
+
+ablation_dimensions:
+  - calibration_method: [kl_attn, mse, percentile]
+  - temperature_correction: [on, off]
+  - group_size: [16, 32, 64, 128]
+  - scale_strategy: [static, adaptive, dynamic]
+
+seeds:
+  quality_eval: [1234, 1235, 1236, 1237, 1238]
+  throughput: [1234, 1235, 1236, 1237, 1238, 1239, 1240, 1241]
+
+claims:
+  - C1: "INT8-ours significantly improves TPOT over INT8-baseline at long context"
+  - C2: "INT8-ours keeps KV memory advantage over FP16 at long context"
+  - C3: "INT8-ours is non-inferior to INT8-baseline on Needle pass rate"
+  - C4: "INT8-ours is non-inferior to INT8-baseline on PPL"
+  - C5: "INT8-ours is non-inferior to INT8-baseline on LongBench score"
+  - C6: "INT8-ours is non-inferior to INT8-baseline on RULER pass rate"
+  - C7: "INT4-ours is non-inferior to INT4-baseline on Needle pass rate"
+  - C8: "INT4-ours is non-inferior to INT4-baseline on PPL"
+  - C9: "INT8-ours is non-inferior to KIVI-style on LongBench/Needle (primary comparison)"
+  - C10: "INT4-ours vs KIVI-style is reported as exploratory (quality + memory + TPOT)"
+  - C11: "On Qwen-7B and Llama-3.1-8B, INT8-ours is non-inferior to INT8-baseline on LongBench"
+
+results_output: "results/emnlp_final/"
+
+execution_workflow:
+  old_phase5_policy: "legacy_only_for_ruler_and_longbench"
+  phase5v2_base_dir: "results/phase5v2/"
+  phase5v2_run_tag_template:
+    - "phase5v2_1p5b_s{seed}"
+    - "phase5v2_7b_s{seed}"
+    - "phase5v2_8b_s{seed}"
+  phase5v2_strategy:
+    quality: "1.5B / 7B / 8B 三模型并行"
+    throughput: "各模型独占 GPU 串行"
+  aggregate_entrypoint: "python3 scripts/aggregate_results.py --runs_dir ${BASE_DIR}/runs --logs_dir ${BASE_DIR}/logs --tables_dir ${BASE_DIR}/tables --plots_dir ${BASE_DIR}/plots --strict"
+
+statistical_framework:
+  confidence_interval: "Bootstrap 95% CI"
+  hypothesis_test: "sign-flip permutation test"
+  multiple_comparison: "BH-FDR (alpha=0.05)"

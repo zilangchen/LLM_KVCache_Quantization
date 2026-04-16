@@ -1,0 +1,1030 @@
+# External validity: Qwen2.5-7B-Instruct
+# Derived from: configs/snapshots/exp_matrix_week5_external_validity_v1.yaml
+# Core runs only (no throughput sweep, no ablation variants).
+# Used by scripts/run_experiments.py
+#
+# Conventions:
+# - kv_mode: fp16 | int8_baseline | int8_ours | int4_baseline | int4_fused | int4_ours | kivi_style
+# - calib_strategy: none | percentile | kl_attn | kivi_asymmetric
+# - decode_attn_impl: torch_ref | triton_fused
+# - use_attn_temperature: true/false (per-head inv_tau from calib file)
+# - clip_percentile_{k,v}: used during calibration or as fixed percentile in percentile mode
+# - group_size_{k,v}: grouping along head_dim (e.g., 32 for head_dim=128)
+# - seq_len: context length budget (tokens)
+# - gen_len: max_new_tokens
+
+project:
+  name: kv-cache-quant-qwen2p5-7b
+  model_id: Qwen/Qwen2.5-7B-Instruct
+  model_revision: a09a35458c702b33eeacc393d103063234e8bc28
+
+runtime:
+  seed: 1234
+  device: cuda
+  dtype: fp16
+  decoding:
+    temperature: 0.0
+    top_p: 1.0
+    top_k: 0
+  quant_defaults:
+    quant_bits: 8
+    calib_strategy: kl_attn
+    # CFG-026: 7B calib files (kv_calib_kl_qwen25_7b_int8.json,
+    # kv_calib_kl_qwen25_7b_int4.json) must be generated on the remote GPU
+    # server via calibrate_behavior.py before running 7B int8_ours/int4_ours
+    # experiments. run_experiments.py will error at precheck if missing.
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int8.json
+    use_attn_temperature: true
+    use_static_scales: true
+    adaptive_static_scales: false
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    clip_percentile_k: 99.5
+    clip_percentile_v: 99.5
+    group_size_k: 16
+    group_size_v: 16
+  kernel_defaults:
+    decode_attn_impl: triton_fused
+
+matrix:
+  # =========================================================================
+  # FP16 baselines — curve points (fixed gen_len=64 for comparability)
+  # =========================================================================
+  - run_name: fp16_kv_curve_4k
+    kv_mode: fp16
+    quant_bits: 16
+    calib_strategy: none
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  - run_name: fp16_kv_curve_8k
+    kv_mode: fp16
+    quant_bits: 16
+    calib_strategy: none
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 64
+    batch: 1
+
+  - run_name: fp16_kv_curve_16k
+    kv_mode: fp16
+    quant_bits: 16
+    calib_strategy: none
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 16384
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # INT8 baseline — percentile symmetric, torch_ref decode
+  # =========================================================================
+  - run_name: int8_baseline_curve_4k
+    kv_mode: int8_baseline
+    quant_bits: 8
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: torch_ref
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  - run_name: int8_baseline_curve_8k
+    kv_mode: int8_baseline
+    quant_bits: 8
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 64
+    batch: 1
+
+  - run_name: int8_baseline_curve_16k
+    kv_mode: int8_baseline
+    quant_bits: 8
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: torch_ref
+    seq_len: 16384
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # INT8 ours mainline — KL calib + static adaptive scales + fused decode
+  # =========================================================================
+  - run_name: int8_ours_curve_4k_static_v3_no_temp_adaptive_fused
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int8.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: triton_fused
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  - run_name: int8_ours_curve_8k_static_v3_no_temp_adaptive_fused
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int8.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 64
+    batch: 1
+
+  - run_name: int8_ours_curve_16k_static_v3_no_temp_adaptive_fused
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int8.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: triton_fused
+    seq_len: 16384
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # INT4 baseline — percentile symmetric, torch_ref decode
+  # =========================================================================
+  - run_name: int4_baseline_curve_4k
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  - run_name: int4_baseline_curve_8k
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 64
+    batch: 1
+
+  - run_name: int4_baseline_curve_16k
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 16384
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # INT4 fused — percentile symmetric, triton_fused decode
+  # =========================================================================
+  - run_name: int4_fused_curve_4k
+    kv_mode: int4_fused
+    quant_bits: 4
+    calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  - run_name: int4_fused_curve_8k
+    kv_mode: int4_fused
+    quant_bits: 4
+    calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 64
+    batch: 1
+
+  - run_name: int4_fused_curve_16k
+    kv_mode: int4_fused
+    quant_bits: 4
+    calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 16384
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # INT4 ours — KL calibration + fused decode
+  # =========================================================================
+  - run_name: int4_ours_curve_4k
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: true
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  - run_name: int4_ours_curve_8k
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: true
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 64
+    batch: 1
+
+  - run_name: int4_ours_curve_16k
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: true
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 16384
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # KIVI-style INT8 — asymmetric quantization baseline
+  # =========================================================================
+  - run_name: kivi_style_int8_curve_4k
+    kv_mode: kivi_style
+    quant_bits: 8
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  - run_name: kivi_style_int8_curve_8k
+    kv_mode: kivi_style
+    quant_bits: 8
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 64
+    batch: 1
+
+  - run_name: kivi_style_int8_curve_16k
+    kv_mode: kivi_style
+    quant_bits: 8
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 16384
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # KIVI-style INT4 — asymmetric quantization baseline
+  # =========================================================================
+  - run_name: kivi_style_int4_curve_4k
+    kv_mode: kivi_style
+    quant_bits: 4
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 4096
+    gen_len: 64
+    batch: 1
+
+  - run_name: kivi_style_int4_curve_8k
+    kv_mode: kivi_style
+    quant_bits: 4
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 64
+    batch: 1
+
+  - run_name: kivi_style_int4_curve_16k
+    kv_mode: kivi_style
+    quant_bits: 4
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 16384
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # Long-context stress runs (seq_len + gen_len <= max_position_embeddings)
+  # NOTE: For this pinned revision, run_experiments.py resolves
+  #       max_position_embeddings=32768 at runtime; using 32704 keeps
+  #       comparability with the 1.5B config.
+  # =========================================================================
+  - run_name: fp16_kv_long
+    kv_mode: fp16
+    quant_bits: 16
+    calib_strategy: none
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  - run_name: int8_baseline_long
+    kv_mode: int8_baseline
+    quant_bits: 8
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  - run_name: int8_ours_long
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int8.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: triton_fused
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # Long-context INT4 & KIVI (seq_len=32704, gen_len=64, batch=1)
+  # =========================================================================
+  - run_name: int4_baseline_long
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  - run_name: int4_fused_long
+    kv_mode: int4_fused
+    quant_bits: 4
+    calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  - run_name: int4_ours_long
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: true
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  - run_name: kivi_style_int8_long
+    kv_mode: kivi_style
+    quant_bits: 8
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  - run_name: kivi_style_int4_long
+    kv_mode: kivi_style
+    quant_bits: 4
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 32704
+    gen_len: 64
+    batch: 1
+
+  # =========================================================================
+  # Throughput sweep (seq_len=8192, gen_len=128, batch=1,2,4,8,16)
+  # =========================================================================
+
+  # --- FP16 throughput ---
+  - run_name: fp16_throughput_8k_b1
+    kv_mode: fp16
+    quant_bits: 16
+    calib_strategy: none
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 1
+
+  - run_name: fp16_throughput_8k_b2
+    kv_mode: fp16
+    quant_bits: 16
+    calib_strategy: none
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 2
+
+  - run_name: fp16_throughput_8k_b4
+    kv_mode: fp16
+    quant_bits: 16
+    calib_strategy: none
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 4
+
+  - run_name: fp16_throughput_8k_b8
+    kv_mode: fp16
+    quant_bits: 16
+    calib_strategy: none
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 8
+
+  - run_name: fp16_throughput_8k_b16
+    kv_mode: fp16
+    quant_bits: 16
+    calib_strategy: none
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 16
+
+  # --- INT8 baseline throughput ---
+  - run_name: int8_baseline_throughput_8k_b1
+    kv_mode: int8_baseline
+    quant_bits: 8
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 1
+
+  - run_name: int8_baseline_throughput_8k_b2
+    kv_mode: int8_baseline
+    quant_bits: 8
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 2
+
+  - run_name: int8_baseline_throughput_8k_b4
+    kv_mode: int8_baseline
+    quant_bits: 8
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 4
+
+  - run_name: int8_baseline_throughput_8k_b8
+    kv_mode: int8_baseline
+    quant_bits: 8
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 8
+
+  - run_name: int8_baseline_throughput_8k_b16
+    kv_mode: int8_baseline
+    quant_bits: 8
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 16
+
+  # --- INT8 ours throughput ---
+  - run_name: int8_ours_throughput_8k_b1
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int8.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 128
+    batch: 1
+
+  - run_name: int8_ours_throughput_8k_b2
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int8.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 128
+    batch: 2
+
+  - run_name: int8_ours_throughput_8k_b4
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int8.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 128
+    batch: 4
+
+  - run_name: int8_ours_throughput_8k_b8
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int8.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 128
+    batch: 8
+
+  - run_name: int8_ours_throughput_8k_b16
+    kv_mode: int8_ours
+    quant_bits: 8
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int8.json
+    use_attn_temperature: false
+    use_static_scales: true
+    adaptive_static_scales: true
+    adaptive_static_margin: 1.0
+    adaptive_static_k: true
+    adaptive_static_v: true
+    group_size_k: 16
+    group_size_v: 16
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 128
+    batch: 16
+
+  # --- INT4 baseline throughput ---
+  - run_name: int4_baseline_throughput_8k_b1
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 1
+
+  - run_name: int4_baseline_throughput_8k_b2
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 2
+
+  - run_name: int4_baseline_throughput_8k_b4
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 4
+
+  - run_name: int4_baseline_throughput_8k_b8
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 8
+
+  - run_name: int4_baseline_throughput_8k_b16
+    kv_mode: int4_baseline
+    quant_bits: 4
+    calib_strategy: percentile
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 16
+
+  # --- INT4 fused throughput ---
+  - run_name: int4_fused_throughput_8k_b1
+    kv_mode: int4_fused
+    quant_bits: 4
+    calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 128
+    batch: 1
+
+  - run_name: int4_fused_throughput_8k_b2
+    kv_mode: int4_fused
+    quant_bits: 4
+    calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 128
+    batch: 2
+
+  - run_name: int4_fused_throughput_8k_b4
+    kv_mode: int4_fused
+    quant_bits: 4
+    calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 128
+    batch: 4
+
+  - run_name: int4_fused_throughput_8k_b8
+    kv_mode: int4_fused
+    quant_bits: 4
+    calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 128
+    batch: 8
+
+  - run_name: int4_fused_throughput_8k_b16
+    kv_mode: int4_fused
+    quant_bits: 4
+    calib_strategy: percentile
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: false
+    clip_percentile_k: 99.9
+    clip_percentile_v: 99.9
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 128
+    batch: 16
+
+  # --- INT4 ours throughput ---
+  - run_name: int4_ours_throughput_8k_b1
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: true
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 128
+    batch: 1
+
+  - run_name: int4_ours_throughput_8k_b2
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: true
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 128
+    batch: 2
+
+  - run_name: int4_ours_throughput_8k_b4
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: true
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 128
+    batch: 4
+
+  - run_name: int4_ours_throughput_8k_b8
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: true
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 128
+    batch: 8
+
+  - run_name: int4_ours_throughput_8k_b16
+    kv_mode: int4_ours
+    quant_bits: 4
+    calib_strategy: kl_attn
+    calib_file: artifacts/kv_calib_kl_qwen25_7b_int4.json
+    use_attn_temperature: true
+    group_size_k: 32
+    group_size_v: 32
+    decode_attn_impl: triton_fused
+    seq_len: 8192
+    gen_len: 128
+    batch: 16
+
+  # --- KIVI-style INT8 throughput ---
+  - run_name: kivi_style_int8_throughput_8k_b1
+    kv_mode: kivi_style
+    quant_bits: 8
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 1
+
+  - run_name: kivi_style_int8_throughput_8k_b2
+    kv_mode: kivi_style
+    quant_bits: 8
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 2
+
+  - run_name: kivi_style_int8_throughput_8k_b4
+    kv_mode: kivi_style
+    quant_bits: 8
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 4
+
+  - run_name: kivi_style_int8_throughput_8k_b8
+    kv_mode: kivi_style
+    quant_bits: 8
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 8
+
+  - run_name: kivi_style_int8_throughput_8k_b16
+    kv_mode: kivi_style
+    quant_bits: 8
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 16
+
+  # --- KIVI-style INT4 throughput ---
+  - run_name: kivi_style_int4_throughput_8k_b1
+    kv_mode: kivi_style
+    quant_bits: 4
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 1
+
+  - run_name: kivi_style_int4_throughput_8k_b2
+    kv_mode: kivi_style
+    quant_bits: 4
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 2
+
+  - run_name: kivi_style_int4_throughput_8k_b4
+    kv_mode: kivi_style
+    quant_bits: 4
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 4
+
+  - run_name: kivi_style_int4_throughput_8k_b8
+    kv_mode: kivi_style
+    quant_bits: 4
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 8
+
+  - run_name: kivi_style_int4_throughput_8k_b16
+    kv_mode: kivi_style
+    quant_bits: 4
+    calib_strategy: kivi_asymmetric
+    use_attn_temperature: false
+    decode_attn_impl: torch_ref
+    seq_len: 8192
+    gen_len: 128
+    batch: 16

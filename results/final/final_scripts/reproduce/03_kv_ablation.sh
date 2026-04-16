@@ -1,33 +1,109 @@
 #!/bin/bash
 # ================================================================
-# Step 3: K/V 消融实验 — 产出 kv_ablation/ 数据
+# Step 3: K/V 消融 + B10 校准灵敏度 — 产出 kv_ablation/ 数据
 # ================================================================
-# 输出: results/final/final_data/kv_ablation/
-# 原始脚本: scripts/archive/expansion_gpu0.sh, expansion_gpu1.sh
-# GPU 时间: ~8-10h
+# 输出: results/final/final_data/kv_ablation/runs/
+# 原始: scripts/archive/expansion_gpu0.sh + expansion_gpu1.sh
+# 配置: configs/snapshots/exp_matrix_b10_sens_*.yaml
+#        configs/snapshots/exp_matrix_mixed_kv_*.yaml
+# GPU: ~8-10h
 # ================================================================
 set -euo pipefail
 export CUDA_VISIBLE_DEVICES=0
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
 
 OUT="results/final/final_data/kv_ablation"
 
-# --- K/V 消融 RULER + LongBench (由 config 中的 ablation entries 控制) ---
-python3 scripts/run_experiments.py \
-    --config configs/exp_matrix.yaml \
-    --tasks eval_ruler,eval_longbench \
-    --seeds 1234,1235,1236 \
-    --out_dir "$OUT"
+# ─────────── Part A: B10 校准灵敏度 (1.5B + 7B) ───────────
+echo "═══ Part A: B10 sensitivity ═══"
 
-# --- K/V 消融 PPL (直接调用，指定 kv_config) ---
-for MODEL in "Qwen/Qwen2.5-1.5B-Instruct" "Qwen/Qwen2.5-7B-Instruct" \
-             "meta-llama/Llama-3.1-8B-Instruct"; do
-    for KV_CFG in "K4V16" "K16V4" "K8V4" "K4V8"; do
-        for SEED in 1234 1235 1236; do
-            python3 scripts/eval_ppl.py \
-                --model_id "$MODEL" \
-                --kv_mode int4_mixed_kv \
-                --seed $SEED \
-                --out_dir "$OUT/runs"
-        done
-    done
+# 1.5B B10
+for SAMPLES in 16 64 256; do
+  python3 scripts/run_experiments.py \
+    --config "configs/snapshots/exp_matrix_b10_sens_1p5b_s${SAMPLES}.yaml" \
+    --tasks eval_ppl --seeds 1234 \
+    --out_dir "$OUT"
+  python3 scripts/run_experiments.py \
+    --config "configs/snapshots/exp_matrix_b10_sens_1p5b_s${SAMPLES}.yaml" \
+    --tasks eval_needle --seeds 1234,1235,1236 \
+    --out_dir "$OUT"
+  python3 scripts/run_experiments.py \
+    --config "configs/snapshots/exp_matrix_b10_sens_1p5b_s${SAMPLES}.yaml" \
+    --tasks eval_longbench --seeds 1234,1235,1236 \
+    --out_dir "$OUT"
 done
+
+# 7B B10
+for SAMPLES in 16 64 256; do
+  python3 scripts/run_experiments.py \
+    --config "configs/snapshots/exp_matrix_b10_sens_7b_s${SAMPLES}.yaml" \
+    --tasks eval_ppl --seeds 1234 \
+    --out_dir "$OUT"
+  python3 scripts/run_experiments.py \
+    --config "configs/snapshots/exp_matrix_b10_sens_7b_s${SAMPLES}.yaml" \
+    --tasks eval_needle --seeds 1234,1235,1236 \
+    --out_dir "$OUT"
+  python3 scripts/run_experiments.py \
+    --config "configs/snapshots/exp_matrix_b10_sens_7b_s${SAMPLES}.yaml" \
+    --tasks eval_longbench --seeds 1234,1235,1236 \
+    --out_dir "$OUT"
+done
+
+# ─────────── Part B: K/V 消融 RULER (4 models) ───────────
+echo "═══ Part B: K/V ablation RULER ═══"
+
+KV_RUNS="k_only_int8_long,v_only_int4_long,k_int4_v_int8_long"
+
+python3 scripts/run_experiments.py \
+  --config configs/snapshots/exp_matrix_mixed_kv_1p5b_v1.yaml \
+  --run_names "$KV_RUNS" --tasks eval_ruler --seeds 1234,1235,1236 \
+  --out_dir "$OUT"
+
+python3 scripts/run_experiments.py \
+  --config configs/snapshots/exp_matrix_mixed_kv_7b_v1.yaml \
+  --run_names "$KV_RUNS" --tasks eval_ruler --seeds 1234,1235,1236 \
+  --out_dir "$OUT"
+
+python3 scripts/run_experiments.py \
+  --config configs/snapshots/exp_matrix_mixed_kv_8b_v1.yaml \
+  --run_names "$KV_RUNS" --tasks eval_ruler --seeds 1234,1235,1236 \
+  --out_dir "$OUT"
+
+python3 scripts/run_experiments.py \
+  --config configs/snapshots/exp_matrix_mixed_kv_mistral7b_v1.yaml \
+  --run_names "$KV_RUNS" --tasks eval_ruler --seeds 1234,1235,1236 \
+  --out_dir "$OUT"
+
+# ─────────── Part C: K/V 消融 LongBench (4 models) ───────────
+echo "═══ Part C: K/V ablation LongBench ═══"
+
+python3 scripts/run_experiments.py \
+  --config configs/snapshots/exp_matrix_mixed_kv_1p5b_v1.yaml \
+  --run_names "$KV_RUNS" --tasks eval_longbench --seeds 1234,1235,1236 \
+  --out_dir "$OUT"
+
+python3 scripts/run_experiments.py \
+  --config configs/snapshots/exp_matrix_mixed_kv_7b_v1.yaml \
+  --run_names "$KV_RUNS" --tasks eval_longbench --seeds 1234,1235,1236 \
+  --out_dir "$OUT"
+
+python3 scripts/run_experiments.py \
+  --config configs/snapshots/exp_matrix_mixed_kv_8b_v1.yaml \
+  --run_names "$KV_RUNS" --tasks eval_longbench --seeds 1234,1235,1236 \
+  --out_dir "$OUT"
+
+# ─────────── Part D: 跨模型 baselines (7B + 8B) ───────────
+echo "═══ Part D: Cross-model baselines ═══"
+
+python3 scripts/run_experiments.py \
+  --config configs/snapshots/exp_matrix_qwen25_7b_v1.yaml \
+  --run_names fp16_kv_long,int8_baseline_long,int8_ours_long \
+  --tasks eval_ruler --seeds 1234,1235,1236 \
+  --out_dir "$OUT"
+
+python3 scripts/run_experiments.py \
+  --config configs/snapshots/exp_matrix_llama31_8b_v1.yaml \
+  --run_names fp16_kv_long,int8_baseline_long,int8_ours_long \
+  --tasks eval_ruler --seeds 1234,1235,1236 \
+  --out_dir "$OUT"
