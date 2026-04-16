@@ -29,10 +29,10 @@
 
 | 论文表 | 数据目录 | CSV 模式 | 说明 |
 |--------|---------|---------|------|
-| tab:kv-ablation-ppl | kv_ablation/runs/kv_ablation_ppl/ | profile_ppl*.csv | 1.5B/7B/8B K/V 消融 PPL |
-| tab:kv-ablation-ruler | kv_ablation/runs/kv_ablation_ruler/ | profile_ruler*.csv | K/V 消融 RULER |
-| tab:kv-ablation-longbench | kv_ablation/runs/kv_ablation_longbench/ | profile_longbench*.csv | K/V 消融 LongBench |
-| tab:mixedkv-cross-model | kv_ablation/runs/mixedkv/ | profile_*.csv | MixedKV 跨模型 |
+| tab:kv-ablation-ruler | kv_ablation/runs/{k_only_int8,v_only_int4,k_int4_v_int8}_long_s*/ | profile_ruler*.csv | K/V 消融 RULER |
+| tab:kv-ablation-longbench | kv_ablation/runs/ (同上 pattern) | profile_longbench*.csv | K/V 消融 LongBench |
+| tab:mixedkv-cross-model | kv_ablation/runs/{k_only_int8,v_only_int4,k_int4_v_int8}_long_s*/ | profile_*.csv | MixedKV 跨模型 |
+| tab:b10-sensitivity | kv_ablation/runs/int8_ours_b10_s{16,64,256}_long_s*/ | profile_ppl*.csv | B10 校准消融 |
 | **tab:14b-kv-ablation** | backend_comparison/runs/ppl_ablation_{K*}_14b_*/ | profile_ppl*.csv | **14B K/V 消融** (新增) |
 
 ## Ch4 Section 4.4 INT4-RoleAlign 结果
