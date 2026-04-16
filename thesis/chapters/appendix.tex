@@ -44,7 +44,7 @@
 \code{REPRODUCE.md} 记录了 one-click 执行顺序、GPU 时间预算与输出位置契约。
 
 \paragraph{主线 subset 冻结入口。}
-\code{reproduce/01\_calibrate.sh} $\sim$ \code{10\_7b\_kl\_vs\_mse.sh} 是**冻结编排入口**，
+\code{reproduce/01\_calibrate.sh} $\sim$ \code{10\_7b\_kl\_vs\_mse.sh} 是\textbf{冻结编排入口}，
 固定 \code{run\_tag} 与输出目录层级（统一落在 \code{results/final/final\_data/*/runs/} 下），
 覆盖正文 Ch4 §4.2（C1 校准依赖）、§4.3（C2 诊断）、§4.4（C2 实例化 + 14B 外部效度）、
 §4.5.1--4（C3 融合核效率）以及附录 \ref{subsec:app-7b-kl-mse} 的 7B KL=MSE 趋同溯源。

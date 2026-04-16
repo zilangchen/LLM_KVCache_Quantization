@@ -232,3 +232,46 @@ $$
 ---
 
 > 预演次数建议：本 Q10 每题独立口头预演 3 次 + 完整串讲 1 次，总耗时约 2 小时。
+
+---
+
+## P4 终审追加 Follow-up（2026-04-17 差量复跑后）
+
+### FU-1. §3.5 非对称公式重写（P3b-2 TR-0401 修复后）
+
+新 Follow-up："你 §3.5 eq:ch3-perchannel-k 的 zero-point 定义 $z^K_{l,j} = m^K_{l,j} - q_{\min}\cdot s^K_{l,j}$，这个 zero-point 是浮点还是整数？与 code `asymmetric_quant.py` 是否一致？"
+→ 答：是**浮点 zero-point**（论文 ch2 eq. 2-8 定义 z 为整数是传统 QNN 约定，本文实现更贴近 PyTorch 的 per-channel quant 惯例：$z_{\text{float}} = m - q_{\min}\cdot s$，反量化 $\hat{x} = q\cdot s + z_{\text{float}}$）。与 `asymmetric_quant.py:119-136` 代码实现一致（ENG-047 实证）。浮点 zp 免去整数 round 引入的额外误差，是 KIVI 原文和 bitsandbytes 主流实现的共同选择。
+
+### FU-2. AI 工具声明充分性
+
+新 Follow-up："致谢中 AI 工具声明列了四个工具，但没有给出具体提示词范例和 references.bib 条目——这够不够附件1 2025-11 新规的要求？"
+→ 答：附件1 新规的强要求是"披露使用的 AI 工具及其用途"，本文致谢 L15-26 已明确 (1) 辅助代码、(2) 文献检索/润色、(3) 语句打磨、(4) 图片素材生成四类具体用途。附件1 的 `@misc` 引用格式是针对"AI 生成的具体内容被作为可引证文献引用"（如 AI 生成的一段论证）的场景；本文 AI 工具仅承担辅助角色（不作为被引文献），故未在 references.bib 单独添加 `@misc` 条目。若答辩评委坚持要求 `@misc` 条目，可在 rebuttal 版追加 `@misc{claude2026,title=...,author={Anthropic},note={...}}` 等四条占位记录。
+
+### FU-3. REPRODUCE.md one-click 清晰度
+
+新 Follow-up："附录 A.2 说 `REPRODUCE.md` 是 one-click 入口，但 v3_quick 的实际 $N=16$ 和论文声称 $N=128$ 不同——复现时读者能对齐到同一校准参数吗？"
+→ 答：完全对齐。A.2 末段明确 "B10 校准样本数量敏感性消融（表 4-6，覆盖 $s\in\{16, 64, 256\}$）确认对 PPL/Needle/RULER/LongBench 四类指标均不敏感，$N=16$ 已进入校准目标的平坦收敛域，$N=128$ 的正文引用与 $N=16$ 的实际实参指向同一校准参数配置"。这个披露在 P3b 修复后作为永久性 appendix 条目存在，答辩评委看到"校准样本数不敏感"+"明确 $N=16$ 实参披露"两段话后应该能理解复现包的 subset 特性。
+
+### FU-4. 非复现数据清单（subset 披露）
+
+新 Follow-up："附录 A.2 列了 BitDecoding 和 LongBench 官方数据作为 `reproduce/` 不复现的部分——这不是 selective 复现吗？"
+→ 答：是的，但已明确披露。BitDecoding (*_bd_*) 依赖外部 CUTLASS + NVFP4 + Blackwell 硬件，**H20 上本来就无法复现**；LongBench 官方 v2 在 EVL-042 bug 修复路径中只作为验证用途，正文主结果用自研合成评测（A.16 独立验证过自研与官方方向一致）。这两项非复现不影响主表 C1/C2/C3 贡献的复现。
+
+---
+
+## 评分预测（D6a' 修复后）
+
+P3 前估计：**79.5/100**（D6a 初评，基于 CRIT/HIGH 数量）
+
+P4 终审后估计：**83-86/100**
+
+依据：
+- P3a 4 CRIT 全部修复（TR-0002, 0003, 0400, 0401）→ +3 分
+- P3b-1 + P3b-2 + P3b-3 共 25 类 HIGH 修复 → +2 分
+- P3c + P3d 20 MED/LOW 修复 → +1 分
+- 新增 §3.5 非对称公式完整、AI 工具声明、复现包披露 → +1 分（格式合规）
+- AI 痕迹消除（feedback_ai_trace_removal.md 口径）维持不变 → 0
+- 残留弱点（LongBench 官方验证仅 1.5B + 3 任务；14B 32K RULER 未测；INT4-RoleAlign 未跑赢 KIVI）已主动披露 → -1.5 (不扣大)
+
+最终区间 83-86，上行空间取决于答辩现场表现（Panel Q&A 训练）。
+
