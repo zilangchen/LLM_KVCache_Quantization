@@ -137,3 +137,59 @@
 | LOW | 4 |
 
 **评估**：论文图表结构性完好，主要优化项为"清理 PDF/PNG 冗余" + "补充 caption 元数据"。预计 4-5 小时完成全部优化。
+
+---
+
+## H. P3c 附录：TR-0701/TR-0702 执行记录（2026-04-17）
+
+### H.1 TR-0701 PDF/PNG 冗余清理（已执行）
+
+扫描 `thesis/figures/` 与 LaTeX `\includegraphics` 引用确认后，统一删除 PNG（LaTeX 偏好 PDF）。
+
+**已删除的 PNG 列表**（35 个，跳过 `ch1_pipeline_gemini_cropped.png` 因为只有 PNG）：
+
+```
+appendix_memory_dashboard.png            kv_error_heatmap_pair_int4_mixed_kv.png
+appendix_throughput_dashboard.png        latency_tpot_gain_vs_fp16.png
+ch3_invtau_heatmap.png                   latency_tpot_vs_seq.png
+kv_ablation_summary_ruler.png            longbench_score_vs_context.png
+kv_error_bars_int4_mixed_kv_Llama-3.1-8B-Instruct.png
+kv_error_bars_int4_mixed_kv_Qwen2.5-1.5B-Instruct.png
+kv_error_heatmap_int4_mixed_kv_Llama-3.1-8B-Instruct.png
+kv_error_heatmap_int4_mixed_kv_Qwen2.5-1.5B-Instruct.png
+main_efficiency_dashboard.png            memory_peak_vs_seq.png
+main_quality_dashboard.png               needle_curve_depth_ctx16384.png
+memory_kv_cache_vs_batch.png             needle_curve_depth_ctx32704.png
+memory_kv_cache_vs_seq.png               needle_curve_depth_ctx4096.png
+memory_peak_vs_batch.png                 needle_curve_depth_ctx8192.png
+needle_depth_grid.png                    ppl_vs_tokens.png
+needle_exact_match_vs_context.png        prefill_tok_per_s_vs_batch.png
+needle_pass_rate_vs_context.png          rolealign_summary.png
+pareto_quality_efficiency.png            ruler_pass_rate_vs_context.png
+ppl_degradation_vs_scale.png             test_fig1_pipeline.png
+throughput_tok_per_s_per_seq_vs_batch.png  test_fig2_framework.png
+throughput_tok_per_s_vs_batch.png
+```
+
+### H.2 TR-0702 孤儿图片登记（存档，不删除）
+
+以下 PDF 文件存在于 `figures/` 但未被任何 `.tex` 文件引用。保留存档价值，不物理删除：
+
+| 基名 | 备注 |
+|------|------|
+| `ch1_pipeline_gemini.jpeg` | Gemini 原图，被 cropped 版本替代 |
+| `kv_error_bars_int4_mixed_kv_Llama-3.1-8B-Instruct.pdf` | KVC 附录备选 |
+| `kv_error_bars_int4_mixed_kv_Qwen2.5-1.5B-Instruct.pdf` | KVC 附录备选 |
+| `kv_error_heatmap_int4_mixed_kv_Llama-3.1-8B-Instruct.pdf` | KVC 附录备选 |
+| `kv_error_heatmap_int4_mixed_kv_Qwen2.5-1.5B-Instruct.pdf` | KVC 附录备选 |
+| `latency_tpot_vs_seq.pdf` | 被 `latency_tpot_gain_vs_fp16.pdf` 替代 |
+| `memory_kv_cache_vs_batch.pdf`, `memory_kv_cache_vs_seq.pdf` | 被 `appendix_memory_dashboard` 聚合 |
+| `memory_peak_vs_batch.pdf`, `memory_peak_vs_seq.pdf` | 被 `appendix_memory_dashboard` 聚合 |
+| `needle_curve_depth_ctx{4096,8192,16384,32704}.pdf` | 单点曲线，已由 grid 版本替代 |
+| `needle_pass_rate_vs_context.pdf` | 被 `needle_exact_match_vs_context.pdf` 替代 |
+| `ppl_vs_tokens.pdf` | 早期调试图 |
+| `prefill_tok_per_s_vs_batch.pdf` | 被 `appendix_throughput_dashboard` 聚合 |
+| `test_fig1_pipeline.pdf`, `test_fig2_framework.pdf` | 测试占位图 |
+| `throughput_tok_per_s_per_seq_vs_batch.pdf`, `throughput_tok_per_s_vs_batch.pdf` | 被 `appendix_throughput_dashboard` 聚合 |
+
+**状态**：登记存档，不做物理删除（避免后续需要查阅被动失数据）。

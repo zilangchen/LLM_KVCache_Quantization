@@ -173,7 +173,7 @@ INT4 KV Cache 退化由 Key 侧主导。
 说明评价低比特量化不能仅用 PPL；
 其他 INT4 配置如对称 INT4 baseline 则呈现 Needle 随 PPL 同降，
 本文第~\ref{sec:exp-int4}~节给出受控对比。
-这一诊断自然指向 per-channel Key + per-token Value 的差异化格式——
+这一诊断指向 per-channel Key + per-token Value 的差异化格式——
 与 KIVI~\cite{liu2024kivi} 从工程经验出发独立提出的格式一致。
 本文在该格式上以离线 attention-KL 搜索替代运行时 absmax/min，
 得到行为引导的实例化 INT4-RoleAlign，

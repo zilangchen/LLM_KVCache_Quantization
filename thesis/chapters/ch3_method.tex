@@ -1000,7 +1000,7 @@ naive dequant+SDPA 路径的 TPOT 为 $T_{\text{naive}}$，
     Triton 核函数的 Grid 按 $(B, H_q)$ 启动。
     当 $H_{kv}$ 较小（如 $H_{kv}=2$，$H_q=12$）时，
     实例总数可能不足以填满所有 SM，导致硬件利用率受限。
-    相反，$H_{kv}=8$（$H_q=28$ 或更多）时 Grid 更密，SM 占用率更高。
+    相反，$H_{kv}=8$（$H_q=32$，如 LLaMA-3.1-8B）时 Grid 更密，SM 占用率更高。
   \item \textbf{带宽节省与反量化开销的权衡}：
     融合核通过在 SRAM 中完成反量化避免了全局显存的中间张量物化，
     其带宽节省量与序列长度成正比（$O(S \cdot d_k)$）。

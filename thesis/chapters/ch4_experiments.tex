@@ -1944,7 +1944,7 @@ KL 至少不劣于 MSE，并在小模型 INT4 设置下表现更优。
 保持 Value 为 FP16 仅恢复 64\%。
 在 INT4-RoleAlign 配置下 Needle retrieval 与 PPL 在 1.5B--14B 范围内一致解耦
 （其他 INT4 配置如 symmetric-only 下 Needle 随 PPL 同降）。
-该诊断自然指向 per-channel Key + per-token Value 的差异化格式——
+该诊断指向 per-channel Key + per-token Value 的差异化格式——
 与 KIVI~\cite{liu2024kivi} 从工程经验出发独立提出的格式一致。
 在该格式上以离线 attention-KL 搜索实例化的 INT4-RoleAlign
 在四个模型上保持 Needle 100\%，KV Cache 压缩约 73\%，
@@ -1954,7 +1954,7 @@ RULER 在 4K--16K 达到 96.6\%--98.5\%。
 
 \paragraph{发现三：融合核效率的 $(H_{kv}, \text{seq\_len})$ 特征}
 Triton 融合核的效率增益在 $(H_{kv}, \text{seq\_len})$ 空间中
-呈显著分化（详见第~\ref{sec:exp-deployment}~节）。
+呈规模依赖（详见第~\ref{sec:exp-deployment}~节）。
 $H_{kv}=8$ 在 32K 下延迟减少约 40\%，
 $H_{kv}=2$ 下融合核始终慢于 SDPA。
 8B 与 14B（同 $H_{kv}=8$）在短序列效率上高度一致，

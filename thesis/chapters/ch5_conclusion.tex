@@ -31,7 +31,7 @@ KL 至少不劣于 MSE，并在小模型 INT4 设置下表现更优。
 INT4 退化由 Key 侧主导。
 14B 上保持 Key 为 FP16 可恢复 93\% 的 PPL 退化，
 保持 Value 为 FP16 仅恢复 64\%。
-该诊断自然指向 per-channel Key + per-token Value 差异化格式——
+该诊断指向 per-channel Key + per-token Value 差异化格式——
 与 KIVI~\cite{liu2024kivi} 从工程经验出发独立提出的格式一致。
 在该格式上以离线 attention-KL 搜索实例化的 INT4-RoleAlign
 在四个模型上保持 Needle 100\%，KV Cache 压缩约 73\%，
@@ -41,7 +41,7 @@ RULER 在 4K--16K 达到 96.6\%--98.5\%。
 
 \paragraph{Finding 3：融合核效率的 $(H_{kv}, \text{seq\_len})$ 特征（回应 RQ3）。}
 Triton 融合量化解码核函数的效率增益
-在 $(H_{kv}, \text{seq\_len})$ 空间中呈显著分化：
+在 $(H_{kv}, \text{seq\_len})$ 空间中呈规模依赖：
 $H_{kv}=8$ 在 8K+ 序列下提供显著加速（32K 下延迟减少约 40\%），
 $H_{kv}=2$ 下融合核在所有长度下均慢于 SDPA。
 8B（$H_{kv}=8$, LLaMA）与 14B（$H_{kv}=8$, Qwen）
