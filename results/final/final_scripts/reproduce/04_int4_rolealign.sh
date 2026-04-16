@@ -9,28 +9,41 @@
 set -euo pipefail
 export CUDA_VISIBLE_DEVICES=0
 
-OUT="results/final/final_data/int4_rolealign"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FINAL_SCRIPTS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$FINAL_SCRIPTS_DIR/../../.." && pwd)"
+RUN_SCRIPT="$REPO_ROOT/scripts/run_experiments.py"
+CONFIG="$FINAL_SCRIPTS_DIR/configs/exp_matrix_rolealign.yaml"
+OUT="$REPO_ROOT/results/final/final_data/int4_rolealign/runs"
+QUALITY_RUNS="int4_ours_sym_ref,int4_ours_asym_long,int4_ours_asym_ba_long,kivi_style_int4_ref"
+PROFILE_RUNS="int4_ours_sym_ref,int4_ours_asym_long,int4_ours_asym_ba_long"
 
-# --- PPL + Needle (模型和 kv_modes 由 rolealign config 控制) ---
-python3 scripts/run_experiments.py \
-    --config configs/exp_matrix_rolealign.yaml \
+# --- PPL + Needle 论文主线子集 (稳定 run_tag) ---
+python3 "$RUN_SCRIPT" \
+    --config "$CONFIG" \
+    --run_names "$QUALITY_RUNS" \
     --tasks eval_ppl,eval_needle \
     --seeds 1234,1235,1236,1237,1238 \
+    --run_tag int4_rolealign_quality \
     --out_dir "$OUT"
 
-# --- RULER (4 context lengths) ---
+# --- RULER (4 context lengths, 每个 context 使用稳定 run_tag) ---
 for CTX in 4096 8192 16384 32704; do
-    python3 scripts/run_experiments.py \
-        --config configs/exp_matrix_rolealign.yaml \
+    python3 "$RUN_SCRIPT" \
+        --config "$CONFIG" \
+        --run_names "$QUALITY_RUNS" \
         --tasks eval_ruler \
         --seeds 1234,1235,1236 \
-        --ruler_context_len $CTX \
+        --run_tag "int4_rolealign_ruler_ctx${CTX}" \
+        --ruler_context_len "$CTX" \
         --out_dir "$OUT"
 done
 
-# --- Serial TPOT profiling ---
-python3 scripts/run_experiments.py \
-    --config configs/exp_matrix_rolealign.yaml \
+# --- Serial TPOT profiling 子集 (稳定 run_tag) ---
+python3 "$RUN_SCRIPT" \
+    --config "$CONFIG" \
+    --run_names "$PROFILE_RUNS" \
     --tasks profile_latency \
     --seeds 1234,1235,1236 \
+    --run_tag int4_rolealign_profile \
     --out_dir "$OUT"
