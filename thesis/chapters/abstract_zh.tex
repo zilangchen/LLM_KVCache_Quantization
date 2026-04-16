@@ -11,45 +11,29 @@ INT4 量化理论上可将 KV Cache 压缩至原始的 $1/4$，
 但现有以数值误差为校准目标的方法在长上下文下
 表现急剧恶化：Needle 检索通过率可从 100\% 降至 0\%，
 困惑度退化超过 15\%。
-这一矛盾提示我们从注意力行为保真的角度重新审视校准目标，
-以量化前后注意力分布之间的 Kullback--Leibler 散度
-（attention-KL）刻画行为偏移。
+本文从注意力行为保真的角度重新审视校准目标，
+以量化前后注意力分布的 Kullback--Leibler 散度
+（attention-KL）作为统一的校准与诊断原则，
+并以 GQA 头数 $H_{kv}$ 为结构性关联变量
+联合分析校准灵敏度、退化模式与融合解码效率。
 
-在 Qwen2.5-1.5B 上、在贪心解码与
-robust selection（$\max~\text{clip rate}\leq 1\%$）约束下，
-我们直接比较 attention-KL 与 MSE 两种校准目标的作用，
-发现校准目标的有效性呈明显的 bit-width 依赖。
-在 INT8 下，两种目标对
-$(\text{clip\_percentile},\text{group\_size})$
-的选择完全趋同，产出的每组 per-group scale 在 float32 下
-逐位一致；而在 INT4 下，两种目标分别选择
-$\text{clip\_percentile}=99.5$ 与 $99.0$，
-所有 scale 元素不同，中位相对差异 12.35\%。
-在本文 INT4 设定下，数值代理不足以稳定替代行为对齐目标。
-
-进一步的受控诊断揭示了两个结构性特征：
-通过 K-only 与 V-only 因子分解，
-INT4 退化在三个模型族上一致呈 Key 主导——
-仅对 Key 量化为 INT4 即复现全 INT4 的崩溃，
-而仅对 Value 量化为 INT4 几乎无影响；
-同时 Needle retrieval 与 PPL 之间存在明显解耦——
-同一 INT4 配置可以在 Needle 上保持 100\% pass rate
-的同时 PPL 退化 13.7\%。
-基于这些诊断，我们在 KIVI~\cite{liu2024kivi} 提出的
-per-channel Key + per-token Value 非对称格式上，
-以离线 attention-KL 搜索为每层确定 BA percentile，
-得到行为引导的实例化 RoleAlign。
-在上述四个模型上，RoleAlign 以约 73\% 的 KV Cache 压缩率
-保持 Needle 检索 100\%，
-PPL 退化随模型规模增大而减弱
-（1.5B: 13.7\%；7B: 6.1\%；8B: 2.4\%；14B: 6.1\%）；
-在 LLaMA-3.1-8B 的 65{,}536-token Needle 设定下，
-RoleAlign 复现了 FP16 自身的 long-context failure mode。
-
-此外，我们观察到逐头温度校正 $\tau^{-1}$ 呈现
-GQA 头数相关的架构依赖（$H_{kv}=2$ 时略有改善，
-$H_{kv}\geq 4$ 时反而恶化），
-因此将其定位为可选启发式而非常规组件。
+在 Qwen2.5-1.5B/7B/14B 与 LLaMA-3.1-8B 四个模型上，
+我们发现校准目标的有效性呈 bit-width 与规模依赖：
+INT8 下两种目标完全趋同，
+INT4 下在小模型（$H_{kv}=2$）上分化而在大模型（$H_{kv}=4$）上再次趋同。
+受控诊断表明 INT4 退化由 Key 侧主导，
+14B 上保持 Key 为 FP16 可恢复 93\% 的 PPL 退化；
+Needle retrieval 与 PPL 在四个模型上一致解耦。
+基于诊断，我们在 KIVI~\cite{liu2024kivi} 的
+非对称格式上以离线 attention-KL 搜索得到 INT4-RoleAlign，
+在四个模型上保持 Needle 100\%，KV Cache 压缩约 73\%，
+PPL 退化随模型规模减弱（1.5B: 13.7\%，7B: 6.0\%，8B: 2.4\%）。
+14B 提供外部效度：Needle 在 4K--32K 全通过，
+RULER 在 4K--16K 达到 96.6\%--98.5\%。
+融合量化解码核函数的效率增益
+在 $(H_{kv}, \text{seq\_len})$ 空间中呈显著分化：
+$H_{kv}=8$ 在 32K 下延迟减少约 40\%，
+$H_{kv}=2$ 下融合核在所有长度下均慢于 SDPA。
 
 \keywordszh{大语言模型；键值缓存；量化；行为对齐校准；非对称量化；GQA 架构}
 

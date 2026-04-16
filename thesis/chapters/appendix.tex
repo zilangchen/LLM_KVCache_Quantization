@@ -434,79 +434,7 @@ TPOT 和 KV Cache 显存变化。
   \end{tablenotes}
 \end{table}
 
-% ============================================================
-\section{实验预期验证详细汇总}
-\label{sec:app-claim-detail}
-% ============================================================
-
-表~\ref{tab:app-claim-summary} 汇总了全部 13 项实验预期的验证结果，
-包括实际观测增益、阈值、统计检验结果和证据强度。
-
-\begin{table}[htbp]
-  \centering
-  \caption{实验预期验证详细汇总（13 项）}
-  \label{tab:app-claim-summary}
-  \zihao{5}
-  \setlength{\tabcolsep}{3pt}
-  \begin{tabular}{clcrrrcl}
-    \toprule
-    \textbf{编号} & \textbf{实验预期} & \textbf{结论} & \textbf{阈值} & \textbf{观测} & \textbf{$q$值} & \textbf{证据} & \textbf{关键模型} \\
-    \midrule
-    E1  & TPOT 显著降低             & 达标 & $\geq$5\%    & +17.3\%   & 0.016 & 强    & 7B \\
-    E2  & KV 显存优势               & 达标 & $\geq$20\%   & +43.7\%   & ---   & 中    & 8B \\
-    E3  & Needle 不劣于 baseline    & 达标 & $\geq$$-$1\%  & 0.0\%     & 1.000 & 中    & 7B \\
-    E4  & PPL 不劣于 baseline       & 达标 & $\geq$$-$0.5\% & $-$0.20\% & 0.097 & 中    & 1.5B \\
-    E5  & LongBench 不劣于 baseline & 达标 & $\geq$$-$1\%  & +0.16\%   & 0.144 & 中    & 7B \\
-    E6  & RULER 不劣于 baseline     & 未达标 & $\geq$$-$1\%  & $-$2.64\% & 0.727 & 无    & 1.5B \\
-    E7  & INT4 Needle 不劣于        & 未达标 & $\geq$$-$1\%  & $-$2.0\%  & 1.000 & 无    & 8B \\
-    E8  & INT4 PPL 不劣于           & 未达标 & $\geq$$-$0.5\% & $-$15.9\% & 0.097 & 无    & 7B \\
-    E9  & LongBench 不劣于 KIVI     & 达标 & $\geq$$-$1\%  & +1.37\%   & 0.144 & 中    & 7B \\
-    E10 & Needle 不劣于 KIVI        & 达标 & $\geq$$-$1\%  & 0.0\%     & 1.000 & 中    & 8B \\
-    E11 & 跨模型 LongBench 不劣于   & 达标 & $\geq$$-$1\%  & +0.05\%   & 0.955 & 中    & 7B+8B \\
-    E12 & MixedKV RULER 优于均匀 INT4 & 达标 & $>$0\%        & +24.87\%\tnote{f} & ---   & 中    & 1.5B/7B \\
-    E13 & 校准样本鲁棒性 PPL 变化极小 & 达标 & $\leq$0.02  & 0.02      & ---   & 中    & 1.5B/7B \\
-    \bottomrule
-  \end{tabular}
-  \begin{tablenotes}
-    \footnotesize
-    \item 注：E1--E5、E9--E11 为 INT8 相关预期，E6 为 INT8 RULER 预期，E7--E8 为 INT4 预期，E12--E13 为新增预期。
-    ``阈值''为非劣性/优效性的最小增益要求。``$q$值''为 BH-FDR 校正后的调整 $p$ 值。
-    ``---'' 表示该项不要求统计检验（直接比较确定性指标）。
-    \item[f] E12 观测值为 Qwen 1.5B 的 MixedKV RULER（24.87\%）相对均匀 INT4（0\%）的增益。
-    LLaMA-8B 的均匀 INT4 RULER 为 27.05\%（非 0\%），MixedKV（33.28\%）与之保持竞争力。
-    三项未达标（E6、E7、E8）的共性分析见正文第~\ref{sec:exp-discussion}~节。
-  \end{tablenotes}
-\end{table}
-
-% ============================================================
-\section{校准产物版本说明}
-\label{sec:app-calib-provenance}
-% ============================================================
-
-本文实验使用的校准产物信息如下：
-
-\begin{itemize}[leftmargin=2em, itemsep=2pt]
-  \item \textbf{校准文件}：\code{kv\_calib\_kl\_selected\_v3\_quick.json}
-  \item \textbf{校准方法}：KL 散度行为对齐校准（kl\_selected）
-  \item \textbf{校准模型}：Qwen2.5-1.5B-Instruct
-  \item \textbf{校准样本}：128 条 WikiText-103 文本，序列长度 2048 tokens
-  \item \textbf{生成日期}：2026-02-12
-  \item \textbf{量化精度}：INT8 对称量化，per-group（group\_size=16）
-  \item \textbf{产物内容}：28 层 $\times$（k\_scale, v\_scale, per-head inv\_tau）
-\end{itemize}
-
-\textbf{已知局限。}
-该校准产物生成时，校准脚本的 Q 向量预处理流程
-尚未包含 input\_layernorm 和 RoPE 位置编码变换，
-后续版本已优化了该预处理流程。
-1.5B 模型的 INT8 量化在实验中展现了与 FP16
-几乎一致的质量（PPL 退化 $-$0.20\%，Needle 100\%），
-表明当前校准产物对 1.5B 模型 INT8 量化的影响有限。
-使用完善后的预处理流程进行重校准对比验证
-列为未来工作（第~\ref{sec:conclusion-future}~节）。
-
-7B 和 8B 模型的校准文件独立生成，
-各模型的 per-layer scale 和 per-head inv\_tau 参数均为模型特异性的。
+% [实验预期验证表和校准产物版本说明已移除——属于工程文档而非学术论文内容]
 
 % ============================================================
 \section{INT4 量化精度敏感性补充实验}
@@ -838,102 +766,38 @@ $\tau^{-1} = 1$ 退化为标准基线。
 $\bQ'_{l,h} = \bQ_{l,h} \cdot \tau^{-1}_{l,h}$（逐头广播），
 无需修改注意力核函数签名，无额外 kernel launch。
 
-\section{主章节实验数据溯源}
-\label{sec:app-data-provenance}
+% [数据溯源表已移除——属于工程数据管理文档而非学术论文内容]
 
-表~\ref{tab:app-data-provenance} 将第~\ref{chap:experiments}~章中有独立
-\code{\textbackslash label} 的核心表格映射到实验产出目录，便于复现与审计。
-每条记录包含表标签与对应结果目录；聚合 CSV 由
-\code{aggregate\_results.py} 自动从该目录下的 \code{runs/} 生成到 \code{tables/}。
-所有目录均位于项目根路径 \code{results/} 之下。
+\subsection{7B KL vs MSE 校准目标趋同验证}
+\label{subsec:app-7b-kl-mse}
 
-\begin{table}[htbp]
-  \centering
-  \caption{ch4 核心表格的数据溯源映射}
-  \label{tab:app-data-provenance}
-  \resizebox{\textwidth}{!}{%
-  \scriptsize
-  \begin{tabular}{lll}
-    \toprule
-    \textbf{表标签} & \textbf{实验目录} & \textbf{状态} \\
-    \midrule
-    tab:decoding-params      & ---                                  & 参数配置非实验产出 \\
-    tab:kv-modes             & emnlp\_final\_raw/                   & canonical (tables/) \\
-    tab:main-results         & emnlp\_final\_raw/                   & canonical (tables/) \\
-    tab:temp-ablation        & emnlp\_final\_raw/runs/temp\_ablation/ & canonical \\
-    tab:b10-sensitivity      & emnlp\_final\_raw/runs/calib\_b10\_ablation/ & canonical \\
-    tab:cross-model          & emnlp\_final\_raw/runs/cross\_model/ & canonical \\
-    tab:kivi-comparison      & emnlp\_final\_raw/                   & canonical（INT8 对比）\\
-    tab:kv-ablation-ppl      & emnlp\_final\_raw/runs/kv\_ablation\_ppl/ & canonical \\
-    tab:kv-ablation-ruler    & emnlp\_final\_raw/runs/kv\_ablation\_ruler/ & canonical \\
-    tab:kv-ablation-longbench & emnlp\_final\_raw/runs/kv\_ablation\_longbench/ & canonical \\
-    tab:mixedkv-cross-model  & emnlp\_final\_raw/runs/mixedkv/      & canonical \\
-    tab:rolealign-results (PPL/Needle)   & emnlp\_rolealign\_v2/runs/ppl\_ours\_asym\_*/ & raw (v2 post-fix) \\
-    tab:rolealign-results (RULER 4K)     & emnlp\_rolealign\_v2/runs/ruler\_ours\_asym\_*\_ctx4096/ & raw (seq\_len=4K，bug 不影响) \\
-    tab:rolealign-results (RULER 8K-32K) & emnlp\_rolealign\_v2/runs/ruler\_v2fix\_*\_ctx\{8192,16384,32704\}/ & raw (v2fix post-seq\_len-bugfix) \\
-    tab:rolealign-results (LongBench)    & emnlp\_rolealign\_v1/tables/longbench\_summary.csv & v1 legacy (4K 合成样本，算法无 bug) \\
-    tab:invtau-ablation      & emnlp\_rolealign\_v2/runs/ppl\_ours\_asym\_*/ & raw \\
-    tab:int4-tpot-cross-model & emnlp\_rolealign\_v2/runs/prof\_serial\_latency\_*/ & raw \\
-    tab:kivi-int4-threeway   & emnlp\_rolealign\_v2/runs/ruler\_v2fix\_*\_ctx\{8192,16384,32704\}/ & raw (v2fix) \\
-    tab:claim-summary        & ---（元表，汇总上述所有 claim 的验证状态）& --- \\
-    \bottomrule
-  \end{tabular}}% end resizebox
-\end{table}
-
-\paragraph{数据版本说明。}
-INT4-RoleAlign 实验经历两个版本：
-v1（2026-03-25）的 PPL 和 RULER 因评测脚本 bug 无效，
-已由 v2（2026-04-02）完全替代；
-Needle 和 LongBench 无 bug，沿用 v1 数据。
-正文表格的所有数字已与 v2 原始 CSV 逐 seed 核对一致。
-贪婪解码下 PPL 为位级确定量（第~\ref{subsec:exp-statistics}~节），
-重复运行结果与原表逐位一致。
-
-\section{实验预期验证状态总结}
-\label{sec:app-claim-summary}
-
-本节展开第~\ref{subsec:exp-claim-summary}~节所概括的四条核心 claim 背后
-16 项具体实验预期（E1--E16）的完整达标状态与证据强度分级
-（见表~\ref{tab:claim-summary}）。
+表~\ref{tab:app-7b-kl-mse} 提供第~\ref{sec:exp-main}~节
+"校准目标灵敏度的规模依赖"所引用的 7B 数据溯源。
+在 Qwen2.5-7B-Instruct 上，KL 与 MSE 两种校准目标搜索到
+完全相同的 percentile 参数（$k\_\text{percentile}=100.0$,
+$v\_\text{percentile}=99.9$），PPL 结果在贪婪解码下逐位一致。
 
 \begin{table}[htbp]
   \centering
-  \caption{实验预期验证状态总结}
-  \label{tab:claim-summary}
+  \caption{7B KL vs MSE 校准对比数据溯源}
+  \label{tab:app-7b-kl-mse}
   \small
-  \begin{threeparttable}
-  \begin{tabular}{clccl}
+  \begin{tabular}{lccccl}
     \toprule
-    编号 & 实验预期 & 结论 & 证据强度 & 证据来源 \\
+    \textbf{校准目标} & $k\_\text{pct}$ & $v\_\text{pct}$ & \textbf{PPL} & \textbf{Seeds} & \textbf{Calib 文件} \\
     \midrule
-    E1  & INT8-ours 显著降低 TPOT              & \textbf{达标} & 强\tnote{a}   & 表~\ref{tab:main-results} \\
-    E2  & INT8-ours 保持 KV 显存优势            & \textbf{达标} & 中等  & 图~\ref{fig:main-efficiency-dashboard} \\
-    E3  & INT8-ours Needle 不劣于 baseline      & \textbf{达标} & 中等  & 图~\ref{fig:main-quality-dashboard} \\
-    E4  & INT8-ours PPL 不劣于 baseline         & \textbf{达标} & 中等  & 表~\ref{tab:main-results} \\
-    E5  & INT8-ours LongBench 不劣于 baseline   & \textbf{达标} & 中等  & 表~\ref{tab:main-results} \\
-    E6  & INT8-ours RULER 不劣于 baseline       & \textit{未达标} & 无\tnote{b}   & 表~\ref{tab:main-results} \\
-    E7  & INT4-ours Needle 不劣于 INT4-baseline & \textit{未达标} & 无\tnote{c}   & 表~\ref{tab:main-results} \\
-    E8  & INT4-ours PPL 不劣于 INT4-baseline    & \textit{未达标} & 无\tnote{c}   & 表~\ref{tab:main-results} \\
-    E9  & INT8-ours LongBench 不劣于 KIVI-style & \textbf{达标} & 中等  & 表~\ref{tab:kivi-comparison} \\
-    E10 & INT8-ours Needle 不劣于 KIVI-style    & \textbf{达标} & 中等  & 第~\ref{sec:exp-kivi}~节 \\
-    E11 & 跨模型泛化（7B + 8B LongBench）      & \textbf{达标} & 中等  & 表~\ref{tab:cross-model} \\
-    E12 & MixedKV RULER 远优于均匀 INT4           & \textbf{达标} & 中等\tnote{d}    & 表~\ref{tab:mixedkv-cross-model} \\
-    E13 & 校准样本 16--256 PPL 变化极小    & \textbf{达标} & 中等\tnote{e}  & 表~\ref{tab:b10-sensitivity} \\
-    E14 & INT4-RoleAlign 检索恢复（3 模型 Needle 100\%）  & \textbf{达标} & 中等\tnote{f} & 表~\ref{tab:rolealign-results} \\
-    E15 & chunk\_size=1 鲁棒性（1.5B）          & \textit{未达标} & 无\tnote{g}   & 附录表~\ref{tab:chunksize-results} \\
-    E16 & inv\_tau 呈格式 $\times$ GQA 尺度双依赖性 & \textbf{达标} & 中\tnote{h}  & 表~\ref{tab:invtau-ablation} \\
+    KL (RoleAlign v3) & 100.0 & 99.9 & 7.1121 & 3 & \code{kv\_calib\_rolealign\_7b\_v3.json} \\
+    MSE               & 100.0 & 99.9 & 7.1121 & 3 & \code{kv\_calib\_mse\_7b\_int4\_rolealign\_v1.json} \\
+    FP16 (baseline)   & ---   & ---  & 6.7097 & 1 & --- \\
     \bottomrule
   \end{tabular}
   \begin{tablenotes}
-    \small
-    \item[a] BH-FDR 校正后 $q = 0.016 < 0.05$，17.27\% TPOT 增益，统计与实际显著性均满足。
-    \item[b] RULER 通过率退化 $-2.64\%$，超过 $-1\%$ 非劣性阈值；退化集中于 S-NIAH/MK-NIAH 检索子任务，受配置聚合效应放大。
-    \item[c] INT4 精度下行为对齐校准未能维持非劣效性：Needle 退化 $-2.0\%$，PPL 退化 $-15.92\%$。
-    \item[d] MixedKV(K8V4) 在 Qwen 1.5B/7B 上 RULER 分别为 24.87\%/25.16\%，远超均匀 INT4 的 0\%/0\%；在 LLaMA-8B 上 RULER 33.28\% 与均匀 INT4（27.05\%）和 FP16（31.48\%）均具竞争力。
-    \item[e] 仅在 1.5B 和 7B 两个模型上验证，推广性有待更多模型确认。
-    \item[f] 三模型 Needle 从 0\%$\to$100\% 恢复；PPL 退化 2.4--13.7\%（与 KIVI-style 相当或略高），LongBench 在 1.5B/7B 略优、8B 持平。
-    \item[g] KIVI-style 与 INT4-RoleAlign 在 cs$=$1 全量化协议下均发生灾难性退化，为 per-channel K Scale 策略的固有局限（见第~\ref{subsec:exp-int4-boundary}~节与附录~\ref{sec:app-chunksize}）；该行原"达标"判定基于早期误读，实应记为未达标。
-    \item[h] 三模型消融（$H_{kv} \in \{2,4,8\}$）一致支持 GQA 尺度反相关规律；作为启发式观察（见第~\ref{subsec:exp-rolealign-invtau}~节与独立性假设边界讨论）。
+    \scriptsize
+    \item 数据位置：\code{results/emnlp\_p012\_batch/runs/ppl\_\{kl,mse,fp16\}\_7b\_s*/}。
+    贪婪解码下 PPL 为确定量，多 seed 验证一致性而非统计方差。
+    7B ($H_{kv}=4$) 趋同与 1.5B ($H_{kv}=2$) 分歧形成对比，
+    表明校准 landscape 的平坦度随模型冗余度增大。
   \end{tablenotes}
-  \end{threeparttable}
 \end{table}
+
+% [实验预期验证状态总结已移除——核心结论已在正文第四章讨论中呈现]

@@ -12,49 +12,37 @@ quantization can in principle reduce KV cache memory to
 $1/4$ of its original size, yet existing methods calibrated
 with numerical reconstruction error degrade sharply at long
 contexts: Needle retrieval drops from 100\% to 0\% and
-perplexity degrades by over 15\%. This gap motivates
-revisiting the calibration objective from an
-attention-behavior perspective, using the Kullback--Leibler
-divergence between attention distributions before and after
-quantization (attention-KL) to measure behavior deviation.
+perplexity degrades by over 15\%. This paper revisits the
+calibration objective from an attention-behavior perspective,
+using the Kullback--Leibler divergence between pre- and
+post-quantization attention distributions (attention-KL) as
+a unified calibration and diagnostic principle, with GQA
+head count $H_{kv}$ as a structural correlate linking
+calibration sensitivity, degradation patterns, and fused
+decoding efficiency.
 
-On Qwen2.5-1.5B, under greedy decoding with a
-robust-selection constraint ($\max~\text{clip rate}\leq 1\%$),
-we directly compare attention-KL and MSE as calibration
-objectives and find that objective validity is bit-width
-dependent. At INT8, the two objectives converge to identical
-$(\text{clip\_percentile},\text{group\_size})$ choices,
-producing per-group scales that are bitwise identical in
-float32. At INT4, the two objectives select
-$\text{clip\_percentile}=99.5$ and $99.0$ respectively,
-yielding per-group scales that differ on every element with
-a median relative difference of $12.35\%$. Under our INT4 setting, numerical proxies are therefore
-insufficient as stable substitutes for behavior alignment.
-
-Controlled diagnosis further reveals two structural
-properties of low-bit degradation. K-only / V-only factoring
-shows that INT4 degradation is Key-dominated across all three
-model families: quantizing only the Key path to INT4 reproduces
-the collapse of full INT4, while quantizing only the Value
-path has almost no effect. At the same time, Needle retrieval
-and PPL decouple measurably --- the same INT4 configuration
-can preserve $100\%$ Needle pass-rate while degrading PPL by
-$13.7\%$. Guided by these diagnostics, we build RoleAlign on
-the per-channel Key + per-token Value asymmetric format of
-KIVI~\cite{liu2024kivi}: for each layer we determine the
-BA percentile by offline attention-KL search rather than by
-runtime absmax/min statistics. Across all four models,
-RoleAlign preserves $100\%$ Needle retrieval at roughly $73\%$
+On Qwen2.5-1.5B/7B/14B and LLaMA-3.1-8B, we find that
+calibration objective validity is both bit-width and scale
+dependent: at INT8 the two objectives converge, while at
+INT4 they diverge on a small model ($H_{kv}=2$) but
+reconverge on a larger one ($H_{kv}=4$). Controlled
+diagnosis shows INT4 degradation is Key-dominated---on the
+14B model, preserving Key in FP16 recovers 93\% of PPL
+degradation---while Needle retrieval and PPL consistently
+decouple across all four models. Guided by these diagnostics,
+we instantiate INT4-RoleAlign on KIVI's~\cite{liu2024kivi}
+per-channel Key + per-token Value asymmetric format via
+offline attention-KL search. Across all four models,
+RoleAlign preserves 100\% Needle retrieval at roughly 73\%
 KV cache compression, with PPL degradation decreasing with
-model scale (1.5B: $13.7\%$; 7B: $6.1\%$; 8B: $2.4\%$;
-14B: $6.1\%$). At a $65{,}536$-token Needle setting on LLaMA-3.1-8B,
-RoleAlign reproduces FP16's own long-context failure mode.
-
-We additionally observe that per-head temperature correction
-$\tau^{-1}$ exhibits GQA-head-count-dependent behavior
-(improving PPL at $H_{kv}=2$ but degrading it at
-$H_{kv}\geq 4$), and accordingly treat it as an optional
-heuristic rather than a default component.
+scale (1.5B: 13.7\%; 7B: 6.0\%; 8B: 2.4\%). The 14B model
+provides external validity: Needle passes at 4K--32K; RULER
+reaches 96.6\%--98.5\% at 4K--16K. The efficiency gains of
+fused quantized decoding kernels exhibit pronounced
+differentiation in the $(H_{kv}, \text{seq\_len})$ space:
+at $H_{kv}=8$ the fused kernel reduces latency by roughly
+40\% at 32K, while at $H_{kv}=2$ it is slower than SDPA
+across all tested sequence lengths.
 
 \keywordsen{Large Language Model; Key-Value Cache;
 Quantization; Behavior-Aligned Calibration; Asymmetric

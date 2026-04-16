@@ -8,8 +8,7 @@
 \setcounter{chapter}{5}
 \label{chap:conclusion}
 
-本章把第四章的实验证据压缩为三段式收束：
-我们学到的规律、我们给出的工具、以及外部有效性的边界，
+本章以四条核心发现回扣引言的三个研究问题，
 随后分析局限性与未来工作方向。
 
 % ------------------------------------------------------------
@@ -17,55 +16,45 @@
 \label{sec:conclusion-answers}
 % ------------------------------------------------------------
 
-\paragraph{我们学到的规律——bit-width 依赖的校准目标有效性。}
-在 Qwen2.5-1.5B 上、在贪心解码与 robust selection
-（$\max~\text{clip rate} \leq 1\%$）约束下的直接对比表明，
-attention-KL 与 MSE 两种校准目标的作用呈明显的 bit-width 依赖。
-在 INT8 下，二者对 $(\text{clip\_percentile}, \text{group\_size})$
-的选择完全趋同，产出的 per-group scale 在 float32 下逐位一致；
-而在 INT4 下，二者分别选择 $\text{clip\_percentile}=99.5$ 与 $99.0$，
-所有 scale 元素不同，中位相对差异 12.35\%。
-进一步的受控诊断显示，INT4 退化在三个模型族上一致呈 Key 主导
-（仅对 Key 量化为 INT4 即复现全 INT4 的崩溃），
-同时 Needle retrieval 与 PPL 之间存在明显解耦
-（同一 INT4 配置可以在 Needle 上保持 100\% pass rate
-的同时 PPL 退化 13.7\%）。
-这些证据共同说明：
-在 INT8 下数值代理足以近似行为对齐，
-而在 INT4 下不再等价；
-评价低比特 KV Cache 量化不能只看 PPL。
+\paragraph{Finding 1：校准目标灵敏度的 bit-width 与规模依赖（回应 RQ1）。}
+在贪心解码与 robust selection 约束下，
+attention-KL 与 MSE 两种校准目标的作用呈 bit-width 与规模的双重依赖。
+INT8 下两者完全趋同，产生逐位一致的校准产物；
+INT4 下在 1.5B（$H_{kv}=2$）上分化
+（percentile 99.5 vs 99.0，scale 差异 12.35\%），
+而在 7B（$H_{kv}=4$）上再次趋同。
+在我们测试的模型规模与协议下，
+KL 至少不劣于 MSE，并在小模型 INT4 设置下表现更优。
 
-\paragraph{我们给出的工具——regime-aware 校准与行为引导实例化。}
-基于上述规律，本文提供一条可复现的 regime-aware
-校准与诊断流程：先通过 INT8 与 INT4 下校准目标的对比
-判断当前 bit-width 下数值代理是否足够；
-再通过 K-only / V-only 因子分解定位主导退化源；
-最后在 KIVI~\cite{liu2024kivi} 提出的
-per-channel Key + per-token Value 非对称格式上，
-以离线 attention-KL 搜索确定每层的 BA percentile，
-得到行为引导的实例化 RoleAlign。
-在 Qwen2.5-1.5B/7B/8B/14B 四个模型上，
-RoleAlign 以约 73\% 的 KV Cache 压缩率保持 Needle 检索 100\%，
-PPL 退化随模型规模增大而减弱
-（1.5B: 13.7\%；7B: 6.1\%；8B: 2.4\%；14B: 6.1\%）；
-在 LLaMA-3.1-8B 的 65{,}536-token 上下文极限长度下，
-RoleAlign 与 FP16 在同一位置出现相同的 long-context 退化模式，
-在该模型与该 Needle 设定下量化没有引入新的退化模式。
+\paragraph{Finding 2：Key 主导退化与 $H_{kv}$ 结构性关联（回应 RQ2）。}
+通过 K-only / V-only 因子分解，四个模型一致观察到
+INT4 退化由 Key 侧主导。
+14B 上保持 Key 为 FP16 可恢复 93\% 的 PPL 退化，
+保持 Value 为 FP16 仅恢复 64\%。
+Needle retrieval 与 PPL 在 1.5B 至 14B 范围内一致解耦——
+同一 INT4-RoleAlign 配置保持 Needle 100\% 的同时伴随可观 PPL 退化。
+评价低比特 KV Cache 量化不能仅用 PPL，行为层面指标是必要补充。
 
-\paragraph{边界与下一步。}
-本文的结论是在 Qwen2.5 家族（$\leq 14$B）、贪心解码、
-robust selection 协议与自研 KIVI-style 实现下得到的结构化观察，
-不是普适定理。外部有效性的进一步验证至少涉及三类工作：
-(a) 扩展到更大模型规模与更多模型家族，
-以确认 bit-width 依赖的规律以及 RoleAlign 的压缩--质量权衡；
-(b) 使用官方 LongBench、RULER 基准完成最小 sanity check，
-以校准本文基于合成 proxy 得到的相对差异；
-(c) 与更强的 KIVI 官方实现或等价 INT4 baseline 进行对照，
-以及与 vLLM、TGI 等成熟推理服务框架的集成测试。
-在 KV Cache 量化中，
-把 MSE 当作行为保真代理在 INT8 下往往可行但在 INT4 下可能失效；
-未来工作应围绕 regime-aware objectives 与 objective--format co-design 展开，
-并用长上下文综合基准验证外部有效性。
+\paragraph{Finding 3：RoleAlign 跨规模验证与 14B 外部效度（回应 RQ2--3）。}
+在 KIVI-style 非对称格式上以离线 attention-KL 搜索
+得到 INT4-RoleAlign，在四个模型上保持 Needle 100\%，
+KV Cache 压缩约 73\%，PPL 退化随规模减弱
+（1.5B: 13.7\%，7B: 6.0\%，8B: 2.4\%）。
+14B 提供外部效度：Needle 在 4K--32K 全通过，
+RULER 在 4K--16K 达到 96.6\%--98.5\%。
+14B 的 PPL 退化（7.6\%）高于 8B（2.4\%），
+非单调现象可能与校准数据量或模型族差异有关。
+
+\paragraph{Finding 4：融合核效率的 $(H_{kv}, \text{seq\_len})$ 特征（回应 RQ3）。}
+Triton 融合量化解码核函数的效率增益
+在 $(H_{kv}, \text{seq\_len})$ 空间中呈显著分化：
+$H_{kv}=8$ 在 8K+ 序列下提供显著加速（32K 下延迟减少约 40\%），
+$H_{kv}=2$ 下融合核在所有长度下均慢于 SDPA。
+8B（$H_{kv}=8$, LLaMA）与 14B（$H_{kv}=8$, Qwen）
+在短序列效率特征上高度一致，
+为 $H_{kv}$ 而非模型规模主导提供支持证据。
+部署建议（限 NVIDIA H20 平台）：
+$H_{kv}\geq 4$ 且序列长度超过 8K 时使用融合核，$H_{kv}=2$ 使用 SDPA。
 
 % ------------------------------------------------------------
 \section{局限性}
@@ -121,7 +110,7 @@ K/V 消融实验覆盖了 RULER、LongBench 和 PPL
 
 \paragraph{校准框架局限}
 1.5B 主模型校准产物的 Q 向量预处理缺少 input\_layernorm 和 RoPE 变换
-（附录~\ref{sec:app-calib-provenance}），
+，
 但修正版对比验证表明对 INT8 的 PPL 影响仅 0.05\%（$<$0.01 绝对值），
 对 INT4-RoleAlign 影响为零（BA percentile 校准独立于 RoPE）。
 LLaMA-3.1-8B 的 INT8 校准在 $n{=}10$ 种子验证中展现一定次优性
@@ -137,6 +126,23 @@ LLaMA-3.1-8B 的 INT8 校准在 $n{=}10$ 种子验证中展现一定次优性
 本文 KIVI-style 基线采用 KIVI~\citep{liu2024kivi} 的核心量化轴策略，
 未完整复现原文全部工程优化（如残差长度调度等），
 结果应理解为对核心算法思想的验证。
+
+\paragraph{BitDecoding 融合核的 GQA 兼容性}
+在探索 Tensor-core 级别的 INT4 解码加速时，
+本文评测了 BitDecoding~\cite{du2026bitdecoding} 的 CUTLASS 内核。
+测试发现其在 GQA 架构下的数值输出与 FP16 参考存在显著偏差，
+无法通过数值验证。
+该问题发生在库层面，超出 wrapper 可修复的范围，
+因此本文将 BitDecoding 作为工程案例记录，
+而非可用的部署 backend（详见第四章讨论）。
+
+\paragraph{Threat-to-Validity 总结}
+第四章综合讨论部分给出了五条 Threat-to-Validity 声明，
+覆盖 $H_{kv}$/规模共变、解码策略依赖（greedy only）、
+硬件依赖（NVIDIA H20 only）、
+校准数据分布依赖（WikiText-103 only）、
+以及单实现威胁（KIVI 自实现）。
+相关结论应在上述边界内理解。
 
 % ------------------------------------------------------------
 \section{未来工作展望}
@@ -173,7 +179,7 @@ vLLM~\cite{kwon2023vllm}、Text Generation Inference（TGI）\footnote{HuggingFa
 
 \paragraph{K/V 差异化精度的精细化}
 第~\ref{sec:exp-kv-sensitivity}~节的 K/V 消融实验已验证了
-MixedKV（K@INT8+V@INT4）在多模型上的可行性。
+MixedKV（K@INT8 + V@INT4）在多模型上的可行性。
 在此基础上，一个自然的改进方向是进一步精细化 K/V 差异化策略：
 根据每一层的 K/V KL 散度值动态选择各层的 K/V 比特宽度：
 对 Key 敏感层保持 INT8 甚至 FP16，
@@ -222,18 +228,21 @@ INT4-RoleAlign 的 BA-guided percentile 校准在 4-bit 下展现了有效性。
 \label{sec:conclusion-closing}
 % ------------------------------------------------------------
 
-本文在 KV Cache 量化中引入以 attention-KL 为核心的行为对齐视角，
-并用它系统刻画了校准目标在 INT8 与 INT4 两个 regime 下的分层作用、
-低比特退化的 Key 主导结构、retrieval 与 PPL 的解耦，
-以及基于这些诊断的 KIVI-style 非对称格式上的实例化 RoleAlign。
+本文的核心主张是：
+attention-KL 提供了 GQA 架构下 KV Cache 量化的统一校准与诊断原则，
+而 $H_{kv}$ 是与低比特失效模式、温度校正分化和融合解码效率
+一致性变化的结构性关联变量。
 这一视角把 KV Cache 量化的问题从``先量化再看效果''的试错模式
-转向``先刻画目标有效性、再定位退化主因、再完成实例化''的分层流程。
-分层流程在其他中间表示压缩场景（如激活值量化、特征蒸馏、稀疏化）
-中是否能迁移，仍需专门验证，前提是目标任务存在类似的
-``数值保真 $\neq$ 行为保真''错位，并且存在可直接观测的行为级度量。
+转向以 $H_{kv}$ 为组织轴的系统分析：
+校准目标的有效性何时依赖行为度量、
+退化在 Key/Value 间如何分配、
+以及融合核在何种 $(H_{kv}, \text{seq\_len})$ 条件下提供正向加速。
+分层流程在其他中间表示压缩场景中是否能迁移，
+取决于目标任务是否存在类似的
+``数值保真 $\neq$ 行为保真''错位以及可直接观测的行为级度量。
 
-本文结论的适用范围仅限于 Qwen2.5 家族（$\leq 14$B）、贪心解码、
+在当前模型集合中，$H_{kv}$ 与模型规模部分共变，
+因此相关结论应理解为结构性证据而非严格受控因果识别。
+本文结论的适用范围限于四个模型（$\leq 14$B）、贪心解码、
 robust selection 协议与自研 KIVI-style 实现这一具体协议。
-INT4 的 PPL 代价在小模型上依然显著，效率收益依赖于融合核函数的完成度，
-与更强 baseline、官方基准和成熟推理服务框架的对照仍有待完成。
 这些边界同时也定义了后续工作的清晰起点。
