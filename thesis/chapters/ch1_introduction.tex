@@ -17,13 +17,14 @@ GPT-4、LLaMA~3~\cite{grattafiori2024llama3}、Qwen2.5~\cite{qwen2025qwen25} 等
 KV Cache 机制是自回归解码的核心加速手段，能够将单步解码的时间复杂度从 $O(n^2)$ 降低至 $O(n)$，
 但其代价是显存占用随序列长度线性增长。
 
-具体而言，对于一个具有 $L$ 层 Transformer、每层 $h_{KV}$ 个键值头（KV head）、头维度为 $d_h$ 的模型，
-在序列长度为 $s$ 时，KV Cache 的显存占用可表示为：
+具体而言，KV Cache 的显存占用与模型层数、每层 KV 头数、头维度以及序列长度均成正比，
+可表示为：
 \begin{equation}
-  M_{\text{KV}} = 2 \times L \times h_{KV} \times d_h \times s \times b
+  M_{\mathrm{KV}} = 2 \times L \times H_{kv} \times d_k \times S \times b
   \label{eq:kv_memory}
 \end{equation}
-其中，因子 $2$ 对应键（Key）和值（Value）两个矩阵，$b$ 为每个元素占用的字节数（FP16 下 $b=2$）。
+式中 $L$ 为层数、$H_{kv}$ 为每层 KV 头数、$d_k$ 为头维度、$S$ 为序列长度，
+$b$ 为每个元素占用的字节数（FP16 下为 2），因子 2 对应 Key 和 Value 两个矩阵。
 
 在长上下文、批量推理场景下，
 KV Cache 的总显存消耗可轻易超过模型参数本身（具体推导与数值示例见第~\ref{sec:ch2-kv-memory}~节）。
@@ -39,7 +40,7 @@ vLLM~\cite{kwon2023vllm} 等推理框架通过 PagedAttention 技术改善了显
 在上述背景下，低比特（INT4）量化是最具吸引力的压缩目标，
 理论上可将 KV Cache 压缩至 FP16 的 $1/4$，
 在相同硬件预算下支持 4 倍的上下文长度或并发批次。
-然而，现有的 INT4 量化方法在长上下文场景下表现急剧恶化：
+然而，现有以数值重建误差为校准目标的 INT4 量化方法在长上下文场景下表现急剧恶化：
 Needle 检索通过率可从 100\% 降至 0\%，困惑度退化超过 15\%。
 对称 INT4 量化的模型在长上下文下
 不仅无法完成精确检索任务，其语言建模能力也发生灾难性崩溃。
@@ -64,7 +65,8 @@ softmax 的非线性使得误差大小与注意力偏移之间不存在单调关
 
 本文采用注意力行为保真视角：KV Cache 量化的合适衡量对象
 不是存储表示的数值误差，而是量化前后注意力行为
-（attention behavior）的分布差异。
+（attention behavior）的分布差异。本文将这一视角命名为
+\textbf{行为对齐}（Behavior Alignment, BA）。
 若将 FP16 精度下的注意力权重分布记为 $\bm{p}$，
 量化后的注意力权重分布记为 $\bm{q}$，
 则行为偏移可以用 Kullback-Leibler 散度衡量：
@@ -75,8 +77,7 @@ softmax 的非线性使得误差大小与注意力偏移之间不存在单调关
 其中，$D_{\KL}$ 为 Kullback-Leibler 散度，衡量量化引入的注意力行为偏移程度。
 
 基于这一视角，本文在多模型协议下系统研究校准目标、低比特失效模式
-与部署效率三个核心问题（详见第~\ref{sec:ch1-contribution}~节），
-并将此视角命名为\emph{行为对齐}（Behavior Alignment）。
+与部署效率三个核心问题（详见第~\ref{sec:ch1-contribution}~节）。
 
 \section{国内外研究现状}
 
@@ -114,61 +115,58 @@ vLLM~\cite{kwon2023vllm} 的 PagedAttention 改善了 KV Cache 显存碎片。
 
 基于上述背景，本文提出三个递进的研究问题：
 
-\begin{description}
-  \item[\textbf{研究问题一}] \emph{KV Cache 量化应优化什么目标？其有效性是否随模型规模变化？}
-    现有方法以数值重建误差（如 MSE、absmax percentile）为校准目标，
-    但数值层面的最优未必对应推理行为的保真。
-    是否存在一个更贴近下游推理行为的优化目标？
-    当模型规模增大、GQA 头数 $H_{kv}$ 改变时，
-    数值代理与行为对齐之间的差异是否保持一致？
-  \item[\textbf{研究问题二}] \emph{低比特量化为何失效？失效模式是否与 $H_{kv}$ 结构性关联？}
-    对称 INT4 在 Needle 检索上降至 0\%，PPL 退化超过 15\%。
-    该失效是全局性的还是存在可定位的结构性根因？
-    量化噪声在 Key 和 Value 之间如何分配？
-    不同 GQA 配置（$H_{kv}=2,4,8$）下的退化模式是否呈现结构性关联？
-  \item[\textbf{研究问题三}] \emph{诊断结论能否导出有效的低比特设计，并伴随可部署的效率收益？}
-    如果低比特失效有可定位的根因，
-    是否可以基于诊断结论设计差异化的量化策略，
-    在保持压缩率的同时恢复检索能力？
-    在部署层面，融合量化解码核函数的效率增益
-    是否也依赖 $(H_{kv}, \text{seq\_len})$ 的组合，
-    从而为量化方案的部署选型提供依据？
-\end{description}
+\textbf{研究问题一：KV Cache 量化应优化什么目标？其有效性是否随模型规模变化？}
+现有方法以数值重建误差（如 MSE、absmax percentile）为校准目标，
+但数值层面的最优未必对应推理行为的保真。
+是否存在一个更贴近下游推理行为的优化目标？
+当模型规模增大、GQA 头数 $H_{kv}$ 改变时，
+数值代理与行为对齐之间的差异是否保持一致？
+
+\textbf{研究问题二：低比特量化为何失效？失效模式是否与 $H_{kv}$ 结构性关联？}
+对称 INT4 在 Needle 检索上降至 0\%，PPL 退化超过 15\%。
+该失效是全局性的还是存在可定位的结构性根因？
+量化噪声在 Key 和 Value 之间如何分配？
+不同 GQA 配置（$H_{kv}=2,4,8$）下的退化模式是否呈现结构性关联？
+
+\textbf{研究问题三：诊断结论能否导出有效的低比特设计，并伴随可部署的效率收益？}
+如果低比特失效有可定位的根因，
+是否可以基于诊断结论设计差异化的量化策略，
+在保持压缩率的同时恢复检索能力？
+在部署层面，融合量化解码核函数的效率增益
+是否也依赖 $(H_{kv}, \text{seq\_len})$ 的组合，
+从而为量化方案的部署选型提供依据？
 
 围绕以上三个问题，本文给出三个主要贡献。
 
-\textbf{贡献一：校准目标有效性的 bit-width 与规模依赖。}
-本文系统比较 attention-KL 与 MSE 两种校准目标在 INT8 与 INT4 下的作用。
-在 INT8 结合 鲁棒选择（$\max~\text{clip rate} \leq 1\%$）约束下，
-两种目标对 $(\text{clip\_percentile}, \text{group\_size})$ 的选择
-完全趋同，产生逐位一致的校准产物；
-而在 INT4 下，有效性呈现规模依赖：
-在 1.5B（$H_{kv}=2$）上两种目标选出不同 percentile（99.5 vs 99.0），
-scale 中位相对差异 12.35\%；
-在 7B（$H_{kv}=4$）上两者趋同到相同参数，
-产生逐位一致的 PPL。
-在本文所测试的模型规模与协议下，
-KL 至少不劣于 MSE，并在小模型 INT4 设置下表现更优。
-
-\textbf{贡献二：Key 主导退化的受控诊断、$H_{kv}$ 结构性关联与低比特实例化验证。}
-通过 K-only 与 V-only 因子分解，本文在四个模型上一致观察到
-INT4 KV Cache 退化由 Key 侧主导。
-在 14B 上的 K/V 消融进一步验证：
-保持 Key 为 FP16 可恢复 93\% 的 PPL 退化，
+\textbf{贡献一：attention-KL 诊断透镜与 Key 主导退化机制。}
+以 attention-KL 作为量化前后注意力行为的统一诊断度量，
+通过 K-only 与 V-only 因子分解，
+本文在四个模型上一致观察到 INT4 KV Cache 退化由 Key 侧主导。
+14B 上的 K/V 消融进一步验证：保持 Key 为 FP16 可恢复 93\% 的 PPL 退化，
 而保持 Value 为 FP16 仅恢复 64\%。
-在 INT4-RoleAlign 配置下 Needle retrieval 与 PPL 在 1.5B 至 14B 范围内一致解耦——
-同一 INT4-RoleAlign 配置可以保持 Needle 100\% 的同时伴随可观的 PPL 退化，
+该诊断自然地指向 per-channel Key + per-token Value 的差异化量化格式——
+与 KIVI~\cite{liu2024kivi} 从工程经验出发独立提出的格式相吻合，
+为非对称 KV 量化提供机制性解释。
+校准目标层面，本文同时观察到 attention-KL 与 MSE 在 bit-width 上呈规模依赖：
+INT8 下二者对 $(\text{clip\_percentile}, \text{group\_size})$ 的选择完全趋同，
+产生逐位一致的校准产物；INT4 下在 1.5B（$H_{kv}=2$）上分化，
+在 7B（$H_{kv}=4$）上再次趋同（详见第~\ref{sec:exp-main}~节）。
+
+\textbf{贡献二：INT4-RoleAlign 实例化验证与 Needle/PPL 解耦现象。}
+基于上述诊断，本文在 per-channel K + per-token V 非对称格式上
+以离线 attention-KL 搜索替代运行时 absmax/min，
+得到行为引导的实例化 INT4-RoleAlign。
+在四个模型上 Needle 检索通过率一致保持 100\%，
+KV Cache 压缩约 73\%，
+PPL 退化随模型规模减弱（1.5B: 13.7\%，7B: 6.1\%，8B: 2.4\%；
+14B 打破单调趋势，详见第~\ref{sec:exp-discussion}~节）。
+14B 提供外部效度：Needle 在 4K--32K 全通过，
+RULER 在 4K--16K 达到 96.6\%--98.5\%。
+在 INT4-RoleAlign 配置下，Needle 检索通过率与 PPL 在 1.5B 至 14B 范围内呈现解耦——
+同一配置可保持 Needle 100\% 的同时伴随可观的 PPL 退化，
 说明评价低比特量化不能仅用 PPL；
 其他 INT4 配置如对称 INT4 baseline 则呈现 Needle 随 PPL 同降，
 本文第~\ref{sec:exp-int4}~节给出受控对比。
-这一诊断指向 per-channel Key + per-token Value 的差异化格式——
-与 KIVI~\cite{liu2024kivi} 从工程经验出发独立提出的格式一致。
-本文在该格式上以离线 attention-KL 搜索替代运行时 absmax/min，
-得到行为引导的实例化 INT4-RoleAlign，
-在四个模型上保持 Needle 100\%，KV Cache 压缩约 73\%，
-PPL 退化随模型规模减弱（1.5B: 13.7\%，7B: 6.1\%，8B: 2.4\%）。
-14B 提供外部效度：Needle 在 4K--32K 全通过，
-RULER 在 4K--16K 达到 96.6\%--98.5\%。
 
 \textbf{贡献三：$(H_{kv}, \text{seq\_len})$ 空间中的融合核效率特征与部署建议。}
 本文实现了 Triton 融合量化解码注意力核函数，
@@ -186,8 +184,8 @@ $H_{kv}=2$ 使用 SDPA。
 
 综上，本文的核心主张是：
 attention-KL 提供了 GQA 架构下 KV Cache 量化的统一校准与诊断原则，
-而 $H_{kv}$ 是与低比特失效模式、温度校正分化和融合解码效率
-一致性变化的结构性关联变量。
+而 $H_{kv}$ 是与低比特失效模式、K/V 角色分化和融合解码效率
+一致性变化的结构性相关变量（非严格因果识别，详见第~\ref{subsec:exp-threats}~节效度威胁声明）。
 图~\ref{fig:ch1-pipeline} 展示了本文的论证结构。
 
 \begin{figure}[!htbp]
