@@ -1,0 +1,93 @@
+% ============================================================
+% ch3_framework.tex — 行为对齐量化框架 3 层纵向（等宽对齐）
+% 用户反馈修订：
+%   - 三个层框上下严格对齐（minimum width 统一 14cm）
+%   - 层号"1. 度量 / 2. 协议 / 3. 实例化"放到每层框内的 heading 位置
+%   - 配色按 fig 4-1 四色重新安排，实色边框 + 白底/浅底
+% 独立编译：xelatex ch3_framework.tex
+% ============================================================
+\documentclass[tikz, border=10pt]{standalone}
+
+\usepackage[UTF8]{ctex}
+\usepackage{amsmath}
+\usepackage{tikz}
+\usetikzlibrary{positioning, arrows.meta, shapes.geometric, calc, fit, backgrounds}
+
+% Fig 4-1 调色板
+\definecolor{figGreyDeep}{HTML}{2C3E50}
+\definecolor{figGreyMid}{HTML}{95A5A6}
+\definecolor{figBlueCore}{HTML}{3498DB}
+\definecolor{figPurpleAlt}{HTML}{9B59B6}
+
+\begin{document}
+\begin{tikzpicture}[
+    font=\small\bfseries,
+    >={Stealth[length=2.4mm, width=2.0mm]},
+    thick,
+    %
+    % 层容器（minimum width 统一对齐）
+    layerbox/.style={rectangle, rounded corners=6pt,
+                     draw=figGreyDeep, line width=1.2pt,
+                     fill=figGreyDeep!4,
+                     minimum width=14cm, minimum height=2.4cm,
+                     inner sep=10pt, align=center,
+                     font=\small\bfseries},
+    % 每层内部的 heading（左上角）
+    layerhead/.style={anchor=north west, font=\small\bfseries,
+                      text=figGreyDeep, inner sep=4pt},
+    %
+    % 层一：度量节点（核心柔和蓝）
+    metric/.style={rectangle, rounded corners=4pt,
+                   draw=figBlueCore, line width=1.4pt,
+                   fill=figBlueCore!10,
+                   align=center, text width=11cm,
+                   minimum height=1.1cm, inner sep=6pt,
+                   font=\small\bfseries, text=figGreyDeep},
+    % 层二：协议节点（柔和紫）
+    protocol/.style={rectangle, rounded corners=4pt,
+                     draw=figPurpleAlt, line width=1.2pt,
+                     fill=figPurpleAlt!8,
+                     align=center, text width=5.2cm,
+                     minimum height=1.1cm, inner sep=5pt,
+                     font=\small\bfseries, text=figGreyDeep},
+    % 层三：实例化节点（柔和蓝浅填 + 边框深色）
+    instance/.style={rectangle, rounded corners=4pt,
+                     draw=figBlueCore, line width=1.2pt,
+                     fill=white,
+                     align=center, text width=5.2cm,
+                     minimum height=1.1cm, inner sep=5pt,
+                     font=\small\bfseries, text=figGreyDeep},
+    %
+    arrow/.style={->, thick, figGreyDeep!75, line width=1.1pt}
+]
+
+% 容器锚点（用 anchor 机制让三个 layerbox 严格等宽对齐）
+\node[layerbox] (L1) at (0, 0) {};
+\node[layerbox, below=0.9cm of L1] (L2) {};
+\node[layerbox, below=0.9cm of L2] (L3) {};
+
+% ====== 层一内部：度量节点 + heading ======
+\node[layerhead] at ($(L1.north west) + (0.3, -0.25)$) {1. 度量};
+\node[metric] at (L1.center) (kl)
+    {attention-KL：量化前后注意力分布 KL 散度};
+
+% ====== 层二内部：协议两节点 + heading ======
+\node[layerhead] at ($(L2.north west) + (0.3, -0.25)$) {2. 协议};
+\node[protocol] at ($(L2.center) + (-3.0, 0)$) (robust)
+    {Robust Selection（clip rate $\leq 1\%$）};
+\node[protocol] at ($(L2.center) + (3.0, 0)$) (search)
+    {离线搜索空间（clip $\times$ group $\times \tau^{-1}$）};
+
+% ====== 层三内部：实例化两路径 + heading ======
+\node[layerhead] at ($(L3.north west) + (0.3, -0.25)$) {3. 实例化};
+\node[instance] at ($(L3.center) + (-3.0, 0)$) (int8)
+    {INT8 对称路径（grid 搜 $p_c, g$）};
+\node[instance] at ($(L3.center) + (3.0, 0)$) (int4)
+    {INT4-RoleAlign 非对称（per-ch K + per-tok V）};
+
+% ====== 层间箭头 ======
+\draw[arrow] (L1.south) -- (L2.north);
+\draw[arrow] (L2.south) -- (L3.north);
+
+\end{tikzpicture}
+\end{document}

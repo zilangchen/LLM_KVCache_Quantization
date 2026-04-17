@@ -29,6 +29,7 @@ def _setup_thesis_fonts():
     """Configure matplotlib fonts to match thesis: 宋体 (Chinese) + Times New Roman (English).
 
     School requirement: Chinese = 宋体, English = Times New Roman.
+    Unified style (P1-B1): English/numeric prefer Times New Roman, Chinese fallback to 宋体.
     """
     # Register Songti SC (macOS 宋体) for CJK support
     songti_paths = [
@@ -42,7 +43,7 @@ def _setup_thesis_fonts():
 
     plt.rcParams.update({
         "font.family": "serif",
-        "font.serif": ["Songti SC", "STSong", "SimSun", "Times New Roman"],
+        "font.serif": ["Times New Roman", "Songti SC", "STSong", "SimSun"],
         "axes.unicode_minus": False,
         "mathtext.fontset": "stix",  # STIX matches Times New Roman for math
         "pdf.fonttype": 42,
@@ -53,23 +54,23 @@ def _setup_thesis_fonts():
 _setup_thesis_fonts()
 
 # ═══════════════════════════════════════════════════════════════
-# STYLE CONFIGURATION
+# STYLE CONFIGURATION (unified P1-B1: academic soft palette)
 # ═══════════════════════════════════════════════════════════════
 
 DPI = 300
 
-# Semantic color palette — colorblind-safe, print-friendly, role-consistent
+# Academic, print-friendly palette (subtle saturation).
 COLORS = {
-    "fp16":              "#334155",
-    "int8_baseline":     "#F59E0B",
-    "int8_ours":         "#10B981",
-    "int4_baseline":     "#EF4444",
-    "int4_fused":        "#F97316",
-    "int4_ours":         "#60A5FA",
-    "kivi_style":        "#E11D48",
-    "int4_kivi_aligned": "#A855F7",
-    "int4_mixed_kv":     "#8B5E34",
-    "int4_ours_asym":    "#0F766E",
+    "fp16":              "#2c3e50",  # deep grey — baseline
+    "int8_baseline":     "#95a5a6",  # mid grey
+    "int8_ours":         "#3498db",  # soft blue
+    "int4_baseline":     "#e67e22",  # soft orange
+    "int4_fused":        "#e74c3c",  # soft red
+    "int4_ours":         "#27ae60",  # soft green
+    "kivi_style":        "#9b59b6",  # soft purple
+    "int4_kivi_aligned": "#8e44ad",  # darker purple
+    "int4_mixed_kv":     "#8B5E34",  # brown (retained)
+    "int4_ours_asym":    "#16a085",  # teal
 }
 
 LABELS = {
@@ -141,9 +142,9 @@ EFFICIENCY_DASHBOARD_MODES = ["fp16", "int8_baseline", "int8_ours"]
 APPENDIX_MODES = ["fp16", "int8_baseline", "int8_ours", "kivi_style", "int4_ours", "int4_mixed_kv", "int4_ours_asym"]
 
 KV_ABLATION_COLORS = {
-    "K-only":  "#16A34A",
-    "V-only":  "#60A5FA",
-    "K4V8":    "#EF4444",
+    "K-only":  "#27ae60",
+    "V-only":  "#3498db",
+    "K4V8":    "#e74c3c",
     "MixedKV": "#8B5E34",
 }
 
@@ -165,11 +166,11 @@ PRIMARY_NEEDLE_MAINLINE_OVERRIDE = {
 
 
 def setup_style():
-    """Configure matplotlib for publication-quality output."""
+    """Configure matplotlib for publication-quality output (P1-B1 unified style)."""
     plt.rcParams.update({
-        "font.size": 10.5,
+        "font.size": 10,
         "axes.titlesize": 11,
-        "axes.labelsize": 10.5,
+        "axes.labelsize": 10,
         "xtick.labelsize": 9,
         "ytick.labelsize": 9,
         "legend.fontsize": 8,
@@ -189,8 +190,8 @@ def setup_style():
         "axes.edgecolor": "#475569",
         "axes.facecolor": "white",
         "figure.facecolor": "white",
-        "lines.linewidth": 2.1,
-        "lines.markersize": 5.5,
+        "lines.linewidth": 1.3,
+        "lines.markersize": 6.0,
         "legend.fancybox": False,
         "axes.unicode_minus": False,
         "pdf.fonttype": 42,
@@ -345,7 +346,8 @@ def plot_line_with_band(ax, x, y_mean, y_ci_half, mode, label=None):
 
     ax.fill_between(x, y_lo, y_hi, alpha=0.12, color=color, linewidth=0)
     ax.plot(x, y_mean, color=color, marker=marker, linestyle=ls,
-            label=lbl, markersize=5.5, markeredgecolor="white", markeredgewidth=0.6)
+            label=lbl, linewidth=1.3, markersize=6.0,
+            markeredgecolor="white", markeredgewidth=0.6)
 
 
 def _subset_modes(df, modes):
@@ -390,8 +392,8 @@ def _shared_mode_handles(modes):
             color=COLORS.get(mode, "#999999"),
             marker=MARKERS.get(mode, "o"),
             linestyle=LINESTYLES.get(mode, "-"),
-            linewidth=2.0,
-            markersize=5.5,
+            linewidth=1.3,
+            markersize=6.0,
         ))
         labels.append(LABELS.get(mode, mode))
     return handles, labels
@@ -791,16 +793,27 @@ def fig_appendix_memory_dashboard(tables_dir, out_dir):
 def fig_kv_ablation_summary_ruler(project_root, out_dir):
     """Grouped bar chart summarizing K/V sensitivity with MixedKV."""
     print("Fig: kv_ablation_summary_ruler")
-    ruler_path = project_root / "results" / "emnlp_expansion_v1" / "tables" / "kv_ablation_ruler.csv"
-    if not ruler_path.exists():
-        print(f"  SKIP: {ruler_path} not found")
+    # Fall-back search order (newest canonical path first)
+    ruler_candidates = [
+        project_root / "results" / "final" / "final_data" / "kv_ablation" / "tables" / "kv_ablation_ruler.csv",
+        project_root / "results" / "emnlp_expansion_v1" / "tables" / "kv_ablation_ruler.csv",
+    ]
+    ruler_path = next((p for p in ruler_candidates if p.exists()), None)
+    if ruler_path is None:
+        print(f"  SKIP: kv_ablation_ruler.csv not found (searched {len(ruler_candidates)} locations)")
         return
+
+    paper_tables_candidates = [
+        project_root / "results" / "archive" / "round4_misc" / "paper_tables",
+        project_root / "results" / "paper_tables",
+    ]
+    paper_tables_dir = next((p for p in paper_tables_candidates if p.exists()), paper_tables_candidates[0])
 
     ruler = pd.read_csv(ruler_path)
     model_rows = [
-        ("Qwen2.5-1.5B", "1p5b", project_root / "results" / "paper_tables" / "table3_mixedkv_qwen25_1p5b.csv"),
-        ("Qwen2.5-7B", "7b", project_root / "results" / "paper_tables" / "table3_mixedkv_qwen25_7b.csv"),
-        ("LLaMA-3.1-8B", "8b", project_root / "results" / "paper_tables" / "table3_mixedkv_llama31_8b.csv"),
+        ("Qwen2.5-1.5B", "1p5b", paper_tables_dir / "table3_mixedkv_qwen25_1p5b.csv"),
+        ("Qwen2.5-7B", "7b", paper_tables_dir / "table3_mixedkv_qwen25_7b.csv"),
+        ("LLaMA-3.1-8B", "8b", paper_tables_dir / "table3_mixedkv_llama31_8b.csv"),
     ]
     methods = ["K-only", "V-only", "K4V8", "MixedKV"]
     values = {m: [] for m in methods}

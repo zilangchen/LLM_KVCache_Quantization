@@ -59,33 +59,7 @@ Transformers 库和 Triton 编译器。
 和 \code{env/requirements\_freeze.txt} 中，支持严格复现。
 所有实验结果可通过项目仓库中的原始 CSV 文件复现。
 
-所有量化配置均采用统一的贪婪解码参数，以消除采样随机性
-（见表~\ref{tab:decoding-params}）。该配置与第~\ref{subsec:exp-statistics}~节
-的 PPL 确定性论证一致：在同一硬件与软件栈下，PPL 在种子之间逐位相同。
-
-\begin{table}[htbp]
-  \centering
-  \caption{统一解码参数配置（本章全部实验）}
-  \label{tab:decoding-params}
-  \small
-  \begin{tabular}{ll}
-    \toprule
-    \textbf{参数} & \textbf{值} \\
-    \midrule
-    decoding mode          & greedy \\
-    temperature            & 0.0 \\
-    top\_p                 & 1.0 \\
-    top\_k                 & 0 \\
-    repetition\_penalty    & 1.0 \\
-    do\_sample             & false \\
-    max\_new\_tokens       & 依任务（Needle: 64；RULER/LongBench: 128；PPL: N/A） \\
-    质量评测 seeds         & 1234, 1235, 1236, 1237, 1238（5 个固定种子） \\
-    吞吐量评测 seeds       & 1234--1241（8 个固定种子） \\
-    batch size             & 1（除附录~\ref{sec:app-batch-capacity}~的 batch 扫描） \\
-    dtype（权重 + 激活）   & FP16 \\
-    \bottomrule
-  \end{tabular}
-\end{table}
+所有量化配置均采用统一的贪婪解码参数以消除采样随机性\footnote{贪心解码参数：\code{temperature=0.0}、\code{top\_p=1.0}、\code{top\_k=0}、\code{repetition\_penalty=1.0}、\code{do\_sample=false}；\code{max\_new\_tokens} 依任务（Needle: 64，RULER/LongBench: 128，PPL: N/A）；质量评测使用 5 个固定种子 1234--1238，吞吐量评测使用 8 个固定种子 1234--1241；batch size 为 1（除附录~\ref{sec:app-batch-capacity}~的 batch 扫描）；权重与激活 dtype 均为 FP16。}。该配置与第~\ref{subsec:exp-statistics}~节的 PPL 确定性论证一致：在同一硬件与软件栈下，PPL 在种子之间逐位相同。
 
 % ------------------------------------------------------------
 \subsection{评测基准}

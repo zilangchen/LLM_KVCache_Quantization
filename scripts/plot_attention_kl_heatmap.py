@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 
 
 DPI = 300
-CMAP = "cividis"
+CMAP = "viridis"
 
 
 def _setup_thesis_fonts():
@@ -42,13 +42,13 @@ def setup_style():
     _setup_thesis_fonts()
     plt.rcParams.update({
         "font.family": "serif",
-        "font.serif": ["Songti SC", "STSong", "SimSun", "Times New Roman"],
+        "font.serif": ["Times New Roman", "Songti SC", "STSong", "SimSun"],
         "mathtext.fontset": "stix",
-        "font.size": 10.5,
-        "axes.titlesize": 10.5,
-        "axes.labelsize": 9.5,
-        "xtick.labelsize": 8,
-        "ytick.labelsize": 8,
+        "font.size": 10,
+        "axes.titlesize": 11,
+        "axes.labelsize": 10,
+        "xtick.labelsize": 9,
+        "ytick.labelsize": 9,
         "legend.fontsize": 8,
         "legend.framealpha": 0.95,
         "legend.edgecolor": "#CBD5E1",
@@ -144,13 +144,13 @@ def plot_single_heatmap(data, out_dir: Path):
         ax.set_title(title, loc="left", fontweight="bold", pad=8)
         ax.axhspan(focus - 0.5, focus + 0.5, facecolor="none", edgecolor="white", lw=1.2, linestyle="--")
 
-    ax_summary.plot(k_layer_mean, layer_idx, color="#E15759", label="Key 均值", linewidth=2.0)
-    ax_summary.plot(v_layer_mean, layer_idx, color="#76B7B2", label="Value 均值", linewidth=2.0)
+    ax_summary.plot(k_layer_mean, layer_idx, color="#e74c3c", label="Key 均值", linewidth=1.3)
+    ax_summary.plot(v_layer_mean, layer_idx, color="#27ae60", label="Value 均值", linewidth=1.3)
     ax_summary.scatter(
         [k_layer_mean[focus], v_layer_mean[focus]],
         [focus, focus],
-        color=["#E15759", "#76B7B2"],
-        s=28,
+        color=["#e74c3c", "#27ae60"],
+        s=55,
         zorder=4,
         edgecolors="white",
         linewidths=0.7,
@@ -183,8 +183,8 @@ def plot_single_heatmap(data, out_dir: Path):
 
     # Keep the historical filename for the auxiliary per-layer comparison figure.
     fig2, ax = plt.subplots(figsize=(10.5, 4.2))
-    ax.plot(layer_idx, k_layer_mean, color="#E15759", linewidth=2.0, marker="o", markersize=3.5, label="Key 均值")
-    ax.plot(layer_idx, v_layer_mean, color="#76B7B2", linewidth=2.0, marker="s", markersize=3.5, label="Value 均值")
+    ax.plot(layer_idx, k_layer_mean, color="#e74c3c", linewidth=1.3, marker="o", markersize=6.0, label="Key 均值")
+    ax.plot(layer_idx, v_layer_mean, color="#27ae60", linewidth=1.3, marker="s", markersize=6.0, label="Value 均值")
     ax.axvline(focus, color="#666666", linestyle="--", linewidth=0.8, alpha=0.8)
     ax.annotate(
         f"峰值层：{focus}",
@@ -254,8 +254,8 @@ def plot_paired_heatmap(data_a, data_b, out_dir: Path):
             ax.axhspan(focus - 0.5, focus + 0.5, facecolor="none", edgecolor="white", lw=1.2, linestyle="--")
 
         layers = np.arange(k_matrix.shape[0])
-        ax_summary.plot(k_layer_mean, layers, color="#E15759", linewidth=2.0, label="Key 均值")
-        ax_summary.plot(v_layer_mean, layers, color="#76B7B2", linewidth=2.0, label="Value 均值")
+        ax_summary.plot(k_layer_mean, layers, color="#e74c3c", linewidth=1.3, label="Key 均值")
+        ax_summary.plot(v_layer_mean, layers, color="#27ae60", linewidth=1.3, label="Value 均值")
         ax_summary.axhline(focus, color="#666666", linestyle="--", linewidth=0.8, alpha=0.8)
         ax_summary.text(
             0.02,

@@ -21,8 +21,14 @@ for p in [Path("/System/Library/Fonts/Supplemental/Songti.ttc"),
         break
 plt.rcParams.update({
     "font.family": "serif",
-    "font.serif": ["Songti SC", "STSong", "SimSun", "Times New Roman"],
+    "font.serif": ["Times New Roman", "Songti SC", "STSong", "SimSun"],
     "mathtext.fontset": "stix",
+    "font.size": 10,
+    "axes.titlesize": 11,
+    "axes.labelsize": 10,
+    "xtick.labelsize": 9,
+    "ytick.labelsize": 9,
+    "legend.fontsize": 8,
     "axes.unicode_minus": False,
     "pdf.fonttype": 42, "ps.fonttype": 42,
 })
@@ -33,12 +39,12 @@ import numpy as np
 # Source: tab:main-results + tab:rolealign-results
 # ──────────────────────────────────────────────────
 methods = {
-    "FP16":              {"kv_mb": 896, "needle": 100.0, "ppl_delta": 0.0,    "marker": "s", "color": "#2c3e50", "size": 100},
-    "INT8-baseline":     {"kv_mb": 504, "needle": 100.0, "ppl_delta": 0.0,    "marker": "D", "color": "#95a5a6", "size": 80},
-    "INT8-ours":         {"kv_mb": 504, "needle": 100.0, "ppl_delta": 0.2,    "marker": "^", "color": "#2ecc71", "size": 100},
-    "INT4-baseline\n(symmetric)": {"kv_mb": 252, "needle": 0.0,   "ppl_delta": 118.7, "marker": "v", "color": "#e74c3c", "size": 80},
-    "KIVI-style":        {"kv_mb": 462, "needle": 99.0,  "ppl_delta": 6.2,    "marker": "p", "color": "#e67e22", "size": 90},
-    "INT4-RoleAlign":    {"kv_mb": 252, "needle": 100.0, "ppl_delta": 13.7,   "marker": "*", "color": "#3498db", "size": 160},
+    "FP16":              {"kv_mb": 896, "needle": 100.0, "ppl_delta": 0.0,    "marker": "s", "color": "#2c3e50", "size": 60},
+    "INT8-baseline":     {"kv_mb": 504, "needle": 100.0, "ppl_delta": 0.0,    "marker": "D", "color": "#95a5a6", "size": 55},
+    "INT8-ours":         {"kv_mb": 504, "needle": 100.0, "ppl_delta": 0.2,    "marker": "^", "color": "#3498db", "size": 60},
+    "INT4-baseline\n(symmetric)": {"kv_mb": 252, "needle": 0.0,   "ppl_delta": 118.7, "marker": "v", "color": "#e74c3c", "size": 55},
+    "KIVI-style":        {"kv_mb": 462, "needle": 99.0,  "ppl_delta": 6.2,    "marker": "p", "color": "#9b59b6", "size": 60},
+    "INT4-RoleAlign":    {"kv_mb": 252, "needle": 100.0, "ppl_delta": 13.7,   "marker": "*", "color": "#16a085", "size": 110},
 }
 
 fig, ax = plt.subplots(1, 1, figsize=(6, 4.2))
@@ -66,7 +72,7 @@ for name, d in methods.items():
     ax.annotate(name.replace("\n", " "),
                 xy=(compression, d["needle"]),
                 xytext=(cfg["xt"], cfg["yt"]),
-                fontsize=7.5, color=d["color"], fontweight="bold",
+                fontsize=8, color=d["color"], fontweight="bold",
                 ha=cfg["ha"], va="center",
                 bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor=d["color"],
                           linewidth=0.5, alpha=0.85),
@@ -97,10 +103,10 @@ comp_baseline = (1 - 252/896) * 100
 ax.annotate("",
             xy=(comp_baseline - 0.5, 98), xytext=(comp_baseline + 0.5, 3),
             arrowprops=dict(arrowstyle="->, head_width=0.25",
-                           color="#3498db", lw=1.5, ls="--",
+                           color="#16a085", lw=1.3, ls="--",
                            connectionstyle="arc3,rad=0.2"))
 ax.text(comp_baseline + 5, 50, "RoleAlign\nrescues\nretrieval",
-        fontsize=7, color="#3498db", ha="left", va="center", style="italic")
+        fontsize=8, color="#16a085", ha="left", va="center", style="italic")
 
 fig.tight_layout()
 

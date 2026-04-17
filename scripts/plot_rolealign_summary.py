@@ -19,16 +19,17 @@ from matplotlib.lines import Line2D
 
 DPI = 300
 
-C_ROLE = "#8DA59B"
-C_FP16 = "#5A6472"
-C_WARN = "#B79466"
-C_RISK = "#C6948C"
+# Unified P1-B1 palette
+C_ROLE = "#16a085"  # teal — INT4-RoleAlign (ours_asym)
+C_FP16 = "#2c3e50"  # deep grey — baseline
+C_WARN = "#e67e22"  # soft orange — moderate cost
+C_RISK = "#e74c3c"  # soft red — strong cost
 C_TEXT = "#4D5866"
 C_NUM = "#1F2937"
-C_GRID = "#E7EBF0"
+C_GRID = "#CBD5E1"
 C_BOX = "#FDFDFD"
-C_BOX_EDGE = "#E2E7ED"
-C_RETR = "#96A8C1"
+C_BOX_EDGE = "#D1D5DB"
+C_RETR = "#3498db"  # soft blue — retrieval metrics
 
 models = ["Qwen2.5-1.5B", "Qwen2.5-7B", "LLaMA-3.1-8B"]
 x = np.arange(len(models))
@@ -74,14 +75,14 @@ def setup_style():
     _setup_thesis_fonts()
     plt.rcParams.update({
         "font.family": "serif",
-        "font.serif": ["Songti SC", "STSong", "SimSun", "Times New Roman"],
+        "font.serif": ["Times New Roman", "Songti SC", "STSong", "SimSun"],
         "mathtext.fontset": "stix",
-        "font.size": 10.5,
+        "font.size": 10,
         "axes.titlesize": 11,
-        "axes.labelsize": 10.5,
+        "axes.labelsize": 10,
         "xtick.labelsize": 9,
         "ytick.labelsize": 9,
-        "legend.fontsize": 8.3,
+        "legend.fontsize": 8,
         "figure.dpi": DPI,
         "savefig.dpi": DPI,
         "savefig.bbox": "tight",
@@ -96,6 +97,8 @@ def setup_style():
         "grid.alpha": 0.22,
         "grid.linewidth": 0.6,
         "grid.color": C_GRID,
+        "lines.linewidth": 1.3,
+        "lines.markersize": 6.0,
         "legend.framealpha": 0.95,
         "legend.edgecolor": C_BOX_EDGE,
         "axes.unicode_minus": False,

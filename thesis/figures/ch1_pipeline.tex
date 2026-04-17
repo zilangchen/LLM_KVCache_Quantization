@@ -1,0 +1,96 @@
+% ============================================================
+% ch1_pipeline.tex — 论文总览横向 pipeline（回归初版布局 + 新配色）
+% 用户反馈：回归原初版横向长条布局；保留各节点子信息；颜色用 fig 4-1 四色
+% 修订：
+%   - 所有节点字体全加粗
+%   - 子标签保留（Qwen2.5 / LLaMA-3.1、n=128 段、PPL/Needle/RULER 等）
+%   - 修 "⊕" 乱码：Triton 融合解码的副标改为 "反量化 + 注意力"（纯文字）
+%   - 白底 + 深字 + 色边框（不过度填充）
+% 配色：fig 4-1 四色
+%   #2C3E50 深灰（端点）/ #95A5A6 中灰（辅助）/
+%   #3498DB 柔和蓝（核心）/ #9B59B6 柔和紫（分叉）
+% 独立编译：xelatex ch1_pipeline.tex
+% ============================================================
+\documentclass[tikz, border=10pt]{standalone}
+
+\usepackage[UTF8]{ctex}
+\usepackage{amsmath}
+\usepackage{tikz}
+\usetikzlibrary{positioning, arrows.meta, shapes.geometric, calc, fit, backgrounds}
+
+\definecolor{figGreyDeep}{HTML}{2C3E50}
+\definecolor{figGreyMid}{HTML}{95A5A6}
+\definecolor{figBlueCore}{HTML}{3498DB}
+\definecolor{figPurpleAlt}{HTML}{9B59B6}
+
+\begin{document}
+\begin{tikzpicture}[
+    font=\small\bfseries,
+    >={Stealth[length=2.4mm, width=2.0mm]},
+    thick,
+    %
+    base/.style={rectangle, rounded corners=4pt,
+                 minimum height=1.2cm, inner sep=5pt,
+                 align=center, text width=3.1cm,
+                 text=figGreyDeep, fill=white, line width=1.2pt,
+                 font=\small\bfseries},
+    %
+    endpt/.style={base, draw=figGreyDeep, fill=figGreyDeep, text=white},
+    aux/.style={base, draw=figGreyMid},
+    core/.style={base, draw=figBlueCore, line width=1.6pt,
+                 fill=figBlueCore!8, text width=3.3cm,
+                 minimum height=1.35cm},
+    branch/.style={base, draw=figPurpleAlt, line width=1.2pt,
+                   text width=3.5cm},
+    deploy/.style={base, draw=figBlueCore, line width=1.2pt,
+                   fill=figBlueCore!5, text width=3.1cm},
+    %
+    arrow/.style={->, thick, figGreyDeep!75, line width=1.0pt},
+    branchArrow/.style={->, thick, figPurpleAlt!80, line width=1.0pt}
+]
+
+% ====== 主流水线节点（横向左 → 右）======
+\node[endpt] (fp16)
+    {FP16 参考模型\\[-1pt]
+     \mdseries\scriptsize \mbox{Qwen2.5} / \mbox{LLaMA-3.1}};
+\node[aux, right=0.7cm of fp16] (calib)
+    {\mbox{WikiText-2} 校准集\\[-1pt]
+     \mdseries\scriptsize $n{=}128$ 段};
+\node[core, right=0.7cm of calib] (search)
+    {\mbox{attention-KL} 离线搜索\\[-1pt]
+     \mdseries\scriptsize 量化行为对齐};
+\node[aux, right=0.7cm of search] (json)
+    {校准产物 JSON\\[-1pt]
+     \mdseries\scriptsize $s,\ z,\ \tau^{-1}$};
+
+% ====== 分叉两路（上 INT8 / 下 INT4-RoleAlign）======
+\node[branch, right=0.9cm of json, yshift=0.95cm] (int8)
+    {\mbox{INT8 对称}\\[-1pt]
+     \mdseries\scriptsize 自适应保护};
+\node[branch, right=0.9cm of json, yshift=-0.95cm] (int4)
+    {\mbox{INT4-RoleAlign}\\[-1pt]
+     \mdseries\scriptsize \mbox{per-ch K} + \mbox{per-tok V}};
+
+% ====== 合流：融合解码 → 评测 ======
+\node[deploy, right=0.9cm of int8, yshift=-0.95cm] (decode)
+    {\mbox{Triton 融合解码核}\\[-1pt]
+     \mdseries\scriptsize 反量化 + 注意力};
+\node[endpt, right=0.7cm of decode] (infer)
+    {长上下文推理 \& 评测\\[-1pt]
+     \mdseries\scriptsize \mbox{PPL} / \mbox{Needle} / \mbox{RULER}};
+
+% ====== 箭头连接 ======
+\draw[arrow] (fp16) -- (calib);
+\draw[arrow] (calib) -- (search);
+\draw[arrow] (search) -- (json);
+
+\draw[branchArrow] (json.east) -- ++(0.3,0) |- (int8.west);
+\draw[branchArrow] (json.east) -- ++(0.3,0) |- (int4.west);
+
+\draw[branchArrow] (int8.east) -- ++(0.3,0) |- (decode.north west);
+\draw[branchArrow] (int4.east) -- ++(0.3,0) |- (decode.south west);
+
+\draw[arrow] (decode) -- (infer);
+
+\end{tikzpicture}
+\end{document}
