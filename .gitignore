@@ -50,7 +50,14 @@ thesis/*.fls
 thesis/*.fdb_latexmk
 thesis/*.synctex.gz
 thesis/*.xdv
+thesis/*.txt
+thesis/figures/*.aux
+thesis/backups/
 thesis.zip
+
+# Session-level archives (too large for git)
+archive/*.tar.gz
+archive/thesis_final_*/
 
 # Session artifacts (planning-with-files skill)
 progress.md
