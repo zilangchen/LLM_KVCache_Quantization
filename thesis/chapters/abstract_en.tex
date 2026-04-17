@@ -17,9 +17,9 @@ calibration objective from an attention-behavior perspective,
 using the Kullback--Leibler divergence between pre- and
 post-quantization attention distributions (attention-KL) as
 a unified calibration and diagnostic principle, with GQA
-head count $H_{kv}$ as a structural correlate linking
-calibration sensitivity, degradation patterns, and fused
-decoding efficiency.
+head count $H_{kv}$ as a structural correlate (not a strict
+causal identification) linking calibration sensitivity,
+degradation patterns, and fused decoding efficiency.
 
 This paper systematically validates the behavior-aligned
 quantization framework on Qwen2.5-1.5B/7B/14B and
@@ -32,7 +32,12 @@ naturally points to a per-channel Key $+$ per-token Value
 asymmetric format---the same format independently proposed
 by KIVI~\cite{liu2024kivi} from engineering
 observations---and supplies a mechanistic explanation for
-asymmetric KV quantization.
+asymmetric KV quantization. At the calibration-objective
+level, attention-KL and numerical reconstruction error (MSE)
+exhibit a bit-width $\times$ scale double dependence: under
+INT8 the two objectives converge and yield bit-identical
+calibration products, whereas under INT4 they diverge on 1.5B
+($H_{kv}=2$) and re-converge on 7B ($H_{kv}=4$).
 \emph{Second}, instantiating this format through offline
 attention-KL search yields \textbf{INT4-RoleAlign}, which
 preserves 100\% Needle retrieval across all four models at
@@ -40,9 +45,13 @@ roughly 73\% KV cache compression, with PPL degradation
 decreasing markedly with scale (1.5B: 13.7\%; 7B: 6.1\%;
 8B: 2.4\%); external validity on 14B further confirms full
 Needle pass rates over 4K--32K and RULER scores of
-96.6\%--98.5\% over 4K--16K. The method establishes an
-interpretable and reproducible offline calibration interface
-for the per-channel K $+$ per-token V asymmetric format.
+96.6\%--98.5\% over 4K--16K (the 14B PPL degradation of 7.6\%
+is reported on a truncated evaluation window and is not
+directly comparable to the full test-split results of
+1.5B/7B/8B; see Section~\ref{sec:exp-discussion}). The method
+establishes an interpretable and reproducible offline
+calibration interface for the per-channel K $+$ per-token V
+asymmetric format.
 \emph{Third}, the Triton fused quantized decoding kernel
 achieves roughly 40\% decode latency reduction at 32K in the
 GQA-heavy regime ($H_{kv}=8$), which together with

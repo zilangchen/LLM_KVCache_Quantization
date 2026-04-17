@@ -69,12 +69,12 @@ softmax 的非线性使得误差大小与注意力偏移之间不存在单调关
 \textbf{行为对齐}（Behavior Alignment, BA）。
 若将 FP16 精度下的注意力权重分布记为 $\bm{p}$，
 量化后的注意力权重分布记为 $\bm{q}$，
-则行为偏移可以用 Kullback-Leibler 散度衡量：
+则行为偏移可以用 Kullback--Leibler 散度衡量：
 \begin{equation}
   D_{\KL}(\bm{p} \| \bm{q}) = \sum_{i} p_i \log \frac{p_i}{q_i}
   \label{eq:kl_divergence}
 \end{equation}
-其中，$D_{\KL}$ 为 Kullback-Leibler 散度，衡量量化引入的注意力行为偏移程度。
+其中，$D_{\KL}$ 为 Kullback--Leibler 散度，衡量量化引入的注意力行为偏移程度。
 
 基于这一视角，本文在多模型协议下系统研究校准目标、低比特失效模式
 与部署效率三个核心问题（详见第~\ref{sec:ch1-contribution}~节）。

@@ -4,7 +4,7 @@
 
 \begin{abstractzh}
 
-大语言模型的上下文窗口从数千扩展至数十万 token，
+大语言模型的上下文窗口从数千扩展至数十万词元（token），
 键值缓存（KV Cache）的显存占用随序列长度线性增长，
 已成为制约长上下文推理部署的核心瓶颈。
 INT4 量化理论上可将 KV Cache 压缩至原始的 $1/4$，
@@ -14,7 +14,7 @@ INT4 量化理论上可将 KV Cache 压缩至原始的 $1/4$，
 本文从注意力行为保真的角度重新审视校准目标，
 以量化前后注意力分布的 Kullback--Leibler 散度
 （attention-KL）作为统一的校准与诊断原则，
-并以 GQA 头数 $H_{kv}$ 为结构性关联变量
+并以 GQA 头数 $H_{kv}$ 为结构性相关变量（非严格因果识别）
 联合分析校准灵敏度、退化模式与融合解码效率。
 
 本文在 Qwen2.5-1.5B/7B/14B 与 LLaMA-3.1-8B
@@ -28,14 +28,21 @@ INT4 量化理论上可将 KV Cache 压缩至原始的 $1/4$，
 per-channel Key $+$ per-token Value 的差异化量化格式——
 与 KIVI~\cite{liu2024kivi} 从工程经验独立提出的格式相吻合，
 为非对称 KV 量化提供机制性解释。
+校准目标层面，attention-KL 与数值重建误差（MSE）
+在 bit-width 与模型规模维度呈双重依赖：
+INT8 下二者趋同并产生逐位一致的校准产物，
+INT4 下在 1.5B（$H_{kv}=2$）上分化、
+在 7B（$H_{kv}=4$）上再次趋同。
 第二，在上述格式上以离线 attention-KL 搜索实例化
 \textbf{INT4-RoleAlign}：
 四个模型上 Needle 检索通过率一致保持 100\%，
 KV Cache 压缩约 73\%，
-PPL 退化随模型规模显著减弱
+PPL 退化随模型规模减弱
 （1.5B: 13.7\%，7B: 6.1\%，8B: 2.4\%）；
 14B 外部效度进一步确认 Needle 在 4K--32K 全通过、
-RULER 在 4K--16K 达到 96.6\%--98.5\%。
+RULER 在 4K--16K 达到 96.6\%--98.5\%
+（14B PPL 退化 7.6\% 因受限评测窗口与 1.5B/7B/8B 完整 test split 不可直接比较，
+详见第~\ref{sec:exp-discussion}~节）。
 该方法为 per-channel K $+$ per-token V 非对称格式
 建立了可解释、可复现的离线校准接口。
 第三，Triton 融合量化解码核在 GQA 头数较大的场景下
