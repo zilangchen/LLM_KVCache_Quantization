@@ -131,48 +131,57 @@ vLLM~\cite{kwon2023vllm} 的 PagedAttention 改善了 KV Cache 显存碎片。
 围绕以上三个问题，本文给出三个主要贡献。
 
 \textbf{贡献一：attention-KL 诊断透镜与 Key 主导退化机制。}
-以 attention-KL 作为量化前后注意力行为的统一诊断度量，
-通过 K-only 与 V-only 因子分解，
-本文在四个模型上一致观察到 INT4 KV Cache 退化由 Key 侧主导。
-14B 上的 K/V 消融进一步验证：保持 Key 为 FP16 可恢复 93\% 的 PPL 退化，
-而保持 Value 为 FP16 仅恢复 64\%。
-该诊断自然地指向 per-channel Key + per-token Value 的差异化量化格式——
-与 KIVI~\cite{liu2024kivi} 从工程经验出发独立提出的格式相吻合，
-为非对称 KV 量化提供机制性解释。
-校准目标层面，本文同时观察到 attention-KL 与 MSE 在 bit-width 上呈规模依赖：
-INT8 下二者对 $(\text{clip\_percentile}, \text{group\_size})$ 的选择完全趋同，
-产生逐位一致的校准产物；INT4 下在 1.5B（$H_{kv}=2$）上分化，
-在 7B（$H_{kv}=4$）上再次趋同（详见第~\ref{sec:exp-main}~节）。
+本文提出以 attention-KL 作为量化前后注意力行为的统一诊断度量，
+在四个主模型（Qwen2.5-1.5B/7B/14B、LLaMA-3.1-8B）及 Mistral-7B 对照上
+首次用受控 K/V 消融定量刻画 INT4 KV Cache 的 Key 主导退化机制。
+在 Qwen2.5-14B 上，保持 Key 为 FP16 可恢复 93\% 的 PPL 退化，
+保持 Value 为 FP16 仅恢复 64\%；
+该比例跨 K-only/V-only 消融在四个主模型上方向一致。
+该诊断自然推导出 per-channel Key + per-token Value 非对称量化格式，
+为 KIVI~\cite{liu2024kivi} 从工程经验独立提出的同一格式
+提供了首个 attention-KL 视角的机制性解释——
+KIVI 的格式从"经验碰巧有用"升级为"诊断推论下的必然选择"。
+校准目标层面，本文首次系统报告 attention-KL 与 MSE 的选择
+在 bit-width 与模型规模上呈现"趋同-分化-再收敛"经验规律：
+INT8 下两目标在鲁棒选择协议（clip-rate $\leq 1\%$）的参数空间约束下
+收敛到同一 $(\text{clip\_percentile}, \text{group\_size})$ 并产生逐位一致的校准产物；
+INT4 下在 1.5B（$H_{kv}=2$）分化、在 7B（$H_{kv}=4$）再次收敛
+（详见第~\ref{sec:exp-main}~节）。
 
-\textbf{贡献二：INT4-RoleAlign 实例化验证与 Needle/PPL 解耦现象。}
-基于上述诊断，本文在 per-channel K + per-token V 非对称格式上
-以离线 attention-KL 搜索替代运行时 absmax/min，
-得到行为引导的实例化 INT4-RoleAlign（INT4 角色对齐量化）。
-在四个模型上 Needle 检索通过率一致保持 100\%，
+\textbf{贡献二：INT4-RoleAlign---可复现可审计的离线校准接口。}
+在上述非对称格式上，本文以离线 attention-KL 搜索
+取代 KIVI 的运行时 absmax/min 统计量，实例化 INT4-RoleAlign，
+把量化参数固化为可审计的校准产物 JSON——
+这为合规场景（金融、医疗）提供了量化过程可追溯的部署接口。
+该实例化在四个主模型上 Needle 检索通过率一致保持 100\%，
 KV Cache 压缩约 73\%，
-PPL 退化随模型规模减弱（1.5B: 13.7\%，7B: 6.1\%，8B: 2.4\%；
-14B 打破单调趋势，详见第~\ref{sec:exp-discussion}~节）。
-14B 提供外部效度：Needle 在 4K--32K 全通过，
-RULER 在 4K--16K 达到 96.6\%--98.5\%。
-在 INT4-RoleAlign 配置下，Needle 检索通过率与 PPL 在 1.5B 至 14B 范围内呈现解耦——
-同一配置可保持 Needle 100\% 的同时伴随可观的 PPL 退化，
-说明评价低比特量化不能仅用 PPL；
-其他 INT4 配置如对称 INT4 baseline 则呈现 Needle 随 PPL 同降，
-本文第~\ref{sec:exp-int4}~节给出受控对比。
+PPL 退化随模型规模减弱（1.5B: 13.7\%，7B: 6.1\%，8B: 2.4\%），
+并在 LongBench 合成评分上相对同格式 KIVI-style 基线
+提供小幅边际提升（1.5B: $+0.09$，7B: $+0.06$）。
+Qwen2.5-14B 作为外部效度锚点进一步验证 Needle 在 4K--32K 全通过、
+RULER 在 4K--16K 达到 96.6\%--98.5\%
+（14B PPL 在 32K prefix 上评测，与其他模型的完整 test split
+采用不同协议，作为外部效度观察而非跨模型单调性证据）。
+INT4-RoleAlign 配置下揭示的 Needle 与 PPL 解耦现象
+（同一配置可保持 Needle 100\% 的同时伴随可观 PPL 退化）
+说明低比特量化的评价不能仅依赖 PPL，
+这一发现对后续 KV 量化方法的评测设计具有方法论意义
+（详见第~\ref{sec:exp-int4}~节）。
 
-\textbf{贡献三：$(H_{kv}, \text{seq\_len})$ 空间中的融合核效率特征与部署建议。}
-本文实现了 Triton 融合量化解码注意力核函数，
-并在 $(H_{kv}, \text{seq\_len})$ 的二维空间中分析其效率特征。
-在长序列（8K 及以上）下，融合核相对 naive dequant+SDPA 的优势
-随 $H_{kv}$ 和序列长度显著增长：
-$H_{kv}=8$ 在 32K 下延迟减少约 40\%；
-$H_{kv}=2$ 下融合核在所有测试序列长度下均慢于 SDPA。
-8B（$H_{kv}=8$, LLaMA）与 14B（$H_{kv}=8$, Qwen）
-在短序列下的效率特征高度一致，
-为 $H_{kv}$ 而非模型规模主导提供支持证据。
-基于此，本文给出限定于 NVIDIA H20 平台的部署建议：
-$H_{kv}\geq 4$ 且序列长度超过 8K 时使用融合核，
-$H_{kv}=2$ 使用 SDPA。
+\textbf{贡献三：$(H_{kv}, \text{seq\_len})$ 空间中的融合核效率相位图与分层部署策略。}
+本文实现了 Triton 融合量化解码注意力核，
+并在 $(H_{kv}, \text{seq\_len})$ 二维空间给出清晰的效率相位图。
+$H_{kv}=8$ 在 32K 序列下相对同配置 INT4 参考实现降低解码延迟约 40\%；
+8B（$H_{kv}=8$, LLaMA）与 14B（$H_{kv}=8$, Qwen）跨越 1.75$\times$ 参数量差距
+与不同模型族，在短序列效率特征上高度一致，
+支持 $H_{kv}$（而非模型规模）为融合核效率的结构性驱动变量。
+基于该相位图，本文给出 NVIDIA H20 平台的分层部署策略：
+$H_{kv}=8$ 在序列长度 $\geq$ 8K 时优先使用融合核；
+$H_{kv}=4$ 在序列长度 $\geq$ 32K 出现边际收益；
+$H_{kv}=2$ 推荐使用 SDPA。
+该"相位图"评估范式为未来的 efficient inference kernel 工作
+提供了一个可推广的汇报模板——
+kernel 的收益应按场景相位图呈现，而非单一平均加速。
 
 综上，attention-KL 提供了 GQA 架构下 KV Cache 量化的统一校准与诊断原则，
 $H_{kv}$ 则是与低比特失效模式、K/V 角色分化和融合解码效率

@@ -270,9 +270,9 @@ LLM.int8()~\cite{dettmers2022gpt3int8} 以混合精度处理异常值维度。
     ZipCache      & KV Cache  & 混合   & 混合精度      & 显著性  & \checkmark \\
     GEAR          & KV Cache  & 2-bit  & 残差低秩      & MSE     & --- \\
     QServe        & W+A+KV    & 4-bit  & 对称/非对称   & 渐进式  & \checkmark \\
-    Atom          & KV Cache  & 2-bit  & 混合精度      & 动态    & --- \\
-    CacheGen      & KV Cache  & 压缩编码 & 流式编解码  & 否      & --- \\
-    ThinK         & KV Cache  & ---    & Key 剪枝       & 查询驱动& \checkmark \\
+    Atom~\cite{zhao2024atom}          & KV Cache  & 2-bit  & 混合精度      & 动态    & --- \\
+    CacheGen~\cite{liu2024cachegen}      & KV Cache  & 压缩编码 & 流式编解码  & 否      & --- \\
+    ThinK~\cite{xu2024think}         & KV Cache  & ---    & Key 剪枝       & 查询驱动& \checkmark \\
     IntactKV      & KV Cache  & 4-bit  & 混合精度       & Pivot   & \checkmark \\
     QJL           & KV Cache  & 1-bit  & JL 投影        & 否      & --- \\
     SnapKV        & KV Cache  & 驱逐   & 注意力预测     & 否      & \checkmark \\
@@ -330,7 +330,7 @@ Softmax Bias Correction~\cite{bondarenko2023softmax}（ICCV 2023 Workshop）
 锐度随序列长度衰减并在语言模型头（LM head）应用自适应温度；
 以及 AhaKV~\cite{gu2025ahakv}（arXiv 2025），该工作基于注意力熵
 构造\textbf{全局} softmax scale 用于 KV Cache 驱逐的\textbf{重要性打分}。
-两者均确立了"softmax 温度作为可调参数"的方法学先例，但都与本文在三个维度上存在关键差异：
+两者均确立了``softmax 温度作为可调参数''的方法学先例，但都与本文在三个维度上存在关键差异：
 (i) 本文的 $\tau^{-1}_{l,h}$ 是\textbf{逐头}而非全局；
 (ii) 用于\textbf{量化补偿}而非 LM-head 温度调整或驱逐打分；
 (iii) 通过\textbf{行为对齐 KL 校准}在离线阶段确定参数值，而非运行时启发式。
@@ -347,7 +347,7 @@ Softmax-Not-Enough 着眼于 LM head，AhaKV 用于驱逐打分；
 意外发现其有效性与 GQA 头数呈反向依赖
 （第~\ref{subsec:exp-rolealign-invtau}~节）。
 
-然而，校准策略的改进仅解决了"量化什么"的问题；
+然而，校准策略的改进仅解决了``量化什么''的问题；
 要将量化带来的显存节省转化为实际的推理加速，还需要在计算层面进行融合优化。
 
 % ============================================================
@@ -408,7 +408,7 @@ DSL），旨在降低高性能 GPU kernel 编写的门槛。与直接使用 CUDA
 KIVI、KVQuant 等代表工作仍以张量级数值精度（MSE 或百分位裁剪）为校准目标，
 缺乏对量化前后注意力权重分布一致性的显式优化。
 在 softmax 非线性变换下，数值误差的最小化并不等同于注意力行为的保真；
-数值层面的"最优"配置可能对应注意力分布的剧烈偏移。
+数值层面的``最优''配置可能对应注意力分布的剧烈偏移。
 本文第~\ref{sec:ch3-calibration}~节以 attention-KL 作为校准目标的行为保真性度量填补这一空白。
 
 \textbf{空白二：K/V 敏感性的跨模型系统验证缺失。}
