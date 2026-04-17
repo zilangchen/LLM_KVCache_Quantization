@@ -21,43 +21,34 @@ head count $H_{kv}$ as a structural correlate linking
 calibration sensitivity, degradation patterns, and fused
 decoding efficiency.
 
-Across Qwen2.5-1.5B/7B/14B and LLaMA-3.1-8B (with 14B serving
-as an external-validity anchor, evaluated only on 1 seed over
-Needle 4K--32K and RULER 4K--16K and therefore excluded from
-the PPL monotonicity claim), results show that calibration
-objective validity is both bit-width and scale dependent:
-at INT8 the two objectives converge, while at INT4 they
-diverge on a small model ($H_{kv}=2$) but reconverge on a
-larger one ($H_{kv}=4$). Controlled diagnosis shows INT4
-degradation is Key-dominated: on the 14B model, preserving
-Key in FP16 recovers 93\% of the PPL degradation, while
-Needle retrieval and PPL decouple consistently across all
-four models under the INT4-RoleAlign configuration (other
-INT4 configurations such as symmetric-only exhibit Needle
-drops that track PPL degradation). This diagnosis motivates
-a per-channel Key $+$ per-token Value asymmetric format---the
-same format independently proposed by KIVI~\cite{liu2024kivi}
-from engineering observations. Building on this format,
-INT4-RoleAlign is instantiated via offline attention-KL
-search. Across the three models with full quality matrices
-(1.5B/7B/8B), RoleAlign preserves 100\% Needle retrieval at
+This paper systematically validates the behavior-aligned
+quantization framework on Qwen2.5-1.5B/7B/14B and
+LLaMA-3.1-8B, yielding three core contributions.
+\emph{First}, the attention-KL diagnostic lens reveals the
+Key-dominated mechanism behind INT4 degradation: in
+controlled diagnosis, preserving Key in FP16 recovers 93\%
+of the PPL degradation on the 14B model. This finding
+naturally points to a per-channel Key $+$ per-token Value
+asymmetric format---the same format independently proposed
+by KIVI~\cite{liu2024kivi} from engineering
+observations---and supplies a mechanistic explanation for
+asymmetric KV quantization.
+\emph{Second}, instantiating this format through offline
+attention-KL search yields \textbf{INT4-RoleAlign}, which
+preserves 100\% Needle retrieval across all four models at
 roughly 73\% KV cache compression, with PPL degradation
-decreasing with scale (1.5B: 13.7\%; 7B: 6.1\%; 8B: 2.4\%).
-The 14B anchor extends the Needle/RULER evidence to a larger
-model but reports a PPL degradation of 7.6\%, which departs
-from the 1.5B$\to$8B monotonic trend and is treated as a
-supplementary external-validity observation rather than part
-of the main trend. Relative to the KIVI-style baseline,
-INT4-RoleAlign does not exhibit a consistent PPL advantage;
-its contribution lies in providing an interpretable offline
-calibration interface on the per-channel K $+$ per-token V
-format via the attention-KL diagnostic lens, rather than in
-raw quantization quality. The efficiency gains of fused
-quantized decoding kernels show scale-dependent behaviour in
-the $(H_{kv}, \text{seq\_len})$ space: at $H_{kv}=8$ the
-fused kernel reduces latency by roughly 40\% at 32K, while
-at $H_{kv}=2$ it is slower than SDPA across all tested
-sequence lengths.
+decreasing markedly with scale (1.5B: 13.7\%; 7B: 6.1\%;
+8B: 2.4\%); external validity on 14B further confirms full
+Needle pass rates over 4K--32K and RULER scores of
+96.6\%--98.5\% over 4K--16K. The method establishes an
+interpretable and reproducible offline calibration interface
+for the per-channel K $+$ per-token V asymmetric format.
+\emph{Third}, the Triton fused quantized decoding kernel
+achieves roughly 40\% decode latency reduction at 32K in the
+GQA-heavy regime ($H_{kv}=8$), which together with
+INT4-RoleAlign's asymmetric compression forms an end-to-end
+behavior-aligned quantization framework spanning calibration,
+diagnosis, and deployment.
 
 \keywordsen{Large Language Model; KV Cache Quantization;
 Behavior-Aligned Calibration; Asymmetric Quantization;

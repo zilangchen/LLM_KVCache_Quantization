@@ -64,3 +64,14 @@
 \renewcommand{\thefigure}{\thechapter-\arabic{figure}}
 \renewcommand{\thetable}{\thechapter-\arabic{table}}
 \renewcommand{\theequation}{\thechapter-\arabic{equation}}
+
+% --- 浮动体布局参数：放宽默认限制以减少整页空白 ---
+% 默认 topfraction=0.7 / bottomfraction=0.3 / textfraction=0.2 / floatpagefraction=0.5
+% 会导致较大的表格/图独占整页，产生大段空白。以下放宽参数：
+\renewcommand{\topfraction}{0.95}       % top 浮动体允许占页高 95%
+\renewcommand{\bottomfraction}{0.85}    % bottom 浮动体允许占页高 85%
+\renewcommand{\textfraction}{0.05}      % 每页至少保留 5% 正文（其余可为浮动体）
+\renewcommand{\floatpagefraction}{0.85} % 纯浮动页需填满 85% 才独占
+\setcounter{topnumber}{3}               % 单页最多 3 个 top 浮动体
+\setcounter{bottomnumber}{3}            % 单页最多 3 个 bottom 浮动体
+\setcounter{totalnumber}{5}             % 单页总浮动体上限 5 个

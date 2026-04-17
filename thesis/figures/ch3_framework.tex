@@ -1,19 +1,19 @@
 % ============================================================
-% ch3_framework.tex — 行为对齐量化框架 3 层纵向（等宽对齐）
-% 用户反馈修订：
-%   - 三个层框上下严格对齐（minimum width 统一 14cm）
-%   - 层号"1. 度量 / 2. 协议 / 3. 实例化"放到每层框内的 heading 位置
-%   - 配色按 fig 4-1 四色重新安排，实色边框 + 白底/浅底
-% 独立编译：xelatex ch3_framework.tex
+% ch3_framework.tex — 行为对齐量化框架 3 层横向布局
+% 用户反馈（第二轮）：原纵向版本占整页；层号"一/二/三"与左侧标签重合
+% 修订：
+%   - 改为横向 3 容器并列（总宽 ~16cm 贴合 textwidth，高 ~5cm 不占整页）
+%   - 层号 "1. 度量 / 2. 协议 / 3. 实例化" 作为容器顶部 heading（居中，不再左侧浮动）
+%   - 容器间箭头表示层级传递
+% 配色：fig 4-1 四色
 % ============================================================
-\documentclass[tikz, border=10pt]{standalone}
+\documentclass[tikz, border=8pt]{standalone}
 
 \usepackage[UTF8]{ctex}
 \usepackage{amsmath}
 \usepackage{tikz}
 \usetikzlibrary{positioning, arrows.meta, shapes.geometric, calc, fit, backgrounds}
 
-% Fig 4-1 调色板
 \definecolor{figGreyDeep}{HTML}{2C3E50}
 \definecolor{figGreyMid}{HTML}{95A5A6}
 \definecolor{figBlueCore}{HTML}{3498DB}
@@ -25,69 +25,82 @@
     >={Stealth[length=2.4mm, width=2.0mm]},
     thick,
     %
-    % 层容器（minimum width 统一对齐）
+    % 横向层容器（每容器宽 5cm，高 4.2cm）
     layerbox/.style={rectangle, rounded corners=6pt,
                      draw=figGreyDeep, line width=1.2pt,
-                     fill=figGreyDeep!4,
-                     minimum width=14cm, minimum height=2.4cm,
-                     inner sep=10pt, align=center,
-                     font=\small\bfseries},
-    % 每层内部的 heading（左上角）
-    layerhead/.style={anchor=north west, font=\small\bfseries,
-                      text=figGreyDeep, inner sep=4pt},
+                     fill=figGreyDeep!3,
+                     minimum width=5.0cm, minimum height=4.5cm,
+                     inner sep=6pt, align=center,
+                     font=\small\bfseries, text=figGreyDeep},
+    % 容器顶部 heading（层号 + 层名）
+    layerhead/.style={font=\small\bfseries, text=figGreyDeep,
+                      align=center, anchor=north, inner sep=2pt},
     %
-    % 层一：度量节点（核心柔和蓝）
+    % 层一：度量节点
     metric/.style={rectangle, rounded corners=4pt,
                    draw=figBlueCore, line width=1.4pt,
                    fill=figBlueCore!10,
-                   align=center, text width=11cm,
-                   minimum height=1.1cm, inner sep=6pt,
+                   align=center, text width=4.1cm,
+                   minimum height=2.2cm, inner sep=5pt,
                    font=\small\bfseries, text=figGreyDeep},
-    % 层二：协议节点（柔和紫）
+    % 层二：协议节点
     protocol/.style={rectangle, rounded corners=4pt,
                      draw=figPurpleAlt, line width=1.2pt,
                      fill=figPurpleAlt!8,
-                     align=center, text width=5.2cm,
-                     minimum height=1.1cm, inner sep=5pt,
+                     align=center, text width=4.1cm,
+                     minimum height=1.0cm, inner sep=4pt,
                      font=\small\bfseries, text=figGreyDeep},
-    % 层三：实例化节点（柔和蓝浅填 + 边框深色）
+    % 层三：实例化节点
     instance/.style={rectangle, rounded corners=4pt,
                      draw=figBlueCore, line width=1.2pt,
                      fill=white,
-                     align=center, text width=5.2cm,
-                     minimum height=1.1cm, inner sep=5pt,
+                     align=center, text width=4.1cm,
+                     minimum height=1.0cm, inner sep=4pt,
                      font=\small\bfseries, text=figGreyDeep},
     %
-    arrow/.style={->, thick, figGreyDeep!75, line width=1.1pt}
+    bigarrow/.style={->, very thick, figGreyDeep!75,
+                     line width=1.4pt, shorten >=2pt, shorten <=2pt}
 ]
 
-% 容器锚点（用 anchor 机制让三个 layerbox 严格等宽对齐）
+% ====== 横向 3 容器 ======
 \node[layerbox] (L1) at (0, 0) {};
-\node[layerbox, below=0.9cm of L1] (L2) {};
-\node[layerbox, below=0.9cm of L2] (L3) {};
+\node[layerbox, right=0.7cm of L1] (L2) {};
+\node[layerbox, right=0.7cm of L2] (L3) {};
 
-% ====== 层一内部：度量节点 + heading ======
-\node[layerhead] at ($(L1.north west) + (0.3, -0.25)$) {1. 度量};
-\node[metric] at (L1.center) (kl)
-    {attention-KL：量化前后注意力分布 KL 散度};
+% ====== 容器 heading（顶部居中）======
+\node[layerhead] at ($(L1.north) + (0, -0.2)$) {1. 度量};
+\node[layerhead] at ($(L2.north) + (0, -0.2)$) {2. 协议};
+\node[layerhead] at ($(L3.north) + (0, -0.2)$) {3. 实例化};
 
-% ====== 层二内部：协议两节点 + heading ======
-\node[layerhead] at ($(L2.north west) + (0.3, -0.25)$) {2. 协议};
-\node[protocol] at ($(L2.center) + (-3.0, 0)$) (robust)
-    {Robust Selection（clip rate $\leq 1\%$）};
-\node[protocol] at ($(L2.center) + (3.0, 0)$) (search)
-    {离线搜索空间（clip $\times$ group $\times \tau^{-1}$）};
+% ====== 层一内部：度量节点（单节点，撑满）======
+\node[metric] at ($(L1.center) + (0, -0.2)$) (kl)
+    {attention-KL\\[3pt]
+     \mdseries\footnotesize 量化前后\\注意力分布 KL 散度\\[3pt]
+     \mdseries\scriptsize 行为偏移度量\\校准与诊断共享};
 
-% ====== 层三内部：实例化两路径 + heading ======
-\node[layerhead] at ($(L3.north west) + (0.3, -0.25)$) {3. 实例化};
-\node[instance] at ($(L3.center) + (-3.0, 0)$) (int8)
-    {INT8 对称路径（grid 搜 $p_c, g$）};
-\node[instance] at ($(L3.center) + (3.0, 0)$) (int4)
-    {INT4-RoleAlign 非对称（per-ch K + per-tok V）};
+% ====== 层二内部：协议两节点（纵向堆叠）======
+\node[protocol] at ($(L2.center) + (0, 0.7)$) (robust)
+    {Robust Selection\\[-1pt]
+     \mdseries\scriptsize clip rate $\leq 1\%$};
+\node[protocol] at ($(L2.center) + (0, -0.7)$) (search)
+    {离线搜索空间\\[-1pt]
+     \mdseries\scriptsize clip $\times$ group $\times \tau^{-1}$};
 
-% ====== 层间箭头 ======
-\draw[arrow] (L1.south) -- (L2.north);
-\draw[arrow] (L2.south) -- (L3.north);
+% ====== 层三内部：实例化两路径（纵向堆叠）======
+\node[instance] at ($(L3.center) + (0, 0.7)$) (int8)
+    {INT8 对称路径\\[-1pt]
+     \mdseries\scriptsize grid 搜 $(p_c, g)$};
+\node[instance] at ($(L3.center) + (0, -0.7)$) (int4)
+    {INT4-RoleAlign 非对称\\[-1pt]
+     \mdseries\scriptsize per-ch K + per-tok V};
+
+% ====== 容器间箭头（层级传递）======
+\draw[bigarrow] (L1.east) -- (L2.west)
+    node[midway, above, font=\tiny, text=figGreyDeep!80, inner sep=2pt]
+    {度量$\rightarrow$协议};
+\draw[bigarrow] (L2.east) -- (L3.west)
+    node[midway, above, font=\tiny, text=figGreyDeep!80, inner sep=2pt]
+    {协议$\rightarrow$实例化};
 
 \end{tikzpicture}
 \end{document}

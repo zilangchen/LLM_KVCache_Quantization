@@ -59,18 +59,20 @@ _setup_thesis_fonts()
 
 DPI = 300
 
-# Academic, print-friendly palette (subtle saturation).
+# Academic, print-friendly palette — 4-color scheme aligned with KV_ABLATION_COLORS.
+# Same scheme family shares color (baselines=grey, ours=blue, kivi-family=purple),
+# MixedKV uses orange as 5th accent color to avoid collision.
 COLORS = {
-    "fp16":              "#2c3e50",  # deep grey — baseline
-    "int8_baseline":     "#95a5a6",  # mid grey
-    "int8_ours":         "#3498db",  # soft blue
-    "int4_baseline":     "#e67e22",  # soft orange
-    "int4_fused":        "#e74c3c",  # soft red
-    "int4_ours":         "#27ae60",  # soft green
-    "kivi_style":        "#9b59b6",  # soft purple
-    "int4_kivi_aligned": "#8e44ad",  # darker purple
-    "int4_mixed_kv":     "#8B5E34",  # brown (retained)
-    "int4_ours_asym":    "#16a085",  # teal
+    "fp16":              "#2c3e50",  # deep grey — reference baseline
+    "int8_baseline":     "#95a5a6",  # mid grey — baseline family
+    "int8_ours":         "#3498db",  # soft blue — ours family (INT8-Canonical)
+    "int4_baseline":     "#95a5a6",  # mid grey — baseline family
+    "int4_fused":        "#3498db",  # soft blue — ours family (fused variant)
+    "int4_ours":         "#3498db",  # soft blue — ours family
+    "kivi_style":        "#9b59b6",  # soft purple — kivi family
+    "int4_kivi_aligned": "#9b59b6",  # soft purple — kivi family (aligned variant)
+    "int4_ours_asym":    "#3498db",  # soft blue — ours family (INT4-RoleAlign)
+    "int4_mixed_kv":     "#e67e22",  # soft orange — MixedKV accent (5th color)
 }
 
 LABELS = {
@@ -142,10 +144,11 @@ EFFICIENCY_DASHBOARD_MODES = ["fp16", "int8_baseline", "int8_ours"]
 APPENDIX_MODES = ["fp16", "int8_baseline", "int8_ours", "kivi_style", "int4_ours", "int4_mixed_kv", "int4_ours_asym"]
 
 KV_ABLATION_COLORS = {
-    "K-only":  "#27ae60",
-    "V-only":  "#3498db",
-    "K4V8":    "#e74c3c",
-    "MixedKV": "#8B5E34",
+    # Aligned with fig 4-1 main palette (柔和学术配色，避免撞色)
+    "K-only":  "#3498db",  # 柔和蓝（主配色）
+    "V-only":  "#9b59b6",  # 柔和紫（次配色）
+    "K4V8":    "#95a5a6",  # 中灰（对照）
+    "MixedKV": "#2c3e50",  # 深灰（强调）
 }
 
 PRIMARY_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
