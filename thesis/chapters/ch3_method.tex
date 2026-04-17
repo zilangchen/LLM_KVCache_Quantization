@@ -334,6 +334,7 @@ $\tau^{-1}$ 温度校正的效果预期与模型 GQA 尺度相关——
 \textbf{机制直觉与独立性假设的边界}.
 上述 "$\tau^{-1}$ 有效性随 $H_{kv}$ 衰减" 的机制归因可概括为
 $\sigma_{\text{eff}} \propto \sigma / \sqrt{N_{\text{rep}}}$，
+其中 $N_{\text{rep}} = H_q / H_{kv}$ 为 GQA 中每个 KV 头对应的 query 头数（形式化定义见第~\ref{subsec:ch3-gqa}~节）；
 即 GQA 对 KV 头的共享使得 query 头平均下"有效噪声规模"被稀释。
 该 $1/\sqrt{N}$ 规律依赖一个关键简化假设：\textbf{不同 query 头所见的量化噪声近似独立}。
 事实上，所有 $N_{\text{rep}}$ 个 query 头在同一 KV 头上共享\textbf{同一个}量化后 K 张量，
@@ -484,11 +485,11 @@ INT4-RoleAlign 正是这一正交扩展的实证：
 当位宽降至 4~bit 时，量化级别从对称 INT8 的 255 级（值域 $[-127, 127]$）
 骤降至对称 INT4 的 15 级（值域 $[-7, 7]$），
 Key 张量的通道间数值异质性可能超出对称格式的表示能力。
-本文后续使用的非对称 INT4 路径（§\ref{sec:ch3-rolealign}）
-采用完整 $[-8, 7]$ 共 16 个离散值，通过零点偏移获得一个额外的表示量级。
-第~\ref{sec:exp-int4}~节的诊断实验将证实这一判断：
+本节介绍的非对称 INT4 路径采用完整 $[-8, 7]$ 共 16 个离散值，
+通过零点偏移获得一个额外的表示量级。
+第~\ref{sec:exp-int4}~节的诊断实验提供独立证据支持这一设计判断：
 受控 K/V 消融在三个模型族上一致确认 Key 量化主导质量损失，
-且退化程度呈显著的 GQA 架构依赖特征。
+退化程度与 GQA 头数 $H_{kv}$ 呈结构性相关。
 Key 决定了注意力的``看哪里''（attention logits 的排序结构），
 其通道间数值异质性在低比特下无法被对称格式有效捕捉。
 上述诊断结果提示采用角色差异化量化轴是一个合理的设计方向：
@@ -776,7 +777,7 @@ INT4 对称量化（bit-packing 将存储维度从 $[B, H, S, d_k]$
     int4\_baseline  & 4-bit  & 否   & 否   & 否   & INT4 动态量化基线 \\
     int4\_fused     & 4-bit  & 是   & 是   & 是   & INT4 行为对齐 + 融合 \\
     int4\_ours      & 4-bit  & 是   & 是   & 否   & INT4 行为对齐 \\
-    kivi\_style     & 8-bit  & ---  & 否   & 否   & KIVI 风格非对称量化 \\
+    kivi\_style     & 8/4-bit\tnote{$\ddagger$} & ---  & 否   & 否   & KIVI 风格非对称量化 \\
     int4\_ours\_asym & 4-bit  & 是\tnote{$\star$} & 否   & 是\tnote{$\dagger$} & INT4-RoleAlign \\
     int4\_ours\_mixed & 4-bit & 是   & 否   & 否   & MixedKV (K@8+V@4) \\
     \bottomrule
@@ -798,6 +799,8 @@ INT4 对称量化（bit-packing 将存储维度从 $[B, H, S, d_k]$
     端到端评测中 RoleAlign 默认使用 \code{torch\_ref} 参考实现，
     融合核因缺少 Tensor Core 利用而未达延迟加速
     （可行性验证见第~\ref{subsec:exp-fused-feasibility}~节）。
+    \item[$\ddagger$] KIVI-style 支持 INT8（8-bit）与 INT4（4-bit）两种精度；
+    本文第四章对比使用 KIVI-style INT4（与 INT4-RoleAlign 同格式，作为非校准对照）。
   \end{tablenotes}
   \end{threeparttable}
 \end{table}
