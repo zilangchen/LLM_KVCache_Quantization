@@ -5,7 +5,7 @@
 
 本章按三个层级组织行为对齐量化框架。
 \textbf{层一（视角与度量）}：
-以量化前后注意力分布之间的 KL 散度（attention-KL）刻画行为偏移，
+以量化前后注意力分布之间的 KL 散度（attention-KL）度量行为偏移，
 作为本章后续校准与诊断共享的基础度量
 （第~\ref{sec:ch3-overview}--\ref{sec:ch3-calibration}~节）。
 \textbf{层二（选择协议）}：
@@ -457,7 +457,7 @@ $s_{\text{dynamic}} \leq s_{\text{static}}$，最终使用静态 Scale 保持校
 \section{KIVI-style 格式上的行为引导实例化 RoleAlign}
 \label{sec:ch3-rolealign}
 
-INT4-RoleAlign 是在 KIVI~\cite{liu2024kivi} 提出的
+INT4-RoleAlign（INT4 角色对齐量化）是在 KIVI~\cite{liu2024kivi} 提出的
 per-channel Key + per-token Value 非对称格式上，
 以 attention-KL 为目标的行为引导实例化。
 该方案的设计假设——Key 量化对长上下文检索质量的敏感性高于 Value、
@@ -734,7 +734,7 @@ naive dequant+SDPA 路径的 TPOT 为 $T_{\text{naive}}$，
 
 上述分析给出定性的 cost 直觉。
 Phase Boundary 的具体位置依赖于硬件参数（SM 数量、显存带宽、L2 缓存大小）
-和 kernel 实现细节，第四章将通过跨模型的实测数据给出经验刻画。
+和 kernel 实现细节，第四章将通过跨模型的实测数据给出经验分析。
 
 
 % ============================================================

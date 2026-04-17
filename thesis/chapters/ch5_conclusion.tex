@@ -109,7 +109,7 @@ LLaMA-3.1-8B 与 Mistral-7B 四模型以 3 seeds 验证，
 本文校准以 WikiText-2 上的 attention-KL 散度为代理损失，
 而评测跨越 PPL、Needle、RULER、LongBench 多 domain 与任务类型，
 "最小化 WikiText attention-KL 获取的参数对下游多任务泛化具有可迁移性"
-这一核心假设未经形式化证明，仅由第四章联合评测间接支撑。
+这一核心假设尚待理论验证，仅由第四章联合评测间接支撑。
 此外，校准与 PPL 评测共用 WikiText-2 \texttt{test} split，
 但校准仅取 128 段（$\leq$512 token，占 split 总量约 0.03\%）
 用于离线提取 attention 分布统计，不涉及 token-level 预测目标，
@@ -205,11 +205,8 @@ INT4-RoleAlign 的 BA-guided percentile 校准在 4-bit 下展现了有效性。
 \label{sec:conclusion-closing}
 % ------------------------------------------------------------
 
-本文的核心主张是：
-attention-KL 提供了 GQA 架构下 KV Cache 量化的统一校准与诊断原则，
-而 $H_{kv}$ 是与低比特失效模式、温度校正分化和融合解码效率
-一致性变化的结构性相关变量。
-这一视角把 KV Cache 量化的问题从``先量化再看效果''的试错模式
+以 attention-KL 为统一校准与诊断原则、以 $H_{kv}$ 为结构性相关变量的分析视角，
+把 KV Cache 量化的问题从``先量化再看效果''的试错模式
 转向以 $H_{kv}$ 为组织轴的系统分析：
 校准目标的有效性何时依赖行为度量、
 退化在 Key/Value 间如何分配、
