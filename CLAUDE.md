@@ -19,7 +19,7 @@
 | 文件 | 用途 | 规则 |
 |------|------|------|
 | `objective.md` | 目标/边界/约束/成功标准/决策日志 | 任何任务开始前必须对齐；偏离边界须先确认 |
-| `iteration.md` | 进度与迭代记录 | **append-only**，不覆盖历史，只追加 |
+| `iteration.md` | 开发记录与进度时间线 | **append-only**，Latest First；单任务计划不驻留于此；Timeline 超过 30 条时归档旧记录 |
 | `review_tracker.md` | 代码审查问题追踪 | 根目录权威文件，所有审查 issue 的唯一入口 |
 | `experiment_sop.md` | 实验 SOP | 实验目录、命名、复现、数据版本、指标、产物归档 |
 | `AGENTS.md` | 开发工作流协议 | 命令入口、目录规范、提交规范 |
@@ -31,7 +31,7 @@
 
 **有限写入文件**：
 - `objective.md` — 仅追加 Decision Log（修改目标/边界须先确认）
-- `iteration.md` — 仅追加 Timeline + 维护 Approved Plans
+- `iteration.md` — 仅追加 Timeline；旧记录由维护脚本自动归档
 - `review_tracker.md` — 仅标记修复 `[x]` + 新增 issue
 
 ### 1.1 持久化 Memory 维护
@@ -56,8 +56,10 @@ Memory 文件位于**项目级**目录: `~/.claude/projects/-Users-chenzilang-De
 | **源文件重命名/删除** | **MEMORY.md 文件导航** |
 | **新增实验结果目录** | **experiment-state.md 结果目录表** |
 
-> **自动检查**：项目级 SessionStart hook (`scripts/check_memory_freshness.sh`) 会在每次会话启动时
-> 检测 MEMORY.md 是否引用了不存在的文件、是否遗漏了代码中路由的 kv_mode、以及修改时间是否超过 7 天。
+> **自动检查**：项目级 SessionStart hooks 会在每次会话启动时先运行
+> `scripts/auto_archive.sh`（维护 `iteration.md` 最近 30 条窗口并归档旧记录），
+> 再运行 `scripts/check_memory_freshness.sh` 检测 MEMORY.md 是否引用了不存在的文件、
+> 是否遗漏了代码中路由的 kv_mode、以及修改时间是否超过 7 天。
 > 检查失败时输出警告注入会话上下文。
 
 #### 约束
@@ -131,9 +133,9 @@ cd thesis && bibtex main && xelatex -interaction=nonstopmode main.tex
 - 改实验流程或仓库结构
 - 任何可能偏离 `objective.md` 边界的工作
 
-**推荐 `/planning-with-files`**：将计划持久化到 `task_plan.md`，支持跨 session 读取、auto-compact 后恢复、gpu-orchestrator 自动调度。原生 `EnterPlanMode` 的计划仅存在于对话上下文中，compact 或 session 结束后丢失。
+**推荐 `/planning-with-files`**：将计划持久化到 `task_plan.md` 或 `.agents/execplans/`，支持跨 session 读取、auto-compact 后恢复、gpu-orchestrator 自动调度。原生 `EnterPlanMode` 的计划仅存在于对话上下文中，compact 或 session 结束后丢失。
 
-无论使用哪种方式，退出 Plan Mode 后 **PostToolUse hook 会强制要求**将计划写入 `task_plan.md` + `iteration.md Approved Plans`。
+单任务 Plan 不再长期驻留于 `iteration.md`。`iteration.md` 只保留开发记录时间线。
 
 ### 4.2 Plan 必须包含
 
@@ -297,16 +299,15 @@ Sub-agent prompt 必须包含 `git diff` + 修改目的 + "请从你的维度审
 
 ### 7.1 iteration.md 区块结构
 
-`iteration.md` 中维护两个独立区块（从上到下）：
+`iteration.md` 只维护一个核心区块：
 
-1. **Approved Plans** — 经讨论并被用户认可的阶段性执行计划（含前置条件、状态、checklist）
-2. **Timeline** — 实际执行记录（append-only）
+1. **Timeline** — 实际执行记录（append-only, latest first）
 
 规则：
 - 所有代码审查问题追踪在 `review_tracker.md`（不在 iteration.md）
-- 当一个 Plan 被用户讨论并认可后，必须追加到 `## Approved Plans` 区块
-- 每条 Plan 记录：批准日期、Plan 名称、前置条件、状态（待执行/执行中）、具体 checklist
-- **Plan 完成后从 Approved Plans 区块删除**，在 Timeline 中记录完成摘要即可
+- 单任务 Plan 存放在 `task_plan.md` 或 `.agents/execplans/`，不驻留于 `iteration.md`
+- `iteration.md` 仅记录已执行的开发事实、验证命令、输出与风险
+- Timeline 保留最近 `30` 条；超出部分归档到 `development_history/iteration_archive_YYYYMM.md`
 
 ### 7.2 iteration.md 追加记录
 
@@ -354,13 +355,13 @@ Sub-agent prompt 必须包含 `git diff` + 修改目的 + "请从你的维度审
 
 | Agent | 读取范围 | 估算 tokens |
 |-------|----------|-------------|
-| Supervisor 首轮 | Approved Plans 全量 + Timeline 最近 5 条 | ~1,200 |
-| Supervisor 后续 | Approved Plans + `git log -3` | ~600 |
+| Supervisor 首轮 | `task_plan.md` / `.agents/execplans/` + Timeline 最近 5 条 | ~1,200 |
+| Supervisor 后续 | `task_plan.md` / 最新 ExecPlan + `git log -3` | ~600 |
 | Codex Developer | 不读 iteration.md（Supervisor prompt 自包含上下文） | 0 |
 | Review-Coord | Timeline 最近 1 条（确认 baseline） | ~80 |
 | D1-D7 审查 Agent | 不读 iteration.md | 0 |
 
-Timeline 归档工具：`python scripts/iteration_tool.py trim-timeline --keep 15`
+Timeline 归档工具：`python scripts/iteration_tool.py trim-timeline --keep 30`
 
 ---
 

@@ -191,7 +191,7 @@ W = 写入  R = 读取
 | 文件 | Supervisor | Codex Developer | Review-Coord | D1-D7 |
 |------|:---:|:---:|:---:|:---:|
 | `objective.md` | R + Decision Log | — | — | — |
-| `iteration.md` | R/W (Plans + Timeline) | R (只读，汇报 Supervisor 编辑) | W (审查摘要) | — |
+| `iteration.md` | R/W (Timeline only; Latest First; >30 archive) | R (只读，汇报 Supervisor 编辑) | W (审查摘要) | — |
 | `review_tracker.md` | R/W (标记 [x]) | R (只读，汇报 Supervisor 编辑) | R/W (校验) | W (新发现) |
 | `src/` `scripts/` `tests/` | R/W | R/W (直接在 main) | R | R |
 | `configs/` | R/W | R (直接在 main) | R | R |

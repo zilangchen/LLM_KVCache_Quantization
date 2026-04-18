@@ -101,7 +101,7 @@ mcp__codex__codex(
 <从 objective.md 提取的相关 Success Criteria>
 
 ## 当前进度
-<iteration.md Approved Plans 摘要 + 最近完成的里程碑>
+<task_plan.md / .agents/execplans/ 摘要 + iteration.md 最近完成的里程碑>
 
 ## 待解决的关键问题
 <review_tracker.md CRITICAL/HIGH open issues 摘要（如有）>

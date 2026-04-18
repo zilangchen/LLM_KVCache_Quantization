@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# auto_archive.sh — SessionStart hook: auto-archive bloated tracker files.
-# Checks iteration.md and review_tracker.md sizes; archives if >100KB.
-# Exit 0 always (must not block session startup).
+# auto_archive.sh — SessionStart / compact-prep maintenance hook.
+# Normalizes iteration.md to the latest-30-entry window and archives older
+# entries. review_tracker.md is still size-gated. Exit 0 always.
 
 set -uo pipefail
 
@@ -19,12 +19,11 @@ file_size() {
     stat -f%z "$1" 2>/dev/null || stat -c%s "$1" 2>/dev/null || echo 0
 }
 
-# Check iteration.md (>100KB = needs trim)
+# Always normalize iteration.md to latest 30 entries when possible.
 ITERATION="$PROJECT_ROOT/iteration.md"
-SIZE=$(file_size "$ITERATION")
-if [[ "$SIZE" -gt 102400 ]]; then
-    echo "⚠ iteration.md is $(( SIZE / 1024 ))KB (>100KB), auto-trimming timeline..."
-    python3 "$PROJECT_ROOT/scripts/iteration_tool.py" trim-timeline --keep 15 2>&1 || true
+ITER_OUT=$(python3 "$PROJECT_ROOT/scripts/iteration_tool.py" trim-timeline --keep 30 2>&1 || true)
+if [[ -n "$ITER_OUT" && "$ITER_OUT" != *"Nothing to trim."* ]]; then
+    echo "$ITER_OUT"
     ARCHIVED_SOMETHING=1
 fi
 
@@ -32,9 +31,11 @@ fi
 TRACKER="$PROJECT_ROOT/review_tracker.md"
 SIZE=$(file_size "$TRACKER")
 if [[ "$SIZE" -gt 102400 ]]; then
-    echo "⚠ review_tracker.md is $(( SIZE / 1024 ))KB (>100KB), auto-archiving fixed issues..."
-    python3 "$PROJECT_ROOT/scripts/review_tool.py" archive-fixed 2>&1 || true
-    ARCHIVED_SOMETHING=1
+    if python3 "$PROJECT_ROOT/scripts/review_tool.py" -h 2>&1 | grep -q "archive-fixed"; then
+        echo "⚠ review_tracker.md is $(( SIZE / 1024 ))KB (>100KB), auto-archiving fixed issues..."
+        python3 "$PROJECT_ROOT/scripts/review_tool.py" archive-fixed 2>&1 || true
+        ARCHIVED_SOMETHING=1
+    fi
 fi
 
 if [[ "$ARCHIVED_SOMETHING" -eq 1 ]]; then

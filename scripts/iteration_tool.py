@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""iteration_tool.py — Manage iteration.md: trim timeline, compress plans, stats.
+"""iteration_tool.py — Manage iteration.md: trim timeline, archive legacy plan state, stats.
 
 Usage:
     python scripts/iteration_tool.py stats
-    python scripts/iteration_tool.py trim-timeline [--keep 15] [--dry-run]
+    python scripts/iteration_tool.py trim-timeline [--keep 30] [--dry-run]
     python scripts/iteration_tool.py clean-plans [--dry-run]
 """
 from __future__ import annotations
@@ -154,11 +154,17 @@ def cmd_stats(args: argparse.Namespace) -> int:
 
     print(f"=== iteration.md Statistics ===")
     print(f"Total lines:        {total_lines}")
-    print(f"Approved Plans:     {len(plans_entries)} "
-          f"({completed_plans} completed, {active_plans} active)")
     if plans_range:
-        print(f"  Section range:    L{plans_range[0]+1}-L{plans_range[1]}"
-              f" ({plans_range[1] - plans_range[0]} lines)")
+        print(
+            f"Legacy Plans:       {len(plans_entries)} "
+            f"({completed_plans} completed, {active_plans} active)"
+        )
+        print(
+            f"  Section range:    L{plans_range[0]+1}-L{plans_range[1]}"
+            f" ({plans_range[1] - plans_range[0]} lines)"
+        )
+    else:
+        print("Legacy Plans:       0 (deprecated; iteration.md is timeline-only)")
     print(f"Timeline entries:   {len(timeline_entries)}")
     if timeline_range:
         print(f"  Section range:    L{timeline_range[0]+1}-L{timeline_range[1]}"
@@ -275,7 +281,7 @@ def cmd_trim_timeline(args: argparse.Namespace) -> int:
 
 
 def cmd_clean_plans(args: argparse.Namespace) -> int:
-    """Compress completed plans to 1-line summaries."""
+    """Backwards-compatible no-op for legacy Approved Plans cleanup."""
     dry_run: bool = args.dry_run
 
     if not ITERATION.exists():
@@ -287,8 +293,8 @@ def cmd_clean_plans(args: argparse.Namespace) -> int:
 
     plans_range = _find_section_range(lines, "Approved Plans")
     if plans_range is None:
-        print("ERROR: '## Approved Plans' section not found", file=sys.stderr)
-        return 1
+        print("Approved Plans already removed from iteration.md. Nothing to clean.")
+        return 0
 
     p_start, p_end = plans_range
     plans_section = lines[p_start:p_end]
@@ -371,7 +377,7 @@ def cmd_clean_plans(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Manage iteration.md — trim, compress, stats."
+        description="Manage iteration.md — timeline trim, legacy cleanup, stats."
     )
     sub = parser.add_subparsers(dest="command")
 
@@ -384,7 +390,7 @@ def main() -> int:
         help="Archive old Timeline entries, keep most recent N",
     )
     p_trim.add_argument(
-        "--keep", type=int, default=15, help="Number of entries to keep (default: 15)"
+        "--keep", type=int, default=30, help="Number of entries to keep (default: 30)"
     )
     p_trim.add_argument(
         "--dry-run", action="store_true", help="Preview without modifying files"
@@ -393,7 +399,7 @@ def main() -> int:
     # clean-plans
     p_clean = sub.add_parser(
         "clean-plans",
-        help="Compress completed Approved Plans to 1-line summaries",
+        help="Legacy compatibility: clean old Approved Plans if still present",
     )
     p_clean.add_argument(
         "--dry-run", action="store_true", help="Preview without modifying files"

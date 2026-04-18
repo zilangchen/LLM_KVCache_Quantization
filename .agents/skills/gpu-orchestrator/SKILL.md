@@ -103,7 +103,7 @@ Step 6: 输出报告（见 §7）
 
 ```
 部分 GPU 空闲
-├─ 读取 task_plan.md（首选）或 iteration.md Approved Plans → 获取待办任务
+├─ 读取 task_plan.md（首选）或 `.agents/execplans/` → 获取待办任务
 ├─ 冲突检测（§4.3）
 │   ├─ 通过 → 组装命令 → 直接提交到空闲 GPU（无需确认）
 │   └─ 冲突 → 报告冲突原因，跳过该任务，尝试下一个
@@ -326,11 +326,11 @@ GPU 全忙的等待期**不是空闲期**——这是做深度思考和推进非
 ```
 Read 以下文件，构建当前项目的完整画面：
 1. task_plan.md — **首选数据源**（/planning-with-files 生成，含阶段、步骤、依赖）
-2. iteration.md — Approved Plans 区块 + Timeline 最近 10 条（task_plan.md 不存在时的回退来源）
+2. iteration.md — Timeline 最近 10 条（仅作进度与最近动作回退来源）
 3. review_tracker.md — open issues 概况
 4. 远端正在运行的任务列表（刚采集的）
 
-优先级: task_plan.md（磁盘持久化）> iteration.md Approved Plans > 对话上下文（不可跨 session）
+优先级: task_plan.md（磁盘持久化）> `.agents/execplans/` > iteration.md Timeline > 对话上下文（不可跨 session）
 ```
 
 然后进行一次**主动思考**，回答以下问题：

@@ -36,7 +36,7 @@ Run this skill at the end of a significant work session, especially before:
    === Session Handoff Summary ===
    - review_tracker: <total> issues | <fixed> fixed | <open> open (<crit> CRIT)
    - iteration.md: <lines> lines, <timeline_entries> Timeline entries
-   - Approved Plans: <list active plans with status>
+   - Active plans: <task_plan.md / .agents/execplans/ summary or "none">
    - Memory files updated: <list or "none">
    - Open blockers: <list or "none">
    - Recommended next action: <brief description>
