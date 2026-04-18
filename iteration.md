@@ -4545,3 +4545,17 @@ Canonical agent workflow directory is `.agents/`.
   - 该计划仅定义执行边界与顺序，不等于 rerun 已执行
   - 下一步应单独下发远端启动 prompt 或 launch plan 给 Claude
 - Commit: pending
+
+### 2026-04-19 06:37 | Clean-Provenance Launch Plan 提交落盘
+- Goal: 记录 clean-provenance launch 文档提交的实际 commit hash，保持 `iteration.md` append-only。
+- Changed files:
+  - `iteration.md`
+- Commands:
+  - `git commit -m "docs(provenance): add clean rerun launch plan"`
+- Outputs:
+  - clean-provenance launch plan commit 已生成：`44a6a87`
+- Validation:
+  - commit 成功
+- Risks / follow-ups:
+  - 后续需把该计划压成可直接发给 Claude 的远端执行 prompt
+- Commit: `44a6a87`
