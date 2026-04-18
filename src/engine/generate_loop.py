@@ -414,6 +414,7 @@ def generate_from_ids(
     k_bits: Optional[int] = None,
     v_bits: Optional[int] = None,
     residual_length: int = 0,
+    policy_json: Optional[str] = None,
 ) -> GenerationBatchOutput:
     """
     Batched generation loop using explicit prefill + token-by-token decode.
@@ -1075,7 +1076,29 @@ def generate_from_ids(
         elif kv_mode == "int4_mixed_kv":
             # K-INT8 symmetric + V-INT4 asymmetric per-token (hybrid mode).
             # k_bits/v_bits allow K/V ablation (K-only, V-only, counterfactual).
+            # Phase 2 编号 6: policy_json (optional) supplies per-layer bit allocation
+            # produced by scripts/adaptive/behavior_aligned_allocator.py. When provided,
+            # overrides global k_bits/v_bits per layer.
             from src.cache.mixed_kv_cache import MixedKVCache
+
+            per_layer_bits = None
+            if policy_json is not None:
+                _proj = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                policy_path = policy_json if os.path.isabs(policy_json) else os.path.join(_proj, policy_json)
+                if not os.path.exists(policy_path):
+                    raise FileNotFoundError(
+                        f"int4_mixed_kv: policy_json={policy_json!r} not found "
+                        f"(resolved to {policy_path!r}). Use an absolute path or "
+                        f"run from the project root."
+                    )
+                with open(policy_path, "r") as f:
+                    policy_data = json.load(f)
+                raw = policy_data.get("per_layer_bits")
+                if raw is None:
+                    raise ValueError(
+                        f"policy_json {policy_path!r} missing required key 'per_layer_bits'"
+                    )
+                per_layer_bits = [(int(kb), int(vb)) for (kb, vb) in raw]
 
             kv_cache = MixedKVCache(
                 num_layers=num_layers,
@@ -1083,6 +1106,7 @@ def generate_from_ids(
                 max_seq_len=max_cache_len,
                 k_bits=k_bits if k_bits is not None else 8,
                 v_bits=v_bits if v_bits is not None else 4,
+                per_layer_bits=per_layer_bits,
             )
         else:
             raise ValueError(f"Unsupported kv_mode: {kv_mode}")
@@ -1244,6 +1268,22 @@ def generate_from_ids(
             # ENG-088: Also guarantee kv_cache cleanup on decode-step exceptions.
             try:
                 with torch.no_grad():
+                    # ENG-045-v2: pre-record per-layer cached lengths + current step's
+                    # query length BEFORE model forward. Used after forward to correctly
+                    # identify the newly-added KV delta instead of the old heuristic
+                    # that blindly took the last token whenever k.shape[2] > 1.
+                    prev_seq_lens = None
+                    if (
+                        kv_mode not in _FUSED_KV_MODES
+                        and not _use_fused
+                        and not (kv_mode == "fp16" and fp16_use_model_cache)
+                    ):
+                        prev_seq_lens = [
+                            getattr(kv_cache, "_layer_seq_lens", [0] * num_layers)[i]
+                            for i in range(num_layers)
+                        ]
+                    step_q_len = int(current_token.shape[1])
+
                     # Prepare past_key_values
                     if kv_mode == "fp16" and fp16_use_model_cache and model_cache_for_decode is not None:
                         current_past_key_values = model_cache_for_decode
@@ -1288,33 +1328,61 @@ def generate_from_ids(
                         and not (kv_mode == "fp16" and fp16_use_model_cache)
                     ):
                         if outputs.past_key_values is not None:
+                            _prev_lens = prev_seq_lens if prev_seq_lens is not None else [0] * num_layers
                             for i, (k, v) in enumerate(outputs.past_key_values):
-                                # Only append the newly produced token when model returns full cache.
-                                # This avoids re-quantizing historical tokens already stored in kv_cache.
-                                if k.shape[2] > 1:
-                                    # ENG-045: The model returned more than one new KV token
-                                    # (k.shape[2] > 1). This occurs with speculative decoding
-                                    # or models that return the full cumulative cache instead
-                                    # of only the new token. We take only the last token to
-                                    # avoid re-appending previously cached tokens, but any
-                                    # accepted draft tokens beyond the last one are silently
-                                    # dropped. Speculative decoding multi-token returns are
-                                    # NOT correctly handled by this non-fused decode path.
+                                returned_len = int(k.shape[2])
+                                prev_len = int(_prev_lens[i])
+                                delta_len = returned_len - prev_len
+
+                                # ENG-045-v2: Three-way dispatch replacing the old heuristic
+                                # that blindly truncated k[:, :, -1:, :] whenever k.shape[2]>1.
+                                # The old logic silently dropped (prev_len - 1) historical
+                                # tokens when the model returned the full cumulative cache,
+                                # generating thousands of warnings per LongBench run even
+                                # though the correct delta was 1 token.
+                                if returned_len == step_q_len:
+                                    # Case A: model returned ONLY the newly produced KV.
+                                    # HF incremental API behavior; append the whole slice.
+                                    k_new, v_new = k, v
+                                elif delta_len == step_q_len and delta_len > 0:
+                                    # Case B: model returned CUMULATIVE cache. Slice the
+                                    # true new delta. This is the normal case for the
+                                    # "dequantize-before-attention" modes (kivi_style,
+                                    # int4_ours_asym, int4_kivi_aligned, …) where the
+                                    # full dequantized cache is re-fed every decode step.
+                                    # No warning — this is expected and correct.
+                                    k_new = k[:, :, prev_len:returned_len, :]
+                                    v_new = v[:, :, prev_len:returned_len, :]
+                                elif delta_len > 0:
+                                    # Case C (ENG-045A): growth does not match step_q_len.
+                                    # True anomaly — speculative decoding, multi-token
+                                    # acceptance, or unexpected model behavior.
                                     import warnings
                                     warnings.warn(
-                                        f"ENG-045: Layer {i} decode step returned k.shape[2]={k.shape[2]} > 1. "
-                                        "Only the last token will be appended to the KV cache. "
-                                        "Speculative decoding with multiple accepted tokens is not "
-                                        "supported in non-fused mode; extra tokens will be dropped, "
-                                        "which may degrade output quality.",
+                                        f"ENG-045A: Layer {i} unexpected KV growth: "
+                                        f"returned_len={returned_len}, prev_len={prev_len}, "
+                                        f"delta={delta_len}, expected_step_q_len={step_q_len}. "
+                                        "Appending delta tail to preserve forward progress.",
                                         RuntimeWarning,
                                         stacklevel=2,
                                     )
-                                    k_new = k[:, :, -1:, :]
-                                    v_new = v[:, :, -1:, :]
-                                    kv_cache.append(i, k_new, v_new)
+                                    k_new = k[:, :, prev_len:returned_len, :]
+                                    v_new = v[:, :, prev_len:returned_len, :]
                                 else:
-                                    kv_cache.append(i, k, v)
+                                    # Case D (ENG-045B): non-growing KV in decode (stale or
+                                    # malformed past_key_values). Skip append to avoid
+                                    # silently corrupting cache layout.
+                                    import warnings
+                                    warnings.warn(
+                                        f"ENG-045B: Layer {i} non-growing KV in decode: "
+                                        f"returned_len={returned_len}, prev_len={prev_len}. "
+                                        "Skipping append for this layer.",
+                                        RuntimeWarning,
+                                        stacklevel=2,
+                                    )
+                                    continue
+
+                                kv_cache.append(i, k_new, v_new)
                         else:
                             # ENG-027: past_key_values is None in decode step for a non-fused
                             # mode. This should not happen under normal circumstances because
@@ -1473,6 +1541,7 @@ def generate(
     quant_bits: int = 8,
     k_bits: Optional[int] = None,
     v_bits: Optional[int] = None,
+    policy_json: Optional[str] = None,
 ) -> GenerationOutput:
     """
     Custom generation loop with prefill + token-by-token decode.
@@ -1541,6 +1610,7 @@ def generate(
         quant_bits=quant_bits,
         k_bits=k_bits,
         v_bits=v_bits,
+        policy_json=policy_json,
     )
 
     generated_tokens = batch_out.generated_ids[0].tolist()

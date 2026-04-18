@@ -2,8 +2,8 @@
 # =============================================================================
 # Phase 2.6 Wave 1: LLaMA-3.1-8B extended k-scan runner
 # =============================================================================
-# 每 GPU 跑 1 task × 7 configs = 7 runs
-# 3 GPU × 3 tasks = 21 runs 总，wall-clock ~40 min
+# 每 GPU 跑 1 task × 10 configs = 10 runs
+# 3 GPU × 3 tasks = 30 runs 总
 #
 # 用法:
 #   CUDA_VISIBLE_DEVICES=0 bash scripts/phase2_c2b_llama8b_extended.sh narrativeqa
@@ -48,6 +48,9 @@ POLICIES=(
     "bakv_mean_k3"
     "bakv_mean_k5"
     "bakv_mean_k7"
+    "bakv_auto_cov70_max"
+    "bakv_auto_cov80_max"
+    "bakv_auto_cov90_max"
 )
 
 echo "=== Wave 1 (8B extended) task=$TASK @ $(date) ==="
@@ -82,4 +85,4 @@ done
 
 echo ""
 echo "=== Wave 1 task $TASK 完成 @ $(date) ==="
-phase2_gate_task_rows "Wave 1 task $TASK" "$OUT_DIR" "phase2c2b_8b_int4mixedkv_*_${TASK}_n${N_SAMPLES}.log" "longbench_task_summary_*.csv" 7 "$TASK" "int4_mixed_kv"
+phase2_gate_task_rows "Wave 1 task $TASK" "$OUT_DIR" "phase2c2b_8b_int4mixedkv_*_${TASK}_n${N_SAMPLES}.log" "longbench_task_summary_*.csv" 10 "$TASK" "int4_mixed_kv"

@@ -35,6 +35,13 @@ done
 $ALLOCATOR --policy uniform --uniform_bits 4 4 --out "$OUT_DIR/uniform_int4_k4v4.json"
 $ALLOCATOR --policy uniform --uniform_bits 8 8 --out "$OUT_DIR/uniform_int8_k8v8.json"
 
+for COV in 0.7 0.8 0.9; do
+    TAG=$(python3 -c "print(int(round(float('$COV') * 100)))")
+    $ALLOCATOR --policy auto_k_coverage --coverage "$COV" \
+        --coverage_targets 0.7 0.8 0.9 --sensitivity_agg max \
+        --out "$OUT_DIR/bakv_auto_cov${TAG}_max.json"
+done
+
 echo ""
 echo "=== Mistral-7B protected_layers overview ==="
 python3 - <<'PYEOF'
@@ -43,4 +50,7 @@ d = "artifacts/allocator/sweep_mistral7b"
 for k in [1, 3, 5, 7]:
     data = json.load(open(f"{d}/bakv_k{k}.json"))
     print(f"  Mistral-7B bakv_k{k}: protected={data.get('protected_layers')} avg_bits={data.get('avg_bits'):.3f}")
+for cov in [70, 80, 90]:
+    data = json.load(open(f"{d}/bakv_auto_cov{cov}_max.json"))
+    print(f"  Mistral-7B auto_cov{cov}: protected={data.get('protected_layers')} avg_bits={data.get('avg_bits'):.3f} selected_k={data.get('selected_k')}")
 PYEOF

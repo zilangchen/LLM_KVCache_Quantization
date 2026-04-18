@@ -321,6 +321,7 @@ def build_kv_cache(
     quant_bits: int | None = None,
     k_bits: int | None = None,
     v_bits: int | None = None,
+    policy_json: str | None = None,
     residual_length: int = 0,
 ):
     num_layers = getattr(model.config, "num_hidden_layers", 28)
@@ -422,11 +423,30 @@ def build_kv_cache(
 
     if kv_mode == "int4_mixed_kv":
         from src.cache.mixed_kv_cache import MixedKVCache
+        per_layer_bits = None
+        if policy_json is not None:
+            policy_path = Path(policy_json)
+            if not policy_path.is_absolute():
+                policy_path = project_root / policy_path
+            if not policy_path.exists():
+                raise FileNotFoundError(
+                    f"int4_mixed_kv: policy_json={policy_json!r} not found "
+                    f"(resolved to {str(policy_path)!r})"
+                )
+            with policy_path.open("r", encoding="utf-8") as handle:
+                policy_data = json.load(handle)
+            raw = policy_data.get("per_layer_bits")
+            if raw is None:
+                raise ValueError(
+                    f"policy_json {str(policy_path)!r} missing required key 'per_layer_bits'"
+                )
+            per_layer_bits = [(int(kb), int(vb)) for (kb, vb) in raw]
         return MixedKVCache(
             num_layers=num_layers,
             device=model.device.type,
             k_bits=k_bits if k_bits is not None else 8,
             v_bits=v_bits if v_bits is not None else 4,
+            per_layer_bits=per_layer_bits,
         ), group_size, clip_percentile
 
     if kv_mode in ("int4_ours_asym", "int4_ours_asym_ba"):
@@ -801,6 +821,12 @@ def main():
         help="V cache bit-width for int4_mixed_kv mode (4/8/16). Default: 4.",
     )
     parser.add_argument(
+        "--policy_json",
+        type=str,
+        default=None,
+        help="Optional per-layer policy JSON consumed by kv_mode=int4_mixed_kv.",
+    )
+    parser.add_argument(
         "--residual_length",
         type=int,
         default=0,
@@ -1017,6 +1043,7 @@ def main():
             quant_bits=args.quant_bits,
             k_bits=getattr(args, "k_bits", None),
             v_bits=getattr(args, "v_bits", None),
+            policy_json=getattr(args, "policy_json", None),
             residual_length=getattr(args, "residual_length", 0),
         )
         if (

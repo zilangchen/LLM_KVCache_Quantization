@@ -2,7 +2,7 @@
 # =============================================================================
 # Phase 2.6 Wave 4: Qwen-14B minimal k-scan runner
 # =============================================================================
-# 12 configs × 1 task × n=50（与 C2 对齐）
+# 15 configs × 1 task × n=50（含 auto-k range）
 # 用法: CUDA_VISIBLE_DEVICES=X bash scripts/phase2_c3_qwen14b.sh {narrativeqa|hotpotqa|gov_report}
 # =============================================================================
 set -euo pipefail
@@ -42,6 +42,7 @@ POLICIES=(
     "bakv_k3" "heuristic_k3"
     "bakv_k5" "heuristic_k5" "random3_k5_seed42"
     "bakv_k7" "heuristic_k7"
+    "bakv_auto_cov70_max" "bakv_auto_cov80_max" "bakv_auto_cov90_max"
 )
 
 echo "=== Wave 4 (Qwen-14B) task=$TASK @ $(date) ==="
@@ -68,4 +69,4 @@ for POLICY in "${POLICIES[@]}"; do
 done
 
 echo "=== Wave 4 task $TASK 完成 @ $(date) ==="
-phase2_gate_task_rows "Wave 4 task $TASK" "$OUT_DIR" "phase2c3_14b_int4mixedkv_*_${TASK}_n${N_SAMPLES}.log" "longbench_task_summary_*.csv" 12 "$TASK" "int4_mixed_kv"
+phase2_gate_task_rows "Wave 4 task $TASK" "$OUT_DIR" "phase2c3_14b_int4mixedkv_*_${TASK}_n${N_SAMPLES}.log" "longbench_task_summary_*.csv" 15 "$TASK" "int4_mixed_kv"

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Phase 2.6 Wave 7: 8B extend tasks (4 new tasks × 9 configs)
+# Phase 2.6 Wave 7: 8B extend tasks (4 new tasks × 10 configs)
 # 第 2 个参数是 8B best_k (from Wave 1 结果)
 set -euo pipefail
 source "$(dirname "$0")/phase2_gate_lib.sh"
@@ -35,6 +35,7 @@ POLICIES=(
     "bakv_k1"
     "bakv_mean_k1"
     "bakv_k${BEST_K}"
+    "bakv_auto_cov80_max"
     "heuristic_k1"
     "heuristic_k${BEST_K}"
     "random3_k1_seed42"
@@ -51,6 +52,16 @@ if [ ! -f "$POLICY_DIR/bakv_mean_k1.json" ]; then
     python3 scripts/adaptive/behavior_aligned_allocator.py \
         --calib "$CALIB_8B" --policy top_k --k 1 --sensitivity_agg mean \
         --out "$POLICY_DIR/bakv_mean_k1.json"
+fi
+
+if [ ! -f "$POLICY_DIR/bakv_auto_cov80_max.json" ]; then
+    echo "生成缺失 bakv_auto_cov80_max"
+    CALIB_8B="artifacts/kv_calib_kl_llama31_8b_int8.json"
+    phase2_require_file "$CALIB_8B" "8B calib"
+    python3 scripts/adaptive/behavior_aligned_allocator.py \
+        --calib "$CALIB_8B" --policy auto_k_coverage --coverage 0.8 \
+        --coverage_targets 0.7 0.8 0.9 --sensitivity_agg max \
+        --out "$POLICY_DIR/bakv_auto_cov80_max.json"
 fi
 
 # 如果 sweep_8b 里缺 random3_k${BEST_K}_seed42，先生成
@@ -84,4 +95,4 @@ for POLICY in "${POLICIES[@]}"; do
     fi
 done
 echo "=== Wave 7 task $TASK 完成 @ $(date) ==="
-phase2_gate_task_rows "Wave 7b task $TASK" "$OUT_DIR" "phase2b5_8b_int4mixedkv_*_${TASK}_n${N_SAMPLES}.log" "longbench_task_summary_*.csv" 9 "$TASK" "int4_mixed_kv"
+phase2_gate_task_rows "Wave 7b task $TASK" "$OUT_DIR" "phase2b5_8b_int4mixedkv_*_${TASK}_n${N_SAMPLES}.log" "longbench_task_summary_*.csv" 10 "$TASK" "int4_mixed_kv"

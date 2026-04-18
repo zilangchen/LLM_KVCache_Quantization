@@ -240,6 +240,12 @@ def main():
         help="V cache bit-width for int4_mixed_kv mode (4/8/16). Default: 4.",
     )
     parser.add_argument(
+        "--policy_json",
+        type=str,
+        default=None,
+        help="Optional per-layer policy JSON consumed by kv_mode=int4_mixed_kv.",
+    )
+    parser.add_argument(
         "--residual_length",
         type=int,
         default=0,
@@ -485,6 +491,7 @@ def main():
                 quant_bits=getattr(args, 'quant_bits', None),
                 k_bits=getattr(args, 'k_bits', None),
                 v_bits=getattr(args, 'v_bits', None),
+                policy_json=getattr(args, "policy_json", None),
                 residual_length=getattr(args, 'residual_length', 0),
             )
         except torch.cuda.OutOfMemoryError:

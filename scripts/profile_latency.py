@@ -142,6 +142,12 @@ def main():
         default=None,
         help="V cache bit-width for int4_mixed_kv mode (4/8/16). Default: 4.",
     )
+    parser.add_argument(
+        "--policy_json",
+        type=str,
+        default=None,
+        help="Optional per-layer policy JSON consumed by kv_mode=int4_mixed_kv.",
+    )
     # PRF-036: Default False to match CLAUDE.md §9 mainline decision.
     # run_experiments.py explicitly passes the value from config YAML.
     parser.add_argument(
@@ -321,6 +327,7 @@ def main():
                 quant_bits=runtime_quant_bits,
                 k_bits=getattr(args, 'k_bits', None),
                 v_bits=getattr(args, 'v_bits', None),
+                policy_json=getattr(args, "policy_json", None),
             )
     except torch.cuda.OutOfMemoryError as exc:
         print("OOM during warmup phase")
@@ -375,6 +382,7 @@ def main():
             quant_bits=runtime_quant_bits,
             k_bits=getattr(args, 'k_bits', None),
             v_bits=getattr(args, 'v_bits', None),
+            policy_json=getattr(args, "policy_json", None),
         )
 
         quant_bits = resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))

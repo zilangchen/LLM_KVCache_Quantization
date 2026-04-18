@@ -59,6 +59,7 @@ class MixedKVCache:
         v_percentile: float = 100.0,
         k_bits: int = 8,
         v_bits: int = 4,
+        per_layer_bits: Optional[List[Tuple[int, int]]] = None,
     ):
         if num_layers <= 0:
             raise ValueError(f"num_layers must be > 0, got {num_layers}")
@@ -66,6 +67,34 @@ class MixedKVCache:
             raise ValueError(f"k_bits must be one of {_SUPPORTED_BITS}, got {k_bits}")
         if v_bits not in _SUPPORTED_BITS:
             raise ValueError(f"v_bits must be one of {_SUPPORTED_BITS}, got {v_bits}")
+
+        # Phase 2 编号 6: per-layer bit allocation for behavior-aligned allocator.
+        # When None, behaves exactly as before (backward compat for existing
+        # int4_mixed_kv callers like eval_ppl / run_experiments).
+        # When provided, overrides (k_bits, v_bits) per layer.
+        if per_layer_bits is not None:
+            if len(per_layer_bits) != num_layers:
+                raise ValueError(
+                    f"per_layer_bits length {len(per_layer_bits)} must equal "
+                    f"num_layers {num_layers}"
+                )
+            for i, entry in enumerate(per_layer_bits):
+                if (not isinstance(entry, (tuple, list))) or len(entry) != 2:
+                    raise ValueError(
+                        f"per_layer_bits[{i}] must be a 2-tuple (k_bits, v_bits), got {entry!r}"
+                    )
+                kb, vb = entry
+                if kb not in _SUPPORTED_BITS or vb not in _SUPPORTED_BITS:
+                    raise ValueError(
+                        f"per_layer_bits[{i}]=({kb},{vb}) contains unsupported bits; "
+                        f"allowed values: {_SUPPORTED_BITS}"
+                    )
+            # Normalize to list of tuples for consistent indexing.
+            self._per_layer_bits: Optional[List[Tuple[int, int]]] = [
+                (int(kb), int(vb)) for (kb, vb) in per_layer_bits
+            ]
+        else:
+            self._per_layer_bits = None
 
         self.num_layers = num_layers
         self.device = device
@@ -108,11 +137,21 @@ class MixedKVCache:
     # Internal quantize/dequantize dispatch
     # ------------------------------------------------------------------
 
-    def _quantize_k(self, k: Tensor) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
+    def _resolve_bits(self, layer_id: int) -> Tuple[int, int]:
+        """Return (k_bits, v_bits) for a given layer.
+
+        When per_layer_bits is provided (Phase 2 allocator mode), the per-layer
+        override is used; otherwise falls back to the global (k_bits, v_bits).
+        """
+        if self._per_layer_bits is not None:
+            return self._per_layer_bits[layer_id]
+        return self.k_bits, self.v_bits
+
+    def _quantize_k(self, k: Tensor, k_bits: int) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
         """Quantize K tensor according to k_bits. Returns (data, scale, zp)."""
-        if self.k_bits == 16:
+        if k_bits == 16:
             return k.to(self.dtype), None, None
-        elif self.k_bits == 8:
+        elif k_bits == 8:
             q_k, k_scale = quantize_symmetric_int8(
                 k, percentile=self.k_clip_percentile, group_size=self.k_group_size
             )
@@ -122,11 +161,11 @@ class MixedKVCache:
                 k, quant_bits=4, percentile=self.k_clip_percentile
             )
 
-    def _quantize_v(self, v: Tensor) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
+    def _quantize_v(self, v: Tensor, v_bits: int) -> Tuple[Tensor, Tensor, Optional[Tensor]]:
         """Quantize V tensor according to v_bits."""
-        if self.v_bits == 16:
+        if v_bits == 16:
             return v.to(self.dtype), None, None
-        elif self.v_bits == 8:
+        elif v_bits == 8:
             q_v, v_scale = quantize_symmetric_int8(
                 v, percentile=self.v_percentile, group_size=self.v_group_size
             )
@@ -136,25 +175,25 @@ class MixedKVCache:
                 v, quant_bits=4, percentile=self.v_percentile
             )
 
-    def _dequantize_k(self, layer_id: int) -> Tensor:
-        """Dequantize K tensor from cache."""
+    def _dequantize_k(self, layer_id: int, k_bits: int) -> Tensor:
+        """Dequantize K tensor from cache using the layer's configured k_bits."""
         q_k = self._k_cache[layer_id]
         k_scale = self._k_scale[layer_id]
-        if self.k_bits == 16:
+        if k_bits == 16:
             return q_k.to(self.dtype)
-        elif self.k_bits == 8:
+        elif k_bits == 8:
             return dequantize_symmetric_int8(q_k, k_scale).to(self.dtype)
         else:  # k_bits == 4
             k_zp = self._k_zp[layer_id]
             return dequantize_asymmetric_per_token(q_k, k_scale, k_zp).to(self.dtype)
 
-    def _dequantize_v(self, layer_id: int) -> Tensor:
-        """Dequantize V tensor from cache."""
+    def _dequantize_v(self, layer_id: int, v_bits: int) -> Tensor:
+        """Dequantize V tensor from cache using the layer's configured v_bits."""
         q_v = self._v_cache[layer_id]
         v_scale = self._v_scale[layer_id]
-        if self.v_bits == 16:
+        if v_bits == 16:
             return q_v.to(self.dtype)
-        elif self.v_bits == 8:
+        elif v_bits == 8:
             return dequantize_symmetric_int8(q_v, v_scale).to(self.dtype)
         else:  # v_bits == 4
             v_zp = self._v_zp[layer_id]
@@ -169,11 +208,14 @@ class MixedKVCache:
         if tuple(k.shape) != tuple(v.shape):
             raise ValueError(f"k/v shape mismatch: {tuple(k.shape)} vs {tuple(v.shape)}")
 
+        # Resolve bit-widths for this layer (per_layer_bits override or global).
+        k_bits_layer, v_bits_layer = self._resolve_bits(layer_id)
+
         # Quantize K
-        q_k, k_scale, k_zp = self._quantize_k(k)
+        q_k, k_scale, k_zp = self._quantize_k(k, k_bits_layer)
 
         # Quantize V
-        q_v, v_scale, v_zp = self._quantize_v(v)
+        q_v, v_scale, v_zp = self._quantize_v(v, v_bits_layer)
 
         # KVC-081: PERF WARNING — torch.cat per step is O(S^2) cumulative memory
         # copies. For long-sequence workloads this is a bottleneck. A pre-allocated
@@ -212,8 +254,9 @@ class MixedKVCache:
         if self._k_cache[layer_id] is None:
             raise ValueError(f"Cache for layer {layer_id} is empty")
 
-        k = self._dequantize_k(layer_id)
-        v = self._dequantize_v(layer_id)
+        k_bits_layer, v_bits_layer = self._resolve_bits(layer_id)
+        k = self._dequantize_k(layer_id, k_bits_layer)
+        v = self._dequantize_v(layer_id, v_bits_layer)
 
         return k, v
 

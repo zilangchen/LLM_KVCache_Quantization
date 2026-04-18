@@ -2,7 +2,7 @@
 # =============================================================================
 # Phase 2.6 Wave 4: Qwen-14B Budget Sweep policy 生成（依赖 14B INT8 calibration）
 # =============================================================================
-# 用 14B calib 生成 12 policies 到 artifacts/allocator/sweep_14b/
+# 用 14B calib 生成 15 policies 到 artifacts/allocator/sweep_14b/
 # 前置：必须先有 artifacts/kv_calib_kl_qwen25_14b_int8.json
 #       （由 scripts/calibrate_behavior.py 生成）
 # =============================================================================
@@ -46,6 +46,13 @@ $ALLOCATOR --policy uniform --uniform_bits 4 4 \
 $ALLOCATOR --policy uniform --uniform_bits 8 8 \
     --out "$OUT_DIR/uniform_int8_k8v8.json"
 
+for COV in 0.7 0.8 0.9; do
+    TAG=$(python3 -c "print(int(round(float('$COV') * 100)))")
+    $ALLOCATOR --policy auto_k_coverage --coverage "$COV" \
+        --coverage_targets 0.7 0.8 0.9 --sensitivity_agg max \
+        --out "$OUT_DIR/bakv_auto_cov${TAG}_max.json"
+done
+
 echo ""
 echo "=== 14B protected_layers overview ==="
 python3 - <<'PYEOF'
@@ -54,4 +61,7 @@ d = "artifacts/allocator/sweep_14b"
 for k in [1, 3, 5, 7]:
     data = json.load(open(f"{d}/bakv_k{k}.json"))
     print(f"  14B bakv_k{k}: protected={data.get('protected_layers')} avg_bits={data.get('avg_bits'):.3f}")
+for cov in [70, 80, 90]:
+    data = json.load(open(f"{d}/bakv_auto_cov{cov}_max.json"))
+    print(f"  14B auto_cov{cov}: protected={data.get('protected_layers')} avg_bits={data.get('avg_bits'):.3f} selected_k={data.get('selected_k')}")
 PYEOF

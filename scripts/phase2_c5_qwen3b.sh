@@ -32,6 +32,7 @@ POLICIES=(
     "bakv_k3" "heuristic_k3"
     "bakv_k5" "heuristic_k5" "random3_k5_seed42"
     "bakv_k7" "heuristic_k7"
+    "bakv_auto_cov70_max" "bakv_auto_cov80_max" "bakv_auto_cov90_max"
 )
 
 echo "=== Wave 6 (Qwen-3B) task=$TASK @ $(date) ==="
@@ -55,4 +56,4 @@ for POLICY in "${POLICIES[@]}"; do
     fi
 done
 echo "=== Wave 6 task $TASK 完成 @ $(date) ==="
-phase2_gate_task_rows "Wave 6 task $TASK" "$OUT_DIR" "phase2c5_3b_int4mixedkv_*_${TASK}_n${N_SAMPLES}.log" "longbench_task_summary_*.csv" 12 "$TASK" "int4_mixed_kv"
+phase2_gate_task_rows "Wave 6 task $TASK" "$OUT_DIR" "phase2c5_3b_int4mixedkv_*_${TASK}_n${N_SAMPLES}.log" "longbench_task_summary_*.csv" 15 "$TASK" "int4_mixed_kv"

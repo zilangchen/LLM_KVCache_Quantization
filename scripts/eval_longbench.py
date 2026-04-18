@@ -690,41 +690,50 @@ def _build_prompt(sample: LongBenchSample) -> str:
 
 def _load_samples(args: argparse.Namespace) -> List[LongBenchSample]:
     tasks = _split_csv(args.longbench_tasks)
+    # 验证版 Pre-0 (2026-04-18): 加 sample_offset 支持 slice [offset : offset+max_samples]
+    # 用途：验证结果不是"前 max_samples 个样本"的偶然（A4 sample slice 稳定性）
+    offset = int(getattr(args, "longbench_sample_offset", 0) or 0)
+    max_samples = int(args.longbench_max_samples)
+
     if args.longbench_source == "synthetic":
-        return _load_synthetic_samples(
+        samples = _load_synthetic_samples(
             tasks=tasks,
-            max_samples=int(args.longbench_max_samples),
+            max_samples=max_samples + offset,  # 先加载 offset+max 个，再切片丢弃前 offset 个
             seed=int(args.seed),
         )
+        return samples[offset:]
 
     if args.longbench_source == "jsonl":
         if not args.longbench_dataset_path:
             raise ValueError("--longbench_dataset_path is required for longbench_source=jsonl")
-        return _load_jsonl_samples(
+        samples = _load_jsonl_samples(
             path=Path(args.longbench_dataset_path),
             tasks=tasks,
-            max_samples=int(args.longbench_max_samples),
+            max_samples=max_samples + offset,
         )
+        return samples[offset:]
 
     # hf
     try:
-        return _load_hf_samples(
+        samples = _load_hf_samples(
             repo=str(args.longbench_dataset_repo),
             split=str(args.longbench_dataset_split),
             tasks=tasks,
-            max_samples=int(args.longbench_max_samples),
+            max_samples=max_samples + offset,
         )
+        return samples[offset:]
     except Exception:
         if args.longbench_allow_synthetic_fallback:
             print("Warning: HF LongBench loading failed; fallback to synthetic source.")
             # EVL-063: Update longbench_source so CSV and config_snapshot
             # correctly record that synthetic data was actually used.
             args.longbench_source = "synthetic"
-            return _load_synthetic_samples(
+            samples = _load_synthetic_samples(
                 tasks=tasks,
-                max_samples=int(args.longbench_max_samples),
+                max_samples=max_samples + offset,
                 seed=int(args.seed),
             )
+            return samples[offset:]
         raise
 
 
@@ -783,6 +792,16 @@ def main() -> None:
         type=int,
         default=None,
         help="V cache bit-width for int4_mixed_kv mode (4/8/16). Default: 4.",
+    )
+    parser.add_argument(
+        "--policy_json",
+        type=str,
+        default=None,
+        help=(
+            "Phase 2 编号 6: path to a per-layer bit allocation policy JSON produced "
+            "by scripts/adaptive/behavior_aligned_allocator.py. When provided with "
+            "--kv_mode int4_mixed_kv, overrides --k_bits/--v_bits with per-layer values."
+        ),
     )
     parser.add_argument(
         # EVL-064: Default False to match CLAUDE.md §9 fixed decision
@@ -849,6 +868,8 @@ def main() -> None:
     parser.add_argument("--longbench_dataset_split", type=str, default="test")
     parser.add_argument("--longbench_dataset_path", type=str, default="")
     parser.add_argument("--longbench_max_samples", type=int, default=32)
+    parser.add_argument("--longbench_sample_offset", type=int, default=0,
+                        help="验证版 Pre-0: 跳过前 N 个 samples 再取 max_samples 个。用于 A4 sample slice 稳定性验证（offset=0/50/100 取不同 50 个样本）。")
     parser.add_argument("--longbench_max_new_tokens", type=int, default=64)
     parser.add_argument("--longbench_context_len", type=int, default=None)
     parser.add_argument("--longbench_allow_synthetic_fallback", action="store_true", default=False)
@@ -940,6 +961,7 @@ def main() -> None:
                 quant_bits=getattr(args, 'quant_bits', None),
                 k_bits=getattr(args, 'k_bits', None),
                 v_bits=getattr(args, 'v_bits', None),
+                policy_json=getattr(args, 'policy_json', None),
             )
 
             pred_text = tokenizer.decode(out.generated_ids[0].tolist(), skip_special_tokens=True).strip()
