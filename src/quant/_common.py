@@ -3,6 +3,7 @@
 Shared helpers for INT8 and INT4 quantization modules.
 """
 
+from typing import Optional
 import warnings
 
 import torch
@@ -19,12 +20,27 @@ def _check_quantize_input(tensor: Tensor, func_name: str = "quantize") -> None:
         raise ValueError(f"{func_name}: input contains Inf — refusing to quantize corrupt data")
 
 
+def _infer_scale_heads(scale: Tensor, num_groups: int) -> Optional[int]:
+    """
+    B2 fix (2026-04-18): Infer heads dim from static scale shape for fail-fast check.
+    Returns inferred heads or None if layout is ambiguous (3D dispatch handles own).
+    """
+    if scale.ndim == 2:
+        return int(scale.shape[0])
+    if scale.ndim == 4:
+        return int(scale.shape[1])
+    if scale.ndim == 5 and scale.shape[-1] == 1:
+        return int(scale.shape[1])
+    return None
+
+
 def _normalize_static_scale(
     scale: Tensor,
     batch: int,
     heads: int,
     seq_len: int,
     num_groups: int,
+    context: Optional[dict] = None,
 ) -> Tensor:
     """
     Normalize static scale to shape [B, H, S, num_groups, 1].
@@ -36,7 +52,31 @@ def _normalize_static_scale(
     - [1, H, 1, num_groups]             (4D, broadcast over batch & seq)
     - [B, H, S, num_groups]             (4D, no broadcast needed)
     - [B, H, S, num_groups, 1]          (5D, already target shape)
+
+    context (optional): audit metadata dict for fail-fast error enrichment.
+        Recognized keys: model_id, calib_path, layer_id.
     """
+    # B2 fix (2026-04-18): Fail-fast heads-dim validation BEFORE reshape/expand.
+    # Prevents wrong-model calibration (e.g., H_kv=8 Mistral/Llama/14B loaded
+    # into Qwen-1.5B H_kv=2) from silently crashing deep inside expand().
+    inferred_heads = _infer_scale_heads(scale, num_groups)
+    if inferred_heads is not None and inferred_heads != heads:
+        ctx = context or {}
+        raise ValueError(
+            "_normalize_static_scale: calibration vs model heads mismatch "
+            "(fail-fast; wrong calibration file was loaded).\n"
+            f"  expected heads: {heads} (from model/cache config)\n"
+            f"  scale heads:    {inferred_heads} (from scale.shape={tuple(scale.shape)})\n"
+            f"  num_groups:     {num_groups}\n"
+            f"  model_id:       {ctx.get('model_id', '<not provided>')}\n"
+            f"  calib_path:     {ctx.get('calib_path', '<not provided>')}\n"
+            f"  layer_id:       {ctx.get('layer_id', '<not provided>')}\n"
+            "Likely cause: artifacts/kv_calib_kl.json was overwritten by a "
+            "different model's calibration (e.g., calibrate_behavior.py "
+            "without explicit --calib_out, argparse prefix-matched --out to "
+            "--out_dir, causing default fallback overwrite)."
+        )
+
     if scale.ndim == 2:
         # [H, G] -> [1, H, 1, G, 1]
         scale_view = scale[None, :, None, :, None]

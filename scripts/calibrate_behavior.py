@@ -1045,7 +1045,14 @@ def calibrate_k_path_percentile_asymmetric(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Behavior-aligned calibration for KV cache quantization")
+    # B1a fix (2026-04-18): allow_abbrev=False prevents argparse from prefix-matching
+    # `--out <path.json>` to `--out_dir`, which silently created a directory named
+    # after the JSON path and dumped calibration to the default fallback
+    # `artifacts/kv_calib_kl.json` — clobbering it across model runs.
+    parser = argparse.ArgumentParser(
+        description="Behavior-aligned calibration for KV cache quantization",
+        allow_abbrev=False,
+    )
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
     parser.add_argument(
         "--loss_function",
@@ -1267,10 +1274,28 @@ def main():
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    # Default output path reflects loss function to avoid overwriting.
+    # B1c fix (2026-04-18): --calib_out is required; NO default fallback.
+    # Historical bug: absent --calib_out silently wrote to
+    # `artifacts/kv_calib_{loss_function}.json`, which successive calibration
+    # runs for different models (14B / Mistral-7B / 3B) would overwrite,
+    # leaving 1.5B int8_ours loading the wrong H_kv at inference time.
     if args.calib_out is None:
-        args.calib_out = f"artifacts/kv_calib_{args.loss_function}.json"
+        raise ValueError(
+            "--calib_out is required (A-scheme fix 2026-04-18). "
+            "No default fallback is applied; pass the full output path explicitly, "
+            "e.g. --calib_out artifacts/kv_calib_kl_<model_id>_int<bits>.json. "
+            "Do NOT reuse the legacy default 'artifacts/kv_calib_kl.json' — that "
+            "path is no longer consulted by generate_loop.py loaders without "
+            "an explicit --calib_file pointer."
+        )
     calib_out_path = Path(args.calib_out)
+    if calib_out_path.exists() and calib_out_path.is_dir():
+        raise ValueError(
+            f"--calib_out points to an existing directory: {calib_out_path}. "
+            "This usually indicates prefix-matching confusion between `--out` and "
+            "`--out_dir`. Pass a full .json file path, e.g. "
+            "artifacts/kv_calib_kl_qwen25_1p5b_int8.json."
+        )
     calib_out_path.parent.mkdir(parents=True, exist_ok=True)
 
     # CAL-007: Warn if default output path doesn't match generate_loop.py defaults.
