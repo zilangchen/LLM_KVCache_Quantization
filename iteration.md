@@ -4524,3 +4524,24 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - 仍需继续提交主线文档、审计、工作台、实验 README 与论文表格资产
 - Commit: `5881522`
+
+### 2026-04-19 06:36 | Clean-Provenance Launch Plan 落地
+- Goal: 把 clean-provenance 的执行方案固化成独立 launch 文档，并在工作台/执行清单中挂接统一入口。
+- Changed files:
+  - `docs/clean_provenance_launch_plan.md`
+  - `docs/thesis_upgrade_live_plan.md`
+  - `docs/mainline_execution_queue.md`
+- Commands:
+  - `sed -n '1,220p' docs/clean_provenance_rerun_framework.md`
+  - `rg -n "clean-provenance|compare set" docs/thesis_upgrade_live_plan.md docs/mainline_execution_queue.md`
+- Outputs:
+  - 新增独立 launch 文档，默认 pin=`ddada19`
+  - 工作台明确标注：当前建议单独执行 `L1 claim-critical` clean rerun
+  - 执行清单新增 clean rerun 作为 `Queue A` 的正式动作
+- Validation:
+  - 文档入口与术语对齐
+  - 未触碰 `thesis/chapters/*.tex`
+- Risks / follow-ups:
+  - 该计划仅定义执行边界与顺序，不等于 rerun 已执行
+  - 下一步应单独下发远端启动 prompt 或 launch plan 给 Claude
+- Commit: pending

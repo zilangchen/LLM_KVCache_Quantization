@@ -251,22 +251,23 @@
 1. 吸收 formal audit 到工作台与主线 readout
 2. 更新 cross-4-model auto-k 的 `candidate-main` 口径
 3. 固化 clean-provenance rerun compare set 与 prerequisites
+4. 使用 [docs/clean_provenance_launch_plan.md](/Users/chenzilang/Desktop/LLM_KVCache_Quantization/docs/clean_provenance_launch_plan.md) 单独启动 `L1 claim-critical` clean rerun
 
 ### Queue B：重新整理 extend-task 线
 
-4. 固化 `dureader > lcc > trec/vcsum` 的证据分层
-5. 将 extend-task 线从“4-task 平均”改成“高信息量 task supporting evidence”
+5. 固化 `dureader > lcc > trec/vcsum` 的证据分层
+6. 将 extend-task 线从“4-task 平均”改成“高信息量 task supporting evidence”
 
 ### Queue C：L2 启动准备
 
-6. 把 `L2` 三条方向从 planning 切到 `scripts ready / waiting launch`
-7. 单独起 `L2` launch plan，明确远端启动顺序与 GPU 占用
+7. 把 `L2` 三条方向从 planning 切到 `scripts ready / waiting launch`
+8. 单独起 `L2` launch plan，明确远端启动顺序与 GPU 占用
 
 ### Queue D：L2 升级方向
 
-8. `K/V asymmetric allocator`
-9. `Quality-cost Pareto analysis`
-10. `Prompt-adaptive allocation`
+9. `K/V asymmetric allocator`
+10. `Quality-cost Pareto analysis`
+11. `Prompt-adaptive allocation`
 
 ---
 

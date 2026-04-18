@@ -60,6 +60,10 @@
   - audited result files 结构上干净
   - 但远端 worktree 生产时是 dirty 的
   - 因此当前只支撑 `candidate-main narrative support`，不支撑最终主表唯一来源
+- 当前 clean-provenance 启动状态：
+  - [docs/clean_provenance_launch_plan.md](/Users/chenzilang/Desktop/LLM_KVCache_Quantization/docs/clean_provenance_launch_plan.md) 已落地
+  - 默认 pin：`ddada19`
+  - 当前建议：单独执行 `L1 claim-critical` clean rerun，不与 `L2` exploratory 混跑
 
 **Wave 1 (8B extended) 当前快速判读**
 
