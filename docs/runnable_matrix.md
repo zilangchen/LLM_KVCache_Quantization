@@ -48,8 +48,8 @@
 |---|---|---|
 | `fp16` | 不需要 | ✅ 可直接跑 |
 | `int8_ours` | 需要 INT8 KL calibration | ✅ 见下表 |
-| `kivi_style` | 不需要（运行时 absmax/min） | ✅ 可直接跑 |
-| `int4_ours_asym` (RoleAlign) | 需要 RoleAlign calibration | ⚠️ 1.5B 校准文件缺失（见 §5） |
+| `kivi_style` | 不需要（运行时 absmax/min） | ✅ Phase 1 已验证——ENG-045-v2 补丁（generate_loop.py:1246-1361 三分状态机）修后重跑证实 warning 为"保守告警"：修前/修后分数精确一致（9.23/4.87/6.93 → 9.23/4.87/6.93）。原 v1 数据可信 |
+| `int4_ours_asym` (RoleAlign) | 需要 RoleAlign calibration | ✅ 1.5B 校准文件已 sync（见 §5） |
 | `int4_ours` (对称 INT4) | 需要 INT4 KL calibration | ✅ 兜底方案 |
 | `int4_baseline` | 不需要（运行时 percentile） | 🔸 可选对照 |
 
@@ -76,7 +76,7 @@
 ### 4.3 INT4 RoleAlign（非对称）
 | 模型 | calibration 文件 | 状态 |
 |---|---|---|
-| Qwen2.5-1.5B | `artifacts/kv_calib_rolealign_1p5b.json` | ❌ **yaml 引用但文件不存在** |
+| Qwen2.5-1.5B | `artifacts/kv_calib_rolealign_1p5b.json` | ✅ 远端已生成，2026-04-18 sync 到本地（MD5 `8d8fd9730ed6129613a16fdc267f9372`，40544 bytes） |
 | Qwen2.5-14B | `artifacts/kv_calib_rolealign_14b_v3.json` | ✅ |
 | 7B/8B | ❌ 缺失 | 见 §5 gap 处理 |
 

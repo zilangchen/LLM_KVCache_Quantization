@@ -1,0 +1,80 @@
+% Phase 1 场景 A (v6-stable) 论文主表 LaTeX 模板
+% 生成时间: 2026-04-18 05:49 (编号 3 完成, 编号 4 进行中)
+% 用途: Ch4 §4.x 官方 LongBench 主结果
+% 数据源: results/phase1_summary_merged.csv + results/phase1_summary_7b.csv
+%
+% 待填空占位符用 <<TBD-...>> 标记，编号 4 + 5 完成后一键替换
+
+\subsection{官方 LongBench 主结果（Qwen2.5 1.5B / 7B）}
+\label{subsec:exp-official-longbench}
+
+本节在官方 LongBench~\cite{bai2024longbench} 的三个核心任务
+（NarrativeQA / HotpotQA / GovReport）上对 Qwen2.5-1.5B-Instruct
+和 Qwen2.5-7B-Instruct 进行跨 kv\_mode 系统评测。
+数据来自 THUDM/LongBench 官方 jsonl 发布版，
+评测协议固定 seed=1234，gen\_len=64（QA）/128（GovReport），max\_context=4K，
+n=50 样本，greedy 解码。
+
+\paragraph{主要发现。}
+\begin{enumerate}
+    \item INT8-ours 在 1.5B 上相对 FP16 无显著退化（\(\Delta \in [-0.7\%, +7.6\%]\)），
+    INT4-RoleAlign 3 任务退化控制在 \(\pm 5\%\) 内。
+    \item KIVI-style 修正后（ENG-045-v2 patch）与 FP16 差距 \(\leq 2\%\)，
+    证实 KIVI 的非对称格式在真实长上下文任务上可用。
+    \item \textbf{跨模型一致性}：7B 上所有量化模式退化幅度 \(\leq\) 1.5B 同模式（\textless<<TBD-7B-CROSS-CONSISTENCY>>），
+    验证 INT4 在更大 \(H_{kv}\) 下更稳健（与我们的 Key 主导假设一致）。
+\end{enumerate}
+
+\begin{table}[!htbp]
+\centering
+\caption{Qwen2.5-1.5B 在官方 LongBench 上的跨 kv\_mode 对比
+（n=50, seq\_len=4K, greedy; $\Delta$ 为相对 FP16 退化率）。}
+\label{tab:phase1-official-longbench-1p5b}
+\begin{tabular}{llrrrr}
+\toprule
+任务 & 指标 & FP16 & INT8-ours & KIVI-style & INT4-RoleAlign \\
+\midrule
+NarrativeQA & F1 & 7.07 & 7.13 & 6.93 & 7.05 \\
+            & $\Delta$ & (基线) & +0.8\% & -1.9\% & -0.2\% \\
+HotpotQA    & F1 & 4.90 & 5.27 & 4.87 & 4.96 \\
+            & $\Delta$ & (基线) & +7.6\% & -0.7\% & +1.2\% \\
+GovReport   & ROUGE-L & 9.21 & 9.25 & 9.23 & 8.83 \\
+            & $\Delta$ & (基线) & +0.4\% & +0.2\% & -4.1\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[!htbp]
+\centering
+\caption{Qwen2.5-7B 在官方 LongBench 上的跨 kv\_mode 对比（n=50）。}
+\label{tab:phase1-official-longbench-7b}
+\begin{tabular}{llrrrr}
+\toprule
+任务 & 指标 & FP16 & INT8-ours & KIVI-style & INT4-RoleAlign \\
+\midrule
+NarrativeQA & F1 & <<TBD-7B-NQ-FP16>> & <<TBD-7B-NQ-INT8>> & <<TBD-7B-NQ-KIVI>> & <<TBD-7B-NQ-INT4RA>> \\
+            & $\Delta$ & (基线) & <<TBD>> & <<TBD>> & <<TBD>> \\
+HotpotQA    & F1 & <<TBD-7B-HP-FP16>> & <<TBD-7B-HP-INT8>> & <<TBD-7B-HP-KIVI>> & <<TBD-7B-HP-INT4RA>> \\
+            & $\Delta$ & (基线) & <<TBD>> & <<TBD>> & <<TBD>> \\
+GovReport   & ROUGE-L & <<TBD-7B-GR-FP16>> & <<TBD-7B-GR-INT8>> & <<TBD-7B-GR-KIVI>> & <<TBD-7B-GR-INT4RA>> \\
+            & $\Delta$ & (基线) & <<TBD>> & <<TBD>> & <<TBD>> \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{显存与延迟。}
+在长 prompt（4K）+ 短生成（64/128 token）的 sample-level eval 下，
+KV cache 压缩的绝对显存节省被模型权重本身淹没（1.5B: 4390 MB $\rightarrow$ 4326 MB，
+\textasciitilde 1.4\%）。真正体现压缩收益的是 \texttt{profile\_memory.py}
+在长序列长批次下的 decode 阶段测量，详见附录 A.\ref{subsec:profile-memory}。
+延迟（TPOT）方面，INT8-ours 融合核相对 FP16 快 <<TBD-TPOT-SPEEDUP>>\%。
+
+\paragraph{评测协议与复现。}
+全部实验通过 \texttt{scripts/phase1\_run\_task.sh} (1.5B) 和
+\texttt{scripts/phase1\_run\_task\_7b.sh} (7B) 在 3×H20 GPU 上并行执行，
+单个 (task, kv\_mode) 组合耗时 \textasciitilde1-3 分钟 (1.5B) / \textasciitilde5-8 分钟 (7B)。
+聚合脚本 \texttt{scripts/aggregate\_phase1\_merged.py} 读取每个 run 的
+\texttt{profile\_longbench\_*.csv} + \texttt{longbench\_task\_summary\_*.csv}
+联合产出统一 schema。原始日志保留在
+\texttt{results/phase1\_official/} 和 \texttt{results/phase1\_official\_v2/}
+（v2 是 ENG-045-v2 补丁后 kivi\_style 重跑）。

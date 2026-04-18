@@ -1,0 +1,108 @@
+% =============================================================================
+% Phase 2 场景 B LaTeX 模板（v7-allocator-MVP，对应 plan 场景 B）
+% 生成时间: 2026-04-18 06:28（M3 进行中，模板预留）
+% 用途：论文 Ch3 + Ch4 新增 Allocator 章节
+% 数据源：results/phase2_summary.csv + results/phase2_allocator_mvp/
+%
+% 使用方式：M4 Gate PASS 后，用 scripts/export_phase2_latex.py 生成表格数据，
+% 替换本模板中的 <<TBD>> 占位符或 include 自动生成的 .tex 片段。
+% =============================================================================
+
+%% ------------------ Ch3 新增 §3.x：算法 + 伪代码 ----------------------
+
+\subsection{Behavior-Aligned Layer-wise Bit Allocation}
+\label{subsec:method-allocator}
+
+基于 §\ref{subsec:method-behavior-align} 的 attention-KL 校准产物，我们观察到
+per-layer $k_{\text{scale}}$ 振幅在 Qwen2.5-1.5B 上呈现长尾分布（max/min 比率 30.76$\times$，
+top-3 敏感层为 $\{0, 1, 15\}$）。这个长尾结构自然建议一个 bit 分配策略：
+\textbf{把高敏感度层保留为 INT8、低敏感度层压到 INT4}，在几乎不增加存储的前提下
+优先保护最重要的量化路径。
+
+\paragraph{算法 (BAKV Top-$k$)。}
+给定校准产物中 per-layer 敏感度代理 $s_\ell = \max_{h, g} |k_{\text{scale}}^{(\ell, h, g)}|$，
+我们选择 top-$k$ 最高的层保为 $(k_\text{bits}^{\text{hi}}, v_\text{bits}^{\text{hi}})$（MVP 中为 $(8, 8)$），
+其他层压为 $(k_\text{bits}^{\text{lo}}, v_\text{bits}^{\text{lo}}) = (4, 4)$。
+
+\begin{algorithm}[!htbp]
+\caption{BAKV Top-$k$ Layer-wise Bit Allocation}
+\label{alg:bakv-top-k}
+\begin{algorithmic}[1]
+\Require Calibration JSON with per-layer $k_\text{scale}$; budget $k$; $(\text{hi}, \text{lo})$ bit pairs
+\Ensure Policy $\pi = [(k_{\text{bits}}^{(\ell)}, v_{\text{bits}}^{(\ell)}) : \ell \in \{0, ..., L-1\}]$
+\State $s_\ell \leftarrow \max_{h, g} |k_{\text{scale}}^{(\ell, h, g)}|$ \Comment{每层敏感度代理}
+\State $\mathcal{S} \leftarrow \text{top-}k\text{ indices by } s_\ell$
+\For{$\ell = 0$ to $L - 1$}
+    \If{$\ell \in \mathcal{S}$}
+        \State $\pi[\ell] \leftarrow (\text{hi}, \text{hi})$
+    \Else
+        \State $\pi[\ell] \leftarrow (\text{lo}, \text{lo})$
+    \EndIf
+\EndFor
+\State \Return $\pi$
+\end{algorithmic}
+\end{algorithm}
+
+\paragraph{两条对照 policy。}
+\begin{itemize}
+    \item \textbf{Heuristic-$k$}（位置启发式强对照）：保护等距 $k$ 层（如 $k=3$ 时保护 $\{0, L/2, L-1\}$），
+    不依赖 attention-KL 信号，用以检验 lens 是否真正优于纯位置先验。
+    \item \textbf{Random-$k$}（负对照）：随机选 $k$ 层（seed=42），证明 top-$k$ 选择不是偶然。
+\end{itemize}
+
+\paragraph{实现复用。}
+所有 policy 由 \texttt{scripts/adaptive/behavior\_aligned\_allocator.py}
+统一生成，输出 JSON schema 含 \texttt{per\_layer\_bits} / \texttt{protected\_layers} /
+\texttt{avg\_bits}。运行时由扩展后的 \texttt{MixedKVCache}（§\ref{sec:implementation}）
+通过 \texttt{\--\--policy\_json} CLI 接入 \texttt{eval\_longbench.py}，内部
+\texttt{\_resolve\_bits(layer\_id)} 派发到对应精度路径；当 \texttt{per\_layer\_bits=None}
+时退化为全局 \texttt{(k\_bits, v\_bits)}，保持现有 \texttt{int4\_mixed\_kv}
+模式的 backward compatibility。
+
+%% ------------------ Ch4 新增 §4.y：结果 ----------------------
+
+\subsection{BAKV Allocator 实验结果}
+\label{subsec:exp-allocator-mvp}
+
+本节在官方 LongBench 三个任务（NarrativeQA / HotpotQA / GovReport）上系统对比
+5 种 allocator policy：\textbf{Uniform INT4}（下界参考）、\textbf{Uniform INT8}（上界参考）、
+\textbf{BAKV Top-3}（attention-KL 敏感度 top-3）、\textbf{Heuristic-3}（等距位置启发式）、
+\textbf{Random-3}（seed=42 负对照）。所有非 uniform policy 共享相同 budget（avg\_bits=4.43，
+3 层保 INT8 + 25 层 INT4），\textbf{唯一变量是"哪 3 层被选中"}。
+
+% 自动生成的主表放这里（由 scripts/export_phase2_latex.py 渲染）
+% \input{tables/phase2_allocator_main.tex}
+\begin{table}[!htbp]
+\centering
+\caption{Phase 2 Allocator MVP 主结果（Qwen2.5-1.5B，$n=50$）。占位数据，待 M4 Gate PASS 后用 export\_phase2\_latex.py 自动覆盖。}
+\label{tab:phase2-allocator-mvp-1p5b}
+\begin{tabular}{llrrrrr}
+\toprule
+任务 & 指标 & Uniform INT4 & Uniform INT8 & BAKV Top-3 & Heuristic-3 & Random-3 \\
+\midrule
+NarrativeQA & F1       & <<TBD>> & <<TBD>> & <<TBD>> & <<TBD>> & <<TBD>> \\
+HotpotQA    & F1       & <<TBD>> & <<TBD>> & <<TBD>> & <<TBD>> & <<TBD>> \\
+GovReport   & ROUGE-L  & <<TBD>> & <<TBD>> & <<TBD>> & <<TBD>> & <<TBD>> \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{主要发现。}
+\begin{itemize}
+    \item \textbf{硬 Gate 判定}：BAKV Top-3 平均分 \textless<<TBD-BAKV-MEAN>>\textgreater\ vs Random-3
+    \textless<<TBD-RANDOM-MEAN>>\textgreater，BAKV 胜 \textless<<TBD-WINS>>\textgreater/3 tasks
+    $\Rightarrow$ \textbf{<<TBD-GATE-VERDICT>>}.
+    \item \textbf{次 Gate（加分）}：BAKV vs Heuristic-3 对比
+    \textless<<TBD-HEURISTIC-COMP>>\textgreater
+    $\Rightarrow$ attention-KL lens \textless<<TBD-LENS-VERDICT>>\textgreater\ 位置启发式。
+    \item \textbf{上下界夹挤}：Uniform INT8 $\geq$ BAKV Top-3 $\geq$ Uniform INT4 的经验预期
+    \textless<<TBD-ENVELOPE>>\textgreater。
+\end{itemize}
+
+\paragraph{实验协议。}
+全部实验通过 \texttt{scripts/phase2\_allocator\_mvp.sh} 在 3$\times$H20 GPU 上按 task 维度并行
+（GPU0=NarrativeQA, GPU1=HotpotQA, GPU2=GovReport），每卡串行 5 policies。
+5 policy JSON 由 \texttt{scripts/phase2\_gen\_policies.sh} 一键生成。聚合主键
+\texttt{(task, kv\_mode, policy\_name)} 避免 5 组 \texttt{int4\_mixed\_kv} 互相覆盖。
+单元测试 \texttt{tests/test\_mixed\_kv\_cache\_per\_layer.py}（5 个 PASS）确保
+\texttt{per\_layer\_bits=None} 时完全 backward-compatible。

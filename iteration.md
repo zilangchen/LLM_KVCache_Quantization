@@ -4510,3 +4510,17 @@ Canonical agent workflow directory is `.agents/`.
   - 这批只是代码资产提交，不等于 clean-provenance rerun 已执行
   - 仍需第二批提交工作台/审计/provenance 文档，并 push 当前工作分支
 - Commit: pending
+
+### 2026-04-19 06:28 | Repo Cleanup Round 1a — 代码资产提交落盘
+- Goal: 记录第一批代码资产提交的实际 commit hash，保持 `iteration.md` append-only。
+- Changed files:
+  - `iteration.md`
+- Commands:
+  - `git commit -m "feat(experiments): land phase1 phase2 and l2 tooling"`
+- Outputs:
+  - 第一批代码资产 commit 已生成：`5881522`
+- Validation:
+  - commit hook 通过
+- Risks / follow-ups:
+  - 仍需继续提交主线文档、审计、工作台、实验 README 与论文表格资产
+- Commit: `5881522`

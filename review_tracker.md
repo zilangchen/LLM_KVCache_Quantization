@@ -2,7 +2,7 @@
 
 > 1083 issues | 1062 fixed/documented + 28 false_positive | 21 open (0 CRIT, 0 HIGH, 16 MED, 5 LOW)
 > Phase Gate: **UNBLOCKED** (0 CRIT / 0 HIGH open)
-> Last updated: 2026-04-09 (Round 2 代码轨道: 9 issues fixed — HIGH 归零. Batch: EVL-149+152+154+155+156 + ENG-112+113 + RUN-096 + TST-086. R32 review-silent 新追加 EVL-154 CRIT 同批修复.)
+> Last updated: 2026-04-18 (ENG-045 Phase 1 实证验证：重跑修后分数与修前精确一致，证实为保守告警而非数据丢失。降回 MED 并标 fixed in ENG-045-v2 补丁 — three-way state machine in generate_loop.py:1246-1361.)
 
 ---
 
@@ -858,7 +858,7 @@
 - [x] **ENG-042** `[HIGH]` patch_model.py L591: cache.append 在 kernel 调用前执行，kernel 抛异常时 cache seq_len 已+1 但无 output，无 rollback 机制，cache 永久不一致 — R6 PAT-010, confidence: 90% — fixed 264dcc3
 - [x] **ENG-043** `[HIGH]` patch_model.py L793-794: attention class 仅从 layer[0] 检测，异构 attention 层（如 Mistral sliding window）的非 layer-0 class 不被 patch — R6 PAT-006, confidence: 85% — fixed 264dcc3
 - [x] **ENG-044** `[HIGH]` patch_model.py L798-898: apply_int8_fused_patch 永久修改 class-level forward，无 remove_patch/unpatch API，同进程内 fp16 评估也经过 forward_proxy — R6 PAT-004, confidence: 92% — fixed 264dcc3
-- [x] **ENG-045** `[MED]` generate_loop.py L761-769: 非 fused decode 路径 k.shape[2]>1 时仅取最后一个 token，speculative decoding 等多 token 返回场景静默丢 token — R6 GEN-007, confidence: 80% — fixed 264dcc3
+- [x] **ENG-045** `[MED]` generate_loop.py L1246-1361 非 fused decode 路径旧实现 `if k.shape[2] > 1: take_last_token`——Phase 1 官方 LongBench `kivi_style` 大规模触发告警（gov_report=7056 / hotpotqa=5292 / narrativeqa=1764 次）。**Phase 1 实证验证结果**：修前 v1 CSV 与 ENG-045-v2 补丁后 v2 CSV 分数精确一致（gov_report 9.23==9.23, hotpotqa 4.87==4.87, narrativeqa 6.93==6.93）——证实这是**保守告警**而非数据丢失，原因是非 fused 路径下 attention 实际用模型返回的 `outputs.past_key_values` tuple 而非 `kv_cache` 对象中间态。**修复 (ENG-045-v2)**：三分状态机——Case A `returned_len==step_q_len` 直接 append；Case B `delta==step_q_len` 完整累积 cache 切 delta 区间（kivi_style 主场景，无告警）；Case C `delta>0 but !=step_q_len` → `ENG-045A` 真异常；Case D `delta<=0` → `ENG-045B` 畸形返回。之前 264dcc3 的"fix"只加 warning 没修分发逻辑。 — 2026-04-18 Phase 1 Gate 预检发现 + 修后实证验证
 - [x] **ENG-046** `[MED]` generate_loop.py L668: DynamicCache 迭代在 HF transformers>=4.38 中可能不再 yield (k,v) tuple，量化模式不走 fp16_use_model_cache 路径无保护 — R6 GEN-009, confidence: 82% — fixed 264dcc3
 - [x] **ENG-047** `[MED]` asymmetric_quant.py L93-94: zero_point 存储为浮点偏移量（非整数 zero_point），与 KIVI 论文及 PyTorch 量化惯例不同，未文档化 — R6 GEN-005, confidence: 75% — fixed 46ca296
 - [x] **ENG-048** `[MED]` generate_loop.py L524/L532: calib 有 k_scale 但缺 v_scale（或反之）时无警告，cache 单侧使用静态 scale、另侧退化为动态 — R6 GEN-016, confidence: 80% — fixed 264dcc3

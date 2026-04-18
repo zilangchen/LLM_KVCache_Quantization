@@ -1,0 +1,15 @@
+% Cross-model consistency summary (Gate 5 判据 2)
+\begin{table}[!htbp]
+\centering
+\caption{1.5B↔7B 跨模型退化率一致性（Gate 5 判据 2；正值=退化，负值=提升）。}
+\label{tab:phase1-cross-model-consistency}
+\begin{tabular}{lrrl}
+\toprule
+量化模式 & 1.5B 平均 & 7B 平均 & 一致性 \\
+\midrule
+INT8-ours & -3.0\% & +2.3\% & $\circ$ \\
+KIVI-style & +0.8\% & +0.9\% & \checkmark \\
+INT4-RoleAlign & +1.0\% & +2.9\% & \checkmark \\
+\bottomrule
+\end{tabular}
+\end{table}
