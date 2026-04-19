@@ -144,6 +144,9 @@ def write_latex_table(
     将 table tex body 包装为完整 \\begin{table} 环境并写入 thesis/tables/<table_id>.tex。
     同时写一份 .md 调试版 (thesis/tables/<table_id>.md) 方便 diff review。
     """
+    # 注意：caption 之后直接用 \\[2pt] 会报 "There's no line here to end"
+    # （LaTeX 规则：\\ 需要前面有文本行可以结束，在 \table 环境里 caption 之后不成立）
+    # 改用 \par\smallskip\noindent 合法开新段 + 小间距。
     wrapper = []
     wrapper.append("\\begin{table}[!htbp]")
     wrapper.append("  \\centering")
@@ -152,7 +155,7 @@ def write_latex_table(
     wrapper.append(f"  \\caption{{{caption}}}")
     wrapper.append(f"  \\label{{{label}}}")
     if note:
-        wrapper.append(f"  \\\\[2pt]\\footnotesize {note}")
+        wrapper.append(f"  \\par\\smallskip\\noindent{{\\footnotesize {note}}}")
     wrapper.append("\\end{table}")
     wrapper_str = "\n".join(wrapper)
 

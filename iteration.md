@@ -36,6 +36,30 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 04:39 | fix(thesis): make_table helper emits valid LaTeX note syntax — Phase 3 预览修复
+- Goal: 修复 Phase 3 commit `6540fc7` 引入的 `write_latex_table()` helper bug，让 main.tex 能完整编译出 PDF 恢复预览
+- Root cause: helper 在 `\caption` 之后用 `"\\[2pt]\\footnotesize ..."` 想做 note，但 `\\` 在 `\table` 环境（非 tabular 内）里需要前面有文本行可以结束——`\caption` 之后直接上 `\\` 触发 `! LaTeX Error: There's no line here to end.`（halt-on-error 让 T1 编译在 `\input{tables/table_t1_int8_canonical.tex}` 处停住 → 后续所有 section / table label 注册中断 → main.pdf 无法产出 → 用户反馈"预览看不了")
+- Fix: note 语法改为 `\par\smallskip\noindent{\footnotesize ...}`（LaTeX canonical 的"开新段+小间距+小字"写法）
+- Changed files:
+  - scripts/thesis/_common.py（helper 改 note 包裹为 `\par\smallskip\noindent`，加说明 comment）
+  - thesis/tables/table_t1_int8_canonical.tex（重生成）
+  - thesis/tables/table_t2_int4_kivi.tex（重生成）
+  - S3 手工表未用 helper，不受影响
+- Commands:
+  - `python3 scripts/thesis/make_table_int8_canonical.py` + `python3 scripts/thesis/make_table_int4_kivi.py` 重生成
+  - `cd thesis && xelatex -interaction=nonstopmode main.tex` × 2 passes → 产出 main.pdf
+- Outputs:
+  - main.pdf: **90 pages / 1.48 MB**（从 halt-on-error 到 compile success）
+  - 旧 tag `thesis-v5-POSITIVE` 为 104 pages，当前 90 pages 符合 §4.2 砍 55% 预期
+- Validation:
+  - 首次编译：从 L17 `\\[2pt]...` 错误 halt → Output main.pdf (51 pages, incomplete)
+  - Fix 后 2nd pass：90 pages, 1.48 MB，可预览
+  - 剩余 Warning：orphaned reference（指向已删旧 label 或 Phase 4/5/7 待建 label），不阻塞预览
+- Risks / follow-ups:
+  - 约 15 个 orphaned reference（Ch1/Ch3/Ch5/Appendix 指向已删 Ch4 旧 label），Phase 9 全局 polish 统一清理
+  - 前向引用（`sec:exp-cross-model` / `sec:exp-per-model` / `sec:app-invtau-diagnostic`）会在对应 Phase 建立时消失
+- Commit: <pending 本批>
+
 ### 2026-04-20 04:31 | Thesis Rewrite Phase 3 — Ch4 §4.1+§4.2 重写（1977→884 行 -55%）+ T1/T2/S3
 - Goal: 按 M+ 方案（story §10/§11/§16）把 Ch4 §4.1 Setup 扩到 6 模型 + clean-provenance，并把旧 §4.2 (KL-MSE / 综合性能) + §4.3 (Key 主导 / K/V 敏感性) + §4.4 (RoleAlign / invtau / 证据边界 / INT4 三方对比) 三段 ~1470 行重组为新 §4.2 "INT4 推进：RoleAlign vs KIVI 对比" 约 450 行，给 Phase 4 cross-model 主章让位
 - Scope:

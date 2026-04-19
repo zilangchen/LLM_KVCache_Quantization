@@ -16,5 +16,5 @@
   \end{tabular}
   \caption{INT4-RoleAlign vs KIVI-style 跨模型对比（PPL, WikiText-2 greedy；Needle 4K--32K 通过率）。两者共享 \textbf{per-channel K + per-token V} 非对称格式；唯一差异是 calibration philosophy——\textbf{RoleAlign} 用离线 KL 搜索 $(p_K, p_V)$，KIVI 用运行时 absmax/min。8B 上两者 $\Delta{=}0$；1.5B/7B 差距在 0.15 PPL 内，方向随 $H_{kv}$ 减小而略偏向 KIVI。设计差异见表~\ref{tab:s3-rolealign-vs-kivi}。}
   \label{tab:t2-int4-kivi}
-  \\[2pt]\footnotesize Needle 列 \code{100/100} 表示 Needle-single-retrieval 与 MK-NIAH-2 两类检索同时 100\% 恢复。14B 为外部效度锚点（32K prefix，无 KIVI 对照）。数据 backport：1.5B 来自 clean-provenance pin=\code{ddada19}；7B/8B/14B 来自 legacy \code{emnlp\_rolealign\_v2}（与 canonical 路径在 1.5B 上已交叉验证一致）。
+  \par\smallskip\noindent{\footnotesize Needle 列 \code{100/100} 表示 Needle-single-retrieval 与 MK-NIAH-2 两类检索同时 100\% 恢复。14B 为外部效度锚点（32K prefix，无 KIVI 对照）。数据 backport：1.5B 来自 clean-provenance pin=\code{ddada19}；7B/8B/14B 来自 legacy \code{emnlp\_rolealign\_v2}（与 canonical 路径在 1.5B 上已交叉验证一致）。}
 \end{table}
