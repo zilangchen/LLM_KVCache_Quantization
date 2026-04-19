@@ -36,6 +36,30 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 03:39 | 禁用 ScheduleWakeup 定时轮询，强制 background watchdog 等待远端长任务
+- Goal: 把"远端 GPU 任务等待"的机制从"Claude 用 ScheduleWakeup 按猜测时间回来 poll"改成"本地后台 watchdog 在任务实际结束瞬间通知 Claude"，并把规则写进项目权威文件确保不反弹。
+- Scope:
+  - 新增通用 watchdog 脚本 `scripts/remote_watchdog.sh`（tmux session 监听 + log 尾部快照）
+  - 在 `.agents/skills/remote-server/SKILL.md` 新增「🔔 等待远端长任务」段落，**禁止** 对"远端 tmux session 等死"场景使用 `ScheduleWakeup`
+  - 明确 watchdog 的 env 契约 + 启动流程 + cache/等待语义
+- Changed files:
+  - `scripts/remote_watchdog.sh` (新建)
+  - `.agents/skills/remote-server/SKILL.md`
+  - `iteration.md`
+- Commands:
+  - `bash -n scripts/remote_watchdog.sh` → syntax OK
+  - `chmod +x scripts/remote_watchdog.sh`
+- Outputs:
+  - Watchdog 一次性启动，靠 Bash(run_in_background=true) 跑，退出即触发 Claude Code 的 completion 通知 → 零时间浪费 + cache 在等待期间冻结
+  - 规则把 "Remote tmux/GPU job waits → watchdog (mandatory)" 固化到 remote-server skill
+- Validation:
+  - bash syntax 检查通过
+  - 本轮 system_vs_kivi smoke 将切到 watchdog 模式（sessions svk_smoke_1p5b + svk_smoke_8b）
+- Risks / follow-ups:
+  - `ScheduleWakeup` 仍对"外部时钟驱动、无 observable terminator 的等待"保留（例如等待人类 review 或 cron 触发），不是完全禁用
+  - 旧代码路径里如果还有 timer-based poll 应在见到时一起迁移到 watchdog
+- Commit: <pending>
+
 ### 2026-04-20 03:22 | 论文改写 Phase 0 Pre-flight 完成（audit + tracker + _common.py）
 - Goal: 完成 thesis rewrite Phase 0 的全部前置准备（0a-0h），清空 Phase 1 的硬 blocker
 - Scope:

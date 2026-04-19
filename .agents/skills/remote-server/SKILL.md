@@ -139,6 +139,60 @@ rsync -avz --progress \
 
 ---
 
+## 🔔 等待远端长任务（强制：后台 watchdog，禁止定时 wakeup）
+
+### 原则
+
+**禁止**用 `ScheduleWakeup(delaySeconds=...)` 或任何定时器去周期性"回来检查"
+远端 GPU 任务是否跑完。原因：
+
+1. Anthropic prompt cache TTL 仅 5 分钟；每次超过 300s 的 wakeup 都破坏缓存，
+   重读完整对话上下文 ≫ 一次后台 watchdog 的开销
+2. 时间猜错就双重浪费：任务提前完成要干等，任务延迟完成又要再设一次 wakeup
+3. 唤醒时刻与任务结束时刻不对齐，会错过错误的早期信号或白白等超
+
+**必须**改用一次性的本地后台 watchdog，由 Claude Code runtime 的
+"background bash 完成通知"机制在任务**实际结束瞬间**唤醒 agent。
+
+### 标准 watchdog：`scripts/remote_watchdog.sh`
+
+脚本位于 `scripts/remote_watchdog.sh`，行为：
+
+- 按 comma-separated tmux session 名列表持续 `tmux ls` 轮询（远端）
+- 任何被 watch 的 session 还在就继续 sleep（默认 60s 间隔）
+- 全部 session 消失即 exit 0，并打印日志尾部快照
+
+### 启动流程
+
+```bash
+# 通过 Bash 工具以 run_in_background=true 启动
+SSH_HOST=<从 docs/autodl_server.md 读> \
+SSH_PORT=<...> \
+SSH_USER=<...> \
+SSH_PASSWORD=<...> \
+bash scripts/remote_watchdog.sh \
+  "svk_smoke_1p5b,svk_smoke_8b" \
+  "/root/.../logs/smoke_1p5b_gpu0.log,/root/.../logs/smoke_8b_gpu1.log" \
+  60
+```
+
+启动后立刻结束本轮；Claude Code 的 runtime 在 watchdog 进程退出时会主动
+推一条完成通知到 agent，不需要 agent 自己 poll。
+
+### 何时允许 ScheduleWakeup
+
+只有在**没有可监听的明确终止信号**时才用（例如：等一个外部人类 review、
+等一个基于时钟的 cron 触发）。对"远端有 tmux session 在跑，要等它死掉"
+这一类场景，一律走 watchdog。
+
+### 轮询间歇期的行为
+
+启动 watchdog 后本地 agent 的空闲期**必须做别的事**（推进写作、更新
+文档、review plan、整理 memory），不准坐等 watchdog。等待期间本地
+cache 自然冻结直到 watchdog 通知到达。
+
+---
+
 ## 📝 日志获取
 
 // turbo
