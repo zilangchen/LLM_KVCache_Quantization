@@ -139,7 +139,29 @@ def validate_matched_budget_rows(
     baseline_system: str = SYSTEM_KIVI,
     compared_systems: Iterable[str] = (SYSTEM_AUTO, SYSTEM_FIXED),
     tolerance_pct: float = 3.0,
+    gate_mode: str = "pareto",
 ) -> list[dict[str, object]]:
+    """Validate KV-cache memory relationship between baseline (KIVI) and compared systems.
+
+    ``gate_mode``:
+
+    - ``"strict"`` — legacy "matched-budget" semantics. Any compared system whose
+      ``kv_cache_mem_mb`` deviates from baseline by more than ``tolerance_pct``
+      is flagged as ``out_of_band`` (hard fail).
+    - ``"pareto"`` (default) — Pareto-extension semantics. Budget drift is
+      **reported as info**, not an issue, because allocator systems are
+      designed to occupy a KIVI-unreachable (higher-budget, higher-quality)
+      Pareto region. Only genuinely missing baseline/system rows still flag.
+      Budget ratios are attached to every row under key ``"info"``.
+
+    Missing-baseline / missing-system remain hard issues under both modes:
+    without those rows the comparison itself is undefined.
+    """
+    if gate_mode not in ("strict", "pareto"):
+        raise ValueError(
+            f"gate_mode must be 'strict' or 'pareto', got {gate_mode!r}"
+        )
+
     grouped: dict[str, dict[str, float]] = {}
     for row in rows:
         model_key = str(row.get("model_key", "")).strip()
@@ -179,15 +201,28 @@ def validate_matched_budget_rows(
                 rel_pct = 0.0 if value == 0 else float("inf")
             else:
                 rel_pct = abs(value - baseline) / baseline * 100.0
-            if rel_pct > tolerance_pct:
+            if gate_mode == "strict":
+                if rel_pct > tolerance_pct:
+                    issues.append(
+                        {
+                            "model_key": model_key,
+                            "system_id": system_id,
+                            "issue": "out_of_band",
+                            "baseline_kv_cache_mem_mb": baseline,
+                            "system_kv_cache_mem_mb": value,
+                            "relative_pct": rel_pct,
+                        }
+                    )
+            else:  # "pareto"
                 issues.append(
                     {
                         "model_key": model_key,
                         "system_id": system_id,
-                        "issue": "out_of_band",
+                        "issue": "info_budget_drift",
                         "baseline_kv_cache_mem_mb": baseline,
                         "system_kv_cache_mem_mb": value,
                         "relative_pct": rel_pct,
+                        "budget_ratio": (value / baseline) if baseline else None,
                     }
                 )
     return issues

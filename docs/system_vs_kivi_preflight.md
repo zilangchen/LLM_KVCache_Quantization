@@ -50,9 +50,25 @@ Mechanism ablation target:
 
 The formal package keeps the following rules frozen:
 
-1. Same INT4-oriented comparison family.
-2. Matched-budget rule:
-   - `kv_cache_mem_mb` difference must stay within `+-3%`.
+1. Same INT4-oriented comparison family (`kivi_asym_family` runtime backbone).
+2. **Pareto-disclosure budget rule** (updated 2026-04-20 from legacy ±3% matched-budget):
+   - `kv_cache_mem_mb` difference is **reported, not gated**.
+   - The aggregation step must record, for every (model, compared system) pair,
+     the absolute KV-cache memory of baseline and system, the relative drift
+     percent, and the budget ratio `system_mem / baseline_mem`.
+   - The aggregated report then places baseline and system on a single
+     (budget, quality) Pareto plot so readers can judge the trade-off.
+   - Rationale: a `{4, 8, 16}` bit allocator with non-trivial ratio of
+     higher-bit layers **cannot**, by construction, stay within ±3% of a pure
+     INT4 KIVI baseline without collapsing to full 4-bit (which erases the
+     allocator). The C3 claim framing is therefore "Pareto extension into
+     KIVI's unreachable (higher-budget, higher-quality) region", not
+     "matched-budget winner". See §13 of `docs/thesis_story_20260420.md`.
+   - Tooling: `scripts/check_system_vs_kivi_completeness.py` defaults to
+     `--gate_mode pareto`; budget drift emits `info_budget_drift` rows that do
+     not fail the gate. Passing `--gate_mode strict` restores the legacy
+     ±3% behavior for sanity checks / ablations that specifically want a
+     matched-budget subset.
 3. Same decoding policy:
    - greedy decoding
    - `temperature=0`

@@ -68,7 +68,7 @@ def test_find_missing_assets_reports_missing_files(tmp_path: Path):
     assert missing[0].endswith("artifacts/allocator/l2_kv_asymmetric/1p5b/bakv_k3.json")
 
 
-def test_validate_matched_budget_rows_accepts_within_tolerance():
+def test_validate_matched_budget_rows_strict_accepts_within_tolerance():
     issues = validate_matched_budget_rows(
         [
             {"model_key": "8b", "system_id": "kivi_style", "kv_cache_mem_mb": 100.0},
@@ -80,11 +80,12 @@ def test_validate_matched_budget_rows_accepts_within_tolerance():
             "rolealign_allocator_fixed_eqmem",
         ],
         tolerance_pct=3.0,
+        gate_mode="strict",
     )
     assert issues == []
 
 
-def test_validate_matched_budget_rows_flags_missing_and_out_of_band():
+def test_validate_matched_budget_rows_strict_flags_missing_and_out_of_band():
     issues = validate_matched_budget_rows(
         [
             {"model_key": "3b", "system_id": "kivi_style", "kv_cache_mem_mb": 100.0},
@@ -95,10 +96,48 @@ def test_validate_matched_budget_rows_flags_missing_and_out_of_band():
             "rolealign_allocator_fixed_eqmem",
         ],
         tolerance_pct=3.0,
+        gate_mode="strict",
     )
     assert len(issues) == 2
     assert any(issue["issue"] == "out_of_band" for issue in issues)
     assert any(issue["issue"] == "missing_system" for issue in issues)
+
+
+def test_validate_matched_budget_rows_pareto_reports_drift_as_info():
+    """Under pareto gate_mode, budget drift is info (not failure)."""
+    issues = validate_matched_budget_rows(
+        [
+            {"model_key": "1p5b", "system_id": "kivi_style", "kv_cache_mem_mb": 8.42},
+            {"model_key": "1p5b", "system_id": "rolealign_allocator_auto_eqmem", "kv_cache_mem_mb": 12.64},
+        ],
+        compared_systems=["rolealign_allocator_auto_eqmem"],
+        tolerance_pct=3.0,
+        gate_mode="pareto",
+    )
+    assert len(issues) == 1
+    info = issues[0]
+    assert info["issue"] == "info_budget_drift"
+    assert info["budget_ratio"] == 12.64 / 8.42
+    # Drift percent is still reported for transparency
+    assert abs(info["relative_pct"] - 50.118) < 0.01
+
+
+def test_validate_matched_budget_rows_pareto_still_flags_missing_baseline():
+    """Even under pareto mode, a missing baseline row is a hard problem."""
+    issues = validate_matched_budget_rows(
+        [
+            {"model_key": "3b", "system_id": "rolealign_allocator_auto_eqmem", "kv_cache_mem_mb": 50.0},
+        ],
+        compared_systems=["rolealign_allocator_auto_eqmem"],
+        gate_mode="pareto",
+    )
+    assert any(issue["issue"] == "missing_baseline" for issue in issues)
+
+
+def test_validate_matched_budget_rows_rejects_unknown_gate_mode():
+    import pytest
+    with pytest.raises(ValueError, match="gate_mode"):
+        validate_matched_budget_rows([], gate_mode="bogus")
 
 
 def test_build_phase_plan_rejects_unknown_phase():

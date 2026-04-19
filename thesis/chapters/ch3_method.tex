@@ -588,9 +588,8 @@ $|\mathcal{P}_K| = |\mathcal{P}_V| = 6$，搜索采用完整笛卡尔积枚举 $
     \bottomrule
   \end{tabular}
   \\[4pt]
-  {\small $\dagger$ 消融实验（第~\ref{subsec:exp-rolealign-invtau}~节）表明，
-  $\tau^{-1}$ 呈格式 $\times$ GQA 尺度双依赖：在 $H_{kv}=2$ 的 1.5B 上 PPL 相对改善 1.6\%（10.58$\to$10.41），
-  但在 $H_{kv} \geq 4$ 的 7B/8B 上反而相对恶化 3.4\%--6.0\%；INT8 精度下效果可忽略。}
+  {\small $\dagger$ 温度校正 $\tau^{-1}$ 在本文主线框架中\textbf{未纳入}；
+  其诊断性观察（格式 $\times$ GQA 尺度双依赖）详见附录 \ref{sec:app-invtau-diagnostic}。}
 \end{table}
 
 两者共享相同的量化格式但在参数确定范式上存在本质差异：

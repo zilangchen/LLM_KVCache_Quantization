@@ -1,0 +1,62 @@
+% thesis/figures/fig2_framework.tex
+% Framework Overview — behavior-guided KV Cache quantization 两层框架（story §16.2）
+% Included via \input{figures/fig2_framework} in ch1_introduction.tex §1.4 Roadmap
+
+\begin{figure}[!htbp]
+  \centering
+  \begin{tikzpicture}[
+    every node/.style={font=\small},
+    principle/.style={rectangle, rounded corners, draw=blue!60!black, thick,
+                      fill=blue!10, minimum width=8.5cm, minimum height=0.9cm, align=center},
+    layer1/.style={rectangle, rounded corners, draw=green!50!black, thick,
+                   fill=green!50!black!10, minimum width=4.0cm, minimum height=2.2cm, align=center},
+    layer2/.style={rectangle, rounded corners, draw=orange!80!black, thick,
+                   fill=orange!80!black!10, minimum width=4.0cm, minimum height=2.2cm, align=center},
+    valid/.style={rectangle, rounded corners, draw=purple!60, thick,
+                  fill=purple!10, minimum width=8.5cm, minimum height=0.9cm, align=center},
+    arr/.style={-stealth, thick},
+    dasharr/.style={-stealth, thick, dashed, gray},
+  ]
+    % ── 顶部 principle box
+    \node[principle] (pr) at (0, 4) {
+      \textbf{Behavior-Guided 原则}\\[2pt]
+      \footnotesize 以 attention 分布 $a$ 的保持度为统一目标函数（代替数值范数）
+    };
+
+    % ── 中层两个分支
+    \node[layer1] (calib) at (-2.4, 2) {
+      \textbf{第一层：Static Calibration}\\[4pt]
+      \footnotesize INT8 canonical path\\
+      $\to$ INT4-RoleAlign (KIVI format)\\[2pt]
+      \footnotesize 离线 KL 搜索 $(p_K, p_V)$
+    };
+    \node[layer2] (alloc) at (2.4, 2) {
+      \textbf{第二层：Budget Allocation}\\[4pt]
+      \footnotesize Layer-wise BA-$k$ allocator\\
+      $\to$ AutoK coverage proposer\\[2pt]
+      \footnotesize 共享 behavior sensitivity profile
+    };
+
+    % ── 底部 empirical validation
+    \node[valid] (val) at (0, -0.2) {
+      \textbf{Empirical Validation}：\ INT8 canonical ($\Delta{=}{+}0.02$) \ +\ regime map (5 claims)
+    };
+
+    % ── 箭头
+    \draw[arr] (pr.south) -- ++(-2.4, -0.3) |- (calib.north);
+    \draw[arr] (pr.south) -- ++( 2.4, -0.3) |- (alloc.north);
+    \draw[dasharr, thick] (calib.east) -- node[above, font=\scriptsize, gray]
+      {sensitivity profile} (alloc.west);
+    \draw[arr] (calib.south) -- ++(0, -0.5) -| (val.north west);
+    \draw[arr] (alloc.south) -- ++(0, -0.5) -| (val.north east);
+
+  \end{tikzpicture}
+  \caption{Framework overview。单一 \textbf{behavior-guided 原则}（attention 分布保持度）
+  同时贯通两层：(i) \emph{Static Calibration} 以 KL 目标驱动 INT8 canonical
+  与 INT4-RoleAlign；(ii) \emph{Budget Allocation} 以 behavior sensitivity profile
+  指导逐层预算分配，AutoK 作为 profile-guided 扩展自然长出。
+  两层共享同一个 behavior sensitivity profile（虚线箭头），
+  在下游的 empirical validation（INT8 canonical $\Delta{=}{+}0.02$ 保真度
+  与 4 模型 regime map）上闭环。}
+  \label{fig:framework-overview}
+\end{figure}

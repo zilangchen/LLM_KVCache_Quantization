@@ -36,6 +36,41 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 05:04 | B 升级：smoke gate 从 matched-budget ±3% 重构为 Pareto-disclosure framing（数学上 ±3% 不可达）
+- Goal: 按用户 B 升级版决策，把 system_vs_kivi 的 G1 Fairness Gate 从 "matched-budget ±3%" 重构为 "Pareto-disclosure"（allocator 作为 KIVI 到不了的 (higher budget, higher quality) Pareto 点公开披露）。
+- Root cause（为什么 framing 必须改）:
+  - 1p5b 28 层 allocator policy `bakv_auto_cov80_max` = 15 (8,8) + 13 (4,4) = 344 bits/token
+  - KIVI 纯 int4 = 28 × 8 = 224 bits/token → allocator 必 1.54× KIVI
+  - ±3% 约束下 allocator 只能保留 ≤1 层升 bit，数学上退化为 KIVI
+  - 所以 "matched-budget winner" framing 在当前 `{4,8,16}` bit 字典下**数学上不可能** meaningful win
+- Scope:
+  - `scripts/system_vs_kivi_common.py` — `validate_matched_budget_rows()` 新增 `gate_mode="pareto"|"strict"` 参数；pareto 下 budget drift 作为 `info_budget_drift` 记录 + 附 `budget_ratio`，不失败
+  - `scripts/check_system_vs_kivi_completeness.py` — `evaluate_completeness` 接 `gate_mode`；report 里返回 `gate_mode` 字段；CLI 新增 `--gate_mode {pareto,strict}` 默认 `pareto`；pareto mode 下 `info_budget_drift` 不 fail `ok`
+  - `tests/test_system_vs_kivi_common.py` — 新增 4 项 gate_mode 测试；旧 strict 测试显式加 `gate_mode="strict"`
+  - `tests/test_check_system_vs_kivi_completeness.py` — pareto mode 默认覆盖；新增 "drift reported but ok" 测试；旧 out_of_band 测试显式加 `gate_mode="strict"`
+  - `docs/system_vs_kivi_preflight.md` — Fairness Rule §2 从 "matched memory ±3%" 改为 "budget disclosure + Pareto plot"；解释数学必然性 + tooling 切换
+  - `docs/thesis_story_20260420.md` — §13.1 Hook 状态从 "G0 BLOCKED" 升级为 "L3-pending"；加 Framing I→II 切换条目 + smoke 实测记录；§13.4 激活清单第一项从 "matched ±3%" 改为 "budget disclosed"，明确 L1 在现 bit 字典下不可达、现实预期 L2/L3
+- Changed files:
+  - `scripts/system_vs_kivi_common.py`
+  - `scripts/check_system_vs_kivi_completeness.py`
+  - `tests/test_system_vs_kivi_common.py`
+  - `tests/test_check_system_vs_kivi_completeness.py`
+  - `docs/system_vs_kivi_preflight.md`
+  - `docs/thesis_story_20260420.md`
+  - `iteration.md`
+- Commands:
+  - `pytest -q tests/test_system_vs_kivi_common.py tests/test_check_system_vs_kivi_completeness.py tests/test_run_system_vs_kivi.py tests/test_allocator_cli_modes.py` → `31 passed`
+- Outputs:
+  - 默认 pareto gate 下 existing smoke data 预期 PASS（+50% / +73% drift 变成 `info_budget_drift` 信息行，不 fail `ok`）
+  - preflight doc 把 "Pareto extension into KIVI-unreachable region" 作为 frozen framing
+  - thesis_story §13 Hook 激活清单与新 gate 语义对齐，避免 gate 规则与章节叙事脱节
+- Validation:
+  - 31 本地 pytest passed（含 4 个新 gate_mode 行为测试）
+- Risks / follow-ups:
+  - 现有 smoke raw 未重跑 gate check — 需在 remote 用新代码重跑 `--gate_mode pareto` 确认 `ok=true` 才能进 main phase
+  - Remote worktree 仍在 `36bf21c2`；需 fetch 本轮 commit 后再启动 main phase
+- Commit: <pending>
+
 ### 2026-04-20 05:02 | Thesis Rewrite Phase 5 — Ch4 §4.5 Per-Model Cases（T4/T5/T6 + 图⑨）
 - Goal: M+ 方案 Phase 5，Ch4 §4.5 per-model 剖面分析 3 个代表性模型（Mistral AutoK strongest / 3B early-layer rescue / 14B top-tier no winner）
 - Scope:

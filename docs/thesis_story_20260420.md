@@ -499,15 +499,16 @@ Pareto 层的发现（7B uniform_int4 崩坏 / auto-k top tier 分布）提示 a
 
 ## 13. 【Hook】Allocator vs KIVI Formal Compare Package 接口说明
 
-### 13.1 Hook 状态（2026-04-20）
+### 13.1 Hook 状态（2026-04-20，Pareto framing 升级版）
 
 | 状态字段 | 值 |
 |---|---|
-| 当前状态 | **预留接口**（G0 BLOCKED） |
+| 当前状态 | **L3-pending**（smoke 完成 EXIT=0；main phase 待启动） |
 | 执行 ExecPlan | `.agents/execplans/2026-04-20_allocator-vs-kivi-claim-package.md` |
 | 前置 ExecPlan | `.agents/execplans/2026-04-20_same-format-allocator-backend-enable.md`（B/B/B 版本） |
-| 关键阻塞 | 缺失 3B / 8B / Mistral-7B RoleAlign calibration + backend 需支持完整 mixed-bit / asymmetric pair + 独立 kv_mode |
-| 完成后插入点 | §2.5（calibration 维度）+ §3.5（allocation 维度）+ §11 条件表 9 / 图 4 |
+| Framing 升级（2026-04-20 03:22 决策） | 从旧 **Framing I "matched-budget winner (±3%)"** → 新 **Framing II "Pareto extension into KIVI-unreachable region"**。原因：`{4,8,16}` bit 字典下 allocator 数学上无法在 ±3% 内与 KIVI 纯 INT4 同预算（allocator 必退化为 KIVI）。新 framing 把 budget drift 作为**设计特性**公开披露。 |
+| Smoke 实测（2026-04-20 04:40 收口） | 1p5b allocator 12.64MB vs KIVI 8.42MB（+50.1%）；8b allocator 66.62MB vs KIVI 38.50MB（+73.0%）。Execution-chain 全绿 / 90 CSV 齐全 / 0 sample failure。 |
+| 完成后插入点 | §2.5（calibration 维度，L3 档）+ §3.5（allocation 维度，L3 档）+ §11 条件表 9 + 图 4（Pareto overlay） |
 
 ### 13.2 Hook 四档激活规则
 
@@ -541,14 +542,14 @@ Pareto 层的发现（7B uniform_int4 崩坏 / auto-k top tier 分布）提示 a
 - §2.3 的三层诚实分析（L1 事实 / L2 suggests / L3 open question）**必须始终保留**——它是第一层的底线写法
 - 若实验最终被决定不做，§2.5 / §3.5 / §13 整体作为 "Future Work" 段落并入 §6.2
 
-### 13.4 激活判定清单
+### 13.4 激活判定清单（Pareto framing 升级后）
 
 激活前必须满足 ExecPlan 里的硬约束：
-- [ ] G0 Fairness Gate PASS（same format + matched memory ±3% + strongest fair KIVI config frozen + smoke pass）
-- [ ] G1 Main Matrix Validity Gate PASS（主矩阵完整 + no failed-row + aux 齐全）
-- [ ] G2 Claim Strength Gate 判定到 L1 / L2 / L3 / L4 之一
-- [ ] `docs/system_vs_kivi_readout.md` + `docs/system_vs_kivi_claim_audit.md` 产出
-- [ ] 本文档 §13.1 Hook 状态表从 "BLOCKED" 改成对应的 "L1" / "L2" / "L3" / "L4"
+- [x] **G0 Fairness Gate PASS**（same format ✅ + **budget disclosed** (new rule, 替代 matched ±3%) + strongest fair KIVI config frozen + smoke EXIT=0）
+- [ ] G1 Main Matrix Validity Gate PASS（主矩阵完整 + no failed-row + aux 齐全 + 每个 (model, compared-system) pair 的 `info_budget_drift` 行齐全可 aggregate 出 Pareto 图）
+- [ ] G2 Claim Strength Gate 判定到 L1 / L2 / L3 / L4 之一——在 Framing II 下 L1 实际不可达（mathematical reason）；现实预期是 **L3 (Pareto advantage only)**，若 main 显示大部分 (model, task) 的 allocator 跑赢 KIVI 则可升 L2 (quality win + systems non-inferior)
+- [ ] `docs/system_vs_kivi_readout.md` + `docs/system_vs_kivi_claim_audit.md` 产出（aggregate 里 **必须** 包含 budget ratio 表 + Pareto 图）
+- [ ] 本文档 §13.1 Hook 状态表从 "L3-pending" 改成对应的最终 "L2" / "L3" / "L4"
 - [ ] 在附 C 修订记录 "Hook 激活日志" 小节追加条目
 
 ---

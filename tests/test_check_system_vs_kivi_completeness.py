@@ -102,7 +102,10 @@ def test_evaluate_completeness_passes_for_full_smoke_matrix(tmp_path: Path):
         tolerance_pct=3.0,
     )
     assert report["ok"] is True
-    assert report["issues"] == []
+    # Pareto mode: the compared system always emits an info_budget_drift row
+    # (even when drift is small). Hard issues must be empty.
+    hard = [i for i in report["issues"] if i.get("issue") != "info_budget_drift"]
+    assert hard == []
 
 
 def test_evaluate_completeness_flags_missing_aux_and_failed_rows(tmp_path: Path):
@@ -138,7 +141,7 @@ def test_evaluate_completeness_flags_missing_aux_and_failed_rows(tmp_path: Path)
     assert any(issue["issue"] == "missing_aux_metric" for issue in issues)
 
 
-def test_evaluate_completeness_flags_budget_out_of_band(tmp_path: Path):
+def test_evaluate_completeness_strict_flags_budget_out_of_band(tmp_path: Path):
     raw_dir = tmp_path / "raw"
     _make_system_dir(
         raw_dir,
@@ -162,6 +165,43 @@ def test_evaluate_completeness_flags_budget_out_of_band(tmp_path: Path):
         expected_tasks=["narrativeqa", "dureader"],
         compared_systems=["rolealign_allocator_auto_eqmem"],
         tolerance_pct=3.0,
+        gate_mode="strict",
     )
     assert report["ok"] is False
     assert any(issue["issue"] == "out_of_band" for issue in report["issues"])
+    assert report["gate_mode"] == "strict"
+
+
+def test_evaluate_completeness_pareto_reports_drift_without_failing(tmp_path: Path):
+    """Default pareto mode: big budget drift is info, gate still passes."""
+    raw_dir = tmp_path / "raw"
+    _make_system_dir(
+        raw_dir,
+        model_key="1p5b",
+        system_id="kivi_style",
+        quality_tasks=["narrativeqa", "dureader"],
+        kv_cache_mem_mb=8.42,
+    )
+    _make_system_dir(
+        raw_dir,
+        model_key="1p5b",
+        system_id="rolealign_allocator_auto_eqmem",
+        quality_tasks=["narrativeqa", "dureader"],
+        kv_cache_mem_mb=12.64,
+    )
+
+    report = evaluate_completeness(
+        raw_dir,
+        expected_models=["1p5b"],
+        expected_systems=["kivi_style", "rolealign_allocator_auto_eqmem"],
+        expected_tasks=["narrativeqa", "dureader"],
+        compared_systems=["rolealign_allocator_auto_eqmem"],
+        tolerance_pct=3.0,
+    )
+    # Default mode must be pareto now
+    assert report["gate_mode"] == "pareto"
+    # Gate passes despite ~+50% drift, because info-only
+    assert report["ok"] is True
+    drift = [i for i in report["issues"] if i["issue"] == "info_budget_drift"]
+    assert len(drift) == 1
+    assert drift[0]["budget_ratio"] == 12.64 / 8.42

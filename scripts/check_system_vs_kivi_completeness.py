@@ -60,6 +60,7 @@ def evaluate_completeness(
     expected_tasks: list[str],
     compared_systems: list[str],
     tolerance_pct: float = 3.0,
+    gate_mode: str = "pareto",
 ) -> dict[str, object]:
     raw_dir = Path(raw_dir)
     issues: list[dict[str, object]] = []
@@ -150,9 +151,14 @@ def evaluate_completeness(
             budget_rows,
             compared_systems=compared_systems,
             tolerance_pct=tolerance_pct,
+            gate_mode=gate_mode,
         )
     )
-    return {"ok": not issues, "issues": issues}
+    # Pareto mode: "info_budget_drift" rows are informational, not hard failures.
+    hard_fail = any(
+        str(issue.get("issue", "")) != "info_budget_drift" for issue in issues
+    )
+    return {"ok": not hard_fail, "issues": issues, "gate_mode": gate_mode}
 
 
 def main() -> int:
@@ -163,6 +169,17 @@ def main() -> int:
     parser.add_argument("--tasks", required=True)
     parser.add_argument("--compared_systems", default="rolealign_allocator_auto_eqmem,rolealign_allocator_fixed_eqmem")
     parser.add_argument("--tolerance_pct", type=float, default=3.0)
+    parser.add_argument(
+        "--gate_mode",
+        choices=["pareto", "strict"],
+        default="pareto",
+        help=(
+            "pareto (default): allocator budget drift is reported as info "
+            "('info_budget_drift') and does not fail the gate, matching the "
+            "C3 Pareto-extension claim. strict: legacy matched-budget "
+            "semantics, budget drift > tolerance_pct fails the gate."
+        ),
+    )
     parser.add_argument("--out_json", default="")
     args = parser.parse_args()
 
@@ -173,6 +190,7 @@ def main() -> int:
         expected_tasks=[item.strip() for item in args.tasks.split(",") if item.strip()],
         compared_systems=[item.strip() for item in args.compared_systems.split(",") if item.strip()],
         tolerance_pct=args.tolerance_pct,
+        gate_mode=args.gate_mode,
     )
     if args.out_json:
         Path(args.out_json).write_text(
