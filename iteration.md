@@ -60,6 +60,51 @@ Canonical agent workflow directory is `.agents/`.
   - 旧代码路径里如果还有 timer-based poll 应在见到时一起迁移到 watchdog
 - Commit: <pending>
 
+### 2026-04-20 04:45 | Thesis Rewrite Phase 1 (Ch1) + Phase 2 (Ch3) 主体完成
+- Goal: 按 M+ 方案（8 图 + 9 表）+ thesis_story §A 新故事线改写 Ch1 Introduction 与 Ch3 Method 主体，为后续 Ch4 / Ch2 / Ch5 phase 建立新 framework 叙事骨架
+- Scope:
+  - **Ch1 Phase 1 完成**（除 §1.3 contribution 段 + ch1_pipeline figure + 旧总结段——三者都是 C1-C3 旧叙事的镜像，留 Phase 8 与 Ch5/Abstract 一起改）：
+    - §1.2 改写：引入假设 H（behavior 比数值范数更贴近真实损伤）+ error decomposition 公式 + KL 作为 distribution-side operational proxy（已吸收 Codex 2 轮 adversarial-review 的 5 个 P1 修正）
+    - §1.3 国内外研究现状：融合核从旧 C3 主贡献降级为 C2 method instance
+    - §1.4 RQ 段：旧 3 问题 → 新 RQ1-3（分析对象 / 落成系统 / regime map）
+    - §1.4 Roadmap：对齐新 framework + 6 model + 5 task
+  - **Ch3 Phase 2a/b/c 完成**（从 926 行扩到 1066 行）：
+    - 章标题改为 "Behavior-Guided 量化框架设计"
+    - 新增 §3.1 Problem Formulation（sec:ch3-problem，含 eq:ch3-error-decomp + eq:ch3-kl，与 Ch1 §1.2 一致）
+    - 删除 §inv_tau subsection（sec:ch3-invtau 降级，figure ch3_invtau_heatmap 删除）
+    - 新增 §Behavior-Guided Allocator（sec:ch3-allocator，含 layer-wise top-k + role-aware + sensitivity 聚合 3 子节；heuristic 强 baseline 正面承认）
+    - 新增 §AutoK（sec:ch3-autok，含 coverage-based cov80 公式 + AutoK 定位"非独立主方法贡献"）
+    - Triton section title 降级为 "Triton 融合量化解码核：INT8 Canonical Path 的系统落地"
+    - §本章小结重写（新 framework 两层叙事）
+  - **Codex Review 工作流纠正**：~/.claude/CLAUDE.md §4 扩展（加 Custom Focus 列 + Codex 工作原理 + 3 种调用模式 + prompt 模板 + 常见错误表）；tracker 缩减为 pointer
+  - **Ch6 → Ch5 结构对齐**：18 处 docs Ch6 误用修正（保留旧 5 章制，Ch5 Conclusion 承载 discussion + summary + future work）
+- Changed files:
+  - thesis/chapters/ch1_introduction.tex（§1.2 / §1.3 / §1.4 RQ / Roadmap）
+  - thesis/chapters/ch3_method.tex（+140 行，结构重组）
+  - docs/thesis_story_20260420.md（Ch6→Ch5 6 处 + §14 章节调整表合并）
+  - docs/thesis_chapter_drafts_20260420.md（§6/§7 标题对齐 Ch5 + 编号映射）
+  - docs/thesis_legacy_term_audit_20260420.md（Phase 1/6 → Phase 8 改写顺序调整）
+  - docs/thesis_rewrite_tracker_20260420.md（Phase 1 任务 + Codex Review 方式指向 ~/.claude/CLAUDE.md §4）
+  - ~/.claude/CLAUDE.md §4（Codex 正确调用方式 + 常见错误）
+- Commands:
+  - `python3 <批量 Edit scripts>`（避免中英标点匹配陷阱，一次性多点替换）
+  - `node codex-companion.mjs adversarial-review "<prompt>"`（吸收 5 个 P1 修正，后续不再每段走 Codex，待所有章节写完统一审查）
+- Outputs:
+  - Ch1 + Ch3 主体结构对齐新 M+ 故事线
+  - 新 framework 叙事骨架（behavior-guided + 假设 H + two-layer calibration+allocation + AutoK + regime map）完成
+  - 保留所有旧 labels（sec:ch3-overview/-calibration/-static-scale/-rolealign/-triton/-system/-complexity/-summary）backward-compat
+- Validation:
+  - Phase 1: 10/10 grep 验证通过（RQ1-3 / Roadmap / 融合核降级 / 术语冻结一致性）
+  - Phase 2a: 12/12 验证（新 §3.1 + 删 inv_tau）
+  - Phase 2b: 12/12 验证（新 Allocator + AutoK sections + equations）
+  - Phase 2c: 10/10 验证（Triton title 降级 + §summary 重写）
+- Risks / follow-ups:
+  - §1.3 contribution 段 + ch1_pipeline figure + 旧总结段（L131-230）**保留未改**，Phase 8 与 Ch5/Abstract 一起改（contribution/conclusion 镜像，需 Ch2-Ch4 稳定后收束）
+  - Ch3 Phase 2d minor cleanup（§2 框架总体设计 figure caption + §3 calibration "行为对齐" 术语）留 Phase 9 全局 polish pass
+  - xelatex 编译验证：未做（等 Ch4 完成后统一 pass）
+  - 已 commit 的 tag `thesis-m-plus-entry-point` 可随时回滚
+- Commit: <pending 本批>
+
 ### 2026-04-20 03:22 | 论文改写 Phase 0 Pre-flight 完成（audit + tracker + _common.py）
 - Goal: 完成 thesis rewrite Phase 0 的全部前置准备（0a-0h），清空 Phase 1 的硬 blocker
 - Scope:
@@ -866,67 +911,3 @@ Canonical agent workflow directory is `.agents/`.
 - Changed files: docs/option_d_plan.md (D' 修订标注), docs/handoff_to_thesis_session.md (D' 说明 + 8B 补跑状态), scripts/batch_p012/stage_8b_longseq.sh (新建)
 - 关键修正: (1) behavior-aligned 保住主线 (2) Hkv≠模型规模 (3) Ch3 不泄漏数字 (4) C4 拆分 (5) BD 降级 (6) 14B 口径精确 (7) Ch2 重组 (8) 7B KL=MSE provenance
 - 8B 长序列补跑: PID=3464, 16 测试, ~1h, 验证 8B(Hkv=8) vs 14B(Hkv=8) crossover 一致性
-
-### 2026-04-12 14:34 | 跨 Session 交接: Option D 叙事升级 + handoff 文档
-- Goal: 为新 session 准备完整交接报告,明确 Option D (GQA 中心叙事) 方向和执行计划
-- Changed files: docs/handoff_to_thesis_session.md (新建), docs/option_d_plan.md (新建), C1/Stage7/baseline 补跑脚本
-- 决策: 用户选定 Option D "GQA 中心叙事",5C 重构 (C1 规模依赖, C2 K主导+GQA, C3 RoleAlign, C4 Phase Boundary, C5 大模型验证+BD)
-- 可行性验证: 论文已有 40+ 处 GQA 讨论, D 不是"改装"而是"收拢已有线索到主线"
-- Next: 新 session 按 option_d_plan.md Day 1-5.5 执行论文重构
-
-### 2026-04-12 13:53 | Session 完结: 250+ 数据点全部跑完 + findings 文档最终版
-- Goal: 更新 session findings 文档加入 Stage 7 rerun + 14B fp16 RULER baseline + Phase Boundary 发现; commit 所有产出并 push
-- Key results:
-  - **Stage 7 Rerun (v2)**: 48 测试 (gen=64, runs=10, warmup=5), 修复 v1 warmup 不足 + 32K OOM → **14B 32K triton_ra 比 torchref 快 77 ms (40%)**
-  - **Phase Boundary Finding**: triton_ra 优势与 Hkv 正相关: Hkv=2 始终输, Hkv=4 crossover@32K, **Hkv=8 crossover@4K-8K 且 32K 快 40%**
-  - **14B fp16 RULER baseline**: 9 测试完成, 可与 14B RA 对照
-  - **1.5B fp16 RULER baseline**: FI INT4 vs FP16 差距 <1%, 证实 VT/CWE 低是模型能力上限
-  - **14B K/V ablation**: K16V4 (PPL 4.71) vs K4V16 (4.81) → K 量化恢复 93% 退化, V 只恢复 64%
-- Changed files: docs/session_findings_2026-04-12.md (更新到 16 Parts ~600 行), iteration.md
-- Status: ALL STAGES COMPLETE, GPU 空闲, 待论文修改
-
-### 2026-04-12 01:09 | 删除 BD adapter + 写 session findings 文档
-- Goal: 根据本 session 的 BD 库 GQA-broken 发现，删除 BD adapter 代码路径并降级为 external TPOT reference；同时把所有 session 见解归档到一个文档
-- Changed files:
-  - 删除: `src/kernels/adapters/bitdecoding_adapter.py` (整个 adapter 文件)
-  - 修改: `src/engine/patch_model.py` (删除 L894-907 bitdecoding dispatch 分支)
-  - 修改: `src/engine/generate_loop.py` (L460-462 _valid_impls 删除 "bitdecoding", 删除 L499-505 validation block, L692 _use_fused 删除 "bitdecoding", L1069 fallback warning 删除 "bitdecoding")
-  - 新建: `docs/session_findings_2026-04-12.md` (session 所有见解归档, ~500 行)
-- 保留:
-  - `scripts/tpot_bitdecoding_e2e.py` — BD standalone TPOT reference
-  - `scripts/test_bitdecoding.py` — 调试工具,证明 BD 库 broken
-  - `results/emnlp_p012_batch/runs/tpot_bd_standalone_1p5b/` — BD TPOT 数据 24.22 ms
-- 根因: bit_decode v1.0.0.post1 的 CUTLASS kernel 在 GQA 配置下输出错误。验证证据: 库自带的 `scripts/test_bitdecoding.py` 跑出 max_diff=1.23 vs FP16 reference (阈值 0.1, **FAIL**)。此 bug 在 BD 内部,wrapper 无法修复
-- 实验数据证据:
-  - BD (Stage 3 跑完,adapter 已删): Needle 0%, RULER 1.1%, LongBench F1=0.0 → 数据不可用
-  - FI (Stage 4 跑完): Needle 100%, RULER 60%, LongBench F1=0.036 → 可用
-- 论文叙事调整: BD 从"可替代 backend"降级为"external TPOT reference system"。新 claim: "Triton + in-kernel percentile 是 **only production-viable** INT4 backend for GQA + calibrated quantization"
-- Validation: `python3 -m py_compile` 两个修改的文件 PASS, `grep bitdecoding src/` 只剩 comment
-- Pipeline 状态: Stage 5 14B full 80% (LongBench 3/5 + K/V ablation 0/12 剩余), 1.5B fp16 RULER baseline running (PID 121556), Stage 6/7 pending
-- Next: commit 代码变更(需双重审查门禁), 等 Stage 5/6/7 + baseline 全部完成后,基于 findings 文档改论文
-
-### 2026-04-11 12:15 | BD adapter 回滚 Layout A + 合入 Session 1 v_percentile 修复
-- Goal: 修复 commit 600e87d 错误的 BD adapter layout，同时合入另外两个 session 的 v_percentile 守卫修复
-- Background: 跨 session 协作发现两个独立 bug 同时影响 Phase 1：(1) BD adapter Layout B 输出 cosine=0.035（噪声），(2) `kivi_style_cache.py` 守卫 `v_percentile >= 100.0` 让 RA calib (99.9) 走 fallback 慢路径
-- Merge from origin/main (3 commits, no conflict):
-  - `5c5ec27` Session 1 第一次修复：Triton V kernel `_with_bounds` (PyTorch quantile + Triton runs rest)
-  - `ecc6f5f` Session 1 第二次修复：in-kernel percentile via top-2/bottom-2 → triton_ra **-31% TPOT**
-  - `93bc1ee` handoff_report_2026-04-11.md (290 行，含完整修复后 Phase 1 数据)
-- This commit: src/kernels/adapters/bitdecoding_adapter.py (用 worktree-feat+flashinfer-adapter 分支 5a9e9bd 版本覆盖)
-- Root cause:
-  - **BD bug**: commit 600e87d 同时改了 padding（对，避免 zero-padding NaN）和 layout uint16→int32（错，参考 test_bitdecoding.py 但那个 test 从未做 cosine 对比）。NaN 没了所以以为修好了，输出实际是噪声
-  - **v_percentile bug**: `_use_triton_inplace = (... and v_percentile >= 100.0)` 守卫让所有 RA calib (99.9) 走 fallback。KIVI 默认 100.0 走 fast path 所以快 30%
-- Validation:
-  - 本地: `py_compile src/kernels/adapters/bitdecoding_adapter.py` OK
-  - 远端 Session 1 实测 (independent): triton_ra 1.5B 55.91→38.44 ms (-31.3%), 7B 56.16→38.87 ms (-30.8%)
-  - 远端 Session 2 实测 (independent): BD adapter Layout A cos=0.9902, max_diff=0.0144 (vs FP16)
-  - **新发现**: triton_ra 现在是除 fp16 外最快的 INT4 backend，比 BitDecoding 快 22.6 ms (37%)
-- Phase 1/2 数据状态: Phase 2 已 kill (PID 82475-87732)，因 BD adapter 混合污染 + v_percentile bug 影响，需全部重跑
-- Next:
-  - push origin
-  - 同步远端代码（git pull / rsync）
-  - 独占 GPU 验证 main 上 triton_ra TPOT 与 Session 1 报告一致
-  - 重跑 Phase 1 受影响 backend (triton_ra/bd/fi/torchref × 1.5B/7B = 8 个测试)
-  - 重跑 Phase 2 全套 (39 个 BD quality 测试)
-  - 跑 Phase 3-5 + Phase 1 8B/14B（用 local modelscope path）
-- Risks / follow-ups: 缺 perf regression test（53/53 unit tests 验证正确性，但没有任何 test 验证"优化路径真的被启用了"）

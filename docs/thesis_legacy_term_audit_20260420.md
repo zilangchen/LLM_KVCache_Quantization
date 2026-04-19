@@ -95,7 +95,7 @@
 
 按 `thesis_story` §14.5 + thesis-rewrite 计划：
 
-1. **Phase 1**：Ch1 §1.3 + Ch6 §6.1（contribution 段）→ 处理**类别 B**
+1. **Phase 1（调整后）**：Ch1 §1.1/§1.2/§1.4 研究背景与动机，**不含** §1.3 contribution 段。Ch1 §1.3 + Ch5 整章 + Abstract 放 Phase 8 最后写（contribution 和 conclusion 互为镜像，需其它章节稳定后一起写）
 2. **Phase 2**：Ch3 全章 → 处理**类别 A + E**（inv_tau 最集中，最高风险）
 3. **Phase 3**：Ch4 §4.1-§4.2 → 处理 Ch4 头部 contribution labels（类别 B）
 4. **Phase 4**：Ch4 §4.3 → 处理 Ch4 cross-model 部分，不涉及旧术语
@@ -124,7 +124,7 @@
 - [ ] ch2_related_work.tex（Phase 6）
 - [ ] ch3_method.tex（Phase 2）**[HIGHEST RISK]**
 - [ ] ch4_experiments.tex（Phase 3 + Phase 4 + Phase 5）**[HIGH RISK]**
-- [ ] ch5_conclusion.tex（Phase 6 / Ch6）
+- [ ] ch5_conclusion.tex（**Phase 8**；保留旧 5 章制的 §1 核心发现 / §2 局限 / §3 Future Work / §4 结语四节结构；每节内容对齐新故事）
 - [ ] appendix.tex（Phase 7）
 
 ---

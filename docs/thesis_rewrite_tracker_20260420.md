@@ -13,6 +13,16 @@
 
 ---
 
+## Codex Review（Phase-level 纪律）
+
+**每段改写完后必须调用 Codex Review**（CLAUDE.md §5.1 双重审查的"审查 1"）。
+
+**具体调用方式、命令对比、正确 prompt 模板、常见错误陷阱** → 见**全局规则 `~/.claude/CLAUDE.md` §4**（2026-04-20 修订，含 Bash companion script 路径、`review` vs `adversarial-review` 区别、Codex 工作原理）。
+
+**本 tracker 不 hardcode 调用方式**（规则在 `~/.claude/CLAUDE.md` §4 单一维护）。
+
+---
+
 ## Phase 0 — Pre-flight
 
 | # | 任务 | 状态 | 备注 |
@@ -28,13 +38,13 @@
 
 ---
 
-## Phase 1 — 叙事骨架（Ch1 §1.3 + Ch6 §6.1）
+## Phase 1 — 研究背景（Ch1 §1.1/§1.2/§1.4；§1.3 contribution 段与 Ch5 一起放 Phase 8）
 
 | # | 任务 | 状态 | 依赖 |
 |---|---|---|---|
 | 1.1 | Ch1 §1.3 重写 RQ1-3 + C1-3 段 | ⬜ | drafts §2.3 |
-| 1.2 | Ch6 §6.1 重写 Contribution Summary | ⬜ | drafts §7.2 |
-| 1.3 | Ch1 / Ch6 xelatex 编译通过 | ⬜ | 1.1, 1.2 |
+| 1.2 | [MOVED TO Phase 8] Ch5 §5.1/§5.4 重写 Contribution Summary | ⬜ | Phase 8 最后写（与 §1.3、Abstract 一起） |
+| 1.3 | Ch1 xelatex 编译通过 | ⬜ | 1.1 |
 | 1.4 | Phase 1 commit | ⬜ | 1.3 |
 
 ---

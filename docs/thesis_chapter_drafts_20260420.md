@@ -119,7 +119,7 @@
 
 ### 2.4 §1.4 Roadmap 草稿片段
 
-> 本文组织如下：Ch2 综述相关工作，明确本文与 KIVI 等直接 baseline 的定位；Ch3 形式化问题并描述 behavior-guided 框架在 calibration 与 allocation 两层的具体实例化；Ch4 在 5 模型 × 5 任务的 clean-provenance 实验上给出实证，包括 INT8 canonical 路径、INT4 vs KIVI 跨模型对比、allocator 的 regime 地图（图 ⑦ Pareto 主图）、以及 per-model case 分析；Ch5 讨论 heuristic 强基线的意义、regime map 的解读、以及方法的 open question 和 limitations；Ch6 总结贡献与未来方向（见图 ② 框架总览）。
+> 本文组织如下：Ch2 综述相关工作，明确本文与 KIVI 等直接 baseline 的定位；Ch3 形式化问题并描述 behavior-guided 框架在 calibration 与 allocation 两层的具体实例化；Ch4 在 5 模型 × 5 任务的 clean-provenance 实验上给出实证，包括 INT8 canonical 路径、INT4 vs KIVI 跨模型对比、allocator 的 regime 地图（图 ⑦ Pareto 主图）、以及 per-model case 分析；Ch5 以"核心发现与收束（讨论 heuristic 强基线、regime map 的解读、INT4 open question）、局限性、未来工作、结语"四节结构整合 discussion 与 conclusion，给出完整的论文收束（见图 ② 框架总览）。
 
 ### 2.5 引用图表
 
@@ -283,7 +283,7 @@
 
 ---
 
-## 6. Ch5 Discussion（~2500 字 / ~4 页）
+## 6. Ch5 Conclusion draft — Part 1：核心发现 / 局限 / Future Work（对应旧 ch5_conclusion.tex §1-§3）
 
 ### 6.1 结构
 
@@ -342,7 +342,7 @@
 
 ---
 
-## 7. Ch6 Conclusion（~800 字 / ~1.5 页）
+## 7. Ch5 Conclusion draft — Part 2：C1-C3 Summary + 结语（对应旧 ch5_conclusion.tex §4；同时是 Ch1 §1.3 contribution 段的 draft source）
 
 ### 7.1 结构
 
@@ -380,7 +380,7 @@
 
 ### A.1 改 thesis 的推荐顺序（依赖顺序）
 
-1. **先写 Ch1 §1.3 + Ch6 §6.1**（thesis_story §14.5 Step 1）：建立 RQ/C 框架
+1. **先写研究背景 + 方法 + 实验**（Ch1 §1.1/§1.2/§1.4 + Ch2 + Ch3 + Ch4）；**Ch1 §1.3 + Ch5 整章 + Abstract 放最后**（contribution 与 conclusion 互为镜像）
 2. **再写 Ch3 + Ch4 主体**（Step 2-3）：方法 + 实验
 3. **然后写 Ch2 + Ch5**（Step 4）：related work + discussion
 4. **最后写 Abstract**（Step 5）：等所有章节定稿后
@@ -409,8 +409,8 @@
 
 | 元素 | 值 | 出现章节 |
 |---|---|---|
-| int8↔fp16 Δ | mean Δ=+0.02 | Ch4 §4.1 / Abstract / Ch6 §6.1 |
-| Mistral cov80 | 14.76 cross core+extend | Ch4 §4.5.1 / Ch6 §6.1 |
+| int8↔fp16 Δ | mean Δ=+0.02 | Ch4 §4.1 / Abstract / Ch5 §5.4 |
+| Mistral cov80 | 14.76 cross core+extend | Ch4 §4.5.1 / Ch5 §5.4 |
 | Pin | `ddada19` | Ch4 §4.1 / Abstract（"clean-provenance"） |
 | Model 数 | 5（不含 7B）或 6（含 7B supporting） | Abstract / Ch4 §4.1 |
 | Task 数 | 5 LongBench | Abstract / Ch4 §4.1 |
@@ -437,7 +437,7 @@
 
 **2026-04-20 初版**：
 - 本文档初建
-- 7 章草稿（Abstract / Ch1 / Ch2 / Ch3 / Ch4 / Ch5 / Ch6）
+- 7 个 draft section（Abstract / Ch1 / Ch2 / Ch3 / Ch4 / Ch5 Part 1 / Ch5 Part 2）—— **对应旧 5 章制（Ch1-Ch5），§6/§7 是 Ch5 的两部分 draft source，非独立论文章节**
 - 每章 outline + 1-2 个关键段落 draft + 引用图表 + 写作注意点
 - 附 A 使用指引 + 附 B 数字术语清单 + 附 C 修订记录
 - 配套 `thesis_story_20260420.md`（叙事主线）+ `thesis_story_20260420.md` §16（图表 spec）+ `data_asset_inventory_20260420.md`（数据资产）

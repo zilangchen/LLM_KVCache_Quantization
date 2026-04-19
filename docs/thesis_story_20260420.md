@@ -355,7 +355,7 @@ Pareto 层的发现（7B uniform_int4 崩坏 / auto-k top tier 分布）提示 a
 
 ### 9.3 Contribution 叙事纪律
 
-- **C1 是论文的 conceptual spine**，应在 Ch1 intro + Ch6 conclusion 显眼讲述
+- **C1 是论文的 conceptual spine**，应在 Ch1 intro + Ch5 conclusion（§5.1 核心发现 + §5.4 结语）显眼讲述
 - **C2 是论文的 engineering substrate**，用于 Ch3 method + Ch4 experiment section
 - **C3 是论文的 research honesty**，用于 Ch5 discussion，不压低 heuristic、不宣称 universal
 - 【条件激活】若 §13 Hook 达 L1：C2 增加一条 "systematic superiority to KIVI under matched budget"
@@ -386,10 +386,10 @@ Pareto 层的发现（7B uniform_int4 崩坏 / auto-k top tier 分布）提示 a
 | §5.4 14B | Ch4 §4.5 + Ch5 §5.2 | top-tier but no stable winner（表 6） |
 | §5.5 7B aggregation-split | Ch4 §4.6 supporting case + appendix | 引用 phase2_c2b_local（表 7） |
 | §6.1 heuristic 强基线 | Ch4 主表脚注 + Ch5 §5.1 discussion | 正面承认段 |
-| §6.2-6.4 Future work | Ch5 §5.3 + Ch6 §6.2 | 3 条未来方向 |
-| §7 正向收束 | Ch1 §1.3 contribution 段（提前版）+ Ch6 §6.1 conclusion | 收束段 |
+| §6.2-6.4 Future work | Ch5 §5.3 未来工作展望 | 3 条未来方向 |
+| §7 正向收束 | Ch1 §1.3 contribution 段 + Ch5 §5.4 结语（Phase 8 一起写） | 收束段 |
 | §8 写作纪律 | **不进论文**，仅 writer 内部纪律 | 检查用 |
-| §9 RQ + Contribution | Ch1 §1.3 + Ch6 | intro 明述 RQ/C 结构 |
+| §9 RQ + Contribution | Ch1 §1.3（Phase 8） + Ch5 §5.1（Phase 8） | intro 明述 RQ/C + Ch5 核心发现 summary |
 | §12 Related Work 定位 | Ch2 Related Work | 写作蓝本 |
 | §13 Hook 说明 | **不进论文**，仅 writer 内部控制 | 决定 §2.5 / §3.5 是否激活 |
 | §14 旧论文处理 | **不进论文**，仅改写纪律 | 保留 / 改写 / 删除决策表 |
@@ -571,7 +571,7 @@ Pareto 层的发现（7B uniform_int4 崩坏 / auto-k top tier 分布）提示 a
 | Ch3 Method | INT8 / INT4 / Allocator 方法 | **保留方法细节**（INT8 kernel / RoleAlign / MixedKV），调整 §3.1 motivation 叙事对齐故事 §1 |
 | Ch4 Experiments | 多阶段实验 + Finding 1-4 | **重写 §4.3 / §4.5**（改用 clean_rerun 数据 + 新 regime 地图叙事） |
 | Ch5 Discussion | Finding 4（inv_tau × GQA） | **降级**为 discussion 补充；主讨论改为 regime 地图 + heuristic 正面承认 |
-| Ch6 Conclusion | 旧版 contribution 收束 | **重写**（按新 C1-3 + future work 三条） |
+| **[保留 5 章制，Ch5 整合 Conclusion+Discussion+Future]** Ch5 Conclusion（四节：§1 核心发现 / §2 局限 / §3 Future Work / §4 结语） | 旧版 4 Finding + 5-Contribution + inv_tau × GQA 叙事 | **整章重写 Phase 8**（§1 改新 C1-3 summary + heuristic/regime/INT4 open q 等 discussion 观点；§2 去 inv_tau；§3 改新故事 3 条；§4 改正向收束） |
 | Abstract（中/英） | 旧版 5-contribution | **最后重写**（新 C1-3 + 不再宣称 universal） |
 
 ### 14.3 必须重画的图
@@ -591,7 +591,7 @@ Pareto 层的发现（7B uniform_int4 崩坏 / auto-k top tier 分布）提示 a
 
 按依赖顺序推进，不跳级：
 
-1. **先改 §9 对应章节**（Ch1 §1.3 contribution 段 + Ch6 §6.1 conclusion）—— 确立 RQ/C 框架
+1. **先改研究背景 + 方法 + 实验**（Ch1 §1.1/§1.2/§1.4 + Ch2 + Ch3 + Ch4）；**Ch1 §1.3 + Ch5 整章 + Abstract 放 Phase 8 最后写**（contribution 与 conclusion 互为镜像，需其它章节稳定后一起写）
 2. **再改 §2-§3 对应章节**（Ch3 method + Ch4 §4.1-§4.3）—— 主线内容
 3. **再改 §5-§6 对应章节**（Ch4 §4.5 + Ch5）—— 模型角色 + discussion
 4. **最后改摘要**（abstract_{en,zh}.tex）—— 锁 final messaging
