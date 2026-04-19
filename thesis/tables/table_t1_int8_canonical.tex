@@ -1,0 +1,18 @@
+\begin{table}[!htbp]
+  \centering
+  \small
+  \begin{tabular}{lcccc}
+    \toprule
+    Task & FP16 & \textbf{INT8-ours} & INT4-RoleAlign & KIVI-style \\
+    \midrule
+    NarrativeQA (F1) & 7.07 & 7.16 \scriptsize{(+0.09)} & 6.99 \scriptsize{(-0.08)} & 6.93 \scriptsize{(-0.13)} \\
+    HotpotQA (F1) & 4.90 & 4.88 \scriptsize{(-0.02)} & 5.35 \scriptsize{(+0.45)} & 4.87 \scriptsize{(-0.03)} \\
+    GovReport (Rouge-L) & 9.21 & 9.20 \scriptsize{(-0.01)} & 9.04 \scriptsize{(-0.17)} & 9.23 \scriptsize{(+0.02)} \\
+    \midrule
+    \textbf{Mean} & \textbf{7.06} & \textbf{7.08 \scriptsize{(+0.02)}} & 7.12 \scriptsize{(+0.07)} & 7.01 \scriptsize{(-0.05)} \\
+    \bottomrule
+  \end{tabular}
+  \caption{INT8 Canonical Path 保真度（Qwen2.5-1.5B-Instruct, clean-provenance pin=\code{ddada19}）。每单元格为分数，括号内为相对 FP16 的 $\Delta$。\textbf{INT8-ours} 的 mean $\Delta$ 加粗展示——这是本章 §2.1 \textit{INT8 canonical path fidelity} 的核心硬证据。}
+  \label{tab:t1-int8-canonical}
+  \\[2pt]\footnotesize 数据来源：\code{results/clean\_rerun\_20260419T09/summary\_phase1.csv}。INT4-RoleAlign 与 KIVI-style 在此表仅为 format 参考值，完整跨模型对比见表~\ref{tab:t2-int4-kivi}。
+\end{table}

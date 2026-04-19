@@ -42,10 +42,14 @@
 
 | # | 任务 | 状态 | 依赖 |
 |---|---|---|---|
-| 1.1 | Ch1 §1.3 重写 RQ1-3 + C1-3 段 | ⬜ | drafts §2.3 |
-| 1.2 | [MOVED TO Phase 8] Ch5 §5.1/§5.4 重写 Contribution Summary | ⬜ | Phase 8 最后写（与 §1.3、Abstract 一起） |
-| 1.3 | Ch1 xelatex 编译通过 | ⬜ | 1.1 |
-| 1.4 | Phase 1 commit | ⬜ | 1.3 |
+| 1.1 | Ch1 §1.3 重写 RQ1-3 + C1-3 段 | ⏳ | 延到 Phase 8（与 Ch5/Abstract 一起写） |
+| 1.2 | [MOVED TO Phase 8] Ch5 §5.1/§5.4 重写 Contribution Summary | ⏳ | Phase 8 最后写 |
+| 1.3 | Ch1 §1.2 改写（error decomp + 假设 H + behavior framework） | ✅ | 2 轮 Codex adversarial-review pass |
+| 1.4 | Ch1 §1.3 国内外现状（融合核降 C2 instance） | ✅ | commit `5f8b526` |
+| 1.5 | Ch1 §1.4 RQ 段（3 问题 → RQ1-3） | ✅ | commit `5f8b526` |
+| 1.6 | Ch1 §1.4 Roadmap（对齐 6 模型 + 5 task） | ✅ | commit `5f8b526` |
+| 1.7 | Ch1 xelatex 编译通过 | ⬜ | 延到 Phase 9 统一编译 |
+| 1.8 | Phase 1 commit | ✅ | tag `thesis-m-plus-entry-point` |
 
 ---
 
@@ -53,12 +57,15 @@
 
 | # | 任务 | 状态 | 图表 |
 |---|---|---|---|
-| 2.1 | Ch3 §3.1 problem formulation + 画 **图 ①** Attention decomp（TikZ） | ⬜ | 图 ① |
-| 2.2 | Ch3 §3.2 calibration method + 画 **图 ③** Calibration pipeline（TikZ，去 inv_tau） | ⬜ | 图 ③ |
-| 2.3 | Ch3 §3.3 allocator 段 | ⬜ | 无图 |
-| 2.4 | Ch3 §3.4 AutoK 段 | ⬜ | 无图 |
-| 2.5 | 删除旧 inv_tau heatmap 引用 | ⬜ | audit §Ch3 |
-| 2.6 | Ch3 xelatex 通过 + Phase 2 commit | ⬜ | 2.1-2.5 |
+| 2.1 | Ch3 §3.1 problem formulation + 误差分解公式 `eq:ch3-error-decomp` | ✅ | 图 ① 延 Phase 9（TikZ） |
+| 2.2 | Ch3 §3.2 calibration method（保留现结构） | ✅ | 图 ③ 延 Phase 9（TikZ） |
+| 2.3 | Ch3 §3.3 Behavior-Guided Allocator 3 子节 | ✅ | 无图 |
+| 2.4 | Ch3 §3.4 AutoK 段 + cov80 公式 `eq:ch3-autok-cov` | ✅ | 无图 |
+| 2.5 | 删除旧 inv_tau subsection（sec:ch3-invtau + figure ch3_invtau_heatmap） | ✅ | — |
+| 2.6 | Triton 节 title 降级为 "INT8 Canonical Path 的系统落地" | ✅ | — |
+| 2.7 | §本章小结 重写（新 framework 两层叙事） | ✅ | — |
+| 2.8 | Ch3 xelatex 通过 | ⬜ | 延到 Phase 9 |
+| 2.9 | Phase 2 commit | ✅ | commit `5f8b526` |
 
 ---
 
@@ -66,13 +73,19 @@
 
 | # | 任务 | 状态 | 图表 |
 |---|---|---|---|
-| 3.1 | Ch4 §4.1 setup + 手工表 **S1**（模型 GQA 配置，6 模型） | ⬜ | S1 |
-| 3.2 | 写 `scripts/thesis/make_table_int8_canonical.py` + 生成 **T1** | ⬜ | T1 |
-| 3.3 | Ch4 §4.1 INT8 canonical 段 + 引用 T1 | ⬜ | T1 |
-| 3.4 | 写 `scripts/thesis/make_table_int4_kivi.py` + 生成 **T2** | ⬜ | T2 |
-| 3.5 | 手工表 **S3** RoleAlign vs KIVI 设计差异 | ⬜ | S3 |
-| 3.6 | Ch4 §4.2 INT4 vs KIVI 段 + 引用 T2/S3/图 ⑤ | ⬜ | 图 ⑤ 沿用 |
-| 3.7 | Ch4 §4.1-§4.2 xelatex 通过 + Phase 3 commit | ⬜ | 3.1-3.6 |
+| 3.1 | Ch4 preamble 重写（3-Contribution → RQ1-3 + C1-3） | ✅ | — |
+| 3.2 | Ch4 §4.1 模型表扩到 6 模型（加 Qwen2.5-3B）+ clean-provenance pin 说明 | ✅ | tab:ch4-models |
+| 3.3 | Ch4 §4.1 基线表清理 inv_tau 温度校正列 | ✅ | tab:kv-modes |
+| 3.4 | 写 `scripts/thesis/make_table_int8_canonical.py` + 生成 **T1** | ✅ | T1（int8_ours mean Δ=+0.02 加粗） |
+| 3.5 | Ch4 §4.1.5 INT8 Canonical Path 保真度段 + 引用 T1 | ✅ | T1 |
+| 3.6 | 写 `scripts/thesis/make_table_int4_kivi.py` + 生成 **T2** | ✅ | T2（4 模型 PPL+Needle+Δ） |
+| 3.7 | 手工表 **S3** RoleAlign vs KIVI 设计差异 | ✅ | S3（5 维度对比） |
+| 3.8 | Ch4 §4.2 大砍 + 重写（1470 行 → 450 行，-55%） | ✅ | — |
+| 3.9 | Ch4 §4.2.1 K/V Role Mechanism（保留图 ⑤ 数据+改 framing） | ✅ | 图 ⑤ 沿用 |
+| 3.10 | Ch4 §4.2.2 INT4 跨模型对比（引用 T2+S3） | ✅ | T2, S3 |
+| 3.11 | Ch4 §4.2.3 三层诚实分析（L1/L2/L3）+ §2.5 Hook 占位注释 | ✅ | — |
+| 3.12 | Ch4 §4.1-§4.2 xelatex 通过 | ⬜ | 延到 Phase 9 |
+| 3.13 | Phase 3 commit | 🟡 | 本 commit |
 
 ---
 
@@ -183,4 +196,9 @@
 
 ---
 
-## 最后一次更新：2026-04-20 Phase 0 完成时
+## 最后一次更新：2026-04-20 04:31 — Phase 1 + Phase 2 + Phase 3 完成
+
+- Phase 1 ✅ Ch1 §1.2 / §1.3 / §1.4（Codex adversarial-review 2 轮 pass）
+- Phase 2 ✅ Ch3 全章重写（+140 行）
+- Phase 3 ✅ Ch4 §4.1-§4.2 重写（1977 → 884 行，-55%）+ T1 / T2 / S3
+- 下一步：Phase 4 = Ch4 §4.3 cross-model（T3 + 图④ + 图⑦ + 图⑧）

@@ -1,0 +1,43 @@
+\begin{table}[!htbp]
+  \centering
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{threeparttable}
+  \begin{tabular}{l l l}
+    \toprule
+    \textbf{维度} & \textbf{KIVI-style}~\cite{liu2024kivi} & \textbf{INT4-RoleAlign}（本文） \\
+    \midrule
+    \textbf{Cache format} &
+      per-channel K + per-token V &
+      \textbf{同上}（完全 format-compatible） \\
+    \addlinespace[2pt]
+    \textbf{Calibration} &
+      runtime absmax/min &
+      \textbf{离线 KL 搜索} $(p_K, p_V)$，behavior 目标 \\
+    \addlinespace[2pt]
+    \textbf{Scale 固化} &
+      每次 prefill/decode 重算 &
+      \textbf{校准产物 JSON}，推理时只读 \\
+    \addlinespace[2pt]
+    \textbf{Allocator} &
+      无（所有层统一 bit 分配） &
+      可选扩展至 behavior-guided allocator（§\ref{sec:exp-cross-model}） \\
+    \addlinespace[2pt]
+    \textbf{工程接口} &
+      黑盒 format，无可审计校准产物 &
+      \textbf{可固化 / 可审计}，适合合规部署 \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \footnotesize
+    \item 同 format 不同 calibration：两者的 KV cache 布局完全一致，解码路径相同
+    （torch\_ref，无 fused kernel），\textbf{唯一差异}在于量化 scale 的来源。
+    \item 定位：本文主张 INT4-RoleAlign 是 behavior-guided framework 在 KIVI 非对称 format 上的
+    落地实例（§2.3 三层诚实分析的 L1 事实）；两者之间是 \emph{calibration philosophy}
+    的对比，而非 \emph{format / 架构} 的竞争。
+  \end{tablenotes}
+  \end{threeparttable}
+  \caption{INT4-RoleAlign 与 KIVI-style 设计差异。共享量化格式、差异集中在 calibration；
+  Allocator 扩展与工程接口是本文在 KIVI 基础上新增的两个维度。}
+  \label{tab:s3-rolealign-vs-kivi}
+\end{table}

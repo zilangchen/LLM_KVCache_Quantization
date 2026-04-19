@@ -4168,3 +4168,73 @@
   - BD adapter 无 NaN, cosine_sim > 0.98 vs FP16 reference
   - TPOT (1.5B, seq=4096, gen=32): FP16 24.45ms, Triton 51.52ms, BD 61.92ms, FlashInfer 59.68ms
 - Next: 启动 run_all.sh 执行 Phase 1-5
+
+### 2026-04-11 12:15 | BD adapter 回滚 Layout A + 合入 Session 1 v_percentile 修复
+- Goal: 修复 commit 600e87d 错误的 BD adapter layout，同时合入另外两个 session 的 v_percentile 守卫修复
+- Background: 跨 session 协作发现两个独立 bug 同时影响 Phase 1：(1) BD adapter Layout B 输出 cosine=0.035（噪声），(2) `kivi_style_cache.py` 守卫 `v_percentile >= 100.0` 让 RA calib (99.9) 走 fallback 慢路径
+- Merge from origin/main (3 commits, no conflict):
+  - `5c5ec27` Session 1 第一次修复：Triton V kernel `_with_bounds` (PyTorch quantile + Triton runs rest)
+  - `ecc6f5f` Session 1 第二次修复：in-kernel percentile via top-2/bottom-2 → triton_ra **-31% TPOT**
+  - `93bc1ee` handoff_report_2026-04-11.md (290 行，含完整修复后 Phase 1 数据)
+- This commit: src/kernels/adapters/bitdecoding_adapter.py (用 worktree-feat+flashinfer-adapter 分支 5a9e9bd 版本覆盖)
+- Root cause:
+  - **BD bug**: commit 600e87d 同时改了 padding（对，避免 zero-padding NaN）和 layout uint16→int32（错，参考 test_bitdecoding.py 但那个 test 从未做 cosine 对比）。NaN 没了所以以为修好了，输出实际是噪声
+  - **v_percentile bug**: `_use_triton_inplace = (... and v_percentile >= 100.0)` 守卫让所有 RA calib (99.9) 走 fallback。KIVI 默认 100.0 走 fast path 所以快 30%
+- Validation:
+  - 本地: `py_compile src/kernels/adapters/bitdecoding_adapter.py` OK
+  - 远端 Session 1 实测 (independent): triton_ra 1.5B 55.91→38.44 ms (-31.3%), 7B 56.16→38.87 ms (-30.8%)
+  - 远端 Session 2 实测 (independent): BD adapter Layout A cos=0.9902, max_diff=0.0144 (vs FP16)
+  - **新发现**: triton_ra 现在是除 fp16 外最快的 INT4 backend，比 BitDecoding 快 22.6 ms (37%)
+- Phase 1/2 数据状态: Phase 2 已 kill (PID 82475-87732)，因 BD adapter 混合污染 + v_percentile bug 影响，需全部重跑
+- Next:
+  - push origin
+  - 同步远端代码（git pull / rsync）
+  - 独占 GPU 验证 main 上 triton_ra TPOT 与 Session 1 报告一致
+  - 重跑 Phase 1 受影响 backend (triton_ra/bd/fi/torchref × 1.5B/7B = 8 个测试)
+  - 重跑 Phase 2 全套 (39 个 BD quality 测试)
+  - 跑 Phase 3-5 + Phase 1 8B/14B（用 local modelscope path）
+- Risks / follow-ups: 缺 perf regression test（53/53 unit tests 验证正确性，但没有任何 test 验证"优化路径真的被启用了"）
+
+### 2026-04-12 01:09 | 删除 BD adapter + 写 session findings 文档
+- Goal: 根据本 session 的 BD 库 GQA-broken 发现，删除 BD adapter 代码路径并降级为 external TPOT reference；同时把所有 session 见解归档到一个文档
+- Changed files:
+  - 删除: `src/kernels/adapters/bitdecoding_adapter.py` (整个 adapter 文件)
+  - 修改: `src/engine/patch_model.py` (删除 L894-907 bitdecoding dispatch 分支)
+  - 修改: `src/engine/generate_loop.py` (L460-462 _valid_impls 删除 "bitdecoding", 删除 L499-505 validation block, L692 _use_fused 删除 "bitdecoding", L1069 fallback warning 删除 "bitdecoding")
+  - 新建: `docs/session_findings_2026-04-12.md` (session 所有见解归档, ~500 行)
+- 保留:
+  - `scripts/tpot_bitdecoding_e2e.py` — BD standalone TPOT reference
+  - `scripts/test_bitdecoding.py` — 调试工具,证明 BD 库 broken
+  - `results/emnlp_p012_batch/runs/tpot_bd_standalone_1p5b/` — BD TPOT 数据 24.22 ms
+- 根因: bit_decode v1.0.0.post1 的 CUTLASS kernel 在 GQA 配置下输出错误。验证证据: 库自带的 `scripts/test_bitdecoding.py` 跑出 max_diff=1.23 vs FP16 reference (阈值 0.1, **FAIL**)。此 bug 在 BD 内部,wrapper 无法修复
+- 实验数据证据:
+  - BD (Stage 3 跑完,adapter 已删): Needle 0%, RULER 1.1%, LongBench F1=0.0 → 数据不可用
+  - FI (Stage 4 跑完): Needle 100%, RULER 60%, LongBench F1=0.036 → 可用
+- 论文叙事调整: BD 从"可替代 backend"降级为"external TPOT reference system"。新 claim: "Triton + in-kernel percentile 是 **only production-viable** INT4 backend for GQA + calibrated quantization"
+- Validation: `python3 -m py_compile` 两个修改的文件 PASS, `grep bitdecoding src/` 只剩 comment
+- Pipeline 状态: Stage 5 14B full 80% (LongBench 3/5 + K/V ablation 0/12 剩余), 1.5B fp16 RULER baseline running (PID 121556), Stage 6/7 pending
+- Next: commit 代码变更(需双重审查门禁), 等 Stage 5/6/7 + baseline 全部完成后,基于 findings 文档改论文
+
+### 2026-04-12 13:53 | Session 完结: 250+ 数据点全部跑完 + findings 文档最终版
+- Goal: 更新 session findings 文档加入 Stage 7 rerun + 14B fp16 RULER baseline + Phase Boundary 发现; commit 所有产出并 push
+- Key results:
+  - **Stage 7 Rerun (v2)**: 48 测试 (gen=64, runs=10, warmup=5), 修复 v1 warmup 不足 + 32K OOM → **14B 32K triton_ra 比 torchref 快 77 ms (40%)**
+  - **Phase Boundary Finding**: triton_ra 优势与 Hkv 正相关: Hkv=2 始终输, Hkv=4 crossover@32K, **Hkv=8 crossover@4K-8K 且 32K 快 40%**
+  - **14B fp16 RULER baseline**: 9 测试完成, 可与 14B RA 对照
+  - **1.5B fp16 RULER baseline**: FI INT4 vs FP16 差距 <1%, 证实 VT/CWE 低是模型能力上限
+  - **14B K/V ablation**: K16V4 (PPL 4.71) vs K4V16 (4.81) → K 量化恢复 93% 退化, V 只恢复 64%
+- Changed files: docs/session_findings_2026-04-12.md (更新到 16 Parts ~600 行), iteration.md
+- Status: ALL STAGES COMPLETE, GPU 空闲, 待论文修改
+
+### 2026-04-12 14:34 | 跨 Session 交接: Option D 叙事升级 + handoff 文档
+- Goal: 为新 session 准备完整交接报告,明确 Option D (GQA 中心叙事) 方向和执行计划
+- Changed files: docs/handoff_to_thesis_session.md (新建), docs/option_d_plan.md (新建), C1/Stage7/baseline 补跑脚本
+- 决策: 用户选定 Option D "GQA 中心叙事",5C 重构 (C1 规模依赖, C2 K主导+GQA, C3 RoleAlign, C4 Phase Boundary, C5 大模型验证+BD)
+- 可行性验证: 论文已有 40+ 处 GQA 讨论, D 不是"改装"而是"收拢已有线索到主线"
+- Next: 新 session 按 option_d_plan.md Day 1-5.5 执行论文重构
+
+### 2026-04-12 14:50 | D' 修订 (Codex review) + 8B 长序列补跑
+- Goal: 接受 Codex 的 8 条修正建议，更新 option_d_plan.md 为 D' 版本；启动 8B 长序列 TPOT 补跑验证 Hkv 因果分离
+- Changed files: docs/option_d_plan.md (D' 修订标注), docs/handoff_to_thesis_session.md (D' 说明 + 8B 补跑状态), scripts/batch_p012/stage_8b_longseq.sh (新建)
+- 关键修正: (1) behavior-aligned 保住主线 (2) Hkv≠模型规模 (3) Ch3 不泄漏数字 (4) C4 拆分 (5) BD 降级 (6) 14B 口径精确 (7) Ch2 重组 (8) 7B KL=MSE provenance
+- 8B 长序列补跑: PID=3464, 16 测试, ~1h, 验证 8B(Hkv=8) vs 14B(Hkv=8) crossover 一致性

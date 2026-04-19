@@ -36,6 +36,65 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 04:31 | Thesis Rewrite Phase 3 — Ch4 §4.1+§4.2 重写（1977→884 行 -55%）+ T1/T2/S3
+- Goal: 按 M+ 方案（story §10/§11/§16）把 Ch4 §4.1 Setup 扩到 6 模型 + clean-provenance，并把旧 §4.2 (KL-MSE / 综合性能) + §4.3 (Key 主导 / K/V 敏感性) + §4.4 (RoleAlign / invtau / 证据边界 / INT4 三方对比) 三段 ~1470 行重组为新 §4.2 "INT4 推进：RoleAlign vs KIVI 对比" 约 450 行，给 Phase 4 cross-model 主章让位
+- Scope:
+  - **Phase 3a** 完成：
+    - Ch4 preamble 重写（旧 3-Contribution → 新 RQ1-3 + C1-3 叙事，对应 story §9.1/§9.2）
+    - tab:ch4-models 扩到 6 模型（新增 Qwen2.5-3B-Instruct 行 + 更新各模型"实验角色"列）
+    - 首段加 clean-provenance pin=`ddada19` 段，md5-locked manifest 声明
+    - tab:kv-modes 删除"温度校正"列 + 术语更新（INT8-Canonical → INT8-ours）+ 挪 `$\tau^{-1}$` 到 appendix diagnostic note
+  - **Phase 3b+3d+3e** 数据产出：
+    - 新写 `scripts/thesis/make_table_int8_canonical.py` + 生成 `thesis/tables/table_t1_int8_canonical.{tex,md}`（int8_ours mean $\Delta$=+0.02 加粗展示，核心 claim）
+    - 新写 `scripts/thesis/make_table_int4_kivi.py` + 生成 `thesis/tables/table_t2_int4_kivi.{tex,md}`（4 模型 × PPL+Needle+Δ，backport from legacy emnlp_rolealign_v2 tab:rolealign-results）
+    - 手工编写 `thesis/tables/table_s3_rolealign_vs_kivi.tex`（5 维度 × 3 列：KIVI-style / RoleAlign / 差异描述）
+  - **Phase 3c** 插段：Ch4 §4.1 末尾新增 `\subsection{INT8 Canonical Path 保真度}` 引用 T1，作为 RQ1/C2 第一层闭环证据
+  - **Phase 3f** 大砍 + 重写（4 个 block 操作）：
+    - Block 1 删旧 KL-MSE + 综合性能对比 + 困惑度 + 效率 + 敏感性 + 跨模型泛化 + INT8-KIVI + Key 主导 intro + INT4 结果 + INT4 局限 (~22KB)，替换为新 §4.2 opening（framework 推进 + 对称 INT4 阶跃崩塌动机）
+    - Block 2 保留 K/V 精度敏感性段（含 3 表 + 图⑤），只改 framing（section 标题 → "K/V Role Mechanism：Key 主导退化的 empirical bridge"）+ 桥接到 `eq:ch3-error-decomp`
+    - Block 3 删除 MixedKV 段（-2KB，挪 appendix）
+    - Block 4 删旧 §4.4 整段（RoleAlign 原始设计+实验+invtau×GQA+证据边界+INT4 三方对比+能力边界 ~18KB），替换为新 §4.2.2 INT4 跨模型（T2+S3）+ §4.2.3 三层诚实分析（L1 事实 / L2 suggests / L3 open question）+ §2.5 Hook LaTeX 占位注释
+  - 所有图表数据（tab:kv-ablation-ppl/ruler/longbench/14b + fig:kv-ablation-summary-ruler）完整保留
+  - 保留旧 `sec:exp-main` / `sec:exp-rolealign` / `sec:exp-kv-sensitivity` label 作 backward-compat（防 appendix 等外部引用断裂）
+- Changed files:
+  - thesis/chapters/ch4_experiments.tex（1977 → 884 行）
+  - scripts/thesis/make_table_int8_canonical.py（新建，130 行）
+  - scripts/thesis/make_table_int4_kivi.py（新建，165 行）
+  - thesis/tables/table_t1_int8_canonical.tex（新建，18 行）
+  - thesis/tables/table_t1_int8_canonical.md（新建，调试版）
+  - thesis/tables/table_t2_int4_kivi.tex（新建，28 行）
+  - thesis/tables/table_t2_int4_kivi.md（新建）
+  - thesis/tables/table_s3_rolealign_vs_kivi.tex（手工，30 行）
+  - docs/thesis_rewrite_tracker_20260420.md（Phase 1/2/3 状态同步）
+- Commands:
+  - `python3 /tmp/thesis_phase3/step_a1_preamble_models.py` → preamble+tab:ch4-models 8/8 verification pass
+  - `python3 /tmp/thesis_phase3/step_a2_cleanup_kvmodes_table.py` → tab:kv-modes 清理 8/8 pass
+  - `python3 scripts/thesis/make_table_int8_canonical.py` → T1 生成，mean Δ=+0.02 确认
+  - `python3 /tmp/thesis_phase3/step_c1_insert_int8_canonical.py` → §4.1.5 插入 7/7 pass
+  - `python3 scripts/thesis/make_table_int4_kivi.py` → T2 生成，4 模型数据
+  - `python3 /tmp/thesis_phase3/step_f_rewrite_sec42.py` → §4.2 大砍+重写 23/23 pass (15 present + 8 absent)
+- Outputs:
+  - Ch4 新结构：§4.1 (L38) + §4.2 (L290) + §4.5 (L644) + §4.6 (L793)
+  - §4.2 新 3 subsection：K/V Role Mechanism / INT4 跨模型对比 / 三层诚实分析
+  - 3 个正文表：T1 (Canonical fidelity) / T2 (跨模型 RoleAlign vs KIVI) / S3 (设计差异)
+  - §4.2.3 末尾 LaTeX 注释占位 §2.5 Hook (L634-641)
+  - tracker Phase 1/2/3 状态全部 ✅（Phase 4 下一步）
+- Validation:
+  - Phase 3a: 16/16 grep 验证（preamble 6 keyword + tab:ch4-models + kv-modes cleanup）
+  - Phase 3b: T1 int8_ours mean Δ=+0.02（对齐 story §2.1 核心 claim）
+  - Phase 3c: 7/7 检查（§4.1.5 插入 + T1 引用）
+  - Phase 3d: T2 4 模型数据完整（1.5B/7B/8B PPL 对比 + 14B 外部效度）
+  - Phase 3e: S3 5 维度表生成
+  - Phase 3f: 23/23 检查（15 present + 8 absent，大砍内容完整清除）
+  - xelatex 编译：**未运行**，延到 Phase 9 统一 pass
+- Risks / follow-ups:
+  - 前向引用未解决：`sec:exp-cross-model`（Phase 4 建）、`sec:app-invtau-diagnostic`（Phase 7 建）、`sec:app-kv-ablation-full`（旧 appendix 需确认仍存在）—— xelatex 会 warning 但不阻塞编译
+  - **Phase 4** 下一步：Ch4 §4.3 cross-model（T3 主表 ⭐⭐ + 图④ sensitivity heatmap ⭐ + 图⑦ Pareto ⭐⭐ + 图⑧ regime map）
+  - Phase 5：§4.5 per-model cases（T4 Mistral / T5 3B / T6 14B + 图⑨）
+  - Ch4 §4.5 部署效率 + §4.6 综合讨论 保留未改（Phase 4/6 处理）
+  - MixedKV 段降 appendix 未真正搬（只删除），需 Phase 7 从 git history 捞出放 appendix
+- Commit: <pending 本批>
+
 ### 2026-04-20 03:39 | 禁用 ScheduleWakeup 定时轮询，强制 background watchdog 等待远端长任务
 - Goal: 把"远端 GPU 任务等待"的机制从"Claude 用 ScheduleWakeup 按猜测时间回来 poll"改成"本地后台 watchdog 在任务实际结束瞬间通知 Claude"，并把规则写进项目权威文件确保不反弹。
 - Scope:
@@ -905,9 +964,3 @@ Canonical agent workflow directory is `.agents/`.
 - 关键修订: 5C→4C (C5 合并 C3), RQ4 合并 RQ3, Phase Boundary 4K 不显著 (R2 t-test), Hkv 改为"结构性关联"非"因果", TTV 扩充 5 条, 工作量 5.5→7 天
 - Changed files: docs/option_d_plan.md (D''' final)
 - 8B 长序列已完成 (15:07), 所有实验数据本地备份完毕 (275 dirs)
-
-### 2026-04-12 14:50 | D' 修订 (Codex review) + 8B 长序列补跑
-- Goal: 接受 Codex 的 8 条修正建议，更新 option_d_plan.md 为 D' 版本；启动 8B 长序列 TPOT 补跑验证 Hkv 因果分离
-- Changed files: docs/option_d_plan.md (D' 修订标注), docs/handoff_to_thesis_session.md (D' 说明 + 8B 补跑状态), scripts/batch_p012/stage_8b_longseq.sh (新建)
-- 关键修正: (1) behavior-aligned 保住主线 (2) Hkv≠模型规模 (3) Ch3 不泄漏数字 (4) C4 拆分 (5) BD 降级 (6) 14B 口径精确 (7) Ch2 重组 (8) 7B KL=MSE provenance
-- 8B 长序列补跑: PID=3464, 16 测试, ~1h, 验证 8B(Hkv=8) vs 14B(Hkv=8) crossover 一致性
