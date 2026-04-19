@@ -36,6 +36,35 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 03:15 | 论文改写控制文档 M+ 方案定稿（8 图 + 9 表）+ 启动 Phase 0 pre-flight
+- Goal: 固化从旧版 thesis (thesis-v5-POSITIVE, 5-Contribution) 到新版 (behavior framework + regime map) 的改写计划；敲定最终图表预算并进入 pre-flight
+- Scope:
+  - 落盘三份论文改写控制文档（叙事主线 / 章节草稿 / 数据资产清单）
+  - 经过多轮承重测试收敛到 M+ 方案：**8 张正文图 + 9 张正文表 + 4 张附录 + 1 条件项**（相对原论文 45 项精简 53%，每项都通过"去掉后故事链某节断裂"的承重测试）
+  - 打 tag `thesis-m-plus-entry-point` 作为改 tex 前的回滚点
+- Changed files:
+  - `docs/thesis_story_20260420.md` (新建 ~1064 行；叙事主线 §1-§8 + 操作层 §9-§15 + 17 项图表完整 spec §16 + 附 A/B/C)
+  - `docs/thesis_chapter_drafts_20260420.md` (新建 ~700 行；Abstract + Ch1-Ch6 章节草稿 + 图表编号对齐 M+)
+  - `docs/data_asset_inventory_20260420.md` (新建 ~720 行；数据资产结构层 + 价值判读 + Codex 判断核实 + 五级金字塔)
+- Commands:
+  - `git tag thesis-m-plus-entry-point`
+  - `mkdir -p thesis/tables` (pre-flight 0b，实际目录已存在)
+- Outputs:
+  - M+ 方案图表清单：
+    - 正文 8 图：① Attention decomp + ② Framework + ③ Calibration pipeline + ④ Sensitivity heatmap + ⑤ K/V mechanism + ⑦ Pareto + ⑧ Regime map + ⑨ Scale trend
+    - 正文 9 表：T0 Related Work + S1 模型配置 + S3 RoleAlign vs KIVI + T1 INT8 canonical + T2 INT4 vs KIVI + T3 Cross-Model main + T4 Mistral AutoK + T5 3B early-layer + T6 14B top-tier
+    - 附录 4：P1 FP16 基线 + P2 实验环境 + A Prompt-adaptive 8B + B Off-protocol 1.5B/7B
+    - 条件：§13 Hook（BLOCKED，不进正文）
+  - 废弃：ch3_invtau_heatmap / 4 张 efficiency TPOT / INT4 三方对比 / MixedKV 跨模型 / inv_tau 温度校正 / S2 S3 kv_mode 配置等
+- Validation:
+  - 3 份控制文档互相加指针 + 只 append 不 rewrite 的维护规则
+  - 每项图表都标注对应 story §X + thesis 章节 + 数据 Level + 生成脚本
+- Risks / follow-ups:
+  - Pre-flight 还需完成 0c-0h（calibration JSON 验证 / references.bib 核对 / 旧术语 audit / rewrite tracker / `scripts/thesis/_common.py` 模板 / xelatex 基线验证）
+  - 正式 Ch1-Ch6 改写按 Phase 1-7 顺序进行（预估 ~20 小时 wall-clock）
+  - Allocator vs KIVI Hook（§13）暂保持 BLOCKED，不写入正文 §2.5/§3.5；若未来激活按 §13.2 四档规则插入
+- Commit: <pending>
+
 ### 2026-04-20 00:54 | Formal system-vs-KIVI package Phase 0 preflight + runner scaffolding
 - Goal: 为 `Allocator-enabled RoleAlign vs KIVI-style` 正式 compare package 落地 Phase 0 工程骨架，机器化 G0/G1 前置检查，并用真实 preflight 判定当前是否可进入 smoke。
 - Scope:
@@ -804,75 +833,3 @@ Canonical agent workflow directory is `.agents/`.
   - 重跑 Phase 2 全套 (39 个 BD quality 测试)
   - 跑 Phase 3-5 + Phase 1 8B/14B（用 local modelscope path）
 - Risks / follow-ups: 缺 perf regression test（53/53 unit tests 验证正确性，但没有任何 test 验证"优化路径真的被启用了"）
-
-### 2026-04-11 09:47 | BitDecoding adapter 修复 + P0+P1+P2 批次脚本
-- Goal: 修复 BD adapter 的 NaN bug，准备完整实验批次
-- Changed files: src/kernels/adapters/bitdecoding_adapter.py (重写，匹配 bit_decode 1.0.0.post1 API), scripts/batch_p012/run_all.sh (新建，5 Phase 单卡串行), scripts/debug_bd_adapter.py (调试辅助)
-- Root cause: 原 adapter 使用错误的 tensor 形状（uint16 pack + 4D float32 params），与 bit_decode 1.0.0.post1 的 [B,S,H,pack_dim] int32 + [B,S,H,2] fp16 API 不匹配，导致首次调用即输出 50% NaN
-- Fix: 严格按 scripts/test_bitdecoding.py 的工作布局重写；padding 用最后一个真实 token 复制而非零（避免 per-token scale=0 → NaN）
-- Validation (remote, dry-run):
-  - BD adapter 无 NaN, cosine_sim > 0.98 vs FP16 reference
-  - TPOT (1.5B, seq=4096, gen=32): FP16 24.45ms, Triton 51.52ms, BD 61.92ms, FlashInfer 59.68ms
-- Next: 启动 run_all.sh 执行 Phase 1-5
-
-### 2026-04-20 01:41 | same-format allocator backend 打通 + G0 完整通过
-- Goal: 按 `Allocator vs KIVI` B/B/B ExecPlan 落地独立 allocator kv_mode、补齐缺失 RoleAlign calib 资产，并把 formal `system_vs_kivi` package 从 `G0 BLOCKED` 推到完整 `G0 PASS`
-- Changed files:
-  - `src/cache/role_aware_allocator_cache.py` (新建，same-format allocator cache，支持 per-layer mixed-bit / asymmetric pairs)
-  - `src/cache/__init__.py` (导出 `RoleAwareAllocatorKVCache`)
-  - `src/engine/generate_loop.py` (新增 `kv_mode=int4_ours_asym_alloc` 路由，强制 `torch_ref` + `policy_json`)
-  - `scripts/eval_ppl.py` (新增 `int4_ours_asym_alloc` 构造路径)
-  - `scripts/run_system_vs_kivi.py` (allocator systems 改映射到 `int4_ours_asym_alloc`)
-  - `scripts/system_vs_kivi_common.py` (allocator systems 资产校验加入 rolealign calib + policy JSON)
-  - `tests/test_role_aware_allocator_cache.py` (新建)
-  - `tests/test_eval_ppl_int4_ours_asym_alloc.py` (新建)
-  - `tests/test_run_system_vs_kivi.py` (更新 allocator runtime family 预期)
-  - `tests/test_eval_ppl_int4_ours_asym.py` (修补 mocked `datasets.__spec__`)
-  - `docs/system_vs_kivi_preflight.md` (从 `BLOCKED` 更新为 `G0 PASS` preflight)
-- Commands:
-  - `pytest -q tests/test_role_aware_allocator_cache.py tests/test_run_system_vs_kivi.py tests/test_eval_ppl_int4_ours_asym_alloc.py`
-  - `python3 -m compileall -q src/cache/role_aware_allocator_cache.py src/engine/generate_loop.py scripts/eval_ppl.py scripts/run_system_vs_kivi.py scripts/system_vs_kivi_common.py`
-  - `pytest -q tests/test_system_vs_kivi_common.py tests/test_role_aware_asym_cache.py tests/test_eval_ppl_int4_ours_asym.py`
-  - `python3 scripts/run_system_vs_kivi.py --phase smoke --models 1p5b --dry_run`
-  - `python3 scripts/run_system_vs_kivi.py --phase smoke --dry_run`
-  - `python3 scripts/run_system_vs_kivi.py --phase main --dry_run`
-  - `python3 scripts/run_system_vs_kivi.py --phase ablation --dry_run`
-  - remote clean-provenance calib:
-    - `python3 scripts/calibrate_behavior.py --model_id Qwen/Qwen2.5-3B-Instruct ... --calib_out artifacts/kv_calib_rolealign_3b_v3.json`
-    - `python3 scripts/calibrate_behavior.py --model_id mistralai/Mistral-7B-Instruct-v0.3 ... --calib_out artifacts/kv_calib_rolealign_mistral7b_v3.json`
-- Outputs:
-  - 新增独立 backend `int4_ours_asym_alloc`
-  - `3b` calib 生成成功，remote/local MD5=`3cfb416a8fe1054fc81a453dd1f00e1a`
-  - `8b` calib 从远端已有资产恢复，remote/local MD5=`0a8e2a298c4160ea35083309cc707faa`
-  - `mistral7b` calib 生成成功，remote/local MD5=`19a113081a70d9e26d9d002608f9dfaf`
-  - `system_vs_kivi` dry-run 全部通过：
-    - smoke: `42` jobs
-    - main: `150` jobs
-    - ablation: `120` jobs
-- Validation:
-  - targeted new tests: `13 passed`
-  - regression checks: `25 passed`
-  - `smoke/main/ablation --dry_run` 均不再报 `format_mismatch` 或缺失 calib 资产
-  - `docs/system_vs_kivi_preflight.md` 现已明确记录 `G0 PASS`
-- Risks / follow-ups:
-  - `int4_ours_asym_alloc` 当前仅支持 `decode_attn_impl=torch_ref`，后续若要延伸到 fused kernel 需单独立项
-  - backend enablement 只完成了 preflight / dry-run 门禁，尚未启动 official smoke/main/ablation
-  - 远端 clean workspace `/root/autodl-tmp/LLM_KVCache_Quantization_clean` 含少量 untracked helper 文件，后续 clean-provenance 正式运行前需再次核对
-- Commit: <none>
-
-### 2026-04-20 01:50 | system_vs_kivi runner preflight 补 fail-fast
-- Goal: 修复 official smoke 首次远端启动时暴露的 execution-chain 漏检；在 `longbench_source=jsonl` 下，runner 必须在 phase preflight 就拒绝缺失 dataset path，而不是跑到首个 LongBench job 才失败
-- Changed files:
-  - `scripts/run_system_vs_kivi.py` (新增 `validate_longbench_dataset_config()`，缺失/不存在路径时在 preflight 直接返回 code=2)
-  - `tests/test_run_system_vs_kivi.py` (补 jsonl path 缺失/存在的单测)
-- Commands:
-  - `pytest -q tests/test_run_system_vs_kivi.py`
-- Outputs:
-  - 新增 LongBench dataset preflight 校验
-  - 本地定向测试 `7 passed`
-- Validation:
-  - 现在 `run_system_vs_kivi.py` 在 `jsonl` 模式下会 fail-fast，而不是把错误延后到第一个 `eval_longbench.py`
-- Risks / follow-ups:
-  - 远端 smoke 需要使用显式 `--longbench_dataset_path` 或环境变量重启
-  - 旧的 `4bb1355` remote clean worktree 只应视为失败尝试，不作正式 smoke 证据
-- Commit: <pending>

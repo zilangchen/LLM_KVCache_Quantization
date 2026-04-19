@@ -31,7 +31,12 @@ from src.utils.repro import (
     set_seed,
     write_config_snapshot,
 )
-from scripts.config_utils import load_config, normalize_kv_params, resolve_run_config
+from scripts.config_utils import (
+    load_config,
+    normalize_allocator_cli_args,
+    normalize_kv_params,
+    resolve_run_config,
+)
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 EXIT_OOM = 73
@@ -99,6 +104,7 @@ def main():
             "int4_mixed_kv",
             "int4_ours_asym",
             "int4_ours_asym_ba",
+            "int4_ours_asym_alloc",
         ],
     )
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
@@ -243,6 +249,7 @@ def main():
                 setattr(args, key, value)
 
     normalize_kv_params(args)
+    normalize_allocator_cli_args(args)
     set_seed(seed=args.seed, deterministic=True)
     # PRF-033: Resolve quant_bits for ALL kv_modes (not just kivi_style)
     # so the value passed to generate_from_ids and recorded in CSV is consistent.

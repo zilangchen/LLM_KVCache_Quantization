@@ -4067,3 +4067,104 @@
 - Results: 轮次1 格式不兼容 (per-channel vs per-token)，轮次2 BD自有量化 E2E=25.78ms (参考天花板)，轮次3 Q-prescaling trick 被 BD 黑盒 nibble 编码挡住 (scale=-0.84, 100% nibble 不匹配)
 - Conclusion: BitDecoding 只能作为外部参考系统，不能使用我们的校准
 - Changed files: bitdecoding_compat_test.py, tpot_bitdecoding.py, tpot_bitdecoding_e2e.py, bitdecoding_prescale_test.py
+
+### 2026-04-20 01:52 | official smoke 已在 remote clean worktree 启动
+- Goal: 基于本地 clean-provenance commit `7e48012` 启动 formal `system_vs_kivi` official smoke，不再使用先前缺 dataset path 的失败尝试
+- Changed files:
+  - 无新的代码修改；本条记录的是远端 clean-provenance 运行状态
+- Commands:
+  - 本地 commit bundle: `git bundle create /tmp/system_vs_kivi_7e48012.bundle HEAD`
+  - remote fetch + worktree:
+    - `git fetch /root/autodl-tmp/system_vs_kivi_7e48012.bundle HEAD`
+    - `git worktree add --detach /root/autodl-tmp/LLM_KVCache_Quantization_systemvkivi_7e48012 FETCH_HEAD`
+  - remote preflight:
+    - `python3 scripts/collect_env.py`
+    - `python3 scripts/run_system_vs_kivi.py --phase smoke --longbench_dataset_path /root/autodl-tmp/longbench_data/data --dry_run`
+  - remote official run:
+    - `python3 scripts/run_system_vs_kivi.py --phase smoke --longbench_dataset_path /root/autodl-tmp/longbench_data/data`
+- Outputs:
+  - remote clean worktree: `/root/autodl-tmp/LLM_KVCache_Quantization_systemvkivi_7e48012`
+  - remote HEAD: `7e48012`
+  - tmux session: `svk_smoke_7e48012`
+  - log: `/root/autodl-tmp/LLM_KVCache_Quantization_systemvkivi_7e48012/logs/system_vs_kivi_smoke_7e48012.log`
+- Validation:
+  - remote `smoke --dry_run` 通过，`42` jobs
+  - official smoke 已进入首个 job：`1p5b / kivi_style / narrativeqa`
+  - 轮询时 GPU 状态：`NVIDIA H20, 5073 MiB, 30% util`
+  - 结果目录已生成首个 `manifest.json`
+- Risks / follow-ups:
+  - 当前只确认 smoke 稳定启动，尚未确认首个 job 收口
+  - 旧 remote worktree `4bb1355` 的 smoke 日志保留为失败 provenance，不应混入正式结果
+- Commit: 7e48012
+
+### 2026-04-20 01:50 | system_vs_kivi runner preflight 补 fail-fast
+- Goal: 修复 official smoke 首次远端启动时暴露的 execution-chain 漏检；在 `longbench_source=jsonl` 下，runner 必须在 phase preflight 就拒绝缺失 dataset path，而不是跑到首个 LongBench job 才失败
+- Changed files:
+  - `scripts/run_system_vs_kivi.py` (新增 `validate_longbench_dataset_config()`，缺失/不存在路径时在 preflight 直接返回 code=2)
+  - `tests/test_run_system_vs_kivi.py` (补 jsonl path 缺失/存在的单测)
+- Commands:
+  - `pytest -q tests/test_run_system_vs_kivi.py`
+- Outputs:
+  - 新增 LongBench dataset preflight 校验
+  - 本地定向测试 `7 passed`
+- Validation:
+  - 现在 `run_system_vs_kivi.py` 在 `jsonl` 模式下会 fail-fast，而不是把错误延后到第一个 `eval_longbench.py`
+- Risks / follow-ups:
+  - 远端 smoke 需要使用显式 `--longbench_dataset_path` 或环境变量重启
+  - 旧的 `4bb1355` remote clean worktree 只应视为失败尝试，不作正式 smoke 证据
+- Commit: <pending>
+
+### 2026-04-20 01:41 | same-format allocator backend 打通 + G0 完整通过
+- Goal: 按 `Allocator vs KIVI` B/B/B ExecPlan 落地独立 allocator kv_mode、补齐缺失 RoleAlign calib 资产，并把 formal `system_vs_kivi` package 从 `G0 BLOCKED` 推到完整 `G0 PASS`
+- Changed files:
+  - `src/cache/role_aware_allocator_cache.py` (新建，same-format allocator cache，支持 per-layer mixed-bit / asymmetric pairs)
+  - `src/cache/__init__.py` (导出 `RoleAwareAllocatorKVCache`)
+  - `src/engine/generate_loop.py` (新增 `kv_mode=int4_ours_asym_alloc` 路由，强制 `torch_ref` + `policy_json`)
+  - `scripts/eval_ppl.py` (新增 `int4_ours_asym_alloc` 构造路径)
+  - `scripts/run_system_vs_kivi.py` (allocator systems 改映射到 `int4_ours_asym_alloc`)
+  - `scripts/system_vs_kivi_common.py` (allocator systems 资产校验加入 rolealign calib + policy JSON)
+  - `tests/test_role_aware_allocator_cache.py` (新建)
+  - `tests/test_eval_ppl_int4_ours_asym_alloc.py` (新建)
+  - `tests/test_run_system_vs_kivi.py` (更新 allocator runtime family 预期)
+  - `tests/test_eval_ppl_int4_ours_asym.py` (修补 mocked `datasets.__spec__`)
+  - `docs/system_vs_kivi_preflight.md` (从 `BLOCKED` 更新为 `G0 PASS` preflight)
+- Commands:
+  - `pytest -q tests/test_role_aware_allocator_cache.py tests/test_run_system_vs_kivi.py tests/test_eval_ppl_int4_ours_asym_alloc.py`
+  - `python3 -m compileall -q src/cache/role_aware_allocator_cache.py src/engine/generate_loop.py scripts/eval_ppl.py scripts/run_system_vs_kivi.py scripts/system_vs_kivi_common.py`
+  - `pytest -q tests/test_system_vs_kivi_common.py tests/test_role_aware_asym_cache.py tests/test_eval_ppl_int4_ours_asym.py`
+  - `python3 scripts/run_system_vs_kivi.py --phase smoke --models 1p5b --dry_run`
+  - `python3 scripts/run_system_vs_kivi.py --phase smoke --dry_run`
+  - `python3 scripts/run_system_vs_kivi.py --phase main --dry_run`
+  - `python3 scripts/run_system_vs_kivi.py --phase ablation --dry_run`
+  - remote clean-provenance calib:
+    - `python3 scripts/calibrate_behavior.py --model_id Qwen/Qwen2.5-3B-Instruct ... --calib_out artifacts/kv_calib_rolealign_3b_v3.json`
+    - `python3 scripts/calibrate_behavior.py --model_id mistralai/Mistral-7B-Instruct-v0.3 ... --calib_out artifacts/kv_calib_rolealign_mistral7b_v3.json`
+- Outputs:
+  - 新增独立 backend `int4_ours_asym_alloc`
+  - `3b` calib 生成成功，remote/local MD5=`3cfb416a8fe1054fc81a453dd1f00e1a`
+  - `8b` calib 从远端已有资产恢复，remote/local MD5=`0a8e2a298c4160ea35083309cc707faa`
+  - `mistral7b` calib 生成成功，remote/local MD5=`19a113081a70d9e26d9d002608f9dfaf`
+  - `system_vs_kivi` dry-run 全部通过：
+    - smoke: `42` jobs
+    - main: `150` jobs
+    - ablation: `120` jobs
+- Validation:
+  - targeted new tests: `13 passed`
+  - regression checks: `25 passed`
+  - `smoke/main/ablation --dry_run` 均不再报 `format_mismatch` 或缺失 calib 资产
+  - `docs/system_vs_kivi_preflight.md` 现已明确记录 `G0 PASS`
+- Risks / follow-ups:
+  - `int4_ours_asym_alloc` 当前仅支持 `decode_attn_impl=torch_ref`，后续若要延伸到 fused kernel 需单独立项
+  - backend enablement 只完成了 preflight / dry-run 门禁，尚未启动 official smoke/main/ablation
+  - 远端 clean workspace `/root/autodl-tmp/LLM_KVCache_Quantization_clean` 含少量 untracked helper 文件，后续 clean-provenance 正式运行前需再次核对
+- Commit: <none>
+
+### 2026-04-11 09:47 | BitDecoding adapter 修复 + P0+P1+P2 批次脚本
+- Goal: 修复 BD adapter 的 NaN bug，准备完整实验批次
+- Changed files: src/kernels/adapters/bitdecoding_adapter.py (重写，匹配 bit_decode 1.0.0.post1 API), scripts/batch_p012/run_all.sh (新建，5 Phase 单卡串行), scripts/debug_bd_adapter.py (调试辅助)
+- Root cause: 原 adapter 使用错误的 tensor 形状（uint16 pack + 4D float32 params），与 bit_decode 1.0.0.post1 的 [B,S,H,pack_dim] int32 + [B,S,H,2] fp16 API 不匹配，导致首次调用即输出 50% NaN
+- Fix: 严格按 scripts/test_bitdecoding.py 的工作布局重写；padding 用最后一个真实 token 复制而非零（避免 per-token scale=0 → NaN）
+- Validation (remote, dry-run):
+  - BD adapter 无 NaN, cosine_sim > 0.98 vs FP16 reference
+  - TPOT (1.5B, seq=4096, gen=32): FP16 24.45ms, Triton 51.52ms, BD 61.92ms, FlashInfer 59.68ms
+- Next: 启动 run_all.sh 执行 Phase 1-5

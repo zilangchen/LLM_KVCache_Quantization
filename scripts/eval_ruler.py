@@ -42,7 +42,12 @@ script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from scripts.config_utils import load_config, normalize_kv_params, resolve_run_config
+from scripts.config_utils import (
+    load_config,
+    normalize_allocator_cli_args,
+    normalize_kv_params,
+    resolve_run_config,
+)
 from src.engine.generate_loop import generate_from_ids
 from src.utils.hf import resolve_pretrained_path
 from src.utils.repro import (
@@ -805,6 +810,7 @@ def main() -> None:
             "int4_mixed_kv",
             "int4_ours_asym",
             "int4_ours_asym_ba",
+            "int4_ours_asym_alloc",
         ],
     )
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
@@ -839,6 +845,17 @@ def main() -> None:
         type=int,
         default=None,
         help="V cache bit-width for int4_mixed_kv mode (4/8/16). Default: 4.",
+    )
+    parser.add_argument(
+        "--policy_json",
+        type=str,
+        default=None,
+        help=(
+            "Phase 2 编号 6: path to a per-layer bit allocation policy JSON produced "
+            "by scripts/adaptive/behavior_aligned_allocator.py. When provided with "
+            "--kv_mode int4_mixed_kv, overrides --k_bits/--v_bits with per-layer values. "
+            "Required for --kv_mode int4_ours_asym_alloc."
+        ),
     )
     parser.add_argument(
         "--use_attn_temperature",
@@ -940,6 +957,7 @@ def main() -> None:
                 setattr(args, key, value)
 
     normalize_kv_params(args)
+    normalize_allocator_cli_args(args)
     set_seed(seed=args.seed, deterministic=True)
     runtime_quant_bits = (
         resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))
@@ -1111,6 +1129,7 @@ def main() -> None:
                 quant_bits=runtime_quant_bits,
                 k_bits=getattr(args, 'k_bits', None),
                 v_bits=getattr(args, 'v_bits', None),
+                policy_json=getattr(args, 'policy_json', None),
             )
 
             pred_text = tokenizer.decode(

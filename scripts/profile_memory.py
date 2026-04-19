@@ -33,7 +33,12 @@ from src.utils.repro import (
     write_config_snapshot,
 )
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from scripts.config_utils import load_config, normalize_kv_params, resolve_run_config
+from scripts.config_utils import (
+    load_config,
+    normalize_allocator_cli_args,
+    normalize_kv_params,
+    resolve_run_config,
+)
 
 try:
     import pynvml
@@ -165,6 +170,7 @@ def main():
             "int4_mixed_kv",
             "int4_ours_asym",
             "int4_ours_asym_ba",
+            "int4_ours_asym_alloc",
         ],
     )
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
@@ -324,6 +330,7 @@ def main():
                 setattr(args, key, value)
 
     normalize_kv_params(args)
+    normalize_allocator_cli_args(args)
     set_seed(seed=args.seed, deterministic=True)
     # PRF-033: Resolve quant_bits for ALL kv_modes (not just kivi_style)
     runtime_quant_bits = resolve_quant_bits(args.kv_mode, getattr(args, "quant_bits", None))

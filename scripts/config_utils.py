@@ -242,6 +242,9 @@ def resolve_run_config(config: Dict[str, Any], run_name: str) -> Dict[str, Any]:
         ),
         "k_bits": run_entry.get("k_bits"),
         "v_bits": run_entry.get("v_bits"),
+        # Allocator backends read per-layer (k_bits, v_bits) from this JSON;
+        # required for kv_mode=int4_ours_asym_alloc. Optional for other modes.
+        "policy_json": run_entry.get("policy_json"),
     }
 
     # CFG-053: Extract runtime.decoding section so child scripts can use
@@ -298,3 +301,52 @@ def normalize_kv_params(args: argparse.Namespace) -> None:
         setattr(args, "group_size", group_size_k)
     if clip_k is not None:
         setattr(args, "clip_percentile", clip_k)
+
+
+_ALLOCATOR_ONLY_KV_MODES = ("int4_ours_asym_alloc",)
+_ALLOCATOR_REQUIRED_DECODE_ATTN_IMPL = "torch_ref"
+
+
+def normalize_allocator_cli_args(args: argparse.Namespace) -> None:
+    """Enforce allocator-kv_mode invariants at CLI normalization time.
+
+    Called after ``parser.parse_args()`` *and* ``resolve_run_config()``, so
+    yaml-driven runs whose ``runtime.kernel_defaults.decode_attn_impl`` is
+    ``triton_fused`` are folded into ``args`` before this helper runs.
+
+    Enforces two invariants when ``args.kv_mode`` is an allocator-only mode:
+
+    1. ``decode_attn_impl`` must be ``torch_ref``. If it is ``None``, fill in
+       ``torch_ref``. If it is any other value (e.g. ``triton_fused`` pulled
+       from yaml ``kernel_defaults``), override it to ``torch_ref`` and emit
+       a :class:`UserWarning` so the override is visible in logs — raising
+       would break every config-driven allocator run.
+    2. ``policy_json`` must be non-empty. Allocator backends need per-layer
+       ``(k_bits, v_bits)`` and fail deep inside ``generate_from_ids`` if it
+       is missing; failing here turns that into an early, cheap CLI error.
+
+    Mutates *args* in-place. Safe to call unconditionally from any CLI
+    entrypoint.
+    """
+    kv_mode = getattr(args, "kv_mode", None)
+    if kv_mode not in _ALLOCATOR_ONLY_KV_MODES:
+        return
+
+    current = getattr(args, "decode_attn_impl", None)
+    if current not in (None, _ALLOCATOR_REQUIRED_DECODE_ATTN_IMPL):
+        warnings.warn(
+            f"kv_mode={kv_mode!r} requires decode_attn_impl="
+            f"{_ALLOCATOR_REQUIRED_DECODE_ATTN_IMPL!r}; overriding "
+            f"{current!r} (from CLI or yaml kernel_defaults).",
+            UserWarning,
+            stacklevel=2,
+        )
+    setattr(args, "decode_attn_impl", _ALLOCATOR_REQUIRED_DECODE_ATTN_IMPL)
+
+    policy_json = getattr(args, "policy_json", None)
+    if not policy_json:
+        raise ValueError(
+            f"kv_mode={kv_mode!r} requires --policy_json <file>, but none was "
+            "provided. Pass --policy_json on the command line or set "
+            "`policy_json:` in the yaml run entry."
+        )

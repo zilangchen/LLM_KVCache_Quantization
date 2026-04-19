@@ -39,7 +39,12 @@ script_dir = Path(__file__).resolve().parent
 project_root = script_dir.parent
 sys.path.insert(0, str(project_root))
 
-from scripts.config_utils import load_config, normalize_kv_params, resolve_run_config
+from scripts.config_utils import (
+    load_config,
+    normalize_allocator_cli_args,
+    normalize_kv_params,
+    resolve_run_config,
+)
 from src.engine.generate_loop import generate_from_ids
 from src.utils.hf import resolve_pretrained_path
 from src.utils.repro import (
@@ -759,6 +764,7 @@ def main() -> None:
             "int4_mixed_kv",
             "int4_ours_asym",
             "int4_ours_asym_ba",
+            "int4_ours_asym_alloc",
         ],
     )
     parser.add_argument("--model_id", type=str, default="Qwen/Qwen2.5-1.5B-Instruct")
@@ -902,6 +908,7 @@ def main() -> None:
         args.longbench_max_new_tokens = int(args.gen_len)
 
     normalize_kv_params(args)
+    normalize_allocator_cli_args(args)
     set_seed(seed=args.seed, deterministic=True)
 
     print(f"Loading {args.model_id}...")

@@ -48,7 +48,12 @@ from src.utils.repro import (
     set_seed,
     write_config_snapshot,
 )
-from scripts.config_utils import load_config, normalize_kv_params, resolve_run_config
+from scripts.config_utils import (
+    load_config,
+    normalize_allocator_cli_args,
+    normalize_kv_params,
+    resolve_run_config,
+)
 
 # EVL-029: Standard exit codes aligned with eval_longbench/eval_ruler.
 EXIT_OOM = 73
@@ -986,6 +991,7 @@ def main():
                 setattr(args, key, value)
 
     normalize_kv_params(args)
+    normalize_allocator_cli_args(args)
     set_seed(seed=args.seed, deterministic=True)
 
     kv_mode_used = args.kv_mode
