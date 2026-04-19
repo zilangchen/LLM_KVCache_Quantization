@@ -146,19 +146,35 @@ def evaluate_completeness(
                         }
                     )
 
-    issues.extend(
-        validate_matched_budget_rows(
-            budget_rows,
-            compared_systems=compared_systems,
-            tolerance_pct=tolerance_pct,
-            gate_mode=gate_mode,
-        )
+    # Only budget-validate compared systems that are actually expected in this
+    # phase. Smoke/main phases do not declare `rolealign_allocator_fixed_eqmem`
+    # even though it is in the default compared_systems list — intersecting
+    # prevents spurious "missing_system" rows for phase-excluded systems, while
+    # still catching genuine omissions when the system IS expected (e.g.
+    # ablation) but no memory row was produced.
+    expected_set = set(expected_systems)
+    effective_compared = [s for s in compared_systems if s in expected_set]
+    budget_entries = validate_matched_budget_rows(
+        budget_rows,
+        compared_systems=effective_compared,
+        tolerance_pct=tolerance_pct,
+        gate_mode=gate_mode,
     )
-    # Pareto mode: "info_budget_drift" rows are informational, not hard failures.
-    hard_fail = any(
-        str(issue.get("issue", "")) != "info_budget_drift" for issue in issues
-    )
-    return {"ok": not hard_fail, "issues": issues, "gate_mode": gate_mode}
+    # Split informational rows (pareto mode budget drift) from hard issues so
+    # downstream callers can still rely on the contract that `issues` only
+    # contains blocking problems.
+    info_rows: list[dict[str, object]] = []
+    for entry in budget_entries:
+        if str(entry.get("issue", "")) == "info_budget_drift":
+            info_rows.append(entry)
+        else:
+            issues.append(entry)
+    return {
+        "ok": not issues,
+        "issues": issues,
+        "info": info_rows,
+        "gate_mode": gate_mode,
+    }
 
 
 def main() -> int:
@@ -167,7 +183,17 @@ def main() -> int:
     parser.add_argument("--models", required=True)
     parser.add_argument("--systems", required=True)
     parser.add_argument("--tasks", required=True)
-    parser.add_argument("--compared_systems", default="rolealign_allocator_auto_eqmem,rolealign_allocator_fixed_eqmem")
+    parser.add_argument(
+        "--compared_systems",
+        default="rolealign_allocator_auto_eqmem,rolealign_allocator_fixed_eqmem",
+        help=(
+            "Comma-separated allocator system IDs to compare against baseline. "
+            "Default covers both auto_eqmem (smoke/main/ablation) and "
+            "fixed_eqmem (ablation only). The checker automatically drops "
+            "compared systems not present in --systems, so the default works "
+            "for every phase without caller intervention."
+        ),
+    )
     parser.add_argument("--tolerance_pct", type=float, default=3.0)
     parser.add_argument(
         "--gate_mode",

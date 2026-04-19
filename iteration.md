@@ -36,6 +36,34 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 05:22 | Pareto gate P2 follow-ups（Codex R1/R2 回归修复）
+- Goal: 修复 Codex R1/R2 对 Pareto gate_mode 初版（d4dd704 合入）提出的两个 P2 issue，让 checker 的 CLI default 对 smoke/main/ablation 三 phase 都自适应，并恢复 `report["issues"]` = "hard failure only" 的下游契约
+- Root cause:
+  - P2-1 (R1): `info_budget_drift` 塞进 `issues` 列表破坏了 "issues 只装 blocking 问题" 的契约，下游 `if report["issues"]` 误判 clean 跑为 dirty
+  - P2-2 (R1→R2): `--compared_systems` default 原含 `fixed_eqmem`，但 smoke/main 只有 `auto_eqmem` → 误报 missing_system；一旦收窄 default 去掉 fixed，ablation phase 又会漏查 fixed budget
+- Fix:
+  - `scripts/check_system_vs_kivi_completeness.py`:
+    1. `evaluate_completeness()` 把 budget 结果按 issue 类型分流：hard 进 `issues`，`info_budget_drift` 进新的 `info` key，`ok = not issues`
+    2. `compared_systems` 在进 `validate_matched_budget_rows` 前与 `expected_systems` 求交集——default `auto,fixed` 在 smoke/main 自动降级为 `auto`，在 ablation 保持 `auto,fixed`
+    3. `--compared_systems` default 恢复为 `"rolealign_allocator_auto_eqmem,rolealign_allocator_fixed_eqmem"` 覆盖全 phase
+  - `tests/test_check_system_vs_kivi_completeness.py`:
+    - 新增 `test_evaluate_completeness_skips_compared_systems_not_in_expected` 守护 intersection 语义
+    - pareto drift 测试断言 `issues == [] and info 1 row`（新契约）
+- Changed files:
+  - `scripts/check_system_vs_kivi_completeness.py`
+  - `tests/test_check_system_vs_kivi_completeness.py`
+  - `iteration.md`
+- Commands:
+  - `pytest -q tests/test_system_vs_kivi_common.py tests/test_check_system_vs_kivi_completeness.py tests/test_run_system_vs_kivi.py tests/test_allocator_cli_modes.py` → `32 passed`
+  - Codex R3 → `no discrete correctness regression`
+- Validation:
+  - 32 passed（+1 新 intersection 测试）
+  - Codex 3 轮 review 完整覆盖 Pareto gate 语义
+- Risks / follow-ups:
+  - `d4dd704` 里的 Pareto gate 初版 + 本 commit 的 P2 fix 一起才构成完整修复；单独 revert 任一 commit 都会 break
+  - 需在 remote 用 P2 修复后的代码跑 `--gate_mode pareto` 确认 smoke raw ok=true → 才进 main phase
+- Commit: <pending>
+
 ### 2026-04-20 05:17 | Thesis Rewrite Phase 8 最终收束（Ch1 §1.4 + Ch5 + Abstract 镜像 triplet）
 - Goal: M+ Phase 8 最后收束（镜像 triplet：Ch1 §1.4 contribution 段 + Ch5 整章 + Abstract 中英），严格遵守 feedback_math_display_style.md 的 display math 规则
 - Scope:

@@ -102,10 +102,13 @@ def test_evaluate_completeness_passes_for_full_smoke_matrix(tmp_path: Path):
         tolerance_pct=3.0,
     )
     assert report["ok"] is True
-    # Pareto mode: the compared system always emits an info_budget_drift row
-    # (even when drift is small). Hard issues must be empty.
-    hard = [i for i in report["issues"] if i.get("issue") != "info_budget_drift"]
-    assert hard == []
+    # Pareto mode: budget drift rows live in "info", not "issues".
+    assert report["issues"] == []
+    # Info rows must exist for the compared system(s) that have a baseline.
+    info = report.get("info", [])
+    assert len(info) == 1
+    assert info[0]["issue"] == "info_budget_drift"
+    assert info[0]["system_id"] == "rolealign_allocator_auto_eqmem"
 
 
 def test_evaluate_completeness_flags_missing_aux_and_failed_rows(tmp_path: Path):
@@ -172,6 +175,40 @@ def test_evaluate_completeness_strict_flags_budget_out_of_band(tmp_path: Path):
     assert report["gate_mode"] == "strict"
 
 
+def test_evaluate_completeness_skips_compared_systems_not_in_expected(tmp_path: Path):
+    """compared_systems is intersected with expected_systems so the CLI
+    default (auto + fixed) doesn't spuriously flag missing_system on
+    smoke/main phases that only declare auto."""
+    raw_dir = tmp_path / "raw"
+    # Smoke-like layout: NO fixed_eqmem declared
+    _make_system_dir(
+        raw_dir, model_key="1p5b", system_id="kivi_style",
+        quality_tasks=["narrativeqa", "dureader"], kv_cache_mem_mb=8.0,
+    )
+    _make_system_dir(
+        raw_dir, model_key="1p5b", system_id="rolealign_allocator_auto_eqmem",
+        quality_tasks=["narrativeqa", "dureader"], kv_cache_mem_mb=12.0,
+    )
+
+    report = evaluate_completeness(
+        raw_dir,
+        expected_models=["1p5b"],
+        expected_systems=["kivi_style", "rolealign_allocator_auto_eqmem"],
+        expected_tasks=["narrativeqa", "dureader"],
+        # CLI default includes fixed_eqmem even though smoke doesn't have it.
+        compared_systems=[
+            "rolealign_allocator_auto_eqmem",
+            "rolealign_allocator_fixed_eqmem",
+        ],
+    )
+    # fixed_eqmem is silently skipped (not in expected_systems)
+    assert report["ok"] is True
+    assert report["issues"] == []
+    info = report.get("info", [])
+    assert len(info) == 1
+    assert info[0]["system_id"] == "rolealign_allocator_auto_eqmem"
+
+
 def test_evaluate_completeness_pareto_reports_drift_without_failing(tmp_path: Path):
     """Default pareto mode: big budget drift is info, gate still passes."""
     raw_dir = tmp_path / "raw"
@@ -200,8 +237,10 @@ def test_evaluate_completeness_pareto_reports_drift_without_failing(tmp_path: Pa
     )
     # Default mode must be pareto now
     assert report["gate_mode"] == "pareto"
-    # Gate passes despite ~+50% drift, because info-only
+    # Gate passes despite ~+50% drift, because drift is info-only
     assert report["ok"] is True
-    drift = [i for i in report["issues"] if i["issue"] == "info_budget_drift"]
+    assert report["issues"] == []
+    drift = report.get("info", [])
     assert len(drift) == 1
+    assert drift[0]["issue"] == "info_budget_drift"
     assert drift[0]["budget_ratio"] == 12.64 / 8.42
