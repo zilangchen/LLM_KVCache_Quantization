@@ -36,6 +36,32 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 05:32 | 14B 权重定位 + SVK_MODEL_PATH env override，补齐 main phase 第 5 个 model
+- Goal: 用户纠正 "14B 不存在" 的错误判断——14B 在 modelscope cache 下，需要让 transformers 离线加载，并不永久修改 `_MODEL_SPECS` 默认 HF id
+- Root cause（错误判断 + 正确定位）:
+  - 我之前只搜 `/root/autodl-tmp/hf_cache/hub/`，认定 14B 缺失
+  - 用户指出应该有 → 扩大搜索 → 找到 `/root/autodl-tmp/modelscope_cache/qwen/Qwen2___5-14B-Instruct/`（modelscope 命名把 `.` 替换为 `___`）8 个 safetensors 共 28GB 完整
+- 方案选择:
+  - ❌ HF-cache symlink 方案：`snapshot_download(local_files_only=True)` 要求 blobs/sha + refs/<commit-hash> 规范结构，仅改 refs/main 不够（实测仍报 LocalEntryNotFoundError）
+  - ✅ **env override 方案**：`get_model_specs()` 读 `SVK_MODEL_PATH_<KEY>` env 覆盖 `model_id`；`src/utils/hf.py::resolve_pretrained_path` 已有 `is_dir` 分支，传本地路径自动绕过 hub lookup
+  - Why env (not code default)：保留 `_MODEL_SPECS` 的 HF id 用于 reproducibility，override 仅 session-scoped，审计 trail 清晰
+- Changed files:
+  - `scripts/system_vs_kivi_common.py` — `get_model_specs()` 新逻辑：每 key 检查 `SVK_MODEL_PATH_<KEY_UPPER>` env，存在则 override model_id
+  - `tests/test_system_vs_kivi_common.py` — 新增 2 项测试：env override 命中 / 无 env 时回 HF 默认
+  - `iteration.md`
+- Commands:
+  - `pytest -q tests/test_system_vs_kivi_common.py tests/test_check_system_vs_kivi_completeness.py tests/test_run_system_vs_kivi.py tests/test_allocator_cli_modes.py` → `34 passed`
+  - remote `ls /root/autodl-tmp/modelscope_cache/qwen/Qwen2___5-14B-Instruct/` 确认 8 shards 28G 完整
+- Outputs:
+  - 14B main 启动契约：`SVK_MODEL_PATH_14B=/root/autodl-tmp/modelscope_cache/qwen/Qwen2___5-14B-Instruct python3 scripts/run_system_vs_kivi.py --phase main --models 14b ...`
+  - env override 为 session 作用域，不污染默认 HF id
+- Validation:
+  - 34 passed（+2 新 env override 测试）
+- Risks / follow-ups:
+  - 需本轮 commit + bundle 到 remote 后才能启动 14B main session
+  - 14B main ~15h wall-clock（28GB 模型 load 3-5 min + 5 tasks × 3 systems × 7 aux 多 jobs）
+- Commit: <pending>
+
 ### 2026-04-20 05:22 | Pareto gate P2 follow-ups（Codex R1/R2 回归修复）
 - Goal: 修复 Codex R1/R2 对 Pareto gate_mode 初版（d4dd704 合入）提出的两个 P2 issue，让 checker 的 CLI default 对 smoke/main/ablation 三 phase 都自适应，并恢复 `report["issues"]` = "hard failure only" 的下游契约
 - Root cause:

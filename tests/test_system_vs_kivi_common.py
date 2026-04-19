@@ -10,6 +10,26 @@ from scripts.system_vs_kivi_common import (
 )
 
 
+def test_get_model_specs_applies_env_override(monkeypatch):
+    """SVK_MODEL_PATH_<KEY> env var replaces the default HF model_id for the
+    keyed model while leaving other models untouched."""
+    monkeypatch.setenv("SVK_MODEL_PATH_14B", "/tmp/fake_local_14b")
+    monkeypatch.delenv("SVK_MODEL_PATH_1P5B", raising=False)
+
+    specs = get_model_specs()
+
+    assert specs["14b"].model_id == "/tmp/fake_local_14b"
+    # Other entries keep their default HF id
+    assert specs["1p5b"].model_id == "Qwen/Qwen2.5-1.5B-Instruct"
+    assert specs["8b"].model_id == "meta-llama/Llama-3.1-8B-Instruct"
+
+
+def test_get_model_specs_returns_hf_default_without_override(monkeypatch):
+    monkeypatch.delenv("SVK_MODEL_PATH_14B", raising=False)
+    specs = get_model_specs()
+    assert specs["14b"].model_id == "Qwen/Qwen2.5-14B-Instruct"
+
+
 def test_build_phase_plan_smoke_defaults():
     plan = build_phase_plan("smoke")
     assert plan.models == ["1p5b", "8b"]

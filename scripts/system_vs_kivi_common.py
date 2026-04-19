@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -68,11 +69,32 @@ _MODEL_SPECS: dict[str, dict[str, str]] = {
 
 
 def get_model_specs(*, repo_root: Path | None = None) -> dict[str, ModelSpec]:
+    """Return per-model specs, honoring environment overrides on model_id.
+
+    Environment variable ``SVK_MODEL_PATH_<KEY_UPPER>`` (e.g.
+    ``SVK_MODEL_PATH_14B``) replaces the default HuggingFace model_id for
+    that entry. The override must point at a local directory containing
+    ``config.json`` + weight shards; ``src/utils/hf.py::resolve_pretrained_path``
+    detects the ``is_dir`` case and skips any hub lookup.
+
+    Used when a model's weights exist only under a non-HF cache layout
+    (e.g. ModelScope's ``qwen/Qwen2___5-14B-Instruct/`` directory) and
+    fabricating a valid HF-cache structure would be more invasive than
+    simply pointing ``from_pretrained`` at the local folder.
+
+    The default hub id is always preserved for reproducibility — the
+    override is session-scoped via env vars, never persisted.
+    """
     _ = PROJECT_ROOT if repo_root is None else repo_root
-    return {
-        key: ModelSpec(key=key, **payload)
-        for key, payload in _MODEL_SPECS.items()
-    }
+    specs: dict[str, ModelSpec] = {}
+    for key, payload in _MODEL_SPECS.items():
+        payload = dict(payload)
+        env_key = f"SVK_MODEL_PATH_{key.upper()}"
+        override = os.environ.get(env_key)
+        if override:
+            payload["model_id"] = override
+        specs[key] = ModelSpec(key=key, **payload)
+    return specs
 
 
 def build_phase_plan(phase: str) -> PhasePlan:
