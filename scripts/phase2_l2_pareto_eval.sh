@@ -90,7 +90,10 @@ if [ "${INCLUDE_ROLE_AWARE:-0}" = "1" ] && [ -f "$ROLE_AWARE_JSON" ]; then
     POLICY_LIST="${POLICY_LIST},role_aware"
 fi
 
-RAW_BASE="results/l2_pareto/raw/${MODEL_KEY}"
+# 2026-04-19 L2 Phase B v4 Step 4b: allow env override so smoke runs can
+# write to an isolated out_dir without polluting results/l2_pareto/raw.
+# Default preserved for the main v4 rerun.
+RAW_BASE="${L2_PARETO_RAW_BASE:-results/l2_pareto/raw}/${MODEL_KEY}"
 mkdir -p "$RAW_BASE"
 
 policy_json_for() {
@@ -158,7 +161,8 @@ PY
             > "$LOG" 2>&1; then
             echo "  [quality:$TASK] DONE"
         else
-            phase2_fail_from_log "$RN" "$LOG"
+            phase2_fail_from_log "$RN" "$LOG" || true
+            exit 3
         fi
     done
 
@@ -180,11 +184,38 @@ PY
             > "$LOG" 2>&1; then
             echo "  [quality:$TASK] DONE"
         else
-            phase2_fail_from_log "$RN" "$LOG"
+            phase2_fail_from_log "$RN" "$LOG" || true
+            exit 3
         fi
     done
 
-    python3 scripts/profile_latency.py \
+    # 2026-04-19 L2 Phase B v4 Step 2B:
+    # Post-quality hard check — eval_longbench 在所有 sample 失败时（例如
+    # --policy_json 加载异常、Triton 不可用、模型初始化部分失败）仍可能
+    # exit 0 但把 longbench_task_summary_*.csv 的 official_metric_name 写成
+    # "failed"。此类 row 不得被聚合成合法 low-score Pareto 点。
+    # 字段 10 == official_metric_name 对应 phase2_gate_lib.sh:98 的 schema。
+    shopt -s nullglob
+    QUALITY_CSVS=( "$POLICY_OUT_DIR"/longbench_task_summary_*.csv )
+    shopt -u nullglob
+    if [ "${#QUALITY_CSVS[@]}" -eq 0 ]; then
+        echo "[$POLICY] QUALITY FAIL: no longbench_task_summary_*.csv produced under $POLICY_OUT_DIR" >&2
+        touch "${POLICY_OUT_DIR}/.quality_failed"
+        exit 3
+    fi
+    QUALITY_FAILED_ROWS=$(awk -F, 'NR>1 && $10=="failed" {c++} END {print c+0}' "${QUALITY_CSVS[@]}" 2>/dev/null)
+    QUALITY_FAILED_ROWS="${QUALITY_FAILED_ROWS:-0}"
+    if [ "$QUALITY_FAILED_ROWS" -gt 0 ]; then
+        echo "[$POLICY] QUALITY FAIL: $QUALITY_FAILED_ROWS rows with official_metric_name=failed in $POLICY_OUT_DIR" >&2
+        awk -F, 'NR==1 || $10=="failed"' "${QUALITY_CSVS[@]}" 2>/dev/null | head -20 >&2 || true
+        touch "${POLICY_OUT_DIR}/.quality_failed"
+        exit 3
+    fi
+
+    # 辅助评测允许 quarantine：profiling / PPL / needle 单项失败不应让整条
+    # Phase B 报废；但 quality 缺失（exit code 或 failed-row）必须在上面 hard fail。
+    LAT_LOG="${POLICY_OUT_DIR}/l2pareto_${MODEL_KEY}_${POLICY}_latency.log"
+    if python3 scripts/profile_latency.py \
         --model_id "$MODEL" \
         --kv_mode int4_mixed_kv \
         --policy_json "$POLICY_JSON" \
@@ -196,9 +227,14 @@ PY
         --seed "$SEED" \
         --out_dir "$POLICY_OUT_DIR" \
         --run_name "l2pareto_${MODEL_KEY}_${POLICY}_latency" \
-        > "${POLICY_OUT_DIR}/l2pareto_${MODEL_KEY}_${POLICY}_latency.log" 2>&1
+        > "$LAT_LOG" 2>&1; then
+        echo "  [latency] DONE"
+    else
+        phase2_fail_from_log "l2pareto_${MODEL_KEY}_${POLICY}_latency" "$LAT_LOG" || true
+    fi
 
-    python3 scripts/profile_memory.py \
+    MEM_LOG="${POLICY_OUT_DIR}/l2pareto_${MODEL_KEY}_${POLICY}_memory.log"
+    if python3 scripts/profile_memory.py \
         --model_id "$MODEL" \
         --kv_mode int4_mixed_kv \
         --policy_json "$POLICY_JSON" \
@@ -210,9 +246,14 @@ PY
         --seed "$SEED" \
         --out_dir "$POLICY_OUT_DIR" \
         --run_name "l2pareto_${MODEL_KEY}_${POLICY}_memory" \
-        > "${POLICY_OUT_DIR}/l2pareto_${MODEL_KEY}_${POLICY}_memory.log" 2>&1
+        > "$MEM_LOG" 2>&1; then
+        echo "  [memory] DONE"
+    else
+        phase2_fail_from_log "l2pareto_${MODEL_KEY}_${POLICY}_memory" "$MEM_LOG" || true
+    fi
 
-    python3 scripts/eval_ppl.py \
+    PPL_LOG="${POLICY_OUT_DIR}/l2pareto_${MODEL_KEY}_${POLICY}_ppl.log"
+    if python3 scripts/eval_ppl.py \
         --model_id "$MODEL" \
         --kv_mode int4_mixed_kv \
         --policy_json "$POLICY_JSON" \
@@ -223,9 +264,14 @@ PY
         --seed "$SEED" \
         --out_dir "$POLICY_OUT_DIR" \
         --run_name "l2pareto_${MODEL_KEY}_${POLICY}_ppl" \
-        > "${POLICY_OUT_DIR}/l2pareto_${MODEL_KEY}_${POLICY}_ppl.log" 2>&1
+        > "$PPL_LOG" 2>&1; then
+        echo "  [ppl] DONE"
+    else
+        phase2_fail_from_log "l2pareto_${MODEL_KEY}_${POLICY}_ppl" "$PPL_LOG" || true
+    fi
 
-    python3 scripts/eval_needle.py \
+    NEEDLE_LOG="${POLICY_OUT_DIR}/l2pareto_${MODEL_KEY}_${POLICY}_needle.log"
+    if python3 scripts/eval_needle.py \
         --model_id "$MODEL" \
         --kv_mode int4_mixed_kv \
         --policy_json "$POLICY_JSON" \
@@ -236,7 +282,11 @@ PY
         --seed "$SEED" \
         --out_dir "$POLICY_OUT_DIR" \
         --run_name "l2pareto_${MODEL_KEY}_${POLICY}_needle" \
-        > "${POLICY_OUT_DIR}/l2pareto_${MODEL_KEY}_${POLICY}_needle.log" 2>&1
+        > "$NEEDLE_LOG" 2>&1; then
+        echo "  [needle] DONE"
+    else
+        phase2_fail_from_log "l2pareto_${MODEL_KEY}_${POLICY}_needle" "$NEEDLE_LOG" || true
+    fi
 done
 
 echo "=== L2 Pareto raw runs ready under $RAW_BASE @ $(date) ==="

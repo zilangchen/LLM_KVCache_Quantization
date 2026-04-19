@@ -61,8 +61,30 @@ out_dir = Path(sys.argv[1])
 task = sys.argv[2]
 expected = sys.argv[3:]
 
+def collect_logged_csvs(prefix: str):
+    selected = []
+    seen = set()
+    for run_name in expected:
+        log_path = out_dir / f"{run_name}.log"
+        if not log_path.exists():
+            continue
+        text = log_path.read_text(encoding="utf-8", errors="ignore")
+        for line in text.splitlines():
+            if "Saved to " not in line:
+                continue
+            raw_path = line.split("Saved to ", 1)[1].strip()
+            name = Path(raw_path).name
+            if not name.startswith(prefix):
+                continue
+            candidate = out_dir / name
+            if candidate.exists() and candidate not in seen:
+                seen.add(candidate)
+                selected.append(candidate)
+    return selected
+
+
 profiles = {}
-for path in out_dir.glob("profile_longbench_int4_mixed_kv_*.csv"):
+for path in collect_logged_csvs("profile_longbench_int4_mixed_kv_"):
     with path.open() as fh:
         for row in csv.DictReader(fh):
             run_name = row.get("run_name", "")
@@ -70,7 +92,7 @@ for path in out_dir.glob("profile_longbench_int4_mixed_kv_*.csv"):
                 profiles.setdefault(run_name, set()).add(row.get("run_id", ""))
 
 task_hits = {run_name: 0 for run_name in expected}
-for path in out_dir.glob("longbench_task_summary_int4_mixed_kv_*.csv"):
+for path in collect_logged_csvs("longbench_task_summary_int4_mixed_kv_"):
     with path.open() as fh:
         for row in csv.DictReader(fh):
             if row.get("task_name") != task:

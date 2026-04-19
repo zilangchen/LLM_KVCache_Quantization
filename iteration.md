@@ -36,6 +36,180 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-19 21:22 | Freeze current repository state after full L2 + clean-provenance completion
+- Goal: 把已完成的 L2 / clean-provenance 结果、本地 artifact 对账、工作台去旧化与 freeze 文档一次性收口，形成可回溯冻结态。
+- Scope:
+  - 核对远端与本地 `results/l2_*`、`results/clean_rerun_20260419T09/`、`artifacts/clean_rerun_20260419T09/` 文件总数
+  - 更新 `docs/thesis_upgrade_live_plan.md` 与 `docs/mainline_execution_queue.md` 的 live status / archived planning 边界
+  - 新增 `docs/freeze_20260419.md`
+  - 语义化 staging + freeze commit
+- Changed files:
+  - `docs/thesis_upgrade_live_plan.md`
+  - `docs/mainline_execution_queue.md`
+  - `docs/freeze_20260419.md`
+  - `iteration.md`
+- Commands:
+  - `git status --short`
+  - `sshpass -p 'uOpBXFwsQSPa' ssh ... find results/l2_{kv_asymmetric,pareto,prompt_adaptive} -type f | wc -l`
+  - `sshpass -p 'uOpBXFwsQSPa' ssh ... find /root/autodl-tmp/LLM_KVCache_Quantization_clean/results/clean_rerun -type f | wc -l`
+  - 本地 Python 目录计数脚本核对 `results/` / `artifacts/` / `docs/`
+- Outputs:
+  - 工作台切换为 `Frozen State + Archived Planning` 结构
+  - 新增 freeze 文档记录本地 canonical artifact map 与协议边界
+  - freeze 前确认主要远端 / 本地结果目录文件总数一致
+- Validation:
+  - 远端 `L2KV=180` / `L2PA=710` / `L2PR=240` 与本地匹配
+  - 远端 clean rerun raw `462 files / 278 CSV` 与本地匹配
+  - `rg` 不再在工作台 live 区域出现 `未开始 / waiting-launch / pending gate` 这类当前态误导表述
+- Risks / follow-ups:
+  - `results/` 与 `artifacts/` 仍按项目政策保持 gitignored；freeze 依赖本地磁盘保留
+  - 后续若需要更强冻结，可再补本地 annotated tag 或离线打包归档
+
+### 2026-04-19 19:05 | Completion session — Prompt-adaptive 官方矩阵补齐 + 全量同步 + 工作台收口
+- Goal: 按 completion session plan 严格补齐 L2 Phase C 正式协议（8B × 5 tasks）+ 并行不浪费 GPU 补 1p5b/7b × dureader/lcc off-protocol exploratory + 全量拉回远端 L2 raw + 工作台 0'-section 更新。
+- Changed files:
+  - `scripts/phase2_l2c_extend_8b.sh`（8B 官方 extend wrapper）
+  - `scripts/phase2_l2c_extend.sh`（通用 extend wrapper，支持 1p5b/7b/8b）
+  - `docs/clean_rerun_20260419T09/completion_report_20260419.md`（158 行 / 10.6 KB）
+  - `docs/l2_prompt_adaptive_readout_final.md`（远端产后 scp 回本地）
+  - `docs/thesis_upgrade_live_plan.md`（0' section 注入覆盖 07:03 旧 snapshot）
+  - `docs/mainline_execution_queue.md`（0' section 注入覆盖 06:17 旧 snapshot）
+  - `results/l2_prompt_adaptive_summary_final.csv`（45 行，3 model × 5 task × 3 variant）
+  - `results/l2_{kv_asymmetric,pareto,prompt_adaptive}/`（全量 rsync pulled from exploratory）
+  - `results/clean_rerun_20260419T09/raw/`（clean workspace 280 CSV 全量 rsync）
+  - `artifacts/clean_rerun_20260419T09/allocator/`（70+ policy JSONs rsync）
+- Commands:
+  - `bash scripts/phase2_l2c_extend_8b.sh` on GPU0 (tmux l2c_8b_ext, 18:36→19:00)
+  - `bash scripts/phase2_l2c_extend.sh {1p5b,7b}` on GPU1/2 (tmux l2c_{1p5b,7b}_ext, 18:42→19:01/19:04)
+  - 5 parallel rsync pulls (b0wueklvq / bh28h0ksn / b2hiebklz / bafrmf7wm / blsqsyjnn) all exit 0
+  - `python3 scripts/aggregate_l2_prompt_adaptive.py --runs_dir ... --out_csv ... --out_md ...` 产生 45-row 矩阵
+- Outputs:
+  - L2 Phase C 8B official 5/5 task full (0 failed rows) — protocol-valid complete
+  - L2 Phase C 1p5b/7b × 5 task extras — retained as off-protocol exploratory
+  - 45-row full matrix 落入 `results/l2_prompt_adaptive_summary_final.csv`
+  - 5 clean rerun docs 落入 `docs/clean_rerun_20260419T09/` (677 lines total)
+- Gate C Official Verdict (8B × 5 task):
+  - fixed_k mean = 10.027; auto_k = 9.854; prompt_adaptive = 9.725
+  - prompt_adaptive 输 fixed_k -0.30；3/5 错选，1 tie (gov)，1 独立 win (lcc +0.40 over auto_k)
+  - **Weak / Mixed — 不作 final claim**；lcc 独立 prompt-level routing 作 future-work seed
+- Validation:
+  - 8B extend: [L2 Prompt-adaptive 8b task {dureader,lcc}] GATE PASS
+  - 1p5b/7b extend: GATE PASS on {dureader, lcc} × each
+  - 全部 0 failed_rows / 0 traceback / 0 head mismatch
+- Risks / follow-ups:
+  - Off-protocol results **不得** 用作 official Gate C 输入
+  - lcc 独立 prompt-level win 仅限 8B；1p5b/7b 上 prompt_adaptive 反而不如 auto_k
+  - 当前 prompt_adaptive 实质仍是 task-bucket 为主，lcc 是例外；若要 publish prompt-adaptive claim 需新 selector 实现（future work）
+
+### 2026-04-19 18:30 | Overnight L2 完整收尾 + Clean-Provenance rerun + 产物同步回本地可审计视图
+- Goal: 按 overnight plan 依次完成 L2 Phase B v4 full rerun、Gate B 判读、Phase C、Gate C、clean-provenance Step 0-3、Gate P0-P3；并把 clean workspace 产物同步回本地 canonical repo。
+- Scope:
+  - L2 track: Phase B v4 (12 policies × 3 models = 36 runs)、Phase C prompt-adaptive (27 runs)
+  - Clean-provenance: pin=`ddada19` clean workspace `/root/autodl-tmp/LLM_KVCache_Quantization_clean`，Step 0 3 calibration regen + Step 1 canonical + Step 2 compare + Step 3 extend = 92 runs
+  - Sync 回本地: `docs/clean_rerun_20260419T09/`, `results/clean_rerun_20260419T09/`, `artifacts/clean_rerun_20260419T09/`
+- Changed files:
+  - `scripts/profile_memory.py` — 加 `--warmup` 参数（CLI parity with profile_latency；no-op）
+  - `scripts/phase2_l2_pareto_eval.sh` — quality 后扫 `official_metric_name=failed` 行 → `.quality_failed` marker + exit 3；`L2_PARETO_RAW_BASE` env override
+  - `scripts/phase2_l2b_smoke_poll.sh` / `phase2_l2b_v4_poll.sh` / `phase2_l2c_one.sh` / `phase2_l2c_poll.sh` — 新建 L2 poll infrastructure
+  - `docs/clean_rerun_20260419T09/` — 新增 MANIFEST.md (117 行, 5782 B) / readout_phase1.md / readout_final.md / **overnight_report_20260419.md (301 行, 16.5 KB)**
+  - `results/clean_rerun_20260419T09/summary_{phase1,final}.csv` — disk only, gitignored
+  - `artifacts/clean_rerun_20260419T09/kv_calib_kl_{qwen25_3b,qwen25_14b,mistral7b}_int8.json` — 3 newly-regen calibrations, gitignored
+- Commands:
+  - Phase B v4: `tmux new -d -s l2b_v4_{7b,8b,mistral7b} bash scripts/phase2_l2_pareto_eval.sh ...`
+  - Phase C: `tmux new -d -s l2c_{1p5b,7b,8b} bash scripts/phase2_l2c_one.sh ...`
+  - Clean Step 0: `tmux new -d -s clean_calib_{3b,14b,mistral7b} bash scripts/clean_rerun_calibrate.sh ...`
+  - Clean Step 1-3: `tmux new -d -s clean_p{1,2}_gpu{0,1,2} bash scripts/clean_rerun_eval.sh {canonical|compare|extend} ... > /tmp/clean_gpu*.log`
+  - Aggregate: `python3 scripts/clean_rerun_aggregate.py --rerun_dir results/clean_rerun --out_csv ... --out_md ...`
+- Outputs:
+  - L2 Phase B v4: 12/12 policies PASS（auto-k on Pareto front 3/4 model；Mistral-specific win 14.68；7B uniform_int4 灾难性崩溃 PPL=6326）
+  - L2 Phase C: 9/9 cells PASS; Gate C **Mixed**（prompt_adaptive 7B 胜但 1.5B/8B 输，不作 final claim）
+  - Clean Step 0: 3B/14B/Mistral-7B calibrations regen 全部 md5 有效
+  - Clean Step 1: 1.5B canonical fp16/int8_ours/int4_ours_asym/kivi_style 全保真（int8↔fp16 Δ=+0.02）
+  - Clean Step 2: 4 claim-critical reading 全复现（Mistral-specific win / 3B early-layer / 14B top-tier not winner / auto-k top tier）
+  - Clean Step 3: Mistral-specific win 跨 core+extend 成立；3B/8B 上 auto-k 在 extend 任务 weaken
+- Validation:
+  - All poll scripts exit 0（`bc9xjy4vl` / `bwtq4nl6x` / `bxpxkybkk` / `bs4107qph` / `bkluzi0q9` / `befwfl265`）
+  - Clean rerun 总 92/92 runs 成功，0 failed_rows
+  - 产物 md5 匹配远端（e.g. 14B calib `41893e70...` local == remote）
+  - Bug 6 处修复记录见 `docs/clean_rerun_20260419T09/overnight_report_20260419.md` §C
+- Risks / follow-ups:
+  - 8B cov80↔bakv_k11 两者 clean vs exploratory 轻 micro-ranking swap（Δ +0.40），建议 paper 脚注 "top-tier tie"
+  - Mistral/heuristic_k3 clean vs exploratory +0.85 drift（但 heur 仍 < cov80，Mistral-specific win 未翻转）—— 根因未查，记作 threats-to-validity
+  - 3B/8B 上 auto-k 的 "cross-model top-tier" 在 extend tasks (dureader/lcc) 上 weaken，**不宣称 "universal cross-task winner"**
+  - 本地 `docs/clean_rerun_20260419T09/` untracked 待 commit 决定；`results/` 和 `artifacts/` 按 CLAUDE.md §2 保持 gitignored（on-disk 可审计，git clone 不带）
+  - L2 Phase C 里 prompt_adaptive 实质是 task-id bucket 不是 per-prompt re-selection —— 若将来要做真 prompt-level，需新 selector 实现
+
+### 2026-04-19 07:58 | 修复实验可信性链并复核已产出数据影响
+- Goal: 修复最近审查发现的实验完整性与聚合链 bug，并明确这些问题对现有 `L1/L2` 数据到底是已污染、无影响还是仅有 future-risk。
+- Scope: `scripts/phase2_gate_lib.sh`, `scripts/phase2_allocator_mvp.sh`, `scripts/phase2_l2_pareto_eval.sh`, `scripts/aggregate_l2_pareto.py`, `scripts/aggregate_l2_kv_asymmetric.py`, `scripts/aggregate_l2_prompt_adaptive.py`, `scripts/adaptive/export_prompt_selector.py`, `src/engine/generate_loop.py`, `scripts/eval_longbench.py`, `scripts/profile_memory.py`, `scripts/phase2_backfill_wave1_autok.sh`, `scripts/phase2_backfill_wave4_autok.sh`, `tests/test_l2_pareto_aggregation.py`, `tests/test_prompt_adaptive_selector.py`, `tests/test_mixed_kv_cache_per_layer.py`
+- Changed files:
+  - `scripts/phase2_gate_lib.sh`
+  - `scripts/phase2_allocator_mvp.sh`
+  - `scripts/phase2_l2_pareto_eval.sh`
+  - `scripts/aggregate_l2_pareto.py`
+  - `scripts/aggregate_l2_kv_asymmetric.py`
+  - `scripts/aggregate_l2_prompt_adaptive.py`
+  - `scripts/adaptive/export_prompt_selector.py`
+  - `src/engine/generate_loop.py`
+  - `scripts/eval_longbench.py`
+  - `scripts/profile_memory.py`
+  - `scripts/phase2_backfill_wave1_autok.sh`
+  - `scripts/phase2_backfill_wave4_autok.sh`
+  - `tests/test_l2_pareto_aggregation.py`
+  - `tests/test_prompt_adaptive_selector.py`
+  - `tests/test_mixed_kv_cache_per_layer.py`
+- Commands:
+  - `bash -n scripts/phase2_gate_lib.sh scripts/phase2_allocator_mvp.sh scripts/phase2_l2_pareto_eval.sh scripts/phase2_backfill_wave1_autok.sh scripts/phase2_backfill_wave4_autok.sh`
+  - `python3 -m py_compile scripts/aggregate_l2_kv_asymmetric.py scripts/aggregate_l2_prompt_adaptive.py scripts/aggregate_l2_pareto.py scripts/adaptive/export_prompt_selector.py scripts/eval_longbench.py scripts/profile_memory.py src/engine/generate_loop.py`
+  - `pytest -q tests/test_l2_pareto_aggregation.py tests/test_prompt_adaptive_selector.py tests/test_kv_asymmetric_allocator.py tests/test_mixed_kv_cache_per_layer.py`
+  - `sshpass -p '***' ssh ...`（复核远端 `L2KV/L2Pareto/W1/W4` 的重复 run_name、重复 basename 与 policy 覆盖情况）
+- Outputs:
+  - gate 现在按“当前 log 引用的 CSV”做校验，不再直接扫全目录
+  - allocator MVP 失败会返回非零 exit code，不再假成功
+  - Pareto runner 恢复为：quality hard fail；profiling/PPL/needle quarantine
+  - Pareto front 不再纳入缺 cost 的残缺行，并改为优先读取最新 profile CSV
+  - `L2` 两个聚合器改成按具体 CSV 路径回填 `run_name`，不再依赖 basename
+  - prompt selector 对未知 `task/profile` fail-fast
+  - `int4_mixed_kv` 重新透传 `group_size/clip_percentile`
+  - `eval_longbench.py` 不再吞掉显式 CLI 的 `--longbench_max_new_tokens`
+  - backfill verifier 只认本轮 log 引用的 profile/task CSV
+- Validation:
+  - shell 语法检查通过
+  - `py_compile` 通过
+  - `pytest` 结果：`8 passed, 6 skipped, 1 warning`
+  - 远端复核：`L2KV_SUMMARIES=36`, `L2KV_DUP_BASENAMES=0`, `L2KV_DUP_RUNNAMES=0`
+  - 远端复核：`W1/W3/W4/W5/W6_DUP_RUNNAMES=0`, `W1/W4_AUTOK_DUP_RUNNAMES=0`
+  - 远端复核：当前 `results/l2_pareto/raw/*` 各 policy 全部缺 `latency/memory/ppl/needle`，现有 Phase B 数据不可用于 Gate B
+- Risks / follow-ups:
+  - 当前修复尚未 rsync 到远端，因此 `L2 Pareto` 仍需同步后重跑
+  - `L1/L2KV` 当前未发现已污染证据，但 gate 污染问题在脏目录复跑场景下仍要求保持目录卫生
+  - 仍有少量次级问题（例如 failure JSON 唯一性）未纳入本轮补丁
+- Commit: 未提交
+
+### 2026-04-19 07:05 | 论文主线升级工作台同步到 L2 Phase A 完成态并开放草稿入口
+- Goal: 把 `docs/thesis_upgrade_live_plan.md` 从旧的 “L2 waiting-launch” 状态更新到当前真实状态，并将其收束成可直接承接论文草稿的主线升级实施工作台。
+- Scope: `docs/thesis_upgrade_live_plan.md`, `iteration.md`
+- Changed files:
+  - `docs/thesis_upgrade_live_plan.md`
+  - `iteration.md`
+- Commands:
+  - `sshpass -p 'YLt4oozwKWNg' ssh -o StrictHostKeyChecking=no -p 23129 root@region-42.seetacloud.com "bash -lc 'cd /root/LLM_KVCache_Quantization && printf \"L2KV=\" && find results/l2_kv_asymmetric -name \"longbench_task_summary_*.csv\" 2>/dev/null | wc -l && printf \"L2PA=\" && find results/l2_pareto -type f 2>/dev/null | wc -l && printf \"L2PR=\" && find results/l2_prompt_adaptive -name \"longbench_task_summary_*.csv\" 2>/dev/null | wc -l && echo ===TMUX=== && tmux ls 2>/dev/null || true && echo ===GPU=== && nvidia-smi --query-gpu=index,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits'"`
+  - `python3 - <<'PY' ...`（远端汇总 `results/l2_kv_asymmetric/` 的 1.5B/7B/8B 三模型均值与 task-level 最小 readout）
+  - `date '+%Y-%m-%d %H:%M %Z'`
+- Outputs:
+  - 工作台顶部快照已改为 `2026-04-19 07:03 CST`
+  - 明确写入：`L2 Phase A` 已完成（`L2KV=36`），`Pareto/Prompt-adaptive` 未开始
+  - 吸收了 `K/V asymmetric` 的最小 exploratory readout，并明确其当前只是 `engineering-proof + mixed signal`
+  - 将第 7 节改写为“可在本文档底部开始写草稿，但不直接迁入 thesis/chapters”
+  - 新增 `## 10. Drafting Workspace（从这里开始写）`
+- Validation:
+  - 远端返回 `L2KV=36`、`tmux` 为空、GPU 全 idle
+  - 工作台包含 `L2 Phase A 最小 readout`、`engineering-proof + mixed signal`、`Drafting Workspace`
+- Risks / follow-ups:
+  - 当前 L2 只完成了 `Phase A`，正式 `Gate A` readout 仍待单独整理
+  - 论文草稿现阶段仍必须严格遵守 `candidate-main` 边界，不能把 `L2` 提前写成正文主张
+- Commit: 未提交
+
 ### 2026-04-19 06:52 | iteration 活跃引用去旧化完成，准备提交收口
 - Goal: 清除 repo 活跃路径中仍把 `iteration.md` 当作 `Approved Plans` 容器的旧引用，并在提交前验证新规则已经在文档、agent prompt、skills 与脚本之间保持一致。
 - Scope: `CLAUDE.md`, `.claude/agents/supervisor.md`, `.claude/agents/developer.md`, `.agents/skills/gpu-orchestrator/SKILL.md`, `.agents/skills/session-handoff/SKILL.md`, `iteration.md`
@@ -601,113 +775,3 @@ Canonical agent workflow directory is `.agents/`.
   - BD adapter 无 NaN, cosine_sim > 0.98 vs FP16 reference
   - TPOT (1.5B, seq=4096, gen=32): FP16 24.45ms, Triton 51.52ms, BD 61.92ms, FlashInfer 59.68ms
 - Next: 启动 run_all.sh 执行 Phase 1-5
-
-### 2026-04-10 22:56 | BitDecoding 探索完结（3 轮测试，无法使用我们的校准）
-- Goal: 穷尽所有路径验证 BitDecoding 能否使用我们的 KL per-channel 校准
-- Branch: `feat/bitdecoding-explore`
-- Results: 轮次1 格式不兼容 (per-channel vs per-token)，轮次2 BD自有量化 E2E=25.78ms (参考天花板)，轮次3 Q-prescaling trick 被 BD 黑盒 nibble 编码挡住 (scale=-0.84, 100% nibble 不匹配)
-- Conclusion: BitDecoding 只能作为外部参考系统，不能使用我们的校准
-- Changed files: bitdecoding_compat_test.py, tpot_bitdecoding.py, tpot_bitdecoding_e2e.py, bitdecoding_prescale_test.py
-
-### 2026-04-10 20:16 | BitDecoding 端到端 TPOT 脚本
-- Goal: 写一个真正的端到端 BitDecoding TPOT benchmark，手动实现 decode 循环（每层注意力用 BD fwd_kvcache_int）
-- Branch: `feat/bitdecoding-explore`
-- Changed files: `scripts/tpot_bitdecoding_e2e.py` (新建)
-- Commands: `CUDA_VISIBLE_DEVICES=0 python3 scripts/tpot_bitdecoding_e2e.py` (待远端空闲)
-- Note: BD 使用自己的 per-token 量化（系统级对比，非同量化换 kernel）。之前的 kernel-only 1.11ms 不可与端到端 TPOT 直接比较
-- Validation: 语法验证通过
-- Risks: 手动 forward 可能与 HF 内部实现有微小差异（RoPE 缓存、precision 等）
-
-### 2026-04-10 19:23 | BitDecoding INT4 格式兼容性验证（Gate FAIL）
-- Goal: 验证 BitDecoding (`bit_decode` 包) 能否直接消费我们的 per-channel K + per-token V 量化产物
-- Branch: `feat/bitdecoding-explore`
-- Changed files: `scripts/bitdecoding_compat_test.py` (新建)
-- Commands: `CUDA_VISIBLE_DEVICES=0 python3 scripts/bitdecoding_compat_test.py` (远端 H20)
-- Results:
-  - **Gate 0.1 FAIL**: BitDecoding `quant_mode="k-channel"` 实际是 per-token 量化 (scale [B,S,H,2])，与我们的 per-channel K (scale [B,H,D]) 正交不兼容
-  - **Gate 0.2 FAIL**: V scale max diff = 19.6（量化数学不同）
-  - **Gate 0.3 PARTIAL**: BD direct vs FP16 = 0.90（OK），roundtrip (dequant+repack) vs FP16 = 2.39（质量损失过大）
-- Conclusion: BitDecoding 无法作为"同量化换 kernel"对比。继续定位为外部参考系统（论文 ch4 已有此定位）。Triton v2 和 FlashInfer adapter 是"同量化换 kernel"的正确路径
-- Risks / follow-ups: S=64 时 BitDecoding 产生 NaN（边缘数值情况，S≥256 正常）
-
-### 2026-04-10 06:14 | X-lite 叙事换心脏：档 3 完整执行（A1-A6 + B1 + C1-C2 + D1-D3）
-- **Commits**（本次 batch 共 4 个）:
-  - `a3d99d4` — refactor(thesis): X-lite narrative rewrite (A1-A6) — bit-width dependent behavior alignment
-  - `3cb7316` — refactor(thesis): B1 polish sweep — soften overstrong phrasing in ch4
-  - `317de7f` — refactor(thesis): C1+C2 — demote inv_tau to exploratory observation
-  - `692ae7c` — refactor(thesis): D1+D2+D3 — data consistency fixes
-- **Goal**: 按用户路径 X-lite 决策把论文的 intellectual center 从"统一原则 + 5 贡献 + 完整闭环 + 工业启示"迁移到"behavior alignment 视角 + bit-width dependent objective validity + 3 主贡献 + 1 observation"。不改任何实验数据，只重写叙事
-- **用户决策链（2026-04-10）**:
-  - 用户要求验证 KL=MSE 声称的真实性后再决定定位：INT8 bitwise 等价（真），INT4 **结构性分歧**（clip_percentile 99.5 vs 99.0，448/448 scales 不同，median rel diff 12.35%，inv_tau 差 1.5）
-  - 用户采纳 ChatGPT 路径 X "换心脏" 判断，但加作用域收缩成路径 X-lite（"在本文协议下的观察模式"，非普适 regime law）
-  - 用户批评 plan 里的"写作纪律 checklist"被机械地写进 ch1 §1.4 成为卑微的 meta-disclaimer ("我们不宣称...")，要求用正面陈述 + `\cite{liu2024kivi}` 自然处理 prior art（教训已存入 `feedback_meta_disclaimers.md`）
-- **三个主要贡献 + 一个观察（最终定义）**:
-  1. **贡献一**: bit-width 依赖的校准目标有效性（INT8 下 KL 与 MSE 在 448/448 scales 上 bitwise 一致，INT4 下结构性分歧 12.35% median rel diff）
-  2. **贡献二**: 受控诊断—— Key 主导退化 + retrieval/PPL 解耦（Needle 100% vs PPL +13.7%）
-  3. **贡献三**: KIVI-style 格式上的行为引导实例化 RoleAlign（四模型 Needle 100%、KV 压缩 73%、64K 与 FP16 同位置失败作为边界证据）
-  4. **观察**: $\tau^{-1}$ × GQA scale-dependent pattern（$H_{kv}=2$ 改善 1.6%，$H_{kv}\geq 4$ 恶化 1.8%-6.0%，默认关闭）
-- **A1-A6 改动**:
-  - A1: ch1 §1.2 reframe 问题定义，加 `Qwen2.5-1.5B/7B/8B/14B, greedy decoding, robust selection` 作用域
-  - A2: ch1 §1.4 5-contribution list → 3 main + 1 observation，删除 meta-disclaimer 段落
-  - A3: abstract zh + en 4 段重写（问题 / bit-width 发现 / 诊断+实例化 / 观察），删除 "统一原则/首次/工业启示/核心贡献/贯通" 等词
-  - A4: ch5 §5.1 4 findings → 3-段式收束（规律/工具/边界与下一步），删除 §5.3 工业实践启示
-  - A5: ch3 §3.1 preamble + 本章小结 重写为三层结构（视角与度量/选择协议/实例化）
-  - A6 🆕: ch4 §4.2.1 新增 subsection "KL vs MSE: 在 bit-width 上的分歧" + tab:kl-mse-bitwidth-comparison
-- **B1 改动**: ch4 intro + §4.4 + §4.5 措辞清理（直接导出→启发，核心方法贡献→删除，4-claim framing → 3-contrib framing）
-- **C1+C2 改动**: ch3 §3.6 开头软化、ch4 §4.4 invtau subsection 标题改为"$\tau^{-1}$ 的 GQA 尺度依赖（探索性观察）"、ch4 §4.5 发现五 改为 observation
-- **D1+D2+D3 改动**: tab:int4-tpot-cross-model caption 加 seq_len=4K vs 32K 交叉引用 footnote；tab:main-results 明确 longbench_contains_macro 字段；tab:rolealign-results 加 Qwen2.5-14B 扩展行（1 seed）+ 更新 caption 从 3 模型到 4 模型
-- **5-claim 数据层 ↔ 3 主 + 1 observation 叙事层映射**（用户选的方案 D，数据层保留 5-claim 标签，叙事层走 3+1）:
-
-  | 原 5-claim | X-lite 定位 | 证据来源 |
-  |---|---|---|
-  | Claim 1 INT8 validated | 贡献一 INT8 regime + 贡献三 reference | `claim1_int8_validated.md` + isolation_{kl,mse}_ppl_1p5b |
-  | Claim 2 diagnostic lens | 贡献一 完整叙事 + 贡献三 methodology | `claim2_diagnostic_lens.md` + INT4 calib JSON 对比 |
-  | Claim 3 INT4 RoleAlign | 贡献三 完整叙事 | `claim3_int4_rolealign.md` + tab:rolealign-results + 14B |
-  | Claim 4 capability boundary | 贡献二 解耦 + 贡献三 failure-boundary fidelity | `claim4_boundary.md` + 64K 8B Needle |
-  | Claim 5 inv_tau × GQA | Observation (不进主贡献) | `claim5_invtau_gqa.md` + 14B inv_tau |
-
-- **Red-line 词清零**（所有 thesis chapters 均为 0 hits）:
-  - `统一原则`、`核心方法贡献`、`canonical validated instance`、`完整逻辑链路`、`工业启示`、`工业实践启示`、`正确的优化`、`直接导出`
-  - Meta-disclaimer 形式（"我们不宣称 X" / "我们不将 X 视为原创"）全部删除
-- **Verification**:
-  - 5 次 xelatex 稳定编译通过，120 pages 输出
-  - `grep "undefined" main.log` 返回 0 条
-  - 全局 red-line scan 0 hits
-- **Risks / follow-ups**:
-  - 用户审阅重写后的 ch1 §1.4 + abstract 风格，确认无新的 meta-disclaimer
-  - 未来可考虑是否把 ch4 §4.2.1 KL vs MSE 实验从 ch4 迁到 ch3 作为方法学 demonstration
-  - 远端 s1236 follow-up 通知未加入（已确认是 2026-04-03 旧失败记录，用户已决定不等 s1236）
-  - Plan 文件 `wondrous-fluttering-goblet.md` 所有任务已完成，可归档
-
-### 2026-04-10 04:46 | 全部实验完成 + 数据回收 + _canonical/ 更新（KL=MSE bitwise 等价 + 14B 扩展）
-- **Commits**:
-  - `17b3126` — feat(data-index): create results/_canonical as authoritative data entry
-  - `ec434d6` — feat(scripts,iteration): add KL-MSE isolation + 64K + 14B experiments batch
-- **Goal**: Plan v3 全部 GPU 实验完成，拉取数据到本地，更新金丝带索引
-- **Execution time**: 18:18 启动 → 20:07 全部完成（**1h49min**，原估算 29h，并行后加速 16×）
-- **三个最重要的新发现**:
-  1. **KL vs MSE isolation bitwise 等价** (INT8 下): PPL 9.3367 / 9.3367, Needle 100%/100%, RULER 4 子任务数字完全一致。**改变答辩叙事** — attention-KL 的价值**完全**是诊断能力，不是边际质量改善
-  2. **14B 模型扩展验证 Claim 5**: FP16 PPL=5.455, INT4-RA no-tau=5.7899 (+6.1%, 与 7B 一致), INT4-RA with-tau=5.8954 (+1.8% 恶化, 符合 H_kv=8 规律)。Needle 4K/8K/16K 全部 100%/100% (pass/exact)
-  3. **64K Context 在 8B 验证**: FP16 和 INT4-RA 都是 100% pass_rate（exact_match=0 是 8B 在 64K 下倾向生成解释文字的模型行为，非 INT4 问题）
-- **GPU 并行策略关键修正**:
-  - 之前假设"单 GPU 必须串行"，实际 H20 98GB 足够并行 4 任务
-  - 并行后 GPU 利用率 30% → 100%，总时间从 29h → 1.8h
-  - **教训**: 质量评测可共享 GPU（CLAUDE.md §5.3 明确），profiling 才需独占
-- **Changed files**:
-  - `results/_canonical/by_experiment/calibration.md` - isolation KL vs MSE 完整数据
-  - `results/_canonical/by_claim/claim5_invtau_gqa.md` - 14B 数据加入（Claim 5 扩展到 4 模型）
-  - `results/_canonical/by_experiment/needle.md` - 64K 和 14B Needle 数据
-  - `results/_canonical/by_experiment/ppl.md` - 14B PPL + isolation 数据
-  - `iteration.md` - 本条
-  - `artifacts/kv_calib_rolealign_14b_v3.json` (315 KB, 新增)
-- **Data synced (17 CSVs + 1 calib JSON)**:
-  - Isolation: 6 CSVs (KL/MSE × PPL/Needle/RULER)
-  - 64K Context: 2 CSVs (FP16/INT4-RA on 8B)
-  - 14B: 3 PPL + 6 Needle CSVs
-- **Commands**:
-  - 远端 4 个并行 tmux: isolation / ctx64k / dl_14b / pipeline_14b
-  - rsync 17 CSVs + 14B 校准 JSON 到本地
-- **Validation**: `find results/emnlp_defense_v1/runs/isolation_* runs/needle_*14b* runs/ppl_*14b* runs/needle_*64k* -name profile_*.csv | wc -l` → 17 CSVs ✓
-- **Risks / follow-ups**:
-  - 论文修改 prompt v2 待生成（KL=MSE 是新的最强答辩武器）
-  - commit 当前变更（.gitignore + _canonical/ + scripts + iteration.md）等用户批准

@@ -18,15 +18,109 @@
 
 ---
 
-## 0. 当前快照
+## 0'' Frozen State (2026-04-19 21:22 CST)
 
-**更新时间**：2026-04-19 06:17 CST
+> 本段是当前唯一有效的 live status。下方 `0'`、`A` 与 `1-10` 节保留作 audit / planning archive；若出现 `未开始`、`waiting-launch`、`pending gate` 等措辞，一律视为历史上下文，不代表当前状态。
+
+### 正式实验状态（最终）
+
+| Track | Status | Current interpretation | Canonical location |
+|---|---|---|---|
+| L2 Phase A (`K/V asymmetric`) | ✅ Complete | exploratory positive branch；Gate A 已关闭 | `results/l2_kv_asymmetric/` |
+| L2 Phase B (`Pareto v4`) | ✅ Complete | exploratory positive branch；Gate B PASS | `results/l2_pareto/` |
+| L2 Phase C (`Prompt-adaptive`, 8B official) | ✅ Complete | **weak / mixed**；不进入 final claim | `results/l2_prompt_adaptive/8b/` |
+| L2 Phase C (`Prompt-adaptive`, 1.5B/7B extras) | ✅ Complete | off-protocol exploratory only | `results/l2_prompt_adaptive/{1p5b,7b}/` |
+| Clean-Provenance P0/P1/P2/P3 | ✅ Complete | 5 claim 已升级为 `final-ready support`；P3 = mixed pass | `docs/clean_rerun_20260419T09/` + `results/clean_rerun_20260419T09/` |
+
+### 当前论文主线冻结口径
+
+1. **可直接写入 `final-ready support` 的 5 条结论**：
+   - Mistral-specific auto-k win
+   - 3B early-layer rescue regime（限 QA tasks）
+   - 14B top-tier not winner
+   - INT8 canonical path fidelity
+   - heuristic is a strong baseline
+2. **L2 A/B** 可写为 exploratory positive support / method-extension evidence，不写成主心脏 claim。
+3. **L2 C official (8B × 5 tasks)** 结论固定为：**weak / mixed**，只保留为 exploratory branch。
+4. **1.5B/7B Prompt-adaptive** 只能写成 off-protocol exploratory，不进入 Gate C 与正文主结论。
+5. 除 Future Work 外，当前**没有剩余实验任务**；后续主工作流切换到论文写作、图表整理、提交与归档。
+
+### 本地 canonical artifact freeze
+
+| Path | Visibility | Local count |
+|---|---|---|
+| `docs/clean_rerun_20260419T09/` | tracked-path | 5 md |
+| `results/l2_kv_asymmetric/` | gitignored on-disk | 180 files / 108 CSV |
+| `results/l2_pareto/` | gitignored on-disk | 710 files / 335 CSV / 32 JSON |
+| `results/l2_prompt_adaptive/` | gitignored on-disk | 240 files / 135 CSV / 15 JSON |
+| `results/clean_rerun_20260419T09/raw/` | gitignored on-disk | 462 files / 278 CSV |
+| `artifacts/clean_rerun_20260419T09/` | gitignored on-disk | 73 JSON |
+
+---
+
+## 0'. Overnight Completion Update (2026-04-19 18:30 CST)
+
+> 本段覆盖下方 07:03 快照的 live status。下方 "## 0. 当前快照" 保留作 audit trail。
+
+### L2 Track — 三 phase 全部完成
+
+| Phase | Status | Location |
+|---|---|---|
+| A (K/V asymmetric) | ✅ Complete (earlier; Gate A PASS, kv_asym 进 Pareto) | `results/l2_kv_asymmetric/` |
+| B (Pareto v4) | ✅ **12/12 policies PASS**; auto-k on Pareto front 3/4; Mistral-specific win (cov80=14.68); 7B uniform_int4 崩溃 (q=2.87, PPL=6326, needle=0%) | `results/l2_pareto/` + `pareto_{table,front,plot}_v4.csv` |
+| C (Prompt-adaptive) | ⚠️ **Official protocol = 8B × 5 tasks 已全覆盖**; 1.5B/7B 标记为 off-protocol exploratory. Gate C: **mixed signal** (selector 在 narra/hotpot 错选) | `results/l2_prompt_adaptive/` |
+
+### Clean-Provenance — Step 0-3 全部完成，本地 canonical repo 可见
+
+| Gate | Status | Note |
+|---|---|---|
+| P0 preflight | ✅ PASS | pin=`ddada19`, workspace `/root/autodl-tmp/LLM_KVCache_Quantization_clean`, 9-file md5 ledger |
+| P1 canonical (1.5B × 4 kvmode × 3 task = 12 runs) | ✅ PASS | int8_ours↔fp16 Δ=+0.02；int4/kivi 无灾难退化 |
+| P2 compare (4 model × 4 policy × 3 task = 48 runs) | ✅ PASS | 4 claim-critical reading 全复现 |
+| P3 extend (4 model × 4 policy × 2 task = 32 runs) | ⚠️ Mixed PASS | Mistral cov80 跨 core+extend 稳；3B/8B auto-k 在 extend weaken |
+
+### 5 claim 可升级为 `final-ready support`
+
+1. ✅ **Mistral-specific auto-k win** (core 14.76 / extend 15.69，cov80 on Pareto front)
+2. ✅ **3B early-layer rescue regime** (bakv_k1 选 layer 0，QA tasks 上胜 heuristic_k1 +98%)
+3. ✅ **14B top-tier not winner** (uniform_int4 core top 7.23；cov90 7.15 gap -0.08 exact)
+4. ✅ **INT8 canonical path 保真** (int8_ours vs fp16 Δ=+0.02)
+5. ✅ **heuristic 作为强 baseline** (14B 上 ≈ cov90；3B 上灾难提供 regime-依赖证据)
+
+### Caveats (脚注 only)
+
+- **8B cov80 ↔ bakv_k11 top-tier tie**: exploratory v4 cov80 > k11 (+0.35)；clean k11 > cov80 (-0.17)。写为 "both top-tier, close tie"。
+- **auto-k 在 3B/8B extend tasks 上 weaken**: 不宣称 "universal cross-task winner"；写为 "top tier on core QA tasks; Mistral-specific win extends to dureader/lcc"。
+
+### 本地可审计视图 (2026-04-19 18:35 同步完成)
+
+| Path | Tracked? | File count |
+|---|---|---|
+| `docs/clean_rerun_20260419T09/` | ✅ tracked-path ready-to-commit | 5（含 `completion_report_20260419.md`） |
+| `results/clean_rerun_20260419T09/` | Gitignored (on-disk) | `summary_{phase1,final}.csv` + `raw/`（278 CSV raw；280 CSV total） |
+| `artifacts/clean_rerun_20260419T09/` | Gitignored (on-disk) | 3 regen calib + 70+ policy JSONs（73 JSON total） |
+| `results/l2_kv_asymmetric/` | Gitignored | 108 CSV |
+| `results/l2_pareto/` | Gitignored | 335 CSV + pareto_*_v4.csv |
+| `results/l2_prompt_adaptive/` | Gitignored | 135 CSV total（45 task_summary；1.5B/7B 为 off-protocol exploratory） |
+
+### 升级建议
+
+- 正文主表：**升级上述 5 claim 到 `final-ready support`**
+- Threats-to-validity：加 2 个 caveat 脚注
+- **不扩 7B Phase C follow-up**（按 overnight plan §1C）
+- **不做 new experiments**；thesis/chapters/*.tex 本轮不触
+
+---
+
+## A. Archived Snapshot (2026-04-19 07:03 CST, pre-completion)
+
+**更新时间**：2026-04-19 07:03 CST
 
 **当前实验链状态**
 
 | 项 | 状态 | 来源 |
 |---|---|---|
-| Phase 2.6 A 方案 | **全部 exploratory wave 完成 @ 2026-04-19 05:27 CST** | 远端 `tmux` / 进程状态 |
+| Phase 2.6 A 方案 | **全部 exploratory wave 完成** | 远端 `tmux` / 进程状态 |
 | Wave 2 sanity | 已通过 | `results/phase2_trec_vcsum_sanity/` |
 | Mistral smoke | 已通过（6/6） | `results/phase2_c4_mistral7b/smoke/` |
 | Wave 1 (8B extended) | 已完成（30/30；含 `9-run auto-k backfill`） | `results/phase2_c2b_llama8b_extended/` |
@@ -36,17 +130,21 @@
 | Wave 5 smoke | 已完成（6/6） | `results/phase2_c4_mistral7b/smoke/` |
 | Wave 7a (7B extend tasks) | 已完成（36/36） | `results/phase2_batch4_extend_tasks_7b/` |
 | Wave 7b (8B extend tasks) | 已完成（40/40） | `results/phase2_batch5_extend_tasks_8b/` |
-| Wave 6 (Qwen-3B sweep) | **已完成（45/45 @ 05:27）；3 task GATE PASS；含 auto-k** | `results/phase2_c5_qwen3b/` |
+| Wave 6 (Qwen-3B sweep) | **已完成（45/45）；3 task GATE PASS；含 auto-k** | `results/phase2_c5_qwen3b/` |
+| L2 Phase A (`K/V asymmetric`) | **已完成（36/36）；Gate A readout 待正式整理** | `results/l2_kv_asymmetric/` |
+| L2 Pareto | Archived snapshot: 当时尚未开始（现已完成，见 `0''`） | `results/l2_pareto/` |
+| L2 Prompt-adaptive | Archived snapshot: 当时尚未开始（现已完成，见 `0''`） | `results/l2_prompt_adaptive/` |
 
 **当前远端执行形态说明**
 
-- 截至 `2026-04-19 05:27 CST`，Phase 2.6 exploratory 链全部完成：
-  - Wave 1/3/4/5/7a/7b/6 + Wave 2 sanity + Mistral smoke + 18-run auto-k backfill 全 GATE PASS
-- 当前 `tmux` 为空，3 GPU 全 idle
-- 当前最稳的解释：
-  - Phase 2.6 exploratory 层已全部收口
-  - 数据可用于 `candidate-main` 层的 readout 与 叙事调整
-  - 但不作最终主表唯一源；仍需 clean-provenance rerun 覆盖验证
+- 截至 `2026-04-19 07:03 CST`，远端状态是：
+  - `L1 exploratory` 全部完成：Wave 1/3/4/5/7a/7b/6 + Wave 2 sanity + Mistral smoke + 18-run auto-k backfill 全部落盘
+  - `L2 Phase A` 也已完整落盘：`L2KV = 36`
+  - 当前 `tmux` 为空，3 GPU 全 idle
+- 当前最稳的执行态判断：
+  - **L1 已足以支撑论文改写的 `candidate-main` 草稿工作**
+  - **L2 已进入 exploratory readout 阶段，但尚不足以改写正文主线**
+  - **当时 clean-provenance 仍是从 `candidate-main` 升级到 `final-ready` 的硬门槛**（现已完成，见 `0''`）
 
 **当前 formal audit 状态**
 
@@ -64,6 +162,20 @@
   - [docs/clean_provenance_launch_plan.md](/Users/chenzilang/Desktop/LLM_KVCache_Quantization/docs/clean_provenance_launch_plan.md) 已落地
   - 默认 pin：`ddada19`
   - 当前建议：单独执行 `L1 claim-critical` clean rerun，不与 `L2` exploratory 混跑
+
+**L2 Phase A 最小 readout（exploratory only）**
+
+| Model | Best mean | `kv_asym_avgbits5p0` mean | 当前最稳解释 |
+|---|---:|---:|---|
+| `1.5B` | `bakv_auto_cov80_max = 6.9972` | `6.8940` | `kv_asym` 在 `narrativeqa` 有正点，但整体仍次于 `auto-k` |
+| `7B` | `bakv_auto_cov80_max = 7.0554` | `6.7830` | mixed / weak，未超过当前 strongest baseline |
+| `8B` | `bakv_auto_cov80_max = 9.3543` | `8.4838` | 明显低于 `auto-k`，也低于当前 `uniform_int4` 均值 |
+
+- 当前 L2 这一步最稳的解释是：
+  - `K/V asymmetric` 路径已经**工程上跑通**，不是纸面设计
+  - 但当前 `Phase A` 质量信号是 **mixed**
+  - 它现在更像 `L2 exploratory branch`，还**不应进入论文正文主线**
+  - 下一步若继续推进，应该先做 **Gate A formal readout**，再决定是否进入 Pareto，而不是把当前 partial positive signal 直接吸收入主叙事
 
 **Wave 1 (8B extended) 当前快速判读**
 
@@ -234,9 +346,9 @@
 | **Auto-k / auto-budget range proposer** | 升级为新方法扩展候选（已进入实验链，并拿到 Mistral full 首轮正面证据） | 8B 扩展 sweep 提出“固定 `k` 不稳”的问题；Mistral full 进一步显示 `bakv_auto_cov80_max` 取得当前最佳平均分，使 auto-k 从方法设想升级为具备 empirical 支撑的候选扩展 | `results/phase2_c2b_llama8b_extended/` + `results/phase2_c4_mistral7b/` + [docs/auto_k_selector_experiment_plan.md](/Users/chenzilang/Desktop/LLM_KVCache_Quantization/docs/auto_k_selector_experiment_plan.md) + `scripts/adaptive/behavior_aligned_allocator.py` | exploratory |
 | **3B early-layer bottleneck regime** | 升级为当前最值得写进正文的新异常现象 | `bakv_k1` 明确保护 `layer 0`，而 `heuristic_k1` 保护中层并灾难性失败，显示小模型下 first-layer rescue 的异常重要性 | `results/phase2_c5_qwen3b/` + [docs/phase2_data_mainline_audit_20260419.md](/Users/chenzilang/Desktop/LLM_KVCache_Quantization/docs/phase2_data_mainline_audit_20260419.md) | candidate-main |
 | **Extend-task evidence triage (`dureader > lcc > trec/vcsum`)** | 升级为工作台正式判定 | allocator 的 extend-task 证据不能再按 4 task 平均混讲，真正有信息量的主要是 `dureader`，`lcc` 次之，`trec/vcsum` 只保留作边界披露 | `results/phase2_batch4_extend_tasks_7b/` + `results/phase2_batch5_extend_tasks_8b/` + [docs/phase2_data_mainline_audit_20260419.md](/Users/chenzilang/Desktop/LLM_KVCache_Quantization/docs/phase2_data_mainline_audit_20260419.md) | candidate-main |
-| **K/V asymmetric allocator** | 升级为下一阶段主升级候选 | 当前项目已具备 `k_bits/v_bits` 路由、MixedKV 执行路径与 `K > V` 诊断资产，且 L2 v1 本地脚本链已完成并通过最小验证；下一步是单独起 launch plan | `src/engine/generate_loop.py` + `src/cache/mixed_kv_cache.py` + `docs/behavior_guided_allocation_roadmap.md` + `scripts/phase2_l2_kv_asymmetric.sh` | scripts-ready / waiting-launch |
-| **Quality-cost Pareto analysis** | 升级为下一阶段实验组织候选 | 当前 allocator 线主要比较 task quality；若要把 allocation 提升为预算分配方法，必须联合纳入 latency、memory、PPL、Needle 等 cost 维度；L2 通用 runner 与聚合脚本已就位 | `scripts/profile_latency.py` + `scripts/profile_memory.py` + `scripts/eval_ppl.py` + `scripts/eval_needle.py` + `scripts/phase2_l2_pareto_eval.sh` | scripts-ready / waiting-launch |
-| **Prompt-adaptive allocation** | 升级为下一阶段策略层候选 | 相比 head-wise 改造，它更适合作为静态 allocator 稳定后的下一步：先做 policy-selection 层的 prompt/task/profile-aware 控制；MVP selector 与 runner 已准备好 | `docs/behavior_guided_allocation_roadmap.md` + `scripts/adaptive/build_prompt_policy_pool.py` + `scripts/phase2_l2_prompt_adaptive.sh` | scripts-ready / waiting-launch |
+| **K/V asymmetric allocator** | 升级为下一阶段主升级候选 | 当前项目已具备 `k_bits/v_bits` 路由、MixedKV 执行路径与 `K > V` 诊断资产；L2 `Phase A` 已完成 `1.5B/7B/8B` 最小矩阵，当前更准确状态是 engineering-proof + mixed quality signal | `src/engine/generate_loop.py` + `src/cache/mixed_kv_cache.py` + `docs/behavior_guided_allocation_roadmap.md` + `scripts/phase2_l2_kv_asymmetric.sh` + `results/l2_kv_asymmetric/` | 已执行；保留为 exploratory positive branch |
+| **Quality-cost Pareto analysis** | 升级为下一阶段实验组织候选 | 当前 allocator 线主要比较 task quality；若要把 allocation 提升为预算分配方法，必须联合纳入 latency、memory、PPL、Needle 等 cost 维度；L2 通用 runner 与聚合脚本已落地并完成 `Phase B v4` | `scripts/profile_latency.py` + `scripts/profile_memory.py` + `scripts/eval_ppl.py` + `scripts/eval_needle.py` + `scripts/phase2_l2_pareto_eval.sh` | 已执行；Phase B PASS |
+| **Prompt-adaptive allocation** | 升级为下一阶段策略层候选 | 相比 head-wise 改造，它更适合作为静态 allocator 稳定后的下一步：先做 policy-selection 层的 prompt/task/profile-aware 控制；MVP selector 与 runner 已跑通 8B 官方矩阵与 1.5B/7B exploratory extend | `docs/behavior_guided_allocation_roadmap.md` + `scripts/adaptive/build_prompt_policy_pool.py` + `scripts/phase2_l2_prompt_adaptive.sh` | 已执行；8B official complete / mixed |
 | **Mistral family = wide-budget profile evidence** | 升级为正文/附录中的新 supporting evidence 候选 | `Wave 5` 中 `auto_cov80` 对应的较宽预算区间拿到当前最好平均分，提示 family-specific profile 可能把高概率预算推到更宽位置 | `results/phase2_c4_mistral7b/` + `artifacts/allocator/sweep_mistral7b/*.json` | exploratory |
 
 ### 2.2 需要降级的内容
@@ -392,6 +504,17 @@
      - 它更多是在复现：**extend tasks 的信息量高度不均衡**
      - 当前更适合把它写成“补强任务分层判断”的 supporting evidence，而不是 allocation 主 finding
 
+9. **L2 Phase A（K/V asymmetric）已完整落盘，但当前只支持“工程可行 + mixed signal”**
+   - 含义：`1.5B / 7B / 8B × 3 tasks × 4 policies = 36` 条 summary CSV 已全部落盘，说明 `int4_mixed_kv + policy_json + kv asym export` 这条执行链已经跑通
+   - 当前最小 readout：
+     - `1.5B`：`auto_cov80 = 6.9972`，`kv_asym = 6.8940`
+     - `7B`：`auto_cov80 = 7.0554`，`kv_asym = 6.7830`
+     - `8B`：`auto_cov80 = 9.3543`，`kv_asym = 8.4838`
+   - 对文章主线的意义：
+     - 当前 **不能**把 `K/V asymmetric` 写成已成立的新正文主张
+     - 它当前更像 `L2 exploratory branch` 的**工程可行性验证**
+     - 如果后续要升级，必须先过 `Gate A formal readout`，再看是否值得进入 `Pareto`
+
 ### 4.2 当前主线升级建议（一句话版本）
 
 > 论文主线应从“某种 allocator 普遍优于 baseline”升级为：  
@@ -399,6 +522,9 @@
 
 > 如果 8B 新证据和后续 14B / Mistral 继续支持“更大模型倾向需要更大 budget”，则更进一步的升级方向不是恢复 `pure scale-shift`，而是：
 > **replace hand-picked fixed-k with a profile-aware automatic budget range proposer.**
+
+> 当前 `L2` 的最稳定位则应写成：
+> **an exploratory follow-up branch for post-mainline method extension, not part of the current thesis-ready claim set.**
 
 ---
 
@@ -457,12 +583,13 @@
 
 ## 7. 当前版本的工作结论
 
-**现在不要急着改论文正文。**  
+**现在可以开始写论文草稿，但只能在这份工作台底部继续写，不直接迁入 `thesis/chapters/`。**  
 当前正确顺序应当是：
 
-1. 先用这份文档持续组织 **已完成的 Phase 2.6 exploratory 证据**
-2. 把章节级修改点和草稿块维护在本工作台内部
-3. 等 `Wave 6` 正式 readout、clean-provenance 覆盖验证，及 `L2` 首轮 exploratory 结果更明确后，再决定哪些内容迁入正式正文
+1. 先把 **L1 的 `candidate-main` 结论** 作为论文改写的唯一稳定输入
+2. 在本工作台中继续维护章节级草稿块，并从文档底部开始写新草稿
+3. 把 `L2` 只当成 **exploratory follow-up** 记录状态，不让它抢走当前论文主线
+4. 等 clean-provenance 覆盖验证完成后，再决定哪些内容迁入正式正文
 
 在那之前，不直接修改：
 
@@ -476,13 +603,11 @@
 1. 把 **3B / 8B / 14B / Mistral** 四条线的差异和 unified auto-k 结论写清楚
 2. 记清楚 **auto-k 当前实现状态、4-model supporting evidence 与 clean-provenance 边界**
 3. 跟进 **extend-task** 对证据等级的影响，特别是 `dureader / lcc / trec / vcsum` 的新角色分工
-4. 把 `objective.md` 中的 **L2 三条方向** 作为下一阶段升级候选单独管理，并明确本地脚本已 ready：
-   - `K/V asymmetric allocator`
-   - `Quality-cost Pareto analysis`
-   - `Prompt-adaptive allocation`
-5. 下一步先单独起 **L2 launch plan**，再决定远端启动顺序
-6. 把 **章节修改草稿** 继续写在工作台里
-7. 再看它是否值得升级为 `ch3/ch4` 的方法扩展
+4. 把 `objective.md` 中的 **L2 三条方向** 继续作为下一阶段升级候选单独管理
+5. 当前 `L2` 只吸收一个事实：
+   - `K/V asymmetric Phase A` 已完成，但仅支持 “engineering-proof + mixed signal”
+6. 把 **章节修改草稿** 继续写在工作台里，并从本文档底部开始累积正文候选文本
+7. clean-provenance 完成前，不把任何 `candidate-main` 直接升级成 `final-ready`
 
 ### 7.1 与 `objective.md` 的当前对齐
 
@@ -496,7 +621,7 @@
 其中：
 
 - 本工作台当前主要维护 `L1`
-- 同时为 `L2` 准备升级入口
+- 同时跟踪 `L2` 的 exploratory 进度与是否值得进入下一 gate
 - 暂不把 `L2` 或 `L3` 直接写成正文既成事实
 
 当前区别于 `objective.md` 的**默认执行顺序**，已单独固定在：
@@ -508,8 +633,8 @@
 1. 把 formal audit 的结论正式吸收入工作台与 readout 体系
 2. 固化 cross-4-model auto-k 的 `candidate-main` 口径
 3. 明确 clean-provenance rerun 的 claim-critical compare set
-4. 单独起 `L2` launch plan，明确远端启动顺序与 GPU 占用
-5. 再按 `K/V asymmetric allocator -> Pareto analysis -> Prompt-adaptive allocation` 的顺序推进 `L2`
+4. 在工作台底部开始组织论文草稿
+5. 等 `L2 Gate A` 正式判读后，再决定是否继续 `Pareto -> Prompt-adaptive`
 
 ---
 
@@ -626,3 +751,37 @@ k_p = \min \left\{ k : \frac{\sum_{i=1}^{k} s_{(i)}}{\sum_{j=1}^{L} s_j} \ge p \
 ```tex
 一个直接的后续方向，是将固定预算 sweep 升级为 profile-aware 的自动预算区间提议器。相比依据模型参数量直接猜测保护层数，这一路径更强调由 calibration profile 驱动的预算决策，因此更有希望将 allocator 从经验性实验协议提升为可复用、可解释的方法能力。该方向当前已经在 Mistral-7B full sweep 上获得初步正面结果，并已补齐 `Wave 1 / Wave 4` 的 backfill；下一步需要通过统一 readout 与 clean-provenance 覆盖验证来确定其最终价值。
 ```
+
+---
+
+## 10. Drafting Workspace（从这里开始写）
+
+> 用途：从这一节开始，允许直接往下续写论文草稿。  
+> 上方 `0-9` 节继续作为工作台维护区；从这里开始是**草稿区**。
+
+### 10.1 当前写作约束
+
+- 允许写 **`final-ready support`**，但仅限上方 `0''` 已冻结的 5 条结论
+- 若提到 `L2`，只能写成：
+  - `Phase A/B`: exploratory positive support / method-extension evidence
+  - `Phase C official`: weak / mixed，不进 final claim
+  - `1.5B/7B` Prompt-adaptive：off-protocol exploratory only
+- 不直接修改 `thesis/chapters/*.tex`
+- 若某段需要最终主表数字或 clean 结论，优先引用 `docs/clean_rerun_20260419T09/readout_final.md` 与本地 `results/` 汇总表
+
+### 10.2 当前最适合直接起草的主题
+
+1. `Introduction` 中关于 `family-/scale-/task-dependent regimes` 的问题重述
+2. `Method` 中关于 `profile-aware budget range proposer` 的扩展定位
+3. `Experiments` 中关于：
+   - heuristic 是强 baseline
+   - 3B 是 early-layer bottleneck regime
+   - auto-k 是 strong extension, not universal winner
+4. `Conclusion` 中关于 framework 而非 superiority 的收束
+
+### 10.3 草稿开始区
+
+> 从这里开始直接写。  
+> 建议格式：
+> - `### Draft YYYY-MM-DD HH:MM | 段落主题`
+> - 然后贴对应草稿正文

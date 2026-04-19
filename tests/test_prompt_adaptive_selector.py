@@ -43,7 +43,10 @@ def test_build_policy_pool_and_resolve_selector(tmp_path: Path):
     )
     assert resolve_policy_entry(selector, "narrativeqa")["policy_id"] == "fixed_k"
     assert resolve_policy_entry(selector, "gov_report")["policy_id"] == "auto_k"
-    assert resolve_policy_entry(selector, "unknown_task")["policy_id"] == "auto_k"
+    with pytest.raises(KeyError, match="unknown task_id"):
+        resolve_policy_entry(selector, "unknown_task")
+    with pytest.raises(KeyError, match="unknown profile_bucket"):
+        resolve_policy_entry(selector, "narrativeqa", profile_bucket="unknown")
 
 
 def test_selector_rejects_unknown_policy_id(tmp_path: Path):

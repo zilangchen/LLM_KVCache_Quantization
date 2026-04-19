@@ -10,17 +10,55 @@ from collections import defaultdict
 from pathlib import Path
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RUN_RE = re.compile(
     r"l2prompt_(?P<model>[a-z0-9]+)_(?P<variant>global_fixed_k|global_auto_k|prompt_adaptive)_(?P<task>[a-z0-9_\-]+)_n(?P<n>\d+)"
 )
 
 
+def _normalize_logged_csv_path(raw_path: str, *, log_path: Path, runs_dir: Path) -> Path:
+    candidate = Path(raw_path.strip())
+    if candidate.is_absolute():
+        return candidate.resolve()
+    if len(candidate.parts) > 1:
+        return (PROJECT_ROOT / candidate).resolve()
+    return (log_path.parent / candidate).resolve()
+
+
+def _build_csv_to_runname_map(runs_dir: Path) -> tuple[dict[Path, str], dict[str, str]]:
+    """Map each produced CSV path → run_name from sibling .log (see
+    aggregate_l2_kv_asymmetric for rationale — eval_longbench CSV schema
+    currently lacks a run_name column)."""
+    path_mapping: dict[Path, str] = {}
+    basename_candidates: dict[str, set[str]] = defaultdict(set)
+    csv_ref_re = re.compile(r"Saved to (?P<path>.+?longbench_task_summary_[^ \n]+\.csv)")
+    for log in runs_dir.rglob("l2prompt_*.log"):
+        try:
+            text = log.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        for match in csv_ref_re.finditer(text):
+            normalized = _normalize_logged_csv_path(match.group("path"), log_path=log, runs_dir=runs_dir)
+            path_mapping[normalized] = log.stem
+            basename_candidates[normalized.name].add(log.stem)
+    basename_mapping = {
+        basename: next(iter(run_names))
+        for basename, run_names in basename_candidates.items()
+        if len(run_names) == 1
+    }
+    return path_mapping, basename_mapping
+
+
 def _scan_rows(runs_dir: Path) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
+    csv_to_runname, basename_to_runname = _build_csv_to_runname_map(runs_dir)
     for path in sorted(runs_dir.rglob("longbench_task_summary_*.csv")):
         with path.open(newline="", encoding="utf-8") as handle:
             for row in csv.DictReader(handle):
-                run_name = row.get("run_name", "")
+                # 1) CSV column (future-proof) → 2) log-filename fallback
+                run_name = row.get("run_name", "") or csv_to_runname.get(path.resolve(), "")
+                if not run_name:
+                    run_name = basename_to_runname.get(path.name, "")
                 match = RUN_RE.match(run_name)
                 if not match:
                     continue

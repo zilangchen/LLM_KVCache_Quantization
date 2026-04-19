@@ -81,6 +81,15 @@ def _write_task_failure(
     path = out_dir / f"task_failure_{Path(__file__).stem}.json"
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=True), encoding="utf-8")
 
+
+def _numeric_values(results: list[dict[str, object]], key: str) -> list[float]:
+    values: list[float] = []
+    for row in results:
+        value = row.get(key)
+        if isinstance(value, (int, float)) and math.isfinite(float(value)):
+            values.append(float(value))
+    return values
+
 class MemoryMonitor(threading.Thread):
     def __init__(self, device_id=0, interval=0.1):
         super().__init__()
@@ -292,6 +301,17 @@ def main():
         help="Replica id for repeated runs (set by run_experiments multi-seed loop).",
     )
     parser.add_argument("--out_dir", type=str, default="results/runs")
+    # 2026-04-19 L2 Phase B v4: accept --warmup for CLI parity with
+    # profile_latency.py (same upstream runner calls both with identical
+    # args). `--runs` already defined at L182 (PRF-021 repeated measurement);
+    # do NOT redefine it here. Memory profiling has no warmup loop, so this
+    # flag is accepted and ignored.
+    parser.add_argument(
+        "--warmup",
+        type=int,
+        default=0,
+        help="Accepted for CLI parity with profile_latency; memory profiling has no warmup loop.",
+    )
 
     args = parser.parse_args()
     _LAST_ARGS = args
@@ -504,25 +524,32 @@ def main():
 
     # PRF-021: Print summary statistics for memory measurements.
     if len(results) >= 2:
-        n = len(results)
-        _t_crit_table = {
+        total_n = len(results)
+        t_crit_table = {
             1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
             6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
             15: 2.131, 20: 2.086, 25: 2.060, 30: 2.042,
         }
-        df = n - 1
-        t_crit = _t_crit_table.get(df)
-        if t_crit is None:
-            candidates = [k for k in _t_crit_table if k <= df]
-            t_crit = _t_crit_table[max(candidates)] if candidates else 1.96
         _stat_keys = ["gpu_mem_peak_mb", "torch_peak_mb", "kv_cache_mem_mb"]
-        print(f"\n--- Memory Summary ({n} runs, 95% CI) ---")
+        print(f"\n--- Memory Summary ({total_n} runs, 95% CI) ---")
         for key in _stat_keys:
-            vals = [r[key] for r in results]
-            mean = sum(vals) / n
-            var = sum((v - mean) ** 2 for v in vals) / (n - 1)
+            vals = _numeric_values(results, key)
+            if len(vals) < 2:
+                if vals:
+                    print(f"  {key}: mean={vals[0]:.2f}, std=0.00, 95%CI=unavailable (only 1 finite sample)")
+                else:
+                    print(f"  {key}: unavailable (no finite samples)")
+                continue
+            valid_n = len(vals)
+            df = valid_n - 1
+            t_crit = t_crit_table.get(df)
+            if t_crit is None:
+                candidates = [k for k in t_crit_table if k <= df]
+                t_crit = t_crit_table[max(candidates)] if candidates else 1.96
+            mean = sum(vals) / valid_n
+            var = sum((v - mean) ** 2 for v in vals) / (valid_n - 1)
             std = math.sqrt(var)
-            ci = t_crit * std / math.sqrt(n)
+            ci = t_crit * std / math.sqrt(valid_n)
             print(f"  {key}: mean={mean:.2f}, std={std:.2f}, 95%CI=[{mean - ci:.2f}, {mean + ci:.2f}]")
 
     if args.save_csv and results:

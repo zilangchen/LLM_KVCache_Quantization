@@ -1,5 +1,6 @@
 import csv
 import json
+import os
 from pathlib import Path
 
 from scripts.aggregate_l2_pareto import build_front, build_table
@@ -40,10 +41,17 @@ def test_build_table_and_front(tmp_path: Path):
         ],
     )
     _write_csv(
-        fast_dir / "profile_latency_x.csv",
+        fast_dir / "profile_latency_old.csv",
         ["run_name", "ttft_ms", "tpot_ms"],
         [{"run_name": "x", "ttft_ms": 10.0, "tpot_ms": 5.0}],
     )
+    os.utime(fast_dir / "profile_latency_old.csv", (1, 1))
+    _write_csv(
+        fast_dir / "profile_latency_new.csv",
+        ["run_name", "ttft_ms", "tpot_ms"],
+        [{"run_name": "x", "ttft_ms": 9.0, "tpot_ms": 4.0}],
+    )
+    os.utime(fast_dir / "profile_latency_new.csv", (2, 2))
     _write_csv(
         fast_dir / "profile_memory_x.csv",
         ["run_name", "gpu_mem_peak_mb"],
@@ -89,11 +97,35 @@ def test_build_table_and_front(tmp_path: Path):
         [{"run_name": "y", "ttft_ms": 11.0, "tpot_ms": 6.0}],
     )
 
+    incomplete_dir = raw_dir / "7b" / "incomplete_policy"
+    incomplete_dir.mkdir(parents=True)
+    (incomplete_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "model_key": "7b",
+                "model_id": "Qwen/Qwen2.5-7B-Instruct",
+                "policy_id": "incomplete_policy",
+                "policy_json": "/tmp/incomplete.json",
+                "avg_bits": 4.5,
+            }
+        ),
+        encoding="utf-8",
+    )
+    _write_csv(
+        incomplete_dir / "longbench_task_summary_incomplete.csv",
+        ["run_name", "task_name", "official_metric_name", "official_metric_value"],
+        [
+            {"run_name": "z", "task_name": "narrativeqa", "official_metric_name": "f1", "official_metric_value": 8.5},
+            {"run_name": "z", "task_name": "hotpotqa", "official_metric_name": "f1", "official_metric_value": 7.5},
+            {"run_name": "z", "task_name": "gov_report", "official_metric_name": "rouge_l", "official_metric_value": 9.5},
+        ],
+    )
+
     table = build_table(raw_dir)
-    assert len(table) == 2
+    assert len(table) == 3
     fast_row = next(row for row in table if row["policy_id"] == "fast_policy")
     assert fast_row["quality_core"] == "8.0000"
-    assert fast_row["tpot_ms"] == "5.0000"
+    assert fast_row["tpot_ms"] == "4.0000"
 
     front = build_front(table)
     assert [row["policy_id"] for row in front] == ["fast_policy"]

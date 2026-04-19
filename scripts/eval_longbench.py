@@ -879,6 +879,11 @@ def main() -> None:
     parser.add_argument("--replica_id", type=int, default=0)
     parser.add_argument("--out_dir", type=str, default="results/runs")
 
+    explicit_longbench_max_new_tokens = any(
+        raw == "--longbench_max_new_tokens" or raw.startswith("--longbench_max_new_tokens=")
+        for raw in sys.argv[1:]
+    )
+
     args = parser.parse_args()
     _LAST_ARGS = args
 
@@ -893,7 +898,7 @@ def main() -> None:
     # resolve_run_config sets args.gen_len but this script uses
     # args.longbench_max_new_tokens.  If gen_len was set by config and
     # longbench_max_new_tokens was not explicitly passed, use gen_len.
-    if getattr(args, "gen_len", None) is not None:
+    if getattr(args, "gen_len", None) is not None and not explicit_longbench_max_new_tokens:
         args.longbench_max_new_tokens = int(args.gen_len)
 
     normalize_kv_params(args)

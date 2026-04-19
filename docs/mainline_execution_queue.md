@@ -17,7 +17,65 @@
 
 ---
 
-## 0. 当前状态快照
+## 0'' Freeze Update (2026-04-19 21:22 CST)
+
+> 本段是当前唯一有效的队列状态。下方 `0` 与 `1-9` 节保留为 pre-completion archive；任何 `waiting launch`、`scripts ready`、`默认顺序` 或待执行项都只代表历史上下文。
+
+### 当前收口状态
+
+| Track / Phase | Status | Canonical path |
+|---|---|---|
+| L2 Phase A | ✅ Complete | `results/l2_kv_asymmetric/` |
+| L2 Phase B | ✅ Complete | `results/l2_pareto/` |
+| L2 Phase C (8B official) | ✅ Complete | `results/l2_prompt_adaptive/8b/` |
+| L2 Phase C (1p5b/7b off-protocol) | ✅ Complete / exploratory only | `results/l2_prompt_adaptive/{1p5b,7b}/` |
+| Clean-Provenance P0/P1/P2/P3 | ✅ Complete | `docs/clean_rerun_20260419T09/` + `results/clean_rerun_20260419T09/` |
+| Full remote → local sync | ✅ Complete | `results/` + `artifacts/` + `docs/clean_rerun_20260419T09/` |
+
+### 除 Future Work 外，无剩余实验队列
+
+1. 正式协议内实验已全部完成。
+2. 当前剩余的近端工作只有：
+   - 冻结仓库状态
+   - 论文写作 / 图表整理 / 表格落稿
+   - 后续是否 push / tag / PR 的决策
+3. `Prompt-adaptive` 的 1.5B/7B 结果保留为 off-protocol exploratory，不再进入任何正式 gate。
+
+### 当前唯一推荐动作
+
+- 冻结当前仓库状态并 commit
+- 从 `docs/clean_rerun_20260419T09/`、`results/clean_rerun_20260419T09/` 与 `results/l2_*` 出发写论文
+- 不再启动新实验（Future Work 除外）
+
+---
+
+## 0'. Overnight Completion Update (2026-04-19 18:30 CST)
+
+> 本段覆盖下方 06:17 快照的 live status。下方 "## 0. 当前状态快照" 保留作 audit trail。
+
+### 执行队列状态
+
+| Track / Phase | Status | 产物路径 (本地 canonical) |
+|---|---|---|
+| Phase 2.6 A 方案 (exploratory) | ✅ 全完成 (前期) | `results/phase2_*/` |
+| L2 Phase A (K/V asymmetric) | ✅ 36 runs PASS | `results/l2_kv_asymmetric/` |
+| L2 Phase B (Pareto v4) | ✅ 12/12 policies PASS | `results/l2_pareto/` + `pareto_*_v4.csv` |
+| L2 Phase C (Prompt-adaptive 8B 官方矩阵) | ✅ 5/5 task (narra/hot/gov/dureader/lcc) | `results/l2_prompt_adaptive/8b/` |
+| Clean-Provenance P0 preflight | ✅ PASS (pin=ddada19) | `docs/clean_rerun_20260419T09/MANIFEST.md` |
+| Clean-Provenance P1 canonical | ✅ 12/12 PASS | `results/clean_rerun_20260419T09/raw/step1_canonical/` |
+| Clean-Provenance P2 compare | ✅ 48/48 PASS | `results/clean_rerun_20260419T09/raw/step2_compare/` |
+| Clean-Provenance P3 extend | ⚠️ 32/32 Mixed PASS | `results/clean_rerun_20260419T09/raw/step3_extend/` |
+
+### 除 Future Work 外，队列无剩余任务
+
+- L1 / L2 / clean-provenance 全收口
+- 5 claim 可升级 `final-ready`
+- 2 个 caveat 脚注记入 threats-to-validity
+- 本地 canonical repo 已拥有全部 L2 raw + clean rerun summaries/readouts + 3 regen calibrations + 70+ policy JSONs
+
+---
+
+## A. Archived Snapshot (2026-04-19 06:17 CST, pre-completion)
 
 **更新时间**：2026-04-19 06:17 CST
 
@@ -71,6 +129,8 @@
   - 不是 `final-ready`：clean-provenance rerun 仍是升级前提
 
 ---
+
+> 下方 `1-9` 节继续保留为 **pre-completion queue archive**。其中出现的默认顺序、待执行项与 launch 建议仅用于回溯当时的排程，不再作为当前动作建议。
 
 ## 1. 我们已经跑了什么
 

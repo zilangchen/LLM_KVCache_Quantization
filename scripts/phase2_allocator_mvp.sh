@@ -35,6 +35,7 @@ JSONL_DIR="/root/autodl-tmp/longbench_data/data"
 OUT_DIR="results/phase2_allocator_mvp"
 POLICY_DIR="artifacts/allocator"
 mkdir -p "$OUT_DIR"
+FAILED=0
 
 # 5 policies 固定顺序（run_name 含 policy 名 → 聚合时区分实验组）
 POLICIES=(
@@ -59,6 +60,7 @@ for POLICY in "${POLICIES[@]}"; do
 
     if [ ! -f "$POLICY_JSON" ]; then
         echo "[$TASK/$POLICY] ERROR: policy JSON not found: $POLICY_JSON"
+        FAILED=1
         continue
     fi
 
@@ -83,11 +85,16 @@ for POLICY in "${POLICIES[@]}"; do
         echo "  ENG-045 warnings: ${eng_cnt:-0}"
     else
         echo "[$TASK/$POLICY] FAILED, see $MODE_LOG"
+        FAILED=1
     fi
 done
 
 echo ""
 echo "=============================================="
 echo "Phase 2 编号 6 M3 task $TASK 完成: $(date)"
-ls -la "$OUT_DIR/" | grep "$TASK" | head -10
+find "$OUT_DIR" -maxdepth 1 -type f -name "*${TASK}*" | sort | head -10
 echo "=============================================="
+
+if [ "$FAILED" -ne 0 ]; then
+    exit 3
+fi

@@ -58,6 +58,23 @@ def test_per_layer_bits_happy_path(device):
         assert v_out.shape == v.shape
 
 
+def test_per_layer_bits_repeated_append_concatenates(device):
+    """Multiple append calls on the same layer should extend seq_len, not overwrite."""
+    cache = MixedKVCache(
+        num_layers=1,
+        device=device,
+        per_layer_bits=[(8, 4)],
+    )
+    k1, v1 = _make_kv(seq_len=4, device=device)
+    k2, v2 = _make_kv(seq_len=3, device=device)
+    cache.append(0, k1, v1)
+    cache.append(0, k2, v2)
+    k_out, v_out = cache.get_kv(0)
+    assert k_out.shape[2] == 7
+    assert v_out.shape[2] == 7
+    assert cache.get_seq_len() == 7
+
+
 def test_per_layer_bits_none_backward_compat(device):
     """per_layer_bits=None retains global k_bits/v_bits behavior (防御 eval_ppl 等现有调用)."""
     cache_none = MixedKVCache(

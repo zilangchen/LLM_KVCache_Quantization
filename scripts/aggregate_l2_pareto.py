@@ -34,8 +34,12 @@ def _scan_quality(policy_dir: Path) -> dict[str, float]:
     return scores
 
 
-def _scan_first_value(policy_dir: Path, prefix: str, column: str) -> float | None:
-    for path in sorted(policy_dir.glob(f"{prefix}_*.csv")):
+def _scan_latest_value(policy_dir: Path, prefix: str, column: str) -> float | None:
+    candidates = sorted(
+        policy_dir.glob(f"{prefix}_*.csv"),
+        key=lambda path: (path.stat().st_mtime, path.name),
+    )
+    for path in reversed(candidates):
         with path.open(newline="", encoding="utf-8") as handle:
             rows = list(csv.DictReader(handle))
         if not rows:
@@ -61,11 +65,11 @@ def build_table(raw_dir: Path) -> list[dict[str, str]]:
         quality_scores = _scan_quality(policy_dir)
         primary_quality = _mean([quality_scores[t] for t in ("narrativeqa", "hotpotqa", "gov_report") if t in quality_scores])
         extend_quality = _mean([quality_scores[t] for t in ("dureader", "lcc") if t in quality_scores])
-        ttft = _scan_first_value(policy_dir, "profile_latency", "ttft_ms")
-        tpot = _scan_first_value(policy_dir, "profile_latency", "tpot_ms")
-        peak_mem = _scan_first_value(policy_dir, "profile_memory", "gpu_mem_peak_mb")
-        ppl = _scan_first_value(policy_dir, "profile_ppl", "perplexity")
-        needle = _scan_first_value(policy_dir, "profile_needle", "needle_pass_rate")
+        ttft = _scan_latest_value(policy_dir, "profile_latency", "ttft_ms")
+        tpot = _scan_latest_value(policy_dir, "profile_latency", "tpot_ms")
+        peak_mem = _scan_latest_value(policy_dir, "profile_memory", "gpu_mem_peak_mb")
+        ppl = _scan_latest_value(policy_dir, "profile_ppl", "perplexity")
+        needle = _scan_latest_value(policy_dir, "profile_needle", "needle_pass_rate")
         rows.append(
             {
                 "model_key": str(manifest["model_key"]),
@@ -103,12 +107,20 @@ def _dominates(a: dict[str, str], b: dict[str, str]) -> bool:
     return better_or_equal and strictly_better
 
 
+def _is_front_eligible(row: dict[str, str]) -> bool:
+    return bool(row["quality_core"] and row["tpot_ms"])
+
+
 def build_front(rows: list[dict[str, str]]) -> list[dict[str, str]]:
     front: list[dict[str, str]] = []
     for row in rows:
+        if not _is_front_eligible(row):
+            continue
         dominated = False
         for other in rows:
             if other is row:
+                continue
+            if not _is_front_eligible(other):
                 continue
             if _dominates(other, row):
                 dominated = True

@@ -35,6 +35,38 @@ phase2_fail_from_log() {
     return 3
 }
 
+phase2_collect_logged_csvs() {
+    local out_dir="$1"
+    local csv_glob="$2"
+    shift 2
+
+    python3 - "$out_dir" "$csv_glob" "$@" <<'PY'
+import sys
+from pathlib import Path
+
+out_dir = Path(sys.argv[1])
+csv_glob = sys.argv[2]
+logs = [Path(item) for item in sys.argv[3:]]
+
+available = {path.name: str(path) for path in sorted(out_dir.glob(csv_glob))}
+seen = set()
+for log_path in logs:
+    try:
+        text = log_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        continue
+    for line in text.splitlines():
+        if "Saved to " not in line:
+            continue
+        raw_path = line.split("Saved to ", 1)[1].strip()
+        csv_name = Path(raw_path).name
+        matched = available.get(csv_name)
+        if matched and matched not in seen:
+            seen.add(matched)
+            print(matched)
+PY
+}
+
 phase2_gate_outputs() {
     local wave_name="$1"
     local out_dir="$2"
@@ -50,8 +82,8 @@ phase2_gate_outputs() {
 
     shopt -s nullglob
     logs=( "$out_dir"/$log_glob )
-    csvs=( "$out_dir"/$csv_glob )
     shopt -u nullglob
+    mapfile -t csvs < <(phase2_collect_logged_csvs "$out_dir" "$csv_glob" "${logs[@]}")
 
     csv_cnt="${#csvs[@]}"
     # pipefail-safe counters: avoid `grep -l ... | wc -l` (grep exit 1 on 0 match
@@ -97,8 +129,8 @@ phase2_gate_task_rows() {
 
     shopt -s nullglob
     logs=( "$out_dir"/$log_glob )
-    csvs=( "$out_dir"/$csv_glob )
     shopt -u nullglob
+    mapfile -t csvs < <(phase2_collect_logged_csvs "$out_dir" "$csv_glob" "${logs[@]}")
 
     # pipefail-safe counters: see phase2_gate_outputs comment.
     local f

@@ -64,11 +64,11 @@ def build_selector(
 def resolve_policy_entry(selector: dict, task_id: str, profile_bucket: str = "default") -> dict:
     rules = selector["routing_rules"]
     pool = {item["policy_id"]: item for item in selector["policy_pool"]}
-    policy_id = rules["by_task"].get(task_id)
-    if policy_id is None:
-        policy_id = rules["by_profile_bucket"].get(profile_bucket)
-    if policy_id is None:
-        policy_id = rules["default_policy_id"]
+    if task_id not in rules["by_task"]:
+        raise KeyError(f"unknown task_id={task_id!r}")
+    if profile_bucket not in rules["by_profile_bucket"]:
+        raise KeyError(f"unknown profile_bucket={profile_bucket!r}")
+    policy_id = rules["by_task"].get(task_id) or rules["by_profile_bucket"][profile_bucket]
     if policy_id not in pool:
         raise KeyError(f"selector resolved to unknown policy_id={policy_id!r}")
     return pool[policy_id]
