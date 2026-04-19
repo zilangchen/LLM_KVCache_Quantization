@@ -449,6 +449,54 @@ def build_kv_cache(
             per_layer_bits=per_layer_bits,
         ), group_size, clip_percentile
 
+    if kv_mode == "int4_ours_asym_alloc":
+        from src.cache.role_aware_allocator_cache import (
+            RoleAwareAllocatorKVCache,
+            load_per_layer_bits_from_policy,
+        )
+        if policy_json is None:
+            raise ValueError(
+                "kv_mode='int4_ours_asym_alloc' requires a non-empty policy_json"
+            )
+        ra_k_percentile = 100.0
+        ra_v_percentile = 100.0
+        if calib_file is not None:
+            _proj = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(_proj, calib_file)
+            if not os.path.exists(calib_path):
+                raise FileNotFoundError(
+                    f"{kv_mode}: calib_file={calib_file!r} not found "
+                    f"(resolved to {calib_path!r}). Use an absolute path or "
+                    f"run from the project root."
+                )
+            with open(calib_path, "r") as f:
+                calib_data = json.load(f)
+            if "role_aware" in calib_data:
+                ra_section = calib_data["role_aware"]
+                ra_k_percentile = float(ra_section.get("k_percentile", 100.0))
+                ra_v_percentile = float(ra_section.get("v_percentile", 100.0))
+            elif "k_calibration" in calib_data:
+                import warnings
+                warnings.warn(
+                    "Allocator RoleAlign mode using k_calibration fallback schema; "
+                    "consider re-generating calibration with role_aware schema.",
+                    UserWarning,
+                )
+                k_cal = calib_data["k_calibration"]
+                ra_k_percentile = float(k_cal.get("k_percentile", calib_data.get("k_percentile", 100.0)))
+                if "v_calibration" in calib_data:
+                    ra_v_percentile = float(calib_data["v_calibration"].get("v_percentile", 100.0))
+        per_layer_bits = load_per_layer_bits_from_policy(policy_json, project_root=project_root)
+        return RoleAwareAllocatorKVCache(
+            num_layers=num_layers,
+            device=model.device.type,
+            per_layer_bits=per_layer_bits,
+            k_percentile=ra_k_percentile,
+            v_percentile=ra_v_percentile,
+            framework="ours_asym_allocator",
+            residual_length=residual_length,
+        ), group_size, clip_percentile
+
     if kv_mode in ("int4_ours_asym", "int4_ours_asym_ba"):
         # Mirrors generate_loop.py L869-919 exactly.
         from src.cache.role_aware_asym_cache import RoleAwareAsymKVCache
@@ -791,6 +839,7 @@ def main():
             "int4_mixed_kv",
             "int4_ours_asym",
             "int4_ours_asym_ba",
+            "int4_ours_asym_alloc",
         ],
     )
     parser.add_argument("--group_size", type=int, default=128)
@@ -824,7 +873,7 @@ def main():
         "--policy_json",
         type=str,
         default=None,
-        help="Optional per-layer policy JSON consumed by kv_mode=int4_mixed_kv.",
+        help="Optional per-layer policy JSON consumed by allocator kv_modes.",
     )
     parser.add_argument(
         "--residual_length",

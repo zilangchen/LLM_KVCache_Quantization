@@ -36,6 +36,45 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 00:54 | Formal system-vs-KIVI package Phase 0 preflight + runner scaffolding
+- Goal: 为 `Allocator-enabled RoleAlign vs KIVI-style` 正式 compare package 落地 Phase 0 工程骨架，机器化 G0/G1 前置检查，并用真实 preflight 判定当前是否可进入 smoke。
+- Scope:
+  - 新增 formal compare 共用定义、runner、completeness checker
+  - 新增对应 pytest 覆盖 phase 组合、runtime 映射、CLI 启动、budget gate、raw completeness gate
+  - 新增 `docs/system_vs_kivi_preflight.md`
+  - 不启动正式 smoke；只执行 preflight / dry-run
+- Changed files:
+  - `docs/system_vs_kivi_preflight.md`
+  - `scripts/system_vs_kivi_common.py`
+  - `scripts/run_system_vs_kivi.py`
+  - `scripts/check_system_vs_kivi_completeness.py`
+  - `tests/test_system_vs_kivi_common.py`
+  - `tests/test_run_system_vs_kivi.py`
+  - `tests/test_check_system_vs_kivi_completeness.py`
+- Commands:
+  - `pytest -q tests/test_system_vs_kivi_common.py tests/test_run_system_vs_kivi.py tests/test_check_system_vs_kivi_completeness.py`
+  - `python3 scripts/run_system_vs_kivi.py --phase smoke --dry_run`
+  - `python3 scripts/run_system_vs_kivi.py --phase main --dry_run`
+  - `python3 scripts/run_system_vs_kivi.py --phase smoke --models 1p5b --dry_run`
+  - `python3 scripts/review_tool.py stats`
+  - `git rev-parse --short HEAD`
+  - `git status --short`
+- Outputs:
+  - 共用 compare 定义与 phase plan 已落地
+  - formal runner 已能生成 smoke/main/ablation job plan，并在 CLI 直接运行时通过导入路径
+  - completeness checker 已能检查缺任务、缺 aux、failed-row contamination、matched-budget 漂移
+  - `docs/system_vs_kivi_preflight.md` 明确冻结公平性规则、当前 runtime 映射与 G0 blockers
+- Validation:
+  - `pytest ...` → `15 passed, 1 warning`
+  - `--phase smoke --dry_run` → blocked by missing `artifacts/kv_calib_rolealign_8b_v3.json`
+  - `--phase main --dry_run` → blocked by missing `artifacts/kv_calib_rolealign_{3b,8b,mistral7b}_v3.json`
+  - `--phase smoke --models 1p5b --dry_run` → blocked by `same-format runtime gate not satisfied` (`rolealign_allocator_auto_eqmem` 当前走 `int4_mixed_kv`, 不属于 `kivi_asym_family`)
+  - `python3 scripts/review_tool.py stats` → open issues: `MEDIUM 16`, `LOW 5`, no CRITICAL/HIGH blockers
+- Risks / follow-ups:
+  - 当前 formal package 还不能过 G0：既缺 rolealign calib 资产，也缺 same-format allocator runtime path
+  - 现有 allocator-enabled 候选只能走 `MixedKVCache`；若要维持“same INT4 format”主张，需要补 backend family 对齐实现，或显式降级 compare framing
+  - worktree 仍有与本任务无关的 dirty：`docs/claude_thesis_outline_pack_v1.md`、`docs/data_asset_inventory_20260420.md`
+
 ### 2026-04-19 21:22 | Freeze current repository state after full L2 + clean-provenance completion
 - Goal: 把已完成的 L2 / clean-provenance 结果、本地 artifact 对账、工作台去旧化与 freeze 文档一次性收口，形成可回溯冻结态。
 - Scope:
@@ -775,3 +814,48 @@ Canonical agent workflow directory is `.agents/`.
   - BD adapter 无 NaN, cosine_sim > 0.98 vs FP16 reference
   - TPOT (1.5B, seq=4096, gen=32): FP16 24.45ms, Triton 51.52ms, BD 61.92ms, FlashInfer 59.68ms
 - Next: 启动 run_all.sh 执行 Phase 1-5
+
+### 2026-04-20 01:41 | same-format allocator backend 打通 + G0 完整通过
+- Goal: 按 `Allocator vs KIVI` B/B/B ExecPlan 落地独立 allocator kv_mode、补齐缺失 RoleAlign calib 资产，并把 formal `system_vs_kivi` package 从 `G0 BLOCKED` 推到完整 `G0 PASS`
+- Changed files:
+  - `src/cache/role_aware_allocator_cache.py` (新建，same-format allocator cache，支持 per-layer mixed-bit / asymmetric pairs)
+  - `src/cache/__init__.py` (导出 `RoleAwareAllocatorKVCache`)
+  - `src/engine/generate_loop.py` (新增 `kv_mode=int4_ours_asym_alloc` 路由，强制 `torch_ref` + `policy_json`)
+  - `scripts/eval_ppl.py` (新增 `int4_ours_asym_alloc` 构造路径)
+  - `scripts/run_system_vs_kivi.py` (allocator systems 改映射到 `int4_ours_asym_alloc`)
+  - `scripts/system_vs_kivi_common.py` (allocator systems 资产校验加入 rolealign calib + policy JSON)
+  - `tests/test_role_aware_allocator_cache.py` (新建)
+  - `tests/test_eval_ppl_int4_ours_asym_alloc.py` (新建)
+  - `tests/test_run_system_vs_kivi.py` (更新 allocator runtime family 预期)
+  - `tests/test_eval_ppl_int4_ours_asym.py` (修补 mocked `datasets.__spec__`)
+  - `docs/system_vs_kivi_preflight.md` (从 `BLOCKED` 更新为 `G0 PASS` preflight)
+- Commands:
+  - `pytest -q tests/test_role_aware_allocator_cache.py tests/test_run_system_vs_kivi.py tests/test_eval_ppl_int4_ours_asym_alloc.py`
+  - `python3 -m compileall -q src/cache/role_aware_allocator_cache.py src/engine/generate_loop.py scripts/eval_ppl.py scripts/run_system_vs_kivi.py scripts/system_vs_kivi_common.py`
+  - `pytest -q tests/test_system_vs_kivi_common.py tests/test_role_aware_asym_cache.py tests/test_eval_ppl_int4_ours_asym.py`
+  - `python3 scripts/run_system_vs_kivi.py --phase smoke --models 1p5b --dry_run`
+  - `python3 scripts/run_system_vs_kivi.py --phase smoke --dry_run`
+  - `python3 scripts/run_system_vs_kivi.py --phase main --dry_run`
+  - `python3 scripts/run_system_vs_kivi.py --phase ablation --dry_run`
+  - remote clean-provenance calib:
+    - `python3 scripts/calibrate_behavior.py --model_id Qwen/Qwen2.5-3B-Instruct ... --calib_out artifacts/kv_calib_rolealign_3b_v3.json`
+    - `python3 scripts/calibrate_behavior.py --model_id mistralai/Mistral-7B-Instruct-v0.3 ... --calib_out artifacts/kv_calib_rolealign_mistral7b_v3.json`
+- Outputs:
+  - 新增独立 backend `int4_ours_asym_alloc`
+  - `3b` calib 生成成功，remote/local MD5=`3cfb416a8fe1054fc81a453dd1f00e1a`
+  - `8b` calib 从远端已有资产恢复，remote/local MD5=`0a8e2a298c4160ea35083309cc707faa`
+  - `mistral7b` calib 生成成功，remote/local MD5=`19a113081a70d9e26d9d002608f9dfaf`
+  - `system_vs_kivi` dry-run 全部通过：
+    - smoke: `42` jobs
+    - main: `150` jobs
+    - ablation: `120` jobs
+- Validation:
+  - targeted new tests: `13 passed`
+  - regression checks: `25 passed`
+  - `smoke/main/ablation --dry_run` 均不再报 `format_mismatch` 或缺失 calib 资产
+  - `docs/system_vs_kivi_preflight.md` 现已明确记录 `G0 PASS`
+- Risks / follow-ups:
+  - `int4_ours_asym_alloc` 当前仅支持 `decode_attn_impl=torch_ref`，后续若要延伸到 fused kernel 需单独立项
+  - backend enablement 只完成了 preflight / dry-run 门禁，尚未启动 official smoke/main/ablation
+  - 远端 clean workspace `/root/autodl-tmp/LLM_KVCache_Quantization_clean` 含少量 untracked helper 文件，后续 clean-provenance 正式运行前需再次核对
+- Commit: <none>

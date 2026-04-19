@@ -20,6 +20,7 @@ Test matrix:
 """
 
 import json
+import importlib.machinery
 import os
 import sys
 import tempfile
@@ -106,6 +107,7 @@ if "triton" in _MOCKED_MODULES:
 _ensure_mock_if_missing("datasets")
 if "datasets" in _MOCKED_MODULES and isinstance(sys.modules["datasets"], MagicMock):
     sys.modules["datasets"].load_dataset = MagicMock()
+    sys.modules["datasets"].__spec__ = importlib.machinery.ModuleSpec("datasets", loader=None)
 _ensure_mock_if_missing("pynvml")
 
 

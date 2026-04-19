@@ -449,13 +449,14 @@ def generate_from_ids(
         "int4_mixed_kv",
         "int4_ours_asym",
         "int4_ours_asym_ba",
+        "int4_ours_asym_alloc",
     ]:
         raise ValueError(
             f"kv_mode='{kv_mode}' not supported. "
             "Choose from ['fp16', 'int8_baseline', 'int8_fused', 'int8_ours', "
             "'int4_baseline', 'int4_fused', 'int4_ours', 'int4_ours_mixed', "
             "'kivi_style', 'int4_kivi_aligned', 'int4_mixed_kv', "
-            "'int4_ours_asym', 'int4_ours_asym_ba']."
+            "'int4_ours_asym', 'int4_ours_asym_ba', 'int4_ours_asym_alloc']."
         )
 
     # BitDecoding adapter removed: bit_decode v1.0.0.post1 has GQA-incompatible
@@ -1073,6 +1074,63 @@ def generate_from_ids(
                 decode_attn_impl = "torch_ref"
             # INT4 asymmetric supports both torch_ref and triton_int4_asym.
             # triton_fused also accepted — routes to int4_asym kernel via patch_model.
+        elif kv_mode == "int4_ours_asym_alloc":
+            from src.cache.role_aware_allocator_cache import (
+                RoleAwareAllocatorKVCache,
+                load_per_layer_bits_from_policy,
+            )
+
+            if policy_json is None:
+                raise ValueError(
+                    "kv_mode='int4_ours_asym_alloc' requires a non-empty policy_json"
+                )
+
+            ra_k_percentile = 100.0
+            ra_v_percentile = 100.0
+            if calib_file is not None:
+                _proj = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                calib_path = calib_file if os.path.isabs(calib_file) else os.path.join(_proj, calib_file)
+                if not os.path.exists(calib_path):
+                    raise FileNotFoundError(
+                        f"int4_ours_asym_alloc: calib_file={calib_file!r} not found "
+                        f"(resolved to {calib_path!r}). Use an absolute path or "
+                        f"run from the project root."
+                    )
+                with open(calib_path, "r") as f:
+                    calib_data = json.load(f)
+                if "role_aware" in calib_data:
+                    ra_section = calib_data["role_aware"]
+                    ra_k_percentile = float(ra_section.get("k_percentile", 100.0))
+                    ra_v_percentile = float(ra_section.get("v_percentile", 100.0))
+                elif "k_calibration" in calib_data:
+                    import warnings
+                    warnings.warn(
+                        "Allocator RoleAlign mode using k_calibration fallback schema; "
+                        "consider re-generating calibration with role_aware schema.",
+                        UserWarning,
+                    )
+                    k_cal = calib_data["k_calibration"]
+                    ra_k_percentile = float(k_cal.get("k_percentile", calib_data.get("k_percentile", 100.0)))
+                    if "v_calibration" in calib_data:
+                        ra_v_percentile = float(calib_data["v_calibration"].get("v_percentile", 100.0))
+
+            _proj = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            per_layer_bits = load_per_layer_bits_from_policy(policy_json, project_root=_proj)
+            kv_cache = RoleAwareAllocatorKVCache(
+                num_layers=num_layers,
+                device=model.device.type,
+                max_seq_len=max_cache_len,
+                per_layer_bits=per_layer_bits,
+                k_percentile=ra_k_percentile,
+                v_percentile=ra_v_percentile,
+                framework="ours_asym_allocator",
+                residual_length=residual_length,
+            )
+            if decode_attn_impl != "torch_ref":
+                raise ValueError(
+                    "kv_mode='int4_ours_asym_alloc' currently requires decode_attn_impl='torch_ref'"
+                )
+            kv_cache.decode_attn_impl = "torch_ref"
         elif kv_mode == "int4_mixed_kv":
             # K-INT8 symmetric + V-INT4 asymmetric per-token (hybrid mode).
             # k_bits/v_bits allow K/V ablation (K-only, V-only, counterfactual).
@@ -1296,7 +1354,7 @@ def generate_from_ids(
 
                         # ENG-033: INT8CacheWrapperContainer is reconstructed each decode step. This is intentional — wrappers are lightweight (no buffer copy), and caching them would require tracking cache mutations.
                         current_past_key_values = INT8CacheWrapperContainer(kv_cache, num_layers)
-                    elif kv_mode in ["int8_baseline", "int4_baseline", "kivi_style", "int4_kivi_aligned", "int4_mixed_kv", "int4_ours_asym", "int4_ours_asym_ba"]:
+                    elif kv_mode in ["int8_baseline", "int4_baseline", "kivi_style", "int4_kivi_aligned", "int4_mixed_kv", "int4_ours_asym", "int4_ours_asym_ba", "int4_ours_asym_alloc"]:
                         # For baseline / KIVI / mixed / role-aware-asym modes, we dequantize BEFORE attention.
                         # For int4_kivi_aligned and int4_ours_asym_ba, inv_tau Q pre-scaling is applied via
                         # hooks registered on model forward (both prefill and decode).
