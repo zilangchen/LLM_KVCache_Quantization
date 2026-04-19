@@ -36,6 +36,40 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 05:33 | Thesis Rewrite Phase 9 — consistency audit + orphan ref 清零
+- Goal: 完成 Phase 9（最终 polish）的核心工作：对照 objective.md + 3 份 source-of-truth 文档（thesis_story / chapter_drafts / data_asset_inventory + legacy_term_audit + rewrite_tracker）逐项审计论文一致性，产出 gap 报告，并修掉所有立即可修的 Minor Gap
+- Scope:
+  - **Phase 9a+9b+9c 审计**：读 objective.md 10 节 + thesis_story §9-§16 + drafts §1-§7 + inventory Part A + legacy_term_audit 全部；对照现 .tex 逐项核实
+  - **产出 `docs/thesis_consistency_audit_20260420.md`**（约 260 行详细 gap 报告，分 Part A/B/C/D/E/F）
+  - **审计结论**：总体对齐度 ~92%；objective 七条成功标准全部 ✅；红线 6/6 ✅；章节映射 20/22（缺 2 minor subsection）；图表 14/17（缺 3 TikZ）；术语冻结 6/7（landscape 1 违规）
+  - **Major Gap 5 条**需用户决策（全部推荐 A 保持现状）：M1 RQ 数量 story 3 vs objective 4 / M2 Framework 层数 2 vs 3 / M3 Ch4 §4.4 prompt-adaptive 正文 / M4 Ch4 §4.6 7B aggregation / M5 "Key 主导退化" 用词保留
+  - **Phase 9d 立即修**：批量 Python 脚本修 orphan ref + landscape 术语
+    - 16 个旧 label mapping（sec:ch3-invtau → sec:app-invtau-diagnostic, subsec:exp-rolealign-results → subsec:exp-int4-cross-model, tab:rolealign-results → tab:t2-int4-kivi 等）
+    - "校准 landscape" → "校准 profile"（术语冻结表对齐）
+    - 25 处 substitution，跨 3 个文件（appendix.tex / ch3_method.tex / ch4_experiments.tex）
+  - xelatex smoke 验证：**0 undefined reference warning**（从 Phase 8 的 15+ warning 降到 0）
+- Changed files:
+  - docs/thesis_consistency_audit_20260420.md（新建，~260 行审计报告）
+  - thesis/chapters/appendix.tex（8 处 ref substitution + landscape→profile）
+  - thesis/chapters/ch3_method.tex（13 处 ref substitution）
+  - thesis/chapters/ch4_experiments.tex（4 处 ref substitution）
+- Commands:
+  - Read + grep 审计（objective.md / thesis_story §9-§15 / drafts / inventory / legacy_term_audit）
+  - `python3 /tmp/thesis_phase3/step_phase9d_fix_orphan_refs.py` → 25 substitutions，all orphan refs cleaned
+  - xelatex smoke × 2 pass → main.pdf **98 pages**（稳定）+ **0 undefined reference**
+- Outputs:
+  - 完整一致性审计报告归档为 docs 永久文档
+  - 所有 Phase 3-6 重组遗留的 orphan ref 全部清除
+  - 术语冻结表 100% 对齐
+  - PDF 内不再出现 `??` 占位符（引用断裂）
+- Validation:
+  - xelatex smoke: 98 pages, 0 undefined reference
+  - 审计报告覆盖 objective 10 节 + story §9-§16 + drafts §1-§7 + inventory
+- Risks / follow-ups:
+  - 5 Major Gap 留待用户决策（当前全部 A 方案保持现状，与 Phase 8 终稿对齐）
+  - 可选 Phase 9g（图①③ TikZ + inline math 存量清理 + Codex adversarial-review）未做，工作量较高
+- Commit: <pending 本批>
+
 ### 2026-04-20 05:32 | 14B 权重定位 + SVK_MODEL_PATH env override，补齐 main phase 第 5 个 model
 - Goal: 用户纠正 "14B 不存在" 的错误判断——14B 在 modelscope cache 下，需要让 transformers 离线加载，并不永久修改 `_MODEL_SPECS` 默认 HF id
 - Root cause（错误判断 + 正确定位）:
