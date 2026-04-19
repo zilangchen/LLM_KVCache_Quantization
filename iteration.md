@@ -36,6 +36,43 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 04:42 | system_vs_kivi smoke 完整跑完 — execution-chain 全绿但 G1 Fairness Gate 硬 fail（allocator policy 超 budget）
+- Goal: 在 `36bf21c` HEAD 上、用 watchdog 等结束、严格按 G 指令"smoke 收口后再决定是否进入 main"的 gate 逻辑判定 smoke 成败
+- 执行结果:
+  - 2 并行 session 完整 EXIT=0（1p5b 53 min, 8b 67 min）
+  - 产出 90 CSV，覆盖 2 model × 3 system × 7 aux job
+  - `results/system_vs_kivi/raw/smoke/{1p5b,8b}/{kivi_style,rolealign_static,rolealign_allocator_auto_eqmem}` 三目录齐全
+  - Log grep: 0 failed sample / 0 argparse invalid choice / 0 Traceback
+- 三重本轮修复在实跑中全部确认生效:
+  - parser/CLI `int4_ours_asym_alloc` choice + `--policy_json` 参数 + normalize helper — **零 argparse 错误跑穿 7 个 allocator aux job**
+  - CUDA_VISIBLE_DEVICES=0/1 单卡绑定 mitigation — 0 device mismatch
+  - `HF_HOME=/root/autodl-tmp/hf_cache + HF_HUB_OFFLINE=1` — 8B model 成功离线加载
+- 但 G1 Fairness Gate 硬失败:
+  - `check_system_vs_kivi_completeness.py --compared_systems rolealign_allocator_auto_eqmem,kivi_style --tolerance_pct 3.0` 返回 `ok=false`
+  - 1p5b: allocator kv_cache_mem=12.64 MB vs kivi 8.42 MB → **+50.12% over-budget**
+  - 8b: allocator kv_cache_mem=66.62 MB vs kivi 38.50 MB → **+73.04% over-budget**
+- 根因（policy 设计而非 code bug）:
+  - `artifacts/allocator/l2_kv_asymmetric/1p5b/bakv_auto_cov80_max.json` 的 28 层 per_layer_bits 分布 = 15 层 (8,8) + 13 层 (4,4)
+  - 加权 344 bits/token vs KIVI 纯 int4 224 bits/token → 1.536× = 实测 +50% 吻合
+  - 8b 的 policy 高 bit 层更多，超标更严重
+  - 这违反了 `docs/system_vs_kivi_preflight.md §49-55` "Matched-budget rule ±3%"
+- Decision Gate（交给用户）:
+  - 选项 A: 换 matched-budget allocator policy（找内存等于或 ≤ KIVI +3% 的 `bakv_*` 变体，或生成新 policy）
+  - 选项 B: 放宽 fairness tolerance（从 ±3% 改为 ±10% 或 ±50%），接受 "allocator 用更多内存换更高质量" 的 claim framing 变化
+  - 选项 C: 重新生成 `bakv_auto_cov80_max.json` 使其总 budget 匹配 KIVI（如目标 224 bits/token）
+  - **未得到用户指示前不进入 main phase**
+- Files changed this round (在 ab082e5 + 36bf21c + 30c548d 里): 无新的代码改动
+- Commands:
+  - `find results/system_vs_kivi -name "*.csv" | wc -l` → `90`
+  - `python3 scripts/check_system_vs_kivi_completeness.py --raw_dir results/system_vs_kivi/raw/smoke --models 1p5b,8b --systems kivi_style,rolealign_static,rolealign_allocator_auto_eqmem --tasks narrativeqa,dureader --compared_systems rolealign_allocator_auto_eqmem,kivi_style` → 2 issues out_of_band
+  - watchdog `b7v891sl4` 清晰记录 1p5b 在 04:23 退 / 8b 在 04:40 退
+- Validation: tmux session 序列化退出 + EXIT=0 两次 + smoke 从 run_system_vs_kivi → aux entrypoints → allocator cache 构造 → decode → profile → CSV 全链路无异常
+- Risks / follow-ups:
+  - **不能宣称 smoke PASS**：execution-chain 绿 ≠ G1 Fairness Gate 绿；project preflight doc 明确 smoke 需要同时满足 runtime 通过 + budget 满足
+  - 若选 B 放宽容差，preflight doc 需同步更新，否则 audit trail 与规则脱节
+  - 若选 A/C 换 policy，需要 re-run smoke 确认新 policy 过 gate 后才能进 main
+- Commit: <pending, 本条仅 iteration 记录变更>
+
 ### 2026-04-20 04:39 | fix(thesis): make_table helper emits valid LaTeX note syntax — Phase 3 预览修复
 - Goal: 修复 Phase 3 commit `6540fc7` 引入的 `write_latex_table()` helper bug，让 main.tex 能完整编译出 PDF 恢复预览
 - Root cause: helper 在 `\caption` 之后用 `"\\[2pt]\\footnotesize ..."` 想做 note，但 `\\` 在 `\table` 环境（非 tabular 内）里需要前面有文本行可以结束——`\caption` 之后直接上 `\\` 触发 `! LaTeX Error: There's no line here to end.`（halt-on-error 让 T1 编译在 `\input{tables/table_t1_int8_canonical.tex}` 处停住 → 后续所有 section / table label 注册中断 → main.pdf 无法产出 → 用户反馈"预览看不了")
