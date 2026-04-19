@@ -36,6 +36,26 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 05:36 | 14B chain launcher — 等 GPU 0 空闲自动启动 14B main（不打断正在跑的 1p5b/3b）
+- Goal: 3 张 GPU 都在跑 main session，无卡给 14B。不 kill 现有 session 保留 progress，改用 chain launcher 等 GPU 0 自然空闲后自动启动 14B
+- Scope:
+  - `scripts/launch_14b_after_gpu0.sh` — 本地后台一次性脚本：每 5 min 远端 `tmux has-session -t svk_main_gpu0` 查询，消失后立即 `tmux new -d -s svk_main_gpu0_14b` 启动 14B，带 `SVK_MODEL_PATH_14B=/root/autodl-tmp/modelscope_cache/qwen/Qwen2___5-14B-Instruct` env override（依赖 8a87d89 的代码路径）
+  - 启动 `Bash(run_in_background=true)` 任务 `beesibaru` 跑它
+- Changed files:
+  - `scripts/launch_14b_after_gpu0.sh` (新建)
+  - `iteration.md`
+- Commands:
+  - `chmod +x scripts/launch_14b_after_gpu0.sh && bash -n` → `syntax OK`
+  - `SSH_PASSWORD=... INTERVAL=300 bash scripts/launch_14b_after_gpu0.sh` (background id `beesibaru`)
+- Outputs:
+  - GPU 0 当前跑 1p5b (~2h) → 3b (~4.5h)；chain launcher 轮询后 ~6.7h 启动 14B；14B wall-clock ~15h；total main ≈ 21-22h
+- Validation:
+  - bash syntax 通过；launcher 在 14B launch 成功后 exit 0，退出信号触发 Claude Code notification
+- Risks / follow-ups:
+  - 14B 启动后，原 main watchdog (b1swt0qjp) 只盯 gpu0/gpu1/gpu2 不会盯 `svk_main_gpu0_14b`——14B 需在 chain launcher notify 后启动独立 watchdog
+  - 若 GPU 0 session 异常早退 (<1p5b 完成)，chain launcher 仍会启动 14B；没有残留冲突（下次 session 是全新 tmux）
+- Commit: <pending>
+
 ### 2026-04-20 05:33 | Thesis Rewrite Phase 9 — consistency audit + orphan ref 清零
 - Goal: 完成 Phase 9（最终 polish）的核心工作：对照 objective.md + 3 份 source-of-truth 文档（thesis_story / chapter_drafts / data_asset_inventory + legacy_term_audit + rewrite_tracker）逐项审计论文一致性，产出 gap 报告，并修掉所有立即可修的 Minor Gap
 - Scope:
