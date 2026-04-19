@@ -36,6 +36,34 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 03:22 | 论文改写 Phase 0 Pre-flight 完成（audit + tracker + _common.py）
+- Goal: 完成 thesis rewrite Phase 0 的全部前置准备（0a-0h），清空 Phase 1 的硬 blocker
+- Scope:
+  - 0a-0b: git safety net (tag `thesis-m-plus-entry-point`) + `thesis/tables/` 确认（commit `ab082e5`）
+  - 0c: 6 个 calibration JSON 完整性验证（1.5B/3B/14B/Mistral ✅；7B 有 b10 variants；**8B 只有 RoleAlign JSON**，记入 tracker 的 soft blocker）
+  - 0d: references.bib 核对（KIVI/KVQuant/KVTuner ✅；TurboQuant/NVFP4/StreamingLLM 缺失但非硬依赖）
+  - 0e: 5 章 tex 旧术语 audit 完成
+  - 0f: thesis rewrite progress tracker 建立
+  - 0g: `scripts/thesis/_common.py` 共享模板（smoke test 通过）
+  - 0h: xelatex 基线验证（main.pdf 104 页，2026-04-18 已成功编译）
+- Changed files:
+  - `docs/thesis_legacy_term_audit_20260420.md` (新建；按类别 A-G 分组 5 章旧术语位置 + 改写顺序建议 + 不动术语清单)
+  - `docs/thesis_rewrite_tracker_20260420.md` (新建；Phase 0-8 全部任务清单 + 17 项图表 status table + blocker 记录)
+  - `scripts/thesis/_common.py` (新建；路径常量 + 模型/任务常量 + LaTeX helpers + matplotlib style preset + smoke test)
+- Commands:
+  - `python3 scripts/thesis/_common.py` → smoke test 全通过
+- Outputs:
+  - 所有 Phase 0 项 ✅ 或 🟡（soft blocker 已文档化）
+  - Phase 1（Ch1 §1.3 + Ch6 §6.1）可立即进入
+- Validation:
+  - `_common.py` smoke test: 路径存在性 + LaTeX helper 输出 + matplotlib style 全部正常
+  - tracker 文档覆盖 17 项图表 status + 8 个 Phase 任务链
+- Risks / follow-ups:
+  - **Soft blocker 1**: 8B 无 INT8 KL calibration，图 ④ 需要用 RoleAlign JSON 作 sensitivity 替代（Phase 4 时决策）
+  - **Soft blocker 2**: 7B calibration 非 pin=ddada19 版本（用 b10 variants），Phase 4 时确认 sensitivity signal 仍可用
+  - Phase 1 开始前已无 hard blocker
+- Commit: <pending>
+
 ### 2026-04-20 03:17 | Allocator kv_mode CLI wiring 全链路收口（system-vs-KIVI 第二次 smoke 阻塞根因修复）
 - Goal: 修复第二次远端 official smoke 暴露的 execution-chain 连锁漏洞，让 `run_system_vs_kivi.py` 转发给所有 allocator aux entrypoint 的 `--kv_mode int4_ours_asym_alloc` + `--policy_json` 能够真正被 argparse 接受，并把 allocator 唯一支持的 `decode_attn_impl=torch_ref` 约束在 CLI normalize 阶段就 enforce，避免运行到第一个 decode step 才爆。
 - Scope:
