@@ -36,6 +36,51 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 03:17 | Allocator kv_mode CLI wiring 全链路收口（system-vs-KIVI 第二次 smoke 阻塞根因修复）
+- Goal: 修复第二次远端 official smoke 暴露的 execution-chain 连锁漏洞，让 `run_system_vs_kivi.py` 转发给所有 allocator aux entrypoint 的 `--kv_mode int4_ours_asym_alloc` + `--policy_json` 能够真正被 argparse 接受，并把 allocator 唯一支持的 `decode_attn_impl=torch_ref` 约束在 CLI normalize 阶段就 enforce，避免运行到第一个 decode step 才爆。
+- Scope:
+  - 5 个 aux entrypoint argparse choices 白名单扩展（第一层阻塞）
+  - `eval_ruler.py` 新增 `--policy_json` 参数 + 转发到 `generate_from_ids()`（Codex R2 P1 漏洞）
+  - `scripts/config_utils.py` 新增 `normalize_allocator_cli_args()` helper：
+    - None / torch_ref → 填 torch_ref（无警告）
+    - 其它值（如 yaml kernel_defaults=triton_fused）→ 覆盖为 torch_ref + UserWarning
+    - `policy_json` 为空 → 立即 ValueError，不等 generate_from_ids
+  - `resolve_run_config()` 转发 `policy_json` 字段（补齐 yaml-driven allocator 流程缺口）
+  - 6 个 aux entrypoint 在 `normalize_kv_params(args)` 之后调用新 helper
+  - `tests/test_allocator_cli_modes.py` 新建 AST + 行为回归测试（不 import 脚本本身，避开本地缺 triton 的环境）
+- Changed files:
+  - `scripts/config_utils.py`
+  - `scripts/eval_longbench.py`
+  - `scripts/eval_needle.py`
+  - `scripts/eval_ppl.py`
+  - `scripts/eval_ruler.py`
+  - `scripts/profile_latency.py`
+  - `scripts/profile_memory.py`
+  - `tests/test_allocator_cli_modes.py`
+- Commands:
+  - `pytest -q tests/test_allocator_cli_modes.py tests/test_run_system_vs_kivi.py tests/test_system_vs_kivi_common.py` → `24 passed, 1 warning`
+  - `python3 -m py_compile scripts/config_utils.py scripts/eval_*.py scripts/profile_*.py` → `compile OK`
+  - Codex review ×4 轮（adversarial iterative）：
+    - R1 → R2：`eval_ruler.py` 缺 `--policy_json` 参数（假修复）
+    - R2 → R3：6 脚本 fallback 未处理；`eval_ppl.py` 漏测试覆盖
+    - R3 → R4：`resolve_run_config` 未转发 `policy_json`；helper 在 yaml kernel_defaults=triton_fused 场景下误 raise
+    - R4 → PASS：`I did not identify any actionable bugs`
+- Outputs:
+  - 3 个 execution-chain invariant 被 CLI normalize 阶段守护：
+    1. allocator kv_mode 被下游 argparse 接受
+    2. `--policy_json` 被下游 argparse 接受并转发到 `generate_from_ids()`
+    3. allocator + 不兼容 decode_attn_impl → 早期 ValueError 或 warn+覆盖
+  - 新 helper 在 yaml-driven 与 CLI-driven 两条路径上都工作
+- Validation:
+  - 24 passed (本轮新增 7 项 allocator CLI 回归 + 既有 17 项保持绿)
+  - Codex 第 4 轮 review 无 actionable bug
+  - `resolve_run_config({matrix:[{run_name, kv_mode:allocator, policy_json:...}]}, run_name)` 现返回含 `policy_json` 字段的 dict
+- Risks / follow-ups:
+  - 远端 clean-provenance worktree 仍停留在 `7e48012`，需重新 fetch 到含本次修复的 commit 后才能重启 official smoke
+  - 旧 `svk_smoke_7e48012` tmux session 的 log 保留为失败 provenance；重启前确认进程确实已退
+  - `docs/claude_thesis_outline_pack_v1.md` 仍 dirty，未纳入任何 commit（按项目"不要碰"指令保留）
+- Commit: ab082e5（与论文改写控制文档被同一 SessionEnd hook 合并 commit；parser/CLI fix 属 `scripts/ + tests/` 改动，thesis docs 属 `docs/ + iteration.md`，两类在同一 commit 中）
+
 ### 2026-04-20 03:15 | 论文改写控制文档 M+ 方案定稿（8 图 + 9 表）+ 启动 Phase 0 pre-flight
 - Goal: 固化从旧版 thesis (thesis-v5-POSITIVE, 5-Contribution) 到新版 (behavior framework + regime map) 的改写计划；敲定最终图表预算并进入 pre-flight
 - Scope:
