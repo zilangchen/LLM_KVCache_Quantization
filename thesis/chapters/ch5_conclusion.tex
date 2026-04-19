@@ -120,7 +120,7 @@ md5-locked canonical 数据支撑（story 附 B）：
 诚实地列出本文研究的 5 条 limitations：
 
 \begin{enumerate}[leftmargin=2em, itemsep=3pt, topsep=2pt]
-  \item \textbf{实证范围有界}。
+  \item \textbf{实证范围有界 + PPL 作为长上下文指标的局限}。
   本文在 5 模型 $\times$ 5 LongBench task $\times$ 单一 GPU（NVIDIA H20）
   的实验空间内展开；不覆盖所有 long-context 场景
   （如 complex reasoning、code completion long-form、multimodal KV cache）
@@ -128,6 +128,9 @@ md5-locked canonical 数据支撑（story 附 B）：
   跨硬件的浮点非结合律可能引入 $\leq 9\%$ 的准确率漂移
   \cite{song2025nondeterminism}，
   所有 PPL 与 quality 数据仅在本文硬件栈上保持位级确定。
+  近期工作\cite{fang2025longppl}进一步指出，PPL 作为长上下文评测度量
+  存在系统性缺陷（本质上是 per-token log-likelihood 均值，对\emph{关键检索片段}的失真不敏感），
+  这是本文并列报告 Needle / RULER / LongBench 等\textbf{多维度检索与综合质量指标}的原因之一。
 
   \item \textbf{INT4 vs KIVI 的 format--calibration 耦合未完全解耦}。
   如 §\ref{sec:discussion-int4-openq} 所述，

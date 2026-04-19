@@ -36,6 +36,47 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 07:19 | Thesis Phase 10 — references.bib 清理 + cite 位置审计
+- Goal: 按"新叙事相关度"对 references.bib 做清理：删除与 behavior-guided framework / regime map / AutoK 新叙事无关的 unused entries；新增相关但缺失的 cite 位置；保证 xelatex + bibtex 编译无 undefined citation / undefined ref / multiply-defined label
+- Scope:
+  - **审计结果**：bib 79 entries / 57 unique cited keys / 22 unused / 0 missing
+  - **Tier A 删除 18 unused**（aminabadi2022deepspeed / bai2025longbenchv2 / bean2025measuring / chen2023longlora / dettmers2024qlora / ding2024longrope / egiazarian2024aqlm / han2025polarquant / ouyang2025lowbit / peng2023yarn / press2022train / shao2024omniquant / sheng2023flexgen / tseng2024quipsharp / yuan2025numerical / yue2024wkvquant / zheng2024sglang / zhang2024coupled）
+  - **Tier B 新增 4 处 cite**：
+    - `fang2025longppl` → Ch5 §5.4 Limitations 第 1 条（PPL 作为长上下文指标的局限）
+    - `fogliato2024precise` → Ch4 §4.1.4 统计框架（小样本精确评测 + Bootstrap CI 策略）
+    - `ye2025flashinfer` → Ch3 §3.5 Triton 节（与 FlashInfer INT4/INT8 decode kernel 互为补充）
+    - `yuan2024kvcompressionbench` → Ch2 §2.4 KV compression 综述说明
+  - **Tier C 顺便修复的 label 冲突**：
+    - Ch3 `sec:ch3-triton` duplicate label（§3.5 section + 多余的注释块 label，保留首个）
+    - Appendix `sec:app-kv-ablation-full` duplicate（Phase 7 加的 alias 与原 label 重复，删多余的）
+  - **Tier D 删除 orphan figure ref**：Ch3 L111 旧引用 `fig:ch3-framework`（H1 修复时删除 figure block 后未清），改为指向 Ch1 §1.5 的 `fig:framework-overview`
+- Changed files:
+  - thesis/references.bib（79 → 61 entries，~7.4 KB 瘦身）
+  - thesis/chapters/ch5_conclusion.tex（Limitations 第 1 条加 fang2025longppl）
+  - thesis/chapters/ch4_experiments.tex（§4.1.4 统计框架加 fogliato2024precise）
+  - thesis/chapters/ch3_method.tex（§3.5 Triton 加 ye2025flashinfer + du2026bitdecoding comment；删除 L111 orphan fig:ch3-framework ref；删 duplicate sec:ch3-triton label）
+  - thesis/chapters/ch2_related_work.tex（§2.4 加 yuan2024kvcompressionbench）
+  - thesis/chapters/appendix.tex（删 duplicate sec:app-kv-ablation-full label）
+- Commands:
+  - Python audit script: bib 条目 × cite keys 集合运算 + 逐条判读相关度 + cite 位置检查
+  - Python bib-cleanup 脚本: balanced brace regex 删除 18 个 entry
+  - `xelatex + bibtex + xelatex × 2` 完整循环 → bbl 更新 resolve 所有 cite
+- Outputs:
+  - references.bib 从 79 → **61 entries**（-23%）
+  - 新增 4 处 cite 位置（story §12 相关工作 positioning + 统计 + 评测 + kernel benchmark）
+  - 全部 multiply-defined / undefined ref / undefined cite / Dimension too large 警告清零
+- Validation:
+  - xelatex × 2 pass → main.pdf **99 pages, 1.63 MB**
+  - **0 Warning: Reference undefined**
+  - **0 Warning: Citation undefined**
+  - **0 multiply-defined labels**
+  - **0 Dimension too large**
+  - **0 ! Error**
+- Risks / follow-ups:
+  - bib 61 条全部在正文有至少 1 次 cite
+  - 打 tag `thesis-m-plus-v1-final-refs` 作为 Phase 10 终点
+- Commit: <pending 本批>
+
 ### 2026-04-20 06:00 | Thesis Phase 9h — Codex adversarial-review 6 issues 全部修复
 - Goal: 响应 Codex adversarial-review（verdict: needs-attention / no-ship）指出的 3 HIGH + 3 MEDIUM issues，逐一修复
 - Codex 6 issues 修复状态:

@@ -199,13 +199,6 @@
 }
 
 % === 其他长上下文 ===
-@article{chen2023longlora,
-  title   = {{LongLoRA}: Efficient Fine-tuning of Long-Context Large Language Models},
-  author  = {Chen, Yukang and Qian, Shengju and Tang, Haotian and Lai, Xin and Liu, Zhijian and Han, Song and Jia, Jiaya},
-  journal = {arXiv preprint arXiv:2309.12307},
-  year    = {2023},
-}
-
 @inproceedings{merity2016wikitext,
   title     = {Pointer Sentinel Mixture Models},
   author    = {Merity, Stephen and Xiong, Caiming and Bradbury, James and Socher, Richard},
@@ -245,21 +238,6 @@
 }
 
 % === 模型量化（补充） ===
-@article{shao2024omniquant,
-  title   = {{OmniQuant}: Omnidirectionally Calibrated Quantization for Large Language Models},
-  author  = {Shao, Wenqi and Chen, Mengzhao and Zhang, Zhaoyang and Xu, Peng and Zhao, Lirui and Li, Zhiqian and Zhang, Kaipeng and Gao, Peng and Qiao, Yu and Luo, Ping},
-  journal = {International Conference on Learning Representations},
-  year    = {2024},
-}
-
-@article{dettmers2024qlora,
-  title   = {{QLoRA}: Efficient Finetuning of Quantized Language Models},
-  author  = {Dettmers, Tim and Pagnoni, Artidoro and Holtzman, Ari and Zettlemoyer, Luke},
-  journal = {Advances in Neural Information Processing Systems},
-  volume  = {36},
-  year    = {2024},
-}
-
 % === 量化理论综述 ===
 @article{nagel2021whitepaper,
   title   = {A White Paper on Neural Network Quantization},
@@ -279,20 +257,6 @@
 }
 
 % === 推理系统（补充） ===
-@article{aminabadi2022deepspeed,
-  title   = {{DeepSpeed-Inference}: Enabling Efficient Inference of Transformer Models at Unprecedented Scale},
-  author  = {Aminabadi, Reza Yazdani and Rajbhandari, Samyam and Awan, Ammar Ahmad and Li, Cheng and Li, Du and Zheng, Elton and Ruwase, Olatunji and Smith, Shaden and Zhang, Minjia and Rasley, Jeff and He, Yuxiong},
-  journal = {International Conference for High Performance Computing, Networking, Storage, and Analysis},
-  year    = {2022},
-}
-
-@article{sheng2023flexgen,
-  title   = {{FlexGen}: High-Throughput Generative Inference of Large Language Models with a Single {GPU}},
-  author  = {Sheng, Ying and Zheng, Lianmin and Yuan, Binhang and Li, Zhuohan and Ryabinin, Max and Chen, Beidi and Liang, Percy and R{\'e}, Christopher and Stoica, Ion and Zhang, Ce},
-  journal = {Proceedings of the 40th International Conference on Machine Learning},
-  year    = {2023},
-}
-
 % === KV Cache 驱逐/稀疏 ===
 @article{zhang2024h2o,
   title   = {{H2O}: Heavy-Hitter Oracle for Efficient Generative Inference of Large Language Models},
@@ -318,13 +282,6 @@
 }
 
 % === 长上下文建模 ===
-@article{press2022train,
-  title   = {Train Short, Test Long: Attention with Linear Biases Enables Input Length Generalization},
-  author  = {Press, Ofir and Smith, Noah A and Lewis, Mike},
-  journal = {International Conference on Learning Representations},
-  year    = {2022},
-}
-
 % === KV Cache 量化竞品 (Tier 1) ===
 @inproceedings{xu2024think,
   title     = {{ThinK}: Thinner Key Cache by Query-Driven Pruning},
@@ -332,13 +289,6 @@
   booktitle = {International Conference on Learning Representations},
   year      = {2025},
   note      = {arXiv:2407.21018},
-}
-
-@article{yue2024wkvquant,
-  title   = {{WKVQuant}: Quantizing Weight and Key/Value Cache for Large Language Models Gains More},
-  author  = {Yue, Yuxuan and Yuan, Zhihang and Duanmu, Haojie and Zhou, Sifan and Wu, Jianlong and Nie, Liqiang},
-  journal = {arXiv preprint arXiv:2402.12065},
-  year    = {2024},
 }
 
 @inproceedings{liu2024intactkv,
@@ -385,46 +335,11 @@
 }
 
 % === 量化与推理背景 (Tier 2) ===
-@article{tseng2024quipsharp,
-  title   = {{QuIP\#}: Even Better {LLM} Quantization with Hadamard Incoherence and Lattice Codebooks},
-  author  = {Tseng, Albert and Chee, Jerry and Sun, Qingyao and Voleti, Vikram and De Sa, Christopher},
-  journal = {International Conference on Machine Learning},
-  year    = {2024},
-}
-
-@article{egiazarian2024aqlm,
-  title   = {{AQLM}: Extreme Compression of Large Language Models via Additive Quantization},
-  author  = {Egiazarian, Vage and Panferov, Andrei and Kuznedelev, Denis and Frantar, Elias and Babenko, Artem and Alistarh, Dan},
-  journal = {International Conference on Machine Learning},
-  year    = {2024},
-}
-
-@article{ding2024longrope,
-  title   = {{LongRoPE}: Extending {LLM} Context Window Beyond 2 Million Tokens},
-  author  = {Ding, Yiran and Zhang, Li Lyna and Zhang, Chengruidong and Xu, Yuanyuan and Shang, Ning and Xu, Jiahang and Yang, Fan and Yang, Mao},
-  journal = {arXiv preprint arXiv:2402.13753},
-  year    = {2024},
-}
-
-@article{peng2023yarn,
-  title   = {{YaRN}: Efficient Context Window Extension of Large Language Models},
-  author  = {Peng, Bowen and Quesnelle, Jeffrey and Fan, Honglu and Shippole, Enrico},
-  journal = {arXiv preprint arXiv:2309.00071},
-  year    = {2023},
-}
-
 @article{ye2025flashinfer,
   title   = {{FlashInfer}: Efficient and Customizable Attention Engine for {LLM} Inference},
   author  = {Ye, Zihao and Chen, Lequn and Zheng, Size and Zhu, Yifei and Ceze, Luis and Krishnamurthy, Arvind and Chen, Tianqi},
   journal = {arXiv preprint arXiv:2501.01005},
   year    = {2025},
-}
-
-@article{zheng2024sglang,
-  title   = {{SGLang}: Efficient Execution of Structured Language Model Programs},
-  author  = {Zheng, Lianmin and Yin, Liangmin and Xie, Zhiqiang and Huang, Jeff and Sun, Chien-Sheng and Yu, Cody Hao and Gonzalez, Joseph E and Zhang, Hao and Stoica, Ion},
-  journal = {arXiv preprint arXiv:2312.07104},
-  year    = {2024},
 }
 
 @article{jiang2023mistral,
@@ -451,25 +366,6 @@
   booktitle = {International Conference on Machine Learning (ICML)},
   year      = {2025},
   note      = {arXiv:2502.04420},
-}
-
-@article{zhang2024coupled,
-  title     = {{KV} Cache is 1 Bit Per Channel: Efficient Large Language Model Inference with Coupled Quantization},
-  author    = {Zhang, Tianyi and Yi, Jonah and Xu, Zhaozhuo and Shrivastava, Anshumali},
-  journal   = {arXiv preprint arXiv:2405.03917},
-  year      = {2024},
-}
-
-@inproceedings{ouyang2025lowbit,
-  title     = {Low-Bit Quantization Favors Undertrained {LLM}s},
-  author    = {Ouyang, Xu and Ge, Tao and Hartvigsen, Thomas and Zhang, Zhisong and Mi, Haitao and Yu, Dong},
-  booktitle = {Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)},
-  year      = {2025},
-  address   = {Vienna, Austria},
-  publisher = {Association for Computational Linguistics},
-  pages     = {32338--32348},
-  doi       = {10.18653/v1/2025.acl-long.1555},
-  note      = {arXiv:2411.17691},
 }
 
 % === TensorRT INT8 KL Calibration ===
@@ -561,13 +457,6 @@
   year      = {2025},
 }
 
-@article{han2025polarquant,
-  title     = {{PolarQuant}: Quantizing {KV} Caches with Polar Transformation},
-  author    = {Han, Insu and Kacham, Praneeth and Karbasi, Amin and Mirrokni, Vahab and Zandieh, Amir},
-  journal   = {arXiv preprint arXiv:2502.02617},
-  year      = {2025},
-}
-
 % ------------------------------------------------------------
 % Round 3 Phase 1 additions — ch4 methodology defense citations
 % Added 2026-04-09. Authors listed as "others" are placeholders
@@ -581,14 +470,6 @@
   booktitle = {International Conference on Learning Representations (ICLR)},
   year      = {2025},
   note      = {arXiv:2410.23771},
-}
-
-@inproceedings{bean2025measuring,
-  title     = {Measuring what Matters: Construct Validity in Large Language Model Benchmarks},
-  author    = {Bean, Andrew M. and Kearns, Ryan Othniel and Romanou, Angelika and Hafner, Franziska Sofia and Mayne, Harry and Batzner, Jan and Foroutan, Negar and Schmitz, Chris and Korgul, Karolina and Batra, Hunar and Deb, Oishi and Beharry, Emma and Emde, Cornelius and Foster, Thomas and Gausen, Anna and Grandury, Mar{\'i}a and Han, Simeng and Hofmann, Valentin and Ibrahim, Lujain and Kim, Hazel and Kirk, Hannah Rose and Lin, Fangru and Liu, Gabrielle Kaili-May and Luettgau, Lennart and Magomere, Jabez and Rystr{\o}m, Jonathan and Sotnikova, Anna and Yang, Yushi and Zhao, Yilun and Bibi, Adel and Bosselut, Antoine and Clark, Ronald and Cohan, Arman and Foerster, Jakob and Gal, Yarin and Hale, Scott A. and Raji, Inioluwa Deborah and Summerfield, Christopher and Torr, Philip H.S. and Ududec, Cozmin and Rocher, Luc and Mahdi, Adam},
-  booktitle = {Advances in Neural Information Processing Systems Datasets and Benchmarks Track (NeurIPS D\&B)},
-  year      = {2025},
-  note      = {arXiv:2511.04703; survey of 445 LLM benchmarks reports 16\% statistical testing adoption},
 }
 
 @article{madaan2024variance,
@@ -612,21 +493,6 @@
   booktitle = {Proceedings of the 2025 Conference of the North American Chapter of the Association for Computational Linguistics (NAACL)},
   year      = {2025},
   note      = {aclanthology.org/2025.naacl-long.211},
-}
-
-@article{yuan2025numerical,
-  title     = {Understanding and Mitigating Numerical Sources of Nondeterminism in {LLM} Inference},
-  author    = {Yuan, Jiayi and Li, Hao and Ding, Xinheng and Xie, Wenya and Li, Yu-Jhe and Zhao, Wentian and Wan, Kun and Shi, Jing and Hu, Xia and Liu, Zirui},
-  journal   = {arXiv preprint arXiv:2506.09501},
-  year      = {2025},
-}
-
-@inproceedings{bai2025longbenchv2,
-  title     = {{LongBench v2}: Towards Deeper Understanding and Reasoning on Realistic Long-context Multitasks},
-  author    = {Bai, Yushi and Tu, Shangqing and Zhang, Jiajie and Peng, Hao and Wang, Xiaozhi and Lv, Xin and Cao, Shulin and Xu, Jiazheng and Hou, Lei and Dong, Yuxiao and Tang, Jie and Li, Juanzi},
-  booktitle = {Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (ACL)},
-  year      = {2025},
-  note      = {arXiv:2412.15204},
 }
 
 @inproceedings{yuan2024kvcompressionbench,

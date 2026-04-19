@@ -108,7 +108,8 @@ $D_{\KL}$ 仅直接刻画\emph{分布侧}偏移；
 （详见第~\ref{para:ch3-orthogonality}~段）。
 该设计将计算密集的参数搜索过程从推理关键路径中分离出来，
 使在线阶段的推理延迟不因行为对齐校准而增加。
-图~\ref{fig:ch3-framework} 展示了框架的总体架构。
+框架的总体架构由 Ch1 §\ref{sec:ch1-structure} 的图~\ref{fig:framework-overview} 承担
+（单一 behavior 原则贯通 calibration + allocation 两层），本节不重复 overview 图。
 
 % 【Phase 9h Codex H1 修复】删除旧 fig:ch3-framework 与旧 fig:ch3-calib-pipeline TikZ block
 % 原因：旧图把 tau^-1 画成 "阶段 2 搜索" 的 main-path 产物，与 Phase 9 新写的 fig:calib-pipeline
@@ -679,6 +680,10 @@ AutoK 的价值因此更准确地定位为
 % ============================================================
 \section{Triton 融合量化解码核：INT8 Canonical Path 的系统落地}
 \label{sec:ch3-triton}
+% 注：与开源 attention decode 库（如 FlashInfer~\cite{ye2025flashinfer} 的 INT4/INT8 decode kernel
+% 与 BitDecoding~\cite{du2026bitdecoding} 的 NVFP4 Tensor Core 路径）互为补充——
+% 后者聚焦于极低比特的 kernel-level 加速，而本节聚焦于 behavior-guided INT8 canonical path
+% 的融合核\emph{落地手段}，不做 kernel 速度级比较。
 
 本节给出 behavior-guided 校准方案对应的 Triton 融合核函数实现，
 作为 INT8 canonical path 从校准产物到可部署推理路径的系统桥梁。
