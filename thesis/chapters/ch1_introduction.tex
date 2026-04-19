@@ -55,9 +55,12 @@ Needle 检索通过率可从 100\% 降至 0\%，困惑度退化超过 15\%。
 
 这一矛盾并非工程调参问题，
 而是指向注意力结构本身的误差传播特性。
-设标准注意力为 $z_i = q^\top k_i / \sqrt{d}$、
-$a_i = \mathrm{softmax}(z)_i$、
-$o = \sum_i a_i v_i$；
+设标准注意力为
+\begin{equation*}
+  z_i = \frac{q^\top k_i}{\sqrt{d}}, \qquad
+  a_i = \mathrm{softmax}(z)_i, \qquad
+  o = \sum_i a_i v_i;
+\end{equation*}
 量化后 $k_i, v_i$ 变为 $\hat k_i, \hat v_i$，
 输出误差可严格分解为以下 telescoping 形式（详见第三章方法部分）：
 \begin{equation}

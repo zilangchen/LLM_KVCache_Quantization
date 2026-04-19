@@ -36,6 +36,39 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 05:45 | Thesis Phase 9g — 图①③ TikZ + inline math 存量清存
+- Goal: Phase 9 最终 polish 的 P1-P3 子项落地（剩 P4 Codex review 后台启动）
+- Scope:
+  - **P1 图① Attention error decomposition**：新写 `thesis/figures/fig1_error_decomposition.tex`（TikZ 3 栏布局：attention flow / 量化路径 / 两条传播分支 + 底部误差分解公式框），挂到 Ch3 §3.1 末尾
+  - **P2 图③ Calibration pipeline**：新写 `thesis/figures/fig3_calib_pipeline.tex`（TikZ：WikiText-2 输入 → FP16 前向 → 共享 KL 目标 → INT8/INT4-RoleAlign 两路并行 → JSON 产物；底部注明 inv_tau 降级），挂到 Ch3 §3.3 sec:ch3-calibration
+  - **P3 inline math 存量清**：按 feedback_math_display_style 规则扫 Ch1-Ch3 复杂 inline math（含 sum/prod/int/frac/sqrt），**6 处全部改 display**：
+    - Ch1 §1.2 attention 定义（$z_i$/$a_i$/$o$ 三连 → 1 个 equation* 合并）
+    - Ch3 §3.1 量化后输出 $\hat o$
+    - Ch3 §3.3 softmax 局限性 logits 扰动公式
+    - Ch3 §3.3 layer-wise allocator 平均位宽约束
+    - Ch3 §3.3 role-aware 总预算约束
+  - 顺便修 Ch3 duplicate label：§3.1 `eq:ch3-kl` → `eq:ch3-kl-general`（避免与 §3.3 的具体 KL 定义撞名）
+- Changed files:
+  - thesis/figures/fig1_error_decomposition.tex（新建）
+  - thesis/figures/fig3_calib_pipeline.tex（新建）
+  - thesis/chapters/ch1_introduction.tex（§1.2 3 inline → 1 display）
+  - thesis/chapters/ch3_method.tex（4 inline → 4 display + duplicate label rename + §3.1 末图① \input + §3.3 KL 目标后图③ \input）
+- Commands:
+  - `python3 /tmp/thesis_phase3/step_p3_scan_inline_math.py` → 初始 6 候选 → 清理后 0 候选
+  - xelatex smoke × 2 pass → main.pdf 99 → **100 pages** (+1 from 新增 6 display math 块)
+- Outputs:
+  - M+ 图表清单 17 项：**16/17 就绪**（仅缺原本设计为 optional 的图 ③ 细节 — 已完成新版）
+  - Ch1/Ch2/Ch3 inline math 存量 100% 按规则对齐 feedback_math_display_style
+  - 所有 fig refs (fig:error-decomposition / fig:calib-pipeline) resolve
+- Validation:
+  - xelatex: 100 pages, no halt, 0 undefined fig ref
+  - P3 scan: Ch1/Ch2/Ch3 复杂 inline math 候选 0/0
+  - 剩 "Dimension too large" TikZ warning（不阻塞）
+- Risks / follow-ups:
+  - P4 Codex adversarial-review 待启动（后台执行）
+  - P5 最终 commit + tag thesis-m-plus-v1-final
+- Commit: <pending 本批>
+
 ### 2026-04-20 05:36 | 14B chain launcher — 等 GPU 0 空闲自动启动 14B main（不打断正在跑的 1p5b/3b）
 - Goal: 3 张 GPU 都在跑 main session，无卡给 14B。不 kill 现有 session 保留 progress，改用 chain launcher 等 GPU 0 自然空闲后自动启动 14B
 - Scope:

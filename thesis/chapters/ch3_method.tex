@@ -35,8 +35,11 @@ Triton 融合量化解码核函数（第~\ref{sec:ch3-triton}~节）
 其中 $\bq \in \mathbb{R}^{d_k}$ 为当前 query、
 $\bk_i, v_i$ 为第 $i$ 个历史 token 对应的 Key / Value。
 量化将 $\bk_i, v_i$ 替换为 $\hat{\bk}_i, \hat{v}_i$，
-进而得到 $\hat z_i$、$\hat a_i = \mathrm{softmax}(\hat z)_i$ 与
-$\hat o = \sum_i \hat a_i \hat v_i$。
+进而得到量化版本的 logits $\hat z_i$ 与分布 $\hat a_i = \mathrm{softmax}(\hat z)_i$；
+量化后的 attention 输出为
+\begin{equation*}
+  \hat o = \sum_i \hat a_i \, \hat v_i.
+\end{equation*}
 输出端的误差可严格分解为以下 telescoping 形式：
 \begin{equation}
   \hat{o} - o
@@ -59,7 +62,7 @@ $\hat o = \sum_i \hat a_i \hat v_i$。
 行为偏移由 Kullback--Leibler 散度衡量：
 \begin{equation}
   D_{\KL}(\bm{p} \| \bm{q}) = \sum_i p_i \log \frac{p_i}{q_i}
-  \label{eq:ch3-kl}
+  \label{eq:ch3-kl-general}
 \end{equation}
 $D_{\KL}$ 仅直接刻画\emph{分布侧}偏移；
 聚合侧 $\bm{o}$ 的保真度由校准后模型在端到端任务指标
@@ -68,6 +71,13 @@ $D_{\KL}$ 仅直接刻画\emph{分布侧}偏移；
 在校准层作为目标函数（第~\ref{sec:ch3-calibration}~节），
 在分配层作为跨层敏感度度量（第~\ref{sec:ch3-allocator}~节），
 使 behavior 原则贯通校准与预算分配两个抽象层次。
+
+图~\ref{fig:error-decomposition} 以单 head 示意把上述分解\emph{可视化}：
+左侧展示 FP16 attention 的计算流程；中间是量化算子 $Q(\cdot)$ 把 $K$ / $V$ 映射到量化版本 $\hat K$ / $\hat V$；
+右侧两条分支对应分布侧与聚合侧的传播路径；底部重述公式~\eqref{eq:ch3-error-decomp}
+把两条路径合并为 attention 输出误差的统一表示。
+
+\input{figures/fig1_error_decomposition}
 
 
 % ============================================================
@@ -227,6 +237,13 @@ FP16 精度下的注意力权重分布定义为：
   \label{eq:ch3-kl}
 \end{equation}
 
+图~\ref{fig:calib-pipeline} 把这一目标函数在离线校准阶段的\textbf{完整 pipeline} 可视化：
+WikiText-2 校准数据 $\to$ FP16 前向提取 $(Q, K, V)$ $\to$ 共享 KL 目标 $\to$ 分别在 INT8 canonical 与 INT4-RoleAlign 两条 path 上做参数搜索 $\to$ 输出可审计的校准产物 JSON。
+两条 path 的唯一差异是搜索空间（对称 per-group vs 非对称 per-channel/per-token），
+目标函数与产物接口共享，$\tau^{-1}$ 温度校正路径已降级为附录 diagnostic note（见附录 \ref{sec:app-invtau-diagnostic}）。
+
+\input{figures/fig3_calib_pipeline}
+
 选择 KL 散度而非均方误差（MSE）作为目标函数基于三点考量。
 \textbf{第一，分布层面的度量。}
 注意力权重经过 softmax 归一化后形成概率分布，
@@ -240,7 +257,10 @@ KL 散度中的 $\ln(p_{\text{ref},i}/p_{\text{quant},i})$ 项会产生较大惩
 这对保持模型的长距离依赖建模能力尤为重要。
 \textbf{第三，softmax 非线性下 MSE 的局限性。}
 设 Key 矩阵的量化误差为 $\bm{\delta} = \hat{\bK} - \bK$，
-量化后的注意力 logits 变为 $\bm{l}_{\text{ref}} + \bq\bm{\delta}^T/\sqrt{d_k}$，
+量化后的注意力 logits 满足
+\begin{equation*}
+  \bm{l}_{\text{quant}} = \bm{l}_{\text{ref}} + \frac{\bq\,\bm{\delta}^T}{\sqrt{d_k}},
+\end{equation*}
 经 softmax 映射后注意力权重的重新分配与 $\bm{\delta}$ 方向相关而非仅与 $\|\bm{\delta}\|_2^2$ 相关，
 因此 MSE 较小的量化方案未必对应注意力行为的保真。
 KL 散度直接在 softmax 输出空间度量，天然规避这一数值精度与行为保真度不一致的问题。
@@ -618,8 +638,10 @@ KIVI-style 的 absmax/min 配置对应 RoleAlign 搜索空间的端点 $(p_K, p_
 \label{subsec:ch3-alloc-layerwise}
 
 设总预算为固定平均 bit $\bar b$（对应相同的 KV memory 约束），
-每层独立决定位宽 $b_l \in \{4, 8, 16\}$ 满足
-$\frac{1}{L}\sum_l b_l \approx \bar b$。
+每层独立决定位宽 $b_l \in \{4, 8, 16\}$ 满足平均位宽约束
+\begin{equation*}
+  \frac{1}{L}\sum_{l=1}^{L} b_l \approx \bar b.
+\end{equation*}
 本文实现的 top-$k$ 选择器保护敏感度最高的 $k$ 层使用较高位宽 $b_{\text{hi}}$，
 其余层使用较低位宽 $b_{\text{lo}}$，形式化为：
 \begin{equation}
@@ -643,7 +665,10 @@ Heuristic 在实验章节作为强 baseline 被正面承认
 K 与 V 在误差分解（方程~\eqref{eq:ch3-error-decomp}）中承担不同角色，
 其敏感度画像也不必相同。
 Role-aware allocator 为每层独立决定 $(b_l^K, b_l^V)$ 对，
-总预算约束变为 $\frac{1}{2L}\sum_l (b_l^K + b_l^V) \approx \bar b$。
+总预算约束变为
+\begin{equation*}
+  \frac{1}{2L}\sum_{l=1}^{L} (b_l^K + b_l^V) \approx \bar b.
+\end{equation*}
 这一扩展在当前实现中可行，
 但在本文跨模型实验（第~\ref{sec:conclusion-future}~节）中
 尚未系统性地超越同预算下的对称 top-$k$ 策略，
