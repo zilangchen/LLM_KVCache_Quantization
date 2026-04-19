@@ -17,10 +17,19 @@ independent optimization problems without a unifying organizing
 principle.
 
 This thesis proposes a \textbf{behavior-guided} quantization
-framework in which the attention-distribution shift under quantization
-(behavior preservation) serves as the single organizing objective
-that connects both calibration and layer-wise budget allocation
-through a shared behavior sensitivity profile. We validate the
+framework in which attention \emph{behavior}---defined as the
+\emph{joint} preservation of the attention distribution $a$
+\emph{and} the attention output $o$---serves as the single
+organizing objective. A telescoping decomposition of the output
+error shows that $K$-errors distort $a$ through softmax while
+$V$-errors shift $o$ through weighted aggregation; the two paths
+are \emph{coupled}, not orthogonal. Consequently, preserving the
+distribution $a$ also constrains the $\hat{a}_i$ factor inside the
+aggregation-side term, which is why we use the \textbf{distribution-side
+KL divergence} as an optimizable engineering proxy that bounds
+both error paths. The framework then organizes calibration and
+layer-wise budget allocation as two decisions sharing the same
+behavior sensitivity profile. We validate the
 framework on six open-source LLMs---Qwen2.5-\{1.5B, 3B, 7B, 14B\},
 LLaMA-3.1-8B, and Mistral-7B-Instruct-v0.3---across five LongBench
 tasks under a clean-provenance protocol (pin=\code{ddada19}), and

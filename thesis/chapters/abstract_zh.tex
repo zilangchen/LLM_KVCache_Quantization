@@ -15,9 +15,14 @@ INT4 量化理论上可将 KV Cache 压缩至原始的 $1/4$，
 缺乏跨两层的统一组织原则。
 
 本文提出以\textbf{注意力行为保持度}
-（attention 分布 $a$ 的量化前后偏移）
-为统一目标的 behavior-guided 量化框架，
-把 calibration 与 budget allocation 两层组织到同一 behavior sensitivity profile
+（attention 分布 $a$ \emph{与}输出 $o$ 的联合偏移）
+为统一目标的 behavior-guided 量化框架。
+注意力输出误差的 telescoping 分解显示 $K$ 误差经 softmax 扭曲分布、
+$V$ 误差经加权聚合偏移输出，两侧\emph{耦合}而非正交；
+保持分布 $a$ 的同时也约束了聚合侧项里的 $\hat a_i$ 因子，
+因此以\textbf{分布侧 KL 散度}作为可优化的工程代理，
+可以同时约束两条误差传播路径。
+该 framework 把 calibration 与 budget allocation 两层组织到同一 behavior sensitivity profile
 作为共享输入的结构下。
 在 Qwen 2.5-\{1.5B, 3B, 7B, 14B\}、LLaMA-3.1-8B 与 Mistral-7B-Instruct-v0.3
 共 6 个模型、5 个 LongBench 任务、clean-provenance pin=\code{ddada19}

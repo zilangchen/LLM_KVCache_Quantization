@@ -36,6 +36,44 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 06:00 | Thesis Phase 9h — Codex adversarial-review 6 issues 全部修复
+- Goal: 响应 Codex adversarial-review（verdict: needs-attention / no-ship）指出的 3 HIGH + 3 MEDIUM issues，逐一修复
+- Codex 6 issues 修复状态:
+  - **H1 Ch3 §3.2 legacy τ⁻¹ figure 块自相矛盾**：删除旧 `fig:ch3-framework`（attention-KL framing）+ 旧 `fig:ch3-calib-pipeline` TikZ（阶段 2 τ⁻¹ 搜索节点）+ L125 正文 "(3) τ⁻¹ 作为诊断产物"；统一由新 `fig:framework-overview` + `fig:calib-pipeline` 承担，τ⁻¹ 严格作为附录 diagnostic note ✅
+  - **H2 matched-budget 数学不一致**：承认 eq:ch4-matched-budget 线性于 bit-width；allocator $\bar{b}\in[4.5, 5.0]$ vs uniform $\bar{b}=4.0$ 实际对应 +12.5% 至 +25% memory delta（不是 ±3%）；重命名段落为 "Budget band（非严格 matched-budget）"；整章定位改为 **regime signature readout** 而非 formal matched-budget comparison ✅
+  - **H3 behavior joint 定义统一**：Ch1 §1.2 假设 H 改为 "分布 a 与输出 o 的联合保持度"；解释 telescoping 分解中两侧 coupled（$\hat a_i$ 出现在聚合侧项）；分布侧 KL 作为可优化工程代理同时约束两条误差路径；Abstract 中英对齐 ✅
+  - **M1 Ch4 winner framing → regime signature**：4 处关键词替换（"winner 多样性"→"per-model regime signature"、"winner 指纹"→"per-model regime footprint"、`\text{winner}(X)=Y` equation → `\text{top-tier}(X) \ni Y` relation、"不存在跨模型统一最优 policy"→"不存在跨模型统一的 point 最优 policy...top-tier 落点 vs universal winner"）✅
+  - **M2 图 ① "正交" → "耦合 telescoping"**：fig1_error_decomposition.tex caption 改写，明确公式是 telescoping 恒等式非 K/V 独立因子化；保留 behavior 作为联合对象的论证（分布 a 保持 → $\hat a_i$ 接近 $a_i$ → 聚合侧项第一因子受控）✅
+  - **M3 fig7_pareto Dimension too large**：根因 matplotlib annotate 用 `xytext=(x*1.15, ...)` 在 log scale 下被误解为 log-space 乘法，产生极大 x 坐标（page size 被炸到 764282 × 357 pts）；修为 `xytext=(frac, frac), textcoords="axes fraction"` + 显式 set_xlim；重跑 plot_l2_pareto.py，page size 恢复到 998 × 332 pts ✅
+- Changed files:
+  - thesis/chapters/ch3_method.tex（H1：删 2 legacy figure block + 清 τ⁻¹ 产物描述）
+  - thesis/chapters/ch4_experiments.tex（H2：§4.3 "budget band 非严格 matched" framing；M1：winner → regime signature 4 处）
+  - thesis/chapters/ch1_introduction.tex（H3：假设 H 改 joint）
+  - thesis/chapters/abstract_zh.tex（H3：joint behavior + telescoping）
+  - thesis/chapters/abstract_en.tex（H3：mirror 中文）
+  - thesis/figures/fig1_error_decomposition.tex（M2：caption 正交 → 耦合）
+  - scripts/thesis/plot_l2_pareto.py（M3：annotate 用 axes fraction + set_xlim）
+  - thesis/figures/fig7_pareto.pdf（M3：regen 后 size 正常）
+- Commands:
+  - Codex adversarial-review 后台运行 → verdict: needs-attention, 6 issues
+  - 逐一 Edit / Python slice 替换 / Python regen
+  - xelatex smoke × 2 pass → main.pdf **99 pages**（从 100 减 1 因 H1 删了 2 TikZ block 腾空间）
+  - **Dimension too large 错误消失**
+- Outputs:
+  - 全 6 issue 修复落地，叙事与数学一致性 100% 对齐 story + objective
+  - Ch3 变为\emph{单一}方法叙事（无 τ⁻¹ main-path 矛盾）
+  - Ch4 §4.3 从 "matched-budget formal" 降为 "regime signature readout"（诚实 framing）
+  - Ch1 + Abstract 中英 "behavior" 全部用 joint (a, o) 定义
+  - 图 ① caption 与公式数学对齐（telescoping 非正交）
+  - fig7 Pareto page size 修复（764282 → 998 pts）
+- Validation:
+  - xelatex: 99 pages, no halt, no "Dimension too large"
+  - 镜像 triplet（Ch1 §1.4 / Ch5 §5.1 / Abstract）behavior 定义一致
+- Risks / follow-ups:
+  - Phase 9 最终锁点：本 commit 之后打 tag thesis-m-plus-v1-final
+  - Codex follow-up review 可选（若用户希望再跑一轮确认 no-ship → clean）
+- Commit: <pending 本批>
+
 ### 2026-04-20 05:45 | Thesis Phase 9g — 图①③ TikZ + inline math 存量清存
 - Goal: Phase 9 最终 polish 的 P1-P3 子项落地（剩 P4 Codex review 后台启动）
 - Scope:

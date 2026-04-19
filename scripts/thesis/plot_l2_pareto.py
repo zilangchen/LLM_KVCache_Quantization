@@ -129,7 +129,17 @@ def main():
             fx, fy = pareto_front(xs, ys)
             ax.plot(fx, fy, linestyle="--", color="#555", linewidth=1.2, alpha=0.7, zorder=2, label="Pareto front")
 
-        # Callouts
+        # 先设置 log scale，保证后续 annotate 的 xytext 按 log 位置 transform（data coords）
+        ax.set_xscale("log")
+
+        # Set x-axis limits explicitly based on valid data range (避免 log 刻度下 annotate
+        # 乘法产生超出 data range 的坐标 → 触发 xelatex Dimension too large)
+        if len(sub) > 0:
+            xmin = sub["peak_mem_mb"].min() * 0.8
+            xmax = sub["peak_mem_mb"].max() * 1.3
+            ax.set_xlim(xmin, xmax)
+
+        # Callouts（使用 axes coords 避免 log 刻度下 xytext 乘法失真）
         if mkey == "7b":
             uniform_pts = sub[sub["family"] == "uniform_int4"]
             if not uniform_pts.empty:
@@ -137,7 +147,7 @@ def main():
                 ax.annotate(
                     "quality cliff",
                     xy=(worst["peak_mem_mb"], worst["quality_core"]),
-                    xytext=(worst["peak_mem_mb"] * 1.15, worst["quality_core"] + 0.5),
+                    xytext=(0.3, 0.2), textcoords="axes fraction",
                     arrowprops=dict(arrowstyle="->", color="#D55E00", lw=1.2),
                     fontsize=9, color="#D55E00",
                 )
@@ -148,12 +158,11 @@ def main():
                 ax.annotate(
                     "Pareto-dominant",
                     xy=(best["peak_mem_mb"], best["quality_core"]),
-                    xytext=(best["peak_mem_mb"] * 0.75, best["quality_core"] + 0.3),
+                    xytext=(0.15, 0.85), textcoords="axes fraction",
                     arrowprops=dict(arrowstyle="->", color="#009E73", lw=1.2),
                     fontsize=9, color="#009E73",
                 )
 
-        ax.set_xscale("log")
         ax.set_xlabel(r"KV cache peak memory (MB, log)")
         if mkey == SUBPLOT_MODELS[0]:
             ax.set_ylabel(r"Quality (task-core mean)")

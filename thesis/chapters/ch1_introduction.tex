@@ -80,12 +80,16 @@ Needle 检索通过率可从 100\% 降至 0\%，困惑度退化超过 15\%。
 
 基于上述结构性观察，本文提出一个理论动机驱动的假设：
 \begin{quote}
-  \textbf{假设 H：}在 KV Cache 量化中，
-  以\emph{注意力分布} $\bm{a}$ 的保持度作为直接优化对象，
-  相比以张量数值范数作为优化对象，
-  更贴近模型真实的功能损伤；
-  聚合侧输出 $\bm{o}$ 的保真由端到端任务指标
-  （PPL、Needle、LongBench 等）间接约束。
+  \textbf{假设 H（behavior 保持度，joint 形式）：}
+  在 KV Cache 量化中，把\textbf{注意力行为}定义为 \emph{分布侧} $\bm{a}$ 与
+  \emph{聚合侧} $\bm{o}$ 的\emph{联合保持度}，比以张量数值范数作为优化对象更贴近模型真实的功能损伤。
+  误差分解式~\eqref{eq:error_decomposition}
+  表明两侧误差通过 $\hat a_i$ 与 $\hat v_i - v_i$ 相乘的聚合侧项\emph{耦合}，
+  因此保持分布 $\bm{a}$ 的同时也约束了聚合侧项的第一因子——
+  这是工程上 behavior 保持度可以用\textbf{分布侧 KL 散度作为直接可优化代理}的结构性理由
+  （第三章 §\ref{sec:ch3-problem} 给出形式化推导）。
+  聚合侧 $\bm{o}$ 的保真度在本文实证中由端到端任务指标
+  （PPL、Needle、LongBench 等）作\emph{补充验证}，而非游离于 framework 之外。
 \end{quote}
 在具体实现上，本文以 Kullback--Leibler 散度刻画分布侧偏移：
 若 $\bm{p}$ 记 FP16 注意力权重分布、$\bm{q}$ 记量化后分布，则

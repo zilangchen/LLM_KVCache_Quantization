@@ -79,10 +79,14 @@
     \draw[arr, gray!60] (pv.south) |- (eq.east);
 
   \end{tikzpicture}
-  \caption{Attention 误差的两条传播路径：$K$ 误差经过 softmax 扭曲 attention 分布，
-  $V$ 误差经过加权求和偏移输出。误差分解（底部公式框）明确指出这两条路径是\emph{正交}的——
-  任意 KV Cache 量化方案都必须同时考虑两者，而\textbf{behavior 保持度}
-  （对应 $a$ 与 $o$ 的联合偏移）是同时约束两条路径的自然统一对象。
+  \caption{Attention 误差的两条\emph{耦合}传播路径（telescoping 分解）：$K$ 误差经过 softmax 扭曲 attention 分布，
+  $V$ 误差经过加权求和偏移输出。底部公式框给出的是 telescoping 恒等式而非正交因子化——
+  聚合侧项 $\sum_i \hat a_i (\hat v_i - v_i)$ 中的 $\hat a_i$ 已经携带 $K$ 扰动信息，
+  两条路径在数学上相互耦合、不可完全 isolate。
+  尽管路径耦合，\textbf{behavior 保持度}（$a$ 与 $o$ 的联合偏移）仍然同时约束两侧：
+  分布 $a$ 的保持度直接限定了第一项；
+  分布 $a$ 保持 $\Rightarrow$ $\hat a_i$ 接近 $a_i$ $\Rightarrow$ 第二项里的聚合权重也受控，
+  使得 behavior 作为联合对象覆盖两条误差来源。
   单 head 示意，省略时间步与 $\sqrt{d_k}$ 归一化。}
   \label{fig:error-decomposition}
 \end{figure}

@@ -110,83 +110,25 @@ $D_{\KL}$ 仅直接刻画\emph{分布侧}偏移；
 使在线阶段的推理延迟不因行为对齐校准而增加。
 图~\ref{fig:ch3-framework} 展示了框架的总体架构。
 
-\begin{figure}[!htbp]
-  \centering
-  \includegraphics[width=0.98\textwidth]{figures/ch3_framework.pdf}
-  \caption{行为对齐量化框架的层级结构。层一以 attention-KL 为行为偏移度量。层二在该度量下建立 鲁棒选择 协议，既用于校准参数搜索（INT8 对称路径），也用作诊断工具（低比特结构分析）。层三在 KIVI-style 非对称格式上给出行为引导的实例化 RoleAlign。$\tau^{-1}$ 作为诊断过程中观察到的启发式呈现，显示出格式与 GQA 尺度的双依赖性；Triton 融合量化解码核函数与校准产物 JSON 为上述层级提供系统实现支撑。}
-  \label{fig:ch3-framework}
-\end{figure}
+% 【Phase 9h Codex H1 修复】删除旧 fig:ch3-framework 与旧 fig:ch3-calib-pipeline TikZ block
+% 原因：旧图把 tau^-1 画成 "阶段 2 搜索" 的 main-path 产物，与 Phase 9 新写的 fig:calib-pipeline
+% （§3.3 KL 目标之后 \input）矛盾——后者明确标注 tau^-1 已降级为 appendix diagnostic。
+% Framework overview 统一由 Ch1 §1.5 的 fig:framework-overview（fig2_framework.tex）承担。
 
 \subsection{离线校准阶段}
 
 离线校准阶段的目标是在少量代表性校准数据上确定关键量化参数：
 （1）逐层逐组的静态量化 Scale $s$，用于将浮点键值张量映射到整数表示；
-（2）自适应保护参数，防止推理时超出校准范围的激活值被过度裁剪；
-（3）逐头温度校正因子 $\tau^{-1}$（inverse temperature），
-作为诊断框架的结构性产出，用于揭示量化噪声在 GQA 尺度下的行为特性
-（详见第~\ref{sec:app-invtau-diagnostic}~节）。
+（2）自适应保护参数，防止推理时超出校准范围的激活值被过度裁剪。
+温度校正因子 $\tau^{-1}$ 在本文主线中\textbf{未纳入}——
+其格式/尺度双依赖的诊断性观察降级为附录
+（见附录~\ref{sec:app-invtau-diagnostic}），不是本文的校准产物。
 
-图~\ref{fig:ch3-calib-pipeline} 给出了离线校准的完整流程，
-各步骤如下：
+离线校准的完整流程在本章 §\ref{sec:ch3-calibration} 图~\ref{fig:calib-pipeline} 中给出
+（单一权威图；WikiText-2 校准数据 $\to$ FP16 前向 $\to$ 共享 KL 目标 $\to$
+INT8 canonical 与 INT4-RoleAlign 两路搜索 $\to$ 产物 JSON），
+此处不重复呈现 pipeline 结构图。
 
-\begin{figure}[!htbp]
-  \centering
-  \begin{tikzpicture}[
-    box/.style={rectangle, draw, rounded corners=3pt, minimum height=1.1cm,
-                text centered, font=\small, inner sep=5pt, line width=0.8pt},
-    data/.style={box, fill=gray!8, draw=gray!50, text width=2.4cm},
-    proc/.style={box, fill=blue!6, draw=blue!40, text width=2.8cm},
-    search/.style={box, fill=teal!8, draw=teal!50, text width=3.0cm, minimum height=1.4cm},
-    output/.style={box, fill=orange!8, draw=orange!50, text width=2.6cm},
-    arr/.style={-{Stealth[length=2.5mm]}, semithick, draw=gray!65},
-    note/.style={font=\scriptsize, text=black!55},
-  ]
-  % Row 1: Input
-  \node[data] (wiki) at (0, 0) {校准数据\\[-2pt]\scriptsize WikiText-2};
-  \node[proc] (fwd) at (3.5, 0) {FP16 前向传播\\[-2pt]\scriptsize 提取 Q/K/V};
-
-  % Row 2: Search (two paths)
-  \node[search] (s1) at (-0.5, -2.2) {
-    \textbf{阶段 1: Scale 搜索}\\[-1pt]
-    \scriptsize $(p_c, g) \to \min D_{\text{KL}}$\\[-1pt]
-    \scriptsize per-group 对称量化
-  };
-  \node[search] (s2) at (3.5, -2.2) {
-    \textbf{阶段 2: $\tau^{-1}$ 搜索}\\[-1pt]
-    \scriptsize 逐头温度校正\\[-1pt]
-    \scriptsize （诊断驱动，格式/尺度依赖）
-  };
-  \node[search, fill=teal!14, draw=teal!65, line width=1pt] (sra) at (7.5, -2.2) {
-    \textbf{RoleAlign 路径}\\[-1pt]
-    \scriptsize $(p_K, p_V) \to \min D_{\text{KL}}$\\[-1pt]
-    \scriptsize per-ch K + per-tok V
-  };
-
-  % Row 3: Output
-  \node[output] (json) at (3.5, -4.2) {校准产物 JSON\\[-2pt]\scriptsize scales + $\tau^{-1}$ ($<$10 KB)};
-
-  % Arrows
-  \draw[arr] (wiki) -- (fwd);
-  \draw[arr] (fwd) -- (s1);
-  \draw[arr] (fwd) -- (s2);
-  \draw[arr] (fwd) -- (sra);
-  \draw[arr] (s1) -- (json);
-  \draw[arr] (s2) -- (json);
-  \draw[arr] (sra) -- (json);
-
-  % Labels
-  \node[note, anchor=west] at (5.6, -0.1) {\textit{Q 需经 layernorm + RoPE}};
-  \node[note] at (-0.5, -3.6) {INT8 路径};
-  \node[note] at (7.5, -3.6) {INT4-RoleAlign};
-  \end{tikzpicture}
-  \caption{行为对齐离线校准流程。
-  INT8 路径采用两阶段分离搜索：先在 $(p_c, g)$ 网格上最小化 KL 散度确定 Scale，
-  再逐头搜索 $\tau^{-1}$ 温度校正。
-  INT4-RoleAlign 路径在 per-channel K + per-token V 非对称格式上搜索 $(p_K, p_V)$，
-  不使用 $\tau^{-1}$（第~\ref{subsec:exp-int4-cross-model}~节实验表明其在非对称格式下无稳定收益）。
-  两条路径共享同一校准框架和 KL 散度目标函数。}
-  \label{fig:ch3-calib-pipeline}
-\end{figure}
 校准数据采集过程中，Query 向量须经过输入层归一化与旋转位置编码
 （RoPE~\cite{su2024rope}）处理，
 使校准时的 $\bQ\bK^T$ 点积与实际推理时一致；

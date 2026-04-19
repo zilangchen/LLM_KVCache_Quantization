@@ -652,10 +652,12 @@ INT4-RoleAlign 与 KIVI-style 的 quality / PPL / Needle 差距\textbf{不显著
 本节把该原则推广到 \textbf{allocation 层面}：
 对每个模型，用 behavior sensitivity profile 指导逐层预算分配，
 跨 4 模型 × 4 policy × 3 core task 形成对比矩阵。
-在 matched INT4 memory budget 下（KV cache 峰值显存差距控制在 $\pm 3\%$ 以内，
-详见图~\ref{fig:t7-pareto}），4 种 policy 给出了明显不同的跨模型 winner 分布。
+本节的对比采用\textbf{近似对齐的 INT4 budget band}——
+各 allocator policy 与 \code{uniform\_int4\_k4v4} 基线同量级但\emph{非严格 matched memory}
+（详细说明见下文"Budget band 的定义"段），在此前提下呈现 4 种 policy 的跨模型\textbf{regime signature}。
 
-\paragraph{Matched-budget 的定义。}
+\paragraph{Budget band 的定义（非严格 matched-budget）。}
+\label{para:ch4-budget-band}
 记第 $l$ 层的 K / V 位宽分别为 $b_K^{(l)}$、$b_V^{(l)}$，
 单次推理 KV cache 占用可近似写作
 \begin{equation}
@@ -663,17 +665,23 @@ INT4-RoleAlign 与 KIVI-style 的 quality / PPL / Needle 差距\textbf{不显著
   \label{eq:ch4-matched-budget}
 \end{equation}
 其中 $L$ 为层数、$T$ 为上下文长度、$H_{kv}$ 为 KV head 数、$d_{\text{head}}{=}128$。
-本节所有 policy 的\emph{平均位宽} $\bar{b}{=}\sum_l (b_K^{(l)} + b_V^{(l)}) / (2L)$
-经 allocator 后保持在 $[4.5, 5.0]$ bit 范围内
-（对比 \code{uniform\_int4\_k4v4} 的 $\bar{b}{=}4.0$ bit），
-允许 "同 budget、不同 allocation policy" 的受控对比。
+本节所有 allocator policy 的\emph{平均位宽} $\bar{b}{=}\sum_l (b_K^{(l)} + b_V^{(l)}) / (2L)$
+经 AutoK 后落在 $[4.5, 5.0]$ bit 带内，而 \code{uniform\_int4\_k4v4} 为 $\bar{b}{=}4.0$ bit——
+按公式~\eqref{eq:ch4-matched-budget}，allocator policy 相对 uniform 的
+KV memory 差距大约在 $+12.5\%$ 至 $+25\%$ 之间
+（\textbf{不是}严格 matched memory 的 $\pm 3\%$ 带）。
+本文因此把本节定位为\textbf{regime signature readout}而非\emph{形式化} matched-budget comparison：
+T3 报告的是"在同一数量级预算内不同 allocation 风格跑出什么 quality"，
+图~\ref{fig:t7-pareto} Pareto 前沿直接可视化 quality--memory 权衡。
+严格 matched-budget 的 Allocator-vs-KIVI formal compare 作为条件 Future Work
+（story §13 Hook、第~\ref{sec:conclusion-future}~节）。
 
 \input{tables/table_t3_cross_model_main}
 
-\paragraph{Table T3 readout：winner 多样性。}
+\paragraph{Table T3 readout：per-model regime signature。}
 表~\ref{tab:t3-cross-model-main} 给出 4 模型的完整 3-task 对比。
 把每行的 per-(model, task) winner 合并到 block 末的 \emph{Mean} 行，
-得到跨模型的 \textbf{winner 指纹}：
+得到跨模型的 \textbf{per-model regime footprint}（最佳 policy 落点作为 regime 形状的指示，而不是 point 排序）：
 在 Qwen2.5-3B 上 \textbf{BA-$k_1$} 胜出
 （对应图~\ref{fig:sensitivity-heatmap} 的早层保护 signature）；
 在 Llama-3.1-8B 上 \textbf{BA-$k_{11}$} 胜出
@@ -742,7 +750,7 @@ Llama-3.1-8B 的 4 个 policy 接近共 Pareto，
   每行的红色加粗框指向 per-model best policy。
   4 行的最佳列落点各不相同——
   Qwen2.5-3B / Llama-3.1-8B 倾向 BA-$k$、Qwen2.5-14B 倾向 Uniform INT4、Mistral-7B 倾向 AutoK——
-  \textbf{不存在跨模型统一最优 policy}，构成 C3 regime map 的最快速 skim 证据。}
+  \textbf{不存在跨模型统一的 point 最优 policy}：每行最亮 cell 应理解为该模型在当前预算带内的 top-tier 落点，而非稳定可迁移的 ``universal winner''。}
   \label{fig:regime-map}
 \end{figure}
 
@@ -751,10 +759,10 @@ Llama-3.1-8B 的 4 个 policy 接近共 Pareto，
 每行的红色加粗框指向 per-model winner。
 4 行的最佳列落点各不相同：
 \begin{equation*}
-  \text{winner}(3B) = \text{BA-}k,\quad
-  \text{winner}(8B) = \text{BA-}k,\quad
-  \text{winner}(14B) = \text{Uniform},\quad
-  \text{winner}(\text{Mistral}) = \text{AutoK}.
+  \text{top-tier}(3B) \ni \text{BA-}k,\quad
+  \text{top-tier}(8B) \ni \text{BA-}k,\quad
+  \text{top-tier}(14B) \ni \text{Uniform},\quad
+  \text{top-tier}(\text{Mistral}) \ni \text{AutoK};
 \end{equation*}
 这种"4 模型 4 种倾向"的视觉观察是本章 C3 结论的最快速 skim 入口——
 \textbf{不存在跨模型统一最优的 allocator policy}。
