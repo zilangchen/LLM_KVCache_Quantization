@@ -93,7 +93,7 @@ Canonical agent workflow directory is `.agents/`.
   - Phase 5：§4.5 per-model cases（T4 Mistral / T5 3B / T6 14B + 图⑨）
   - Ch4 §4.5 部署效率 + §4.6 综合讨论 保留未改（Phase 4/6 处理）
   - MixedKV 段降 appendix 未真正搬（只删除），需 Phase 7 从 git history 捞出放 appendix
-- Commit: <pending 本批>
+- Commit: `6540fc7`（11 files, +882/-1317 = 净 -435 行）
 
 ### 2026-04-20 03:39 | 禁用 ScheduleWakeup 定时轮询，强制 background watchdog 等待远端长任务
 - Goal: 把"远端 GPU 任务等待"的机制从"Claude 用 ScheduleWakeup 按猜测时间回来 poll"改成"本地后台 watchdog 在任务实际结束瞬间通知 Claude"，并把规则写进项目权威文件确保不反弹。
