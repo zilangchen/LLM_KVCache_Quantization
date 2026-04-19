@@ -1,0 +1,19 @@
+\begin{table}[!htbp]
+  \centering
+  \small
+  \setlength{\tabcolsep}{5pt}
+  \begin{tabular}{l cccc}
+    \toprule
+    \textbf{Task} & Uniform & BA-$k_7$ & Heur-$k_7$ & BA-AutoK (cov90) \\
+    \midrule
+    NarrativeQA (F1) & \textbf{7.05} & 6.67 & \textbf{6.83} & \textbf{6.80} \\
+    HotpotQA (F1) & \textbf{5.57} & \textbf{5.49} & \textbf{5.40} & 5.39 \\
+    GovReport (Rouge-L) & \textbf{9.09} & 8.95 & \textbf{9.03} & \textbf{9.27} \\
+    \midrule
+    \textit{Mean} & \textit{7.23} & \textit{7.04} & \textit{7.09} & \textit{7.15} \\
+    \bottomrule
+  \end{tabular}
+  \caption{Qwen2.5-14B top-tier 分布（story §5.4 \textit{top-tier but no stable winner} 定量化）。\textbf{加粗}：每 task 的 top-3 policy。Top-3 policies 相对 top-1 的最大 relative gap 为 3.5\%，平均 3.0\%——即 14B 上多 policy 挤在高 quality 区间内，不存在 clear across-task winner。}
+  \label{tab:t6-14b-toptier}
+  \par\smallskip\noindent{\footnotesize \textbf{relative gap}：$(top_1 - top_3) / top_1$。由于 gap 量级在 bootstrap CI 半宽内，14B top-tier 的 policy 之间 statistical distinguishability 需 $n{=}5$ seed CI 叠加判定——因样本量小 $p$-值接近 sign-flip 下界，读作 \emph{inconclusive at this power}。}
+\end{table}

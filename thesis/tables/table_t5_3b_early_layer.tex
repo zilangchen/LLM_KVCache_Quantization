@@ -1,0 +1,19 @@
+\begin{table}[!htbp]
+  \centering
+  \small
+  \setlength{\tabcolsep}{6pt}
+  \begin{tabular}{l cccc c}
+    \toprule
+    \textbf{Task} & \textbf{BA-$k_1$} & Heur-$k_1$ & BA-AutoK & Uniform & $\Delta$ (BA$-$Heur) \\
+    \midrule
+    NarrativeQA (F1) & \textbf{7.17} & 3.08 & 6.48 & 4.33 & \textcolor{red}{+4.09} \\
+    HotpotQA (F1) & 4.73 & 1.39 & \textbf{4.89} & 2.38 & \textcolor{red}{+3.33} \\
+    GovReport (Rouge-L) & 8.81 & 5.96 & \textbf{8.90} & 5.77 & \textcolor{red}{+2.85} \\
+    \midrule
+    \textit{Mean} & \textit{6.90} & \textit{3.48} & \textit{6.75} & \textit{4.16} & \textit{+3.42} \\
+    \bottomrule
+  \end{tabular}
+  \caption{Qwen2.5-3B 的 early-layer rescue regime（story §5.2）。\textbf{BA-$k_1$}（保护 layer 0，对应图~\ref{fig:sensitivity-heatmap} 的 3B top-1 protected layer）相对 \textbf{Heur-$k_1$}（等距保护中层）呈现 catastrophic Δ——heuristic 在 NarrativeQA / HotpotQA 上量化几乎完全失效，而 behavior-guided 的单层保护把大部分 quality 捡回来。这是跨模型里 behavior vs heuristic 差距最大的模型。}
+  \label{tab:t5-3b-early-layer}
+  \par\smallskip\noindent{\footnotesize $\Delta$ 列为 BA-$k_1$ 减 Heur-$k_1$ 的分差，红色表示差距 $>2$ 分。heuristic\_$k_1$ 在 3B 上保护中层（layer$\approx L/2$）；而 3B behavior sensitivity profile 早层集中，因此中层保护对量化回救几乎没有作用。}
+\end{table}

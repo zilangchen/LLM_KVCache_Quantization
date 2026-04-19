@@ -777,6 +777,123 @@ Llama-3.1-8B 的 4 个 policy 接近共 Pareto，
 提供了经验基础——在某些 regime 区间里，保护哪些 $k$ 个位置本就是"决定论式"选择，
 无论启发式还是 behavior-guided 都会落在相似集合。
 
+% ============================================================
+\section{Per-Model Case Analysis：regime 地图的剖面}
+\label{sec:exp-per-model}
+% ============================================================
+
+\noindent§\ref{sec:exp-cross-model} 的 regime 地图给出跨模型的宏观视图；
+本节从剖面视角展开 3 个代表性模型的 per-model 细节：
+Mistral-7B（AutoK strongest positive）/ Qwen2.5-3B（early-layer rescue）
+/ Qwen2.5-14B（top-tier 无稳定赢家）。
+Qwen2.5-1.5B 与 Qwen2.5-3B 的小模型趋势合并叙述于 §\ref{subsec:exp-per-model-3b}。
+
+% ------------------------------------------------------------
+\subsection{Mistral-7B-v0.3：AutoK 的 strongest positive case}
+\label{subsec:exp-per-model-mistral}
+% ------------------------------------------------------------
+
+Mistral-7B 是本章 4 模型中 behavior-guided AutoK 最清晰的赢家：
+在 matched INT4 budget 下跨 5 task（3 core + 2 extend）对比
+4 种 allocator policy，\textbf{BA-AutoK（cov$80$\%）在 3 个 task 上取得 best、mean 上领先其它 3 个 family}。
+数据详见表~\ref{tab:t4-mistral-autok}。
+
+\input{tables/table_t4_mistral_autok}
+
+AutoK 的优势在\emph{大 extend-task 区间}尤为明显：
+DuReader 上 AutoK $=11.62$ vs Heur-$k_3{=}7.97$（$+3.6$ 分差），
+LCC 上略劣于 BA-$k_3$ 但远优于 Uniform。
+对应图~\ref{fig:sensitivity-heatmap} 的 Mistral-7B 剖面——top-3 protected layer index
+为 $\{2, 6, 7\}$，落在中-前层区间，
+与 cov$80$\% threshold 下 AutoK 选择的 25 层保护覆盖吻合。
+这一 signature 在其它 3 模型上缺失（3B 过于集中早层、14B 过于弥散），
+构成 Mistral 作为 \textbf{单家族最强 AutoK 案例}的机制解释。
+
+% ------------------------------------------------------------
+\subsection{Qwen2.5-3B：Early-Layer Rescue Regime}
+\label{subsec:exp-per-model-3b}
+% ------------------------------------------------------------
+
+Qwen2.5-3B 揭示了一个在其它模型上未出现的\textbf{异质 regime}：
+单层 behavior-guided 保护相对单层启发式保护呈现 catastrophic $\Delta$。
+记 $\Delta(\pi_{\text{BA}}, \pi_{\text{Heur}}, t)$ 为同 $k{=}1$ 预算下
+behavior-guided 相对 heuristic 在 task $t$ 上的分差：
+\begin{equation}
+  \Delta(t) = \text{score}_\pi(\text{BA-}k_1, t) - \text{score}_\pi(\text{Heur-}k_1, t).
+  \label{eq:ch4-rescue-delta}
+\end{equation}
+表~\ref{tab:t5-3b-early-layer} 给出 3B 上各 task 的 $\Delta$ 分布。
+
+\input{tables/table_t5_3b_early_layer}
+
+关键观察：
+\begin{itemize}[leftmargin=2em, itemsep=1pt, topsep=2pt]
+  \item \textbf{Heuristic 在 NarrativeQA / HotpotQA 上近乎完全失效}
+    （Heur-$k_1$ 分别为 $3.08$ 与 $1.39$），
+    原因是 heuristic 按等距位置保护中层（$l \approx L/2 = 18$），
+    而 3B 的 behavior sensitivity profile 是\textbf{早层集中型}
+    （图~\ref{fig:sensitivity-heatmap} 中 3B top-3 protected = $\{0, 1, 2\}$）；
+  \item \textbf{BA-$k_1$ 把 NarrativeQA 从 $3.08$ 回救到 $7.17$}（$\Delta \approx +4$ 分），
+    说明 behavior profile 给出的"哪一层需要保护"是\emph{模型特异性}而非通用规则——
+    中层 heuristic 在 3B 上没有合适的 empirical 基础。
+\end{itemize}
+这一事实使 3B 成为论文 C3 regime map 的\textbf{最强方法差异化证据}：
+如果 behavior-guided allocator 在\emph{所有}模型上都仅与 heuristic 持平，
+则它对 pipeline 的独立贡献难以声明；
+3B 上的 $\Delta \gg 0$ 表明 behavior 信号在\emph{某些 regime 区间内}
+提供了 heuristic 结构性缺失的信息。
+
+\textbf{1.5B 的补充趋势。}
+Qwen2.5-1.5B 作为同族更小模型，
+在 canonical step1（§\ref{subsec:exp-int8-canonical}）只参与 INT8 保真度验证
+不纳入 allocator sweep；
+但从早层 calibration profile 判读（artifact \code{kv\_calib\_kl\_selected\_v3\_quick.json}），
+其 top-$k$ sensitivity 同样呈早层集中模式。
+这一趋势\textbf{与 3B 同向}，作为 supporting 证据出现，不独立成节。
+
+% ------------------------------------------------------------
+\subsection{Qwen2.5-14B：Top-Tier but No Stable Winner}
+\label{subsec:exp-per-model-14b}
+% ------------------------------------------------------------
+
+Qwen2.5-14B 呈现相反的 regime：\textbf{4 个 policy 在每 task 上的分数差距都很小}，
+没有稳定的跨 task 最优。
+定义 task $t$ 下的 relative gap
+\begin{equation}
+  \text{gap}_{\text{rel}}(t) = \frac{\text{top}_1(t) - \text{top}_3(t)}{\text{top}_1(t)} \times 100\%.
+  \label{eq:ch4-14b-gap}
+\end{equation}
+表~\ref{tab:t6-14b-toptier} 的统计显示 $\max_t \text{gap}_{\text{rel}}(t) \approx 3.5\%$、
+$\text{avg}_t \text{gap}_{\text{rel}}(t) \approx 3.0\%$——
+top-3 policy 全部挤在 top-1 的 $3.5\%$ relative 距离内。
+
+\input{tables/table_t6_14b_toptier}
+
+这一"多策略共存"与 14B 的 sensitivity profile 形状吻合：
+图~\ref{fig:sensitivity-heatmap} 中 14B 在 48 层里有 42 层被 AutoK 标记为 protected，
+剩余 6 层在大预算下也基本不产生 quality cliff——
+大模型的 behavior sensitivity 弥散化到让 allocator 的 pick-order 对结果边际影响有限。
+这一 regime 正好解释 §\ref{sec:exp-cross-model} 的表~\ref{tab:t3-cross-model-main}
+中 14B winner 是 Uniform 这一看似反直觉结果：\textbf{不是 Uniform 真的"最优"},
+而是该 regime 区间里的 top-$3$ policy 在 $p$-值意义下\emph{不可分辨}。
+
+\paragraph{图 ⑨：跨 scale 的趋势综合视图。}
+图~\ref{fig:scale-trend} 把 4 模型的 4 policy mean quality 对 model scale
+（B params, log-scale）作图，
+把上面 3 个 per-model case 汇总为 scale 维度的连续趋势。
+4 条 policy 线在不同 scale 区间的 dominant 不同——这不是单调 scaling law，
+而是 scale-dependent regime 的直接可视化。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/fig9_scale_trend.pdf}
+  \caption{Quality vs 模型 scale 的 4 policy 趋势图（task-core mean，clean-provenance pin=\code{ddada19}）。
+  4 条线交叉揭示 regime 的 scale-dependent 性质：
+  Mistral-7B 上 AutoK 显著高于其他 3 条（strongest positive case），
+  其它 scale 上 4 policy 接近共线。}
+  \label{fig:scale-trend}
+\end{figure}
+
 \section{GQA-Aware 部署效率分析}
 \label{sec:exp-deployment}
 % ============================================================

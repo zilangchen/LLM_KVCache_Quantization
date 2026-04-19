@@ -36,6 +36,43 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 05:02 | Thesis Rewrite Phase 5 — Ch4 §4.5 Per-Model Cases（T4/T5/T6 + 图⑨）
+- Goal: M+ 方案 Phase 5，Ch4 §4.5 per-model 剖面分析 3 个代表性模型（Mistral AutoK strongest / 3B early-layer rescue / 14B top-tier no winner）
+- Scope:
+  - 写 4 个脚本：make_table_mistral_autok.py (T4) / make_table_3b_early_layer.py (T5) / make_table_14b_toptier.py (T6) / plot_scale_trend.py (图 ⑨)
+  - Ch4 新增 §4.5 Per-Model Cases，3 subsection + 1 common-scale 段：
+    - §4.5.1 Mistral AutoK strongest positive case（T4：AutoK 3/5 task-wins）
+    - §4.5.2 3B Early-Layer Rescue（T5：eq:ch4-rescue-delta display math + 含 "heuristic 在 NarrativeQA 分数 $3.08$ → BA-$k_1$ 回救到 $7.17$" catastrophic $\Delta$）
+    - §4.5.3 14B Top-Tier（T6：eq:ch4-14b-gap display math + max gap $3.5\%$、avg $3.0\%$）
+    - 末尾插入图 ⑨（Quality vs Scale 跨 4 模型 × 4 policy 趋势）
+  - 1.5B 合并进 §4.5.2 3B subsection 作为 supporting trend（不独立成节）
+  - **严格遵守 feedback_math_display_style.md**：本 Phase 新增 2 个 display math equation 块（`eq:ch4-rescue-delta`、`eq:ch4-14b-gap`）
+- Changed files:
+  - thesis/chapters/ch4_experiments.tex（1021 → 1138 行，+117）
+  - scripts/thesis/ 下 4 个新脚本
+  - thesis/tables/ 下 T4/T5/T6 的 .tex + .md
+  - thesis/figures/fig9_scale_trend.pdf（新）
+- Commands:
+  - `python3 scripts/thesis/make_table_mistral_autok.py` → T4 生成，AutoK task-wins 3/5
+  - `python3 scripts/thesis/make_table_3b_early_layer.py` → T5 生成，catastrophic Δ（Heur $3.08$ vs BA $7.17$）
+  - `python3 scripts/thesis/make_table_14b_toptier.py` → T6 生成，max gap $3.54\%$
+  - `python3 scripts/thesis/plot_scale_trend.py` → 图 ⑨ PDF
+  - `python3 /tmp/thesis_phase3/step_phase5_insert_45.py` → §4.5 插入 14/14 pass
+  - **xelatex smoke × 2 pass** → main.pdf 93 → **97 pages** (+4)
+- Outputs:
+  - Ch4 结构完整：§4.1 / §4.2 / §4.3 cross-model / **§4.5 per-model cases** / §4.5(旧GQA-Aware 保留) / §4.6 综合讨论
+  - 所有 C3 支撑证据（T3/T4/T5/T6 + 图 ④/⑦/⑧/⑨）全部到位
+  - Ch4 总行数 884 (Phase 3 结束) → 1138 (Phase 5 结束)，+254 行
+- Validation:
+  - T4 AutoK mean 14.764 > Heur 10.65 > BA-k 11.30 > Uniform 10.00，对齐 story §5.1
+  - T5 BA-$k_1$ mean 7.19 vs Heur-$k_1$ mean 3.47，catastrophic $\Delta{=}+3.72$
+  - T6 top-3 gap 3.54%/3.02% 对齐 story §5.4 "within ~2%" 量级
+  - xelatex smoke 97 pages, no halt
+- Risks / follow-ups:
+  - story 原 T6 caption 说 "within ~2%" 但实际 max 3.5%，caption 中用 "3.5%" 诚实报告不夸大
+  - Phase 6 下一步：Ch2 Related Work 重写（+T0）+ Ch5 Discussion 重写 + 图 ② Framework overview
+- Commit: <pending 本批>
+
 ### 2026-04-20 04:57 | Thesis Rewrite Phase 4 — Ch4 §4.3 Cross-Model 主章完整落地（T3 + 图④/⑦/⑧）
 - Goal: 按 M+ 方案 Phase 4（story §3.2 + §11 C3 证据组），在 Ch4 §4.2 Hook 占位之后、§4.5 之前插入新 §4.3 Cross-Model Regime 章，对应论文 C3（regime map）主证据
 - Scope:
