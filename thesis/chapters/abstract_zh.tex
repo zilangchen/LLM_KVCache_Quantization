@@ -1,68 +1,56 @@
 % ============================================================
-% abstract_zh.tex — 中文摘要
+% abstract_zh.tex — 中文摘要（Phase 8 M+ 重写版）
+% 对齐 docs/thesis_chapter_drafts_20260420.md §1.3
 % ============================================================
 
 \begin{abstractzh}
 
-大语言模型的上下文窗口从数千扩展至数十万词元（token），
+大语言模型的上下文窗口从数千扩展至数十万词元，
 键值缓存（KV Cache）的显存占用随序列长度线性增长，
 已成为制约长上下文推理部署的核心瓶颈。
 INT4 量化理论上可将 KV Cache 压缩至原始的 $1/4$，
-但现有以数值误差为校准目标的方法在长上下文下
-急剧恶化：Needle 检索通过率可从 100\% 降至 0\%，
-困惑度退化超过 15\%。
-本文提出以量化前后注意力分布的 Kullback--Leibler 散度
-（attention-KL）作为 KV Cache 量化的统一校准与诊断原则——
-在输出行为空间而非数值空间定义校准目标，
-并以 GQA 头数 $H_{kv}$ 为结构性组织变量
-联合分析校准灵敏度、退化模式与融合解码效率。
+但现有以\emph{数值误差}（MSE / percentile clipping）为校准目标的方法
+在长上下文下并不稳定，
+且大多将\emph{校准}与\emph{预算分配}作为两个独立优化问题处理，
+缺乏跨两层的统一组织原则。
 
-本文在 Qwen2.5-1.5B/7B/14B 与 LLaMA-3.1-8B 四个主模型
-（另加 Mistral-7B-Instruct-v0.3 作为第三模型族对照）上
-系统验证 attention-KL 原则，形成三方面贡献。
+本文提出以\textbf{注意力行为保持度}
+（attention 分布 $a$ 的量化前后偏移）
+为统一目标的 behavior-guided 量化框架，
+把 calibration 与 budget allocation 两层组织到同一 behavior sensitivity profile
+作为共享输入的结构下。
+在 Qwen 2.5-\{1.5B, 3B, 7B, 14B\}、LLaMA-3.1-8B 与 Mistral-7B-Instruct-v0.3
+共 6 个模型、5 个 LongBench 任务、clean-provenance pin=\code{ddada19}
+的实验集合上系统验证该框架，形成三方面贡献。
 
-\emph{第一}，attention-KL 诊断透镜首次揭示
-INT4 KV Cache 退化的 Key 主导机制：
-在 Qwen2.5-14B 上，保持 Key 为 FP16 可恢复 93\% 的 PPL 退化，
-保持 Value 为 FP16 仅恢复 64\%；
-跨四个主模型的 K-only/V-only 控制消融在方向上一致支持这一结论。
-该诊断自然推导出 per-channel Key + per-token Value 非对称量化格式，
-为 KIVI~\cite{liu2024kivi} 从工程经验独立提出的同一格式
-提供了首个 attention-KL 视角的机制性解释。
-校准目标层面，本文首次系统报告 KL 与 MSE 的选择
-在 bit-width 与规模维度呈现"趋同-分化-再收敛"结构：
-INT8 下两目标在鲁棒选择协议的 clip-rate 约束下收敛到同一参数点
-并产生逐位一致的校准产物，INT4 下在 1.5B（$H_{kv}=2$）分化、
-在 7B（$H_{kv}=4$）再次收敛。
+\textbf{第一}，框架层面，本文以 behavior 保持度
+作为同时贯通 calibration 与 allocation 两层的\textbf{统一原则}，
+并给出 attention 误差分解作为理论起点——
+$K$ 误差通过 softmax 扭曲 attention 分布，
+$V$ 误差通过加权聚合偏移输出；
+behavior 保持度作为二者的\emph{共同组织量}，
+替代传统数值范数目标函数。
 
-\emph{第二}，在上述非对称格式上以离线 attention-KL 搜索
-实例化 \textbf{INT4-RoleAlign}（INT4 角色对齐量化），
-以可复现、可审计的离线 KL 搜索替代运行时统计量，
-提供量化参数固化的部署接口。
-实测在四个主模型上 Needle 检索通过率一致保持 100\%，
-KV Cache 压缩约 73\%，
-PPL 退化随模型规模减弱
-（1.5B: 13.7\%，7B: 6.1\%，8B: 2.4\%），
-在 LongBench 合成评分上相对 KIVI-style 基线提供
-小幅边际提升（1.5B: $+0.09$，7B: $+0.06$）。
-Qwen2.5-14B 作为外部效度锚点进一步确认
-Needle 在 4K--32K 全通过、
-RULER 在 4K--16K 达到 96.6\%--98.5\%
-（14B PPL 在 32K prefix 上评测，
-与其他模型的完整 test split 不可直接比较）。
+\textbf{第二}，方法层面，框架在两个 bit-width 上闭环实例化：
+INT8 canonical path 在 Qwen 2.5-1.5B 上相对 FP16 的 mean $\Delta{=}{+}0.02$
+（3 task 实证不可区分），证明校准层在 canonical 规模下可闭环；
+INT4-RoleAlign 在 KIVI 同 format 下以离线 KL 搜索取代运行时 absmax/min，
+跨 4 模型保持 100\% Needle 与 PPL $\Delta \leq 0.15$；
+AutoK 作为 profile-guided budget proposer 以 cov$80\%$ coverage
+自动确定预算，在 Mistral-7B 上单模型最强正面案例（5 task 赢 3）。
 
-\emph{第三}，Triton 融合量化解码核在 $(H_{kv}, \text{seq\_len})$
-空间中呈现清晰的效率相位图：
-$H_{kv}=8$ 在 32K 序列下相对同配置 INT4 参考实现
-降低解码延迟约 40\%，
-8B LLaMA 与 14B Qwen 在同 $H_{kv}=8$ 下效率特征跨模型族一致，
-支持 $H_{kv}$（而非模型规模）为融合核效率的结构性驱动变量。
-基于该相位图给出 NVIDIA H20 平台的分层部署策略。
+\textbf{第三}，实证层面，跨模型实验揭示一张
+\textbf{(family, scale, task)-dependent 的 operating regime 地图}：
+Qwen 2.5-3B 呈\emph{小模型早层脆弱}
+（BA-$k_1$ 相对 heuristic-$k_1$ 在 NarrativeQA 上回救 $\Delta \approx {+}4$ 分）；
+Qwen 2.5-14B 呈\emph{大模型 top-tier 共存}
+（top-3 policy 挤在 $3.5\%$ 相对距离内）；
+Mistral-7B 呈 AutoK 胜出；多个 regime 区间里 heuristic 与 behavior-guided
+选中集合重合，正面承认 heuristic 为强基线。
+framework 的价值因此从"击败弱对手"\textbf{抬升为"揭示结构分区"}——
+提供一个\textbf{可读数的 regime 工具}，而不是一个"永远最优"的 point 估计。
 
-三项贡献共同构成以 attention-KL 为统一原则、
-以 $H_{kv}$ 为组织变量的行为对齐量化框架，
-覆盖诊断、校准、部署全链路。
-
-\keywordszh{大语言模型；键值缓存量化；行为对齐校准；非对称量化；GQA 架构}
+\keywordszh{大语言模型；KV Cache 量化；behavior-guided 校准；regime 地图；
+非对称量化；AutoK；预算分配}
 
 \end{abstractzh}

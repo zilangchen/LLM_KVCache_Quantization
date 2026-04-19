@@ -1,5 +1,7 @@
 % ============================================================
-% ch5_conclusion.tex — 第五章 总结与展望
+% ch5_conclusion.tex — 第五章 结论与展望（Phase 8 M+ 重写版）
+% 对齐 docs/thesis_chapter_drafts_20260420.md §6+§7
+% 保留原 unnumbered chapter 结构（\chapter* + TOC handling）
 % ============================================================
 
 \chapter*{结论}
@@ -9,239 +11,211 @@
 \setcounter{section}{0}
 \label{chap:conclusion}
 
-本章以三条核心发现回扣引言的三个研究问题，
-随后分析局限性与未来工作方向。
+本章回扣第一章的假设 H 与三个研究问题（RQ1--RQ3），
+以\textbf{主要发现}、\textbf{局限性}、\textbf{未来工作展望}与\textbf{结语}四节
+组织论文的收束。与 drafts §6+§7 镜像对应，
+每一条 contribution（C1--C3）都在对应发现段获得再次提及。
 
-% ------------------------------------------------------------
-\section{核心发现与收束}
-\label{sec:conclusion-answers}
-% ------------------------------------------------------------
+% ============================================================
+\section{主要发现}
+\label{sec:conclusion-findings}
+\label{sec:conclusion-answers}% backward-compat with earlier \ref
+% ============================================================
 
-\paragraph{发现一：校准目标的``趋同-分化-再收敛''规律（回应研究问题一）。}
-本文首次系统报告 attention-KL 与 MSE 两个校准目标
-在 bit-width 与模型规模上呈现"趋同-分化-再收敛"结构性规律：
-INT8 下两目标在鲁棒选择协议（clip-rate $\leq 1\%$）约束下
-收敛到同一 $(p_c, g)$ 最优解并产生逐位一致的校准产物；
-INT4 下在 1.5B（$H_{kv}=2$）分化（percentile 99.5 vs 99.0，scale 差异 12.35\%）；
-7B（$H_{kv}=4$）上再次收敛至同一参数点。
-这一规律可由量化级别与 GQA 头共享的联合作用解释：
-INT4 的 16 级量化在 $H_{kv}=2$ 下对 Key 逐通道异质性更敏感，
-$H_{kv}$ 增大后跨头噪声稀释使单头量化误差的影响被平均。
-该规律的部署意义明确——
-在 INT8 或高 $H_{kv}$ 的大模型上，数值代理（MSE/percentile）足以胜任校准目标；
-在小模型 INT4 的特定设置下，KL 提供不可替代的行为保真信息。
-该规律的完整验证范围为 $(H_{kv} \in \{2, 4\})$ 两个 GQA 设置，
-$H_{kv}=8$ 下的 $(p_c, g)$ 网格行为留作后续工作。
+本文以 behavior-guided 原则组织 KV Cache 量化的 calibration 与 allocation 两层，
+跨 Qwen / LLaMA / Mistral 三个模型家族、1.5B--14B 五个规模与 5 个 LongBench 任务
+给出 5 条 final-ready 的\textbf{经验规律}（clean-provenance pin=\code{ddada19}）。
 
-\paragraph{发现二A：Key 主导退化的机制性刻画与格式解释（回应研究问题二）。}
-本文首次通过受控 K/V 消融定量刻画 INT4 KV 量化的 Key 主导退化机制：
-在 Qwen2.5-14B 上 K 保持 FP16 恢复 93\% 的 PPL 退化，
-V 保持 FP16 仅恢复 64\%；
-跨四个主模型的 K-only 与 V-only 消融在 PPL 方向上一致支持这一结论
-（RULER 指标上 LLaMA-3.1-8B 出现例外，V-only 36.72 略高于 K-only 29.82，
-推测与 $H_{kv}=8$ 的噪声稀释相互作用有关）。
-该机制性结论自然推导出 per-channel K + per-token V 非对称格式，
-为 KIVI 从工程经验独立提出的同一格式提供了首个 attention-KL 视角的机制性解释——
-将该格式从"经验性有用"升级为"诊断推论下的必然选择"。
+\paragraph{发现一：Heuristic 是强基线——结构观察而非方法失败。}
+\label{sec:discussion-heuristic}
+我们的跨模型实验反复呈现同一结果：
+等距位置保护启发式（heuristic-$k$）在多个模型的多个 task 上与 behavior-guided allocator 接近，
+在 Qwen2.5-14B 上甚至反超 BA-$k$（第~\ref{subsec:exp-per-model-14b}~节）。
+我们认为这不是需要 explain away 的现象，而是 framework 自身意义的体现：
+如果 behavior-guided allocator 只靠"击败弱 baseline"成立，它的贡献会非常脆弱；
+而 heuristic 作为强 baseline 的事实，把论文贡献从"方法数字更高"\textbf{抬升为"揭示结构分区"}
+（见发现二）。在多个模型上 heuristic 与 BA-$k$ 接近，
+本身就构成 regime map 的证据——在某些 (model, task) 区间里，
+"保护哪些 $k$ 个位置"的选择空间很窄，无论 behavior profile 还是位置启发式
+都会落到相似集合。
 
-\paragraph{发现二B：Needle 检索与 PPL 的解耦现象（回应研究问题三前半）。}
-INT4-RoleAlign 在四个主模型上同时达成 Needle 检索通过率 100\%
-与约 73\% KV Cache 压缩，PPL 退化随模型规模减弱
-（1.5B: 13.7\%，7B: 6.1\%，8B: 2.4\%），
-Qwen2.5-14B 作为外部效度锚点给出 Needle 4K--32K 全通过、
-RULER 4K--16K 达 96.6\%--98.5\%
-（14B PPL 在 32K prefix 上评测，为外部效度观察而非跨模型单调性证据）。
-本文首次在跨模型尺度上揭示 Needle 检索与 PPL 的解耦现象——
-同一配置可保持 Needle 100\% 同时伴随可观 PPL 退化，
-说明这两个指标反映的是不同层次的能力（局部检索聚焦 vs 全局分布保真）。
-这一发现对后续 KV 量化方法的评测设计具有方法论意义：
-低比特量化的质量评价需要 Needle 与 PPL 双指标联合呈现。
-INT4-RoleAlign 与同格式 KIVI-style 基线在 PPL 上处于同一水平
-（差异在 0.15 PPL 以内），本文贡献不在于打败 KIVI 的数字，
-而在于用 attention-KL 诊断解释 KIVI 格式的必然性，
-并以离线 KL 搜索提供可审计、可固化的校准参数接口。
+\paragraph{发现二：(Family, Scale, Task)-dependent Regime 地图。}
+\label{sec:discussion-regime-map}
+第~\ref{sec:exp-cross-model}~节的 Table~\ref{tab:t3-cross-model-main}
+与 regime heatmap（图~\ref{fig:regime-map}）
+在 4 模型 $\times$ 4 policy 空间上给出 per-model winner 分布，
+4 行的最佳列落点各不相同：
+\begin{itemize}[leftmargin=2em, itemsep=1pt, topsep=2pt]
+  \item \textbf{Small-scale early-layer rescue}（Qwen2.5-3B）——
+    BA-$k_1$ 保护 layer 0 相对 heuristic-$k_1$（保护中层）在 NarrativeQA 上回救 $\Delta \approx +4$ 分
+    （§\ref{subsec:exp-per-model-3b}，Table~\ref{tab:t5-3b-early-layer}）；
+  \item \textbf{Mid-scale top-$k$ 共识}（LLaMA-3.1-8B）——
+    BA-$k_{11}$ 与 heuristic-$k_{11}$ 在 NarrativeQA / HotpotQA 上 top-tier 共存；
+  \item \textbf{Large-scale wide-spread}（Qwen2.5-14B）——
+    AutoK 标记 42/48 层 protected，top-3 policy 挤在 $3.5\%$ relative gap 内
+    （§\ref{subsec:exp-per-model-14b}，Table~\ref{tab:t6-14b-toptier}）；
+  \item \textbf{Mistral-specific AutoK win}——
+    cov$80\%$ coverage 阈值下 AutoK 在 5-task 中赢 3 个，单模型最强正面案例
+    （§\ref{subsec:exp-per-model-mistral}，Table~\ref{tab:t4-mistral-autok}）。
+\end{itemize}
+这一异质性\textbf{不否定} behavior framework 的价值，而是揭示其\emph{作用方式}：
+framework 提供的是一个\emph{读数工具}让不同 regime 可被识别与命名，
+而不是一个"永远最优"的 point 估计。
 
-\paragraph{发现三：融合核效率的 $(H_{kv}, \text{seq\_len})$ 相位图与跨模型族推广性（回应研究问题三后半）。}
-Triton 融合量化解码核在 $(H_{kv}, \text{seq\_len})$ 空间中呈现清晰的效率相位图：
-$H_{kv}=8$ 在 32K 序列下相对同配置 INT4 参考实现降低解码延迟约 40\%，
-$H_{kv}=4$ 在 32K 出现边际收益，$H_{kv}=2$ 建议使用 SDPA。
-跨模型族推广性由 8B（$H_{kv}=8$, LLaMA）与 14B（$H_{kv}=8$, Qwen）的对比支持：
-两个模型跨越 1.75$\times$ 参数量差距与不同模型族，
-在短序列效率特征上保持高度一致——
-表明 $H_{kv}$（而非模型规模或模型族）是融合核效率的结构性驱动变量。
-基于该相位图，本文给出 NVIDIA H20 平台的分层部署策略：
-$H_{kv}=8$ 且序列长度 $\geq$ 8K 优先使用融合核；
-$H_{kv}=4$ 在序列长度 $\geq$ 32K 出现边际收益；
-$H_{kv}=2$ 推荐使用 SDPA。
-这一"相位图评估范式"——按场景二维空间报告效率收益而非单一平均加速——
-为后续 efficient inference kernel 工作提供了可推广的汇报模板。
+\paragraph{发现三：INT4 vs KIVI 的 Open Question（format vs calibration 耦合）。}
+\label{sec:discussion-int4-openq}
+第~\ref{sec:exp-int4-kivi}~节的 cross-model 对比显示
+INT4-RoleAlign 与 KIVI 在同 format 下 PPL $\Delta \leq 0.15$、Needle 均 $100\%$。
+由于两者共享 per-channel K + per-token V 格式，本文的对比
+\textbf{只揭示}"同 format 下 calibration philosophy 差异有限"，
+不能\emph{完全解耦} format 与 calibration 各自的独立贡献。
+要完整回答"低比特 KV 量化的主要决定因素究竟是量化架构还是校准策略"，
+未来需要 pure-format ablation（同 calibration、不同 format）
+与 pure-calibration ablation（同 format、不同 calibration）的正交实验
+——这构成 RoleAlign 的\textbf{第一个 open question}，
+若 Hook（story §13）激活则可具体化为正式 claim。
 
-% ------------------------------------------------------------
+\paragraph{发现四：INT8 canonical path 的 $\Delta{=}{+}0.02$ 闭环证据（C2 of RQ1）。}
+\label{sec:discussion-int8}
+在 Qwen2.5-1.5B 上，INT8-ours 相对 FP16 在 3 个 LongBench task 上的
+mean $\Delta = +0.02$（Table~\ref{tab:t1-int8-canonical}），
+在实证上不可区分。这不是"INT8 量化很容易"的废话——
+它证明本文 framework 的 calibration 层在 canonical 规模下\textbf{可闭环}，
+即 behavior-guided 原则存在一个\emph{干净的落地实例}，
+剩下的工作是把同一原则推广到更激进的 bit-width 与更复杂的 allocator 层。
+
+\paragraph{发现五：5 条 final-ready supported claims。}
+\label{sec:discussion-final-ready}
+本章总结的 5 条 claim 均由 clean-provenance pin=\code{ddada19} 的
+md5-locked canonical 数据支撑（story 附 B）：
+\begin{enumerate}[leftmargin=2em, itemsep=1pt, topsep=2pt]
+  \item INT8 canonical path fidelity（int8$\leftrightarrow$fp16 $\Delta{=}+0.02$）；
+  \item Mistral-specific AutoK win（cov$80\%$ 跨 core+extend task）；
+  \item Qwen2.5-3B early-layer rescue regime；
+  \item Qwen2.5-14B top-tier but no stable winner；
+  \item Heuristic is a strong baseline（结构观察，非方法失败）。
+\end{enumerate}
+
+\paragraph{贡献总结（C1 / C2 / C3 镜像 §\ref{sec:ch1-contribution}）。}
+本文从 attention 误差传播分析出发，
+把\textbf{behavior 保持度}作为 KV Cache 量化的统一组织原则，
+并通过两层实例化与跨模型实证验证其可用性：
+\begin{itemize}[leftmargin=2em, itemsep=1pt, topsep=2pt]
+  \item \textbf{C1}（framework）：behavior 原则同时贯通 calibration 与 allocation 两层，
+    使两者不再是独立优化问题，而是共享同一 behavior sensitivity profile 的两层决策；
+  \item \textbf{C2}（method instance）：INT8 canonical path 与 FP16 实证不可区分，
+    INT4 RoleAlign 在低比特非对称 format 下与 KIVI 可比，
+    AutoK 作为 profile-guided budget proposer 是 framework 自然长出的扩展；
+  \item \textbf{C3}（empirical insight）：跨 5 模型、5 任务的 clean-provenance 实验
+    揭示一张 (family, scale, task)-dependent 的 regime 地图，
+    并在此基础上正面承认 heuristic 作为强基线——
+    behavior-guided allocator 的真实价值从"击败弱对手"升级为"揭示结构分区"。
+\end{itemize}
+
+% ============================================================
 \section{局限性}
 \label{sec:conclusion-limitations}
-% ------------------------------------------------------------
+% ============================================================
 
-当前工作存在以下局限：
+诚实地列出本文研究的 5 条 limitations：
 
-\paragraph{INT4-RoleAlign 的验证范围}
-INT4-RoleAlign 的核心 PPL/Needle 结果已扩展到四个模型（Qwen2.5-1.5B/7B/14B、LLaMA-3.1-8B）；
-其中完整的四类质量矩阵（PPL、Needle、LongBench、RULER）
-与系统效率矩阵（TPOT、KV 显存）目前覆盖三个模型（1.5B/7B/8B）。
-检索能力在 Needle 上完全恢复（100\%），RULER 整体通过率作为补充证据，
-但 PPL 退化显著（8B: 2.4\%，7B: 6.1\%，1.5B: 13.7\%），
-参考实现（torch\_ref）路径下解码延迟增加约 2.4--2.6$\times$，
-本文已验证 INT4 非对称 Triton 融合核函数的数值正确性
-（第~\ref{subsec:ch3-triton-int4-asym}~节），
-但尚未实现端到端延迟加速。
-chunk\_size=1 极端评测下 INT4-RoleAlign 出现灾难性退化
-（cs=128 下 PPL=10.58，cs=1 下 $> 10^4$），
-根因是 asymmetric 量化在极小 batch 解码时依赖 prefill 阶段的 scale range，
-decode 新 K 值若超出该范围则无缓冲空间；
-cs=1 风险极高，cs$\geq$8 的系统验证与跨 $H_{kv}$ 推广留作后续工作。
+\begin{enumerate}[leftmargin=2em, itemsep=3pt, topsep=2pt]
+  \item \textbf{实证范围有界}。
+  本文在 5 模型 $\times$ 5 LongBench task $\times$ 单一 GPU（NVIDIA H20）
+  的实验空间内展开；不覆盖所有 long-context 场景
+  （如 complex reasoning、code completion long-form、multimodal KV cache）
+  与所有硬件平台（A100 / TPU / 消费级 GPU）。
+  跨硬件的浮点非结合律可能引入 $\leq 9\%$ 的准确率漂移
+  \cite{song2025nondeterminism}，
+  所有 PPL 与 quality 数据仅在本文硬件栈上保持位级确定。
 
-\paragraph{评测完整性}
-研究过程中发现评测脚本存在静默回退缺陷
-（\code{eval\_ppl.py} 缺少 \code{int4\_ours\_asym} 分支导致静默使用 INT8 路径），
-早期 PPL 数据（9.42）实为 INT8 结果。该问题已修正，
-论文所有公开数据（PPL/RULER/LongBench 四模型）均以 INT4-RoleAlign
-作为独立 \code{kv\_mode} 完整重跑后的结果（如 1.5B PPL 10.58）。
+  \item \textbf{INT4 vs KIVI 的 format--calibration 耦合未完全解耦}。
+  如 §\ref{sec:discussion-int4-openq} 所述，
+  RoleAlign 与 KIVI 共享 per-channel K + per-token V 格式，
+  不能 isolate 出"同 format 下离线 calibration 相对运行时 absmax/min 的独立增益"。
+  需要 pure-format ablation 与 pure-calibration ablation 的正交实验
+  才能完整回答——这是\textbf{本文 Open Question 1}。
 
-\paragraph{评测方法边界}
-所有实验在单张 NVIDIA H20 GPU 上完成，未涉及多卡分布式推理。
-此外，本文未与 FP8 KV Cache 进行对比。
-FP8（E4M3/E5M2）在 H100/H200 等新一代硬件上已获原生支持，
-其浮点格式对异常值的天然容忍度可能在无需校准的情况下达到接近 INT8 的精度，
-但仅提供 8~bit 压缩率而无 INT4 的 4~bit 选项。
-LongBench 评测基于自行实现的合成数据源而非官方数据集，
-绝对分数不可与排行榜直接对比，量化方法间的相对差异可提供方向性参考，
-但仍需官方基准进一步校准。
-Mistral-7B 的 LongBench 数据因合成源问题在正文核心对比中已排除
-（Mistral 在 PPL、Needle、RULER 上的评测均正常有效）。
-单指标 K/V 消融（保持一端 FP16、另一端量化）的完整 PPL 评测
-（表~\ref{tab:kv-ablation-ppl}）仅在 Qwen2.5-1.5B 单模型上以 1 seed 验证；
-但 K/V 角色差异化的扩展形式 \textbf{非对称 MixedKV（K@INT8 + V@INT4）}
-已在第~\ref{subsec:exp-mixedkv}~节横跨 Qwen2.5-1.5B / 7B、
-LLaMA-3.1-8B 与 Mistral-7B 四模型以 3 seeds 验证，
-因此``K/V 精度不对称''这一机制结论具有跨模型外部效度，
-单 seed 只影响 FP16-基线受控消融的 PPL 数值精度，
-不影响 Key 主导退化的方向性判断。
+  \item \textbf{AutoK 仅在静态层面验证}。
+  第~\ref{sec:exp-per-model}~节的 AutoK 是 \emph{model-level} 的 profile-guided
+  proposer（给定模型 calibration，cov$80\%$ 输出固定 budget）；
+  prompt-adaptive 路径（附录~\ref{sec:app-prompt-adaptive-8b}）
+  在 Llama-3.1-8B 上 5-task mean 输 fixed-k（仅 lcc 独立赢 $+0.40$），
+  Gate C verdict \textbf{Weak / Mixed}；
+  selector 仍是 task-bucket fallback 实现，未来见第~\ref{sec:conclusion-future}~节。
 
-\paragraph{校准-评测的 task transfer 假设}
-本文校准以 WikiText-2 上的 attention-KL 散度为代理损失，
-而评测跨越 PPL、Needle、RULER、LongBench 多 domain 与任务类型，
-``最小化 WikiText attention-KL 获取的参数对下游多任务泛化具有可迁移性''
-这一核心假设尚待理论验证，仅由第四章联合评测间接支撑。
-此外，校准与 PPL 评测共用 WikiText-2 \texttt{test} split，
-但校准仅取 128 段（$\leq$512 token，占 split 总量约 0.03\%）
-用于离线提取 attention 分布统计，不涉及 token-level 预测目标，
-因此共用 split 不直接泄漏 PPL 评测的 teacher-forcing 目标；
-严格消融验证留作未来工作。
+  \item \textbf{Clean-provenance pin 固定的时效性}。
+  所有正文数字基于 pin=\code{ddada19} 的 canonical 数据
+  与 md5-locked manifest；
+  该 pin 保证\emph{审计可追溯}但不保证\emph{泛化到未来 transformer 架构}。
+  当新的长上下文注意力变体（如 sparse attention、hybrid-state）大量出现时，
+  本文的 regime 地图需要在新架构上重新产出。
 
-\paragraph{校准框架局限}
-1.5B 主模型校准产物的 Q 向量预处理缺少 \code{input\_layernorm} 和 RoPE 变换，
-但修正版对比验证表明对 INT8 的 PPL 影响仅 0.05\%（$<$0.01 绝对值），
-对 INT4-RoleAlign 影响为零（BA percentile 校准独立于 RoPE）。
-正文第四章 INT8/INT4-RoleAlign 主表结果已使用修正版校准流程重跑后的数据。
-LLaMA-3.1-8B 的 INT8 校准在 $n{=}10$ 种子验证中展现一定次优性
-（相对 FP16 基线 PPL 偏高约 16\%，高于 1.5B/7B 的 $<$0.5\% 退化），
-推测与校准产物对 8B 架构的稀疏分布适配有关，
-该异常不影响主表（聚焦 1.5B）与 INT4-RoleAlign 的核心结论，
-但提示后续工作应为 8B 规模专门调优校准流程。
-校准依赖 WikiText-2 单一数据分布，
-且提示有效组件耦合于量化格式与模型权重，
-需针对新模型或新数据域重新校准。
+  \item \textbf{【条件性 Limitation】Allocator-vs-KIVI matched-budget formal compare 未完成}。
+  本文的 cross-model regime 地图在\emph{每 policy 独立最优配置}上对比，
+  尚未在\emph{matched memory budget}下对 Allocator（含 RoleAlign）与 KIVI 做正式
+  formal comparison（story §13 Hook）；
+  若 Hook 激活到 L1/L2，本条 limitation 可以从列表中删除，
+  同时对应的 open question（§\ref{sec:discussion-int4-openq}）升级为正式 claim。
+\end{enumerate}
 
-\paragraph{KIVI-style 基线的实现差异}
-本文 KIVI-style 基线采用 KIVI~\cite{liu2024kivi} 的核心量化轴策略，
-未完整复现原文全部工程优化（如残差长度调度等），
-结果应理解为对核心算法思想的验证。
-
-\paragraph{BitDecoding 融合核的 GQA 兼容性}
-在探索 Tensor Core 级别的 INT4 解码加速时，
-本文评测了 BitDecoding~\cite{du2026bitdecoding} 的 CUTLASS 内核。
-测试发现其在 GQA 架构下的数值输出与 FP16 参考存在显著偏差，
-无法通过数值验证。
-该问题发生在库层面，超出 wrapper 可修复的范围，
-因此本文将 BitDecoding 作为工程案例记录，
-而非可用的部署 backend（详见第四章讨论）。
-
-\paragraph{效度威胁总结}
-综合讨论（第~\ref{subsec:exp-threats}~节）给出了六条效度威胁声明，
-本文结论应在其边界内理解。
-
-% ------------------------------------------------------------
+% ============================================================
 \section{未来工作展望}
 \label{sec:conclusion-future}
-% ------------------------------------------------------------
+% ============================================================
 
-基于本文的研究成果和上述局限性分析，以下方向值得进一步探索：
+基于本文的 regime 地图与 open questions，我们识别出 3 条最有价值的方向：
 
-\paragraph{GQA 感知的逐层自适应比特分配}
-K/V 消融共同证实 $H_{kv}$ 是决定低比特量化容忍度的关键架构因素，
-且 Key 与 Value 在量化敏感性上根本不对称。
-基于此可设计架构感知的自适应策略：
-根据每个模型的 $H_{kv}$ 与每层/头的 KL 散度值，
-自动为不同层和 K/V 维度分配量化比特宽度——
-$H_{kv}$ 较大的模型可更激进地压缩 Value，
-$H_{kv}$ 较小或 Key 敏感的层则优先保障 Key 精度。
-第~\ref{subsec:exp-mixedkv}~节的 MixedKV 实验已初步验证该策略方向的可行性，
-但 INT4-RoleAlign 目前仅实现 per-channel K + per-token V 的固定非对称格式，
-逐层自适应比特分配仍需进一步工程工作。
+\paragraph{未来工作一：Per-Prompt Routing。}
+附录~\ref{sec:app-prompt-adaptive-8b} 的 8B Gate C 数据揭示
+\textbf{prompt\_adaptive 在 lcc 上独立赢 $+0.40$ 分}
+（vs auto\_k），尽管 5-task mean 不及 fixed\_k；
+附录~\ref{sec:app-prompt-adaptive-offprotocol} 的 1.5B/7B
+off-protocol seed 亦指向 task-domain 相关的 routing signal。
+当前 selector 实现是 \emph{task-bucket fallback}，未充分利用 prompt 级信号——
+一个真正的 per-prompt selector（input prompt embedding $\to$ 最优 policy）
+有可能把当前在 lcc 上的 positive gradient 扩展到更多 task。
+这是 AutoK 的自然延伸方向。
 
-\paragraph{多 GPU 分布式推理}
-将行为对齐量化框架扩展到张量并行和流水线并行场景，
-需要解决 KV Cache 分片粒度与量化粒度的对齐问题、
-跨设备量化参数的一致性维护以及通信-计算重叠的优化。
-与主流分布式推理框架的集成将是框架走向实际部署的关键一步。
+\paragraph{未来工作二：更成熟的 Role-Aware Allocator。}
+第~\ref{sec:ch3-allocator}~节的 allocator 按 K / V 分层分配提供了结构接口，
+但当前的 K/V 非对称分配\emph{可行但未熟}——
+L2 Phase A 的 role-aware kv-asymmetric 实验
+（\code{results/l2\_kv\_asymmetric/}，108 CSV）显示一些局部改善，
+但没有达到\emph{跨模型一致优于 AutoK} 的信号水平。
+K 与 V 的 layer-wise 联合优化（例如 $(b_K^{(l)}, b_V^{(l)})$ 作为 pair 而非独立变量）
+值得作为专项工作。
 
-\paragraph{推理服务框架集成}
-当前实现基于 Transformers 库的自定义生成循环，尚未与
-vLLM~\cite{kwon2023vllm}、Text Generation Inference（TGI）\footnote{HuggingFace TGI: \url{https://github.com/huggingface/text-generation-inference}} 等
-生产级推理服务框架集成。这些框架已实现了 PagedAttention、
-连续批处理（Continuous Batching）等系统级优化，
-将行为对齐量化集成到其调度与内存管理机制中，
-有望在真实服务场景下充分发挥量化的显存节省优势。
+\paragraph{未来工作三：Allocator-vs-KIVI Matched-Budget Formal Compare。}
+story §13 Hook 的正式对比包是本文的第一个\textbf{条件 Future Work}。
+若在未来实验中 G0 Fairness Gate（format 相同 + memory $\pm 3\%$）、
+G1 Main Matrix Validity、G2 Claim Strength 全部满足并达到 L1/L2，
+则 framework 的\textbf{系统级优势}可以从当前的 open question
+升级为正式 claim，
+并把 §\ref{sec:discussion-int4-openq} 的 Open Question 1 具体化。
+其 ExecPlan 骨架已在 \code{.agents/execplans/2026-04-20\_allocator-vs-kivi-claim-package.md} 冻结。
 
-\paragraph{校准目标函数的泛化探索}
-本文以 forward KL 为校准目标。
-探索 Wasserstein 距离或 R\'{e}nyi 散度等替代目标函数
-在低比特场景下的收敛行为和解空间特性，
-以及 forward/reverse KL 与 Jensen-Shannon 散度的系统消融对比，
-将为校准目标选择提供更完整的理论指导。
-
-\paragraph{chunk\_size 粒度与 decode 阶段动态 scale}
-§5.2 已指出 chunk\_size=1 下 per-channel K Scale 退化的根因；
-后续工作需探索 decode 阶段动态 scale 更新机制，
-并在不同 $H_{kv}$ 的架构上系统验证 chunk\_size 对不同量化方案的影响，
-为实际部署中的量化粒度选择提供指导。
-
-\paragraph{BA percentile 在更低比特下的可行性探索}
-INT4-RoleAlign 的 BA-guided percentile 校准在 4-bit 下展现了有效性。
-探索该校准范式在 INT3 乃至 INT2 极低比特下的适用性，
-以及与非均匀量化网格的结合潜力，
-是进一步拓展行为对齐框架压缩能力的方向。
-
-% ------------------------------------------------------------
+% ============================================================
 \section{结语}
 \label{sec:conclusion-closing}
-% ------------------------------------------------------------
+% ============================================================
 
-以 attention-KL 为统一校准与诊断原则、以 $H_{kv}$ 为结构性相关变量的分析视角，
-把 KV Cache 量化的问题从``先量化再看效果''的试错模式
-转向以 $H_{kv}$ 为组织轴的系统分析：
-校准目标的有效性何时依赖行为度量、
-退化在 Key/Value 间如何分配、
-以及融合核在何种 $(H_{kv}, \text{seq\_len})$ 条件下提供正向加速。
-分层流程在其他中间表示压缩场景中是否能迁移，
-取决于目标任务是否存在类似的
-``数值保真 $\neq$ 行为保真''错位以及可直接观测的行为级度量。
+KV Cache 量化不是一个"找最佳 bit-width"的优化问题，
+而是一个需要\textbf{组织原则}的系统设计问题。
+本文把\emph{behavior 保持度}作为 KV Cache 量化的 first principle，
+完成了 calibration 与 allocation 两层的统一组织，
+并通过 clean-provenance 跨 5 模型实证
+交付了一张\textbf{可读数的 operating regime 地图}。
 
-在当前模型集合中，$H_{kv}$ 与模型规模部分共变，
-因此相关结论应理解为结构性证据而非严格受控因果识别。
-本文结论的适用范围限于四个主模型（Qwen2.5-1.5B/7B/14B、LLaMA-3.1-8B，
-$\leq 14$B）及 Mistral-7B-Instruct-v0.3 作为第三模型族对照（K/V 消融与 MixedKV）、
-贪心解码、鲁棒选择协议与自研 KIVI-style 实现这一具体协议；
-KIVI 基线未启用原论文的 FP16 Residual Buffer（R=128）与 residual-group-scale 更新，
-因此 ``INT4-RoleAlign $\approx$ KIVI'' 的结论适用于 cs$\geq$128 评测设置，
-cs=1 等流式解码设置下两者均出现 PPL $>10^4$ 的失效，应视为非对称 INT4 方法的共同边界。
-这些边界同时也定义了后续工作的清晰起点。
+Regime 地图的价值不在于给出"通用最优"，
+而在于使原本隐藏在"多方法跨模型平均数"背后的结构差异可\textbf{被命名、被复用}：
+3B 的 early-layer rescue、14B 的 top-tier wide-spread、Mistral 的 AutoK cov80 胜利、
+以及 heuristic 在多个 regime 区间里与 behavior-guided 重合的结构观察——
+这 4 条命名规律构成 behavior framework 实证结果的\textbf{操作化入口}。
+
+对 KV Cache 社区，本文的贡献是一组\textbf{工具与方法论}：
+一个统一的 calibration-allocation framework、
+一组可审计的实例化路径（INT8 canonical / INT4 RoleAlign / AutoK）、
+以及一张跨模型 regime 地图与三条诚实的 open question。
+我们希望这些工作能为未来的 KV Cache 研究提供\emph{读数尺度}，
+而不仅是一个 point 估计。

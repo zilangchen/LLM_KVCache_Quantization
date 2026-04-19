@@ -36,6 +36,31 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 05:17 | Thesis Rewrite Phase 8 最终收束（Ch1 §1.4 + Ch5 + Abstract 镜像 triplet）
+- Goal: M+ Phase 8 最后收束（镜像 triplet：Ch1 §1.4 contribution 段 + Ch5 整章 + Abstract 中英），严格遵守 feedback_math_display_style.md 的 display math 规则
+- Scope:
+  - **Ch1 §1.4 contribution paragraphs 重写**：旧 C1-C3（attention-KL 诊断透镜 / INT4-RoleAlign / 融合核相位图）→ 新 C1-C3（Framework / Method Instance / Empirical Insight + regime map），含 display math 公式块 `\begin{equation*}` 误差分解（underbrace 分布侧项 + 聚合侧项）
+  - **Ch5 整章重写**（保留 `\chapter*` + `\addcontentsline` unnumbered 结构）：§1 主要发现（5 findings + 贡献总结 C1/C2/C3）/ §2 局限性（5 条）/ §3 未来工作展望（3 条，含 Hook 条件）/ §4 结语（正向收束）
+  - **Abstract 中文重写**：对齐 drafts §1.3，严格按 behavior-guided framework + C1/C2/C3 + regime map 叙事
+  - **Abstract 英文重写**：mirror 中文版
+  - 补 Ch1 §1.5 `\label{sec:ch1-structure}`
+- Changed files:
+  - thesis/chapters/ch1_introduction.tex / ch5_conclusion.tex / abstract_zh.tex / abstract_en.tex
+- Commands:
+  - `python3 /tmp/thesis_phase3/step_phase8_ch1_contribution.py` → Ch1 §1.4 17/17 pass
+  - Write ch5_conclusion.tex / abstract_zh.tex / abstract_en.tex
+  - xelatex smoke × 2 pass → main.pdf 99 → **98 pages** (no halt)
+- Outputs:
+  - 三份镜像文档（Ch1 §1.4 / Ch5 §5.1 / Abstract）全部对齐 C1/C2/C3
+  - 旧叙事全部清除；5 个 final-ready claim 显式列出在 Ch5 §5.1 发现五
+- Validation:
+  - xelatex 98 pages
+  - Ch1 §1.4 含 display math `\begin{equation*}` 误差分解（feedback_math_display_style）
+  - Ch5 §5.2 limitations 5 条 + §5.3 future 3 条
+- Risks / follow-ups:
+  - Phase 9（optional）全局 Codex adversarial-review 统一扫 orphan ref + 存量 inline math fix
+- Commit: <pending 本批>
+
 ### 2026-04-20 05:04 | B 升级：smoke gate 从 matched-budget ±3% 重构为 Pareto-disclosure framing（数学上 ±3% 不可达）
 - Goal: 按用户 B 升级版决策，把 system_vs_kivi 的 G1 Fairness Gate 从 "matched-budget ±3%" 重构为 "Pareto-disclosure"（allocator 作为 KIVI 到不了的 (higher budget, higher quality) Pareto 点公开披露）。
 - Root cause（为什么 framing 必须改）:

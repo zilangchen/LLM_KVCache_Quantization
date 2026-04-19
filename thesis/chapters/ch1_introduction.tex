@@ -165,74 +165,74 @@ vLLM~\cite{kwon2023vllm} 的 PagedAttention 改善了 KV Cache 显存碎片。
 跨模型家族（Qwen / LLaMA / Mistral）、跨规模（1.5B 至 14B）、
 跨任务（LongBench 多任务）的实验会揭示什么样的 operating regime 结构？
 
-围绕以上三个问题，本文给出三个主要贡献。
+围绕以上三个问题，本文给出三个主要贡献（C1 / C2 / C3），
+分别回应 RQ1 / RQ2 / RQ3。
 
-\textbf{贡献一：attention-KL 诊断透镜与 Key 主导退化机制。}
-本文提出以 attention-KL 作为量化前后注意力行为的统一诊断度量，
-在四个主模型（Qwen2.5-1.5B/7B/14B、LLaMA-3.1-8B）及 Mistral-7B 对照上
-首次用受控 K/V 消融定量刻画 INT4 KV Cache 的 Key 主导退化机制。
-在 Qwen2.5-14B 上，保持 Key 为 FP16 可恢复 93\% 的 PPL 退化，
-保持 Value 为 FP16 仅恢复 64\%；
-该比例跨 K-only/V-only 消融在四个主模型上方向一致。
-该诊断自然推导出 per-channel Key + per-token Value 非对称量化格式，
-为 KIVI~\cite{liu2024kivi} 从工程经验独立提出的同一格式
-提供了首个 attention-KL 视角的机制性解释——
-KIVI 的格式从"经验碰巧有用"升级为"诊断推论下的必然选择"。
-校准目标层面，本文首次系统报告 attention-KL 与 MSE 的选择
-在 bit-width 与模型规模上呈现"趋同-分化-再收敛"经验规律：
-INT8 下两目标在鲁棒选择协议（clip-rate $\leq 1\%$）的参数空间约束下
-收敛到同一 $(\text{clip\_percentile}, \text{group\_size})$ 并产生逐位一致的校准产物；
-INT4 下在 1.5B（$H_{kv}=2$）分化、在 7B（$H_{kv}=4$）再次收敛
-（详见第~\ref{sec:exp-main}~节）。
+\textbf{贡献一（C1）：Behavior-guided 统一框架。}
+我们提出以 attention 行为（分布 $a$ 的保持度）为核心的统一原则，
+把 KV Cache 量化中\emph{两个}此前常被独立处理的层——
+\emph{静态校准}与\emph{预算分配}——
+统一到同一 behavior sensitivity profile 作为共享输入的框架下。
+第三章 §\ref{sec:ch3-problem} 给出误差分解
+\begin{equation*}
+  \hat{o} - o
+  = \underbrace{\textstyle\sum_i (\hat a_i - a_i)\, v_i}_{\text{分布侧项}}
+  + \underbrace{\textstyle\sum_i \hat a_i\, (\hat v_i - v_i)}_{\text{聚合侧项}},
+\end{equation*}
+作为 framework 的\textbf{理论起点}；§\ref{sec:ch3-allocator} / §\ref{sec:ch3-autok}
+把同一 profile 延伸到 layer-wise allocator 与 AutoK。
+此 framework 的独立贡献不在"击败弱 baseline"，
+而在\textbf{组织了 calibration 与 allocation 的共享基础}——
+这是相对 KIVI 等 calibration-only 方法与 KVTuner 等 allocator-only 方法的\emph{结构性}区别。
 
-\textbf{贡献二：INT4-RoleAlign---可复现可审计的离线校准接口。}
-在上述非对称格式上，本文以离线 attention-KL 搜索
-取代 KIVI 的运行时 absmax/min 统计量，实例化 INT4-RoleAlign，
-把量化参数固化为可审计的校准产物 JSON——
-这为合规场景（金融、医疗）提供了量化过程可追溯的部署接口。
-该实例化在四个主模型上 Needle 检索通过率一致保持 100\%，
-KV Cache 压缩约 73\%，
-PPL 退化随模型规模减弱（1.5B: 13.7\%，7B: 6.1\%，8B: 2.4\%），
-并在 LongBench 合成评分上相对同格式 KIVI-style 基线
-提供小幅边际提升（1.5B: $+0.09$，7B: $+0.06$）。
-Qwen2.5-14B 作为外部效度锚点进一步验证 Needle 在 4K--32K 全通过、
-RULER 在 4K--16K 达到 96.6\%--98.5\%
-（14B PPL 在 32K prefix 上评测，与其他模型的完整 test split
-采用不同协议，作为外部效度观察而非跨模型单调性证据）。
-INT4-RoleAlign 配置下揭示的 Needle 与 PPL 解耦现象
-（同一配置可保持 Needle 100\% 的同时伴随可观 PPL 退化）
-说明低比特量化的评价不能仅依赖 PPL，
-这一发现对后续 KV 量化方法的评测设计具有方法论意义
-（详见第~\ref{sec:exp-int4}~节）。
+\textbf{贡献二（C2）：两层实例化——INT8 canonical path 与 INT4 RoleAlign/AutoK。}
+C1 的 framework 在两层、两个 bit-width 上实现闭环验证：
+\begin{itemize}[leftmargin=2em, itemsep=1pt, topsep=2pt]
+  \item \textbf{INT8 canonical path}（第~\ref{subsec:exp-int8-canonical}~节 + 表~\ref{tab:t1-int8-canonical}）：
+    Qwen2.5-1.5B 上 INT8-ours 相对 FP16 mean $\Delta{=}{+}0.02$，
+    在 3 个 LongBench task 上\textbf{在实证上不可区分}，
+    证明 framework 的 calibration 层在 canonical 规模下可闭环；
+  \item \textbf{INT4-RoleAlign}（第~\ref{sec:exp-int4-kivi}~节 + 表~\ref{tab:t2-int4-kivi}/\ref{tab:s3-rolealign-vs-kivi}）：
+    在 KIVI-style 的 per-channel K + per-token V 非对称格式上以\textbf{离线 KL 搜索}
+    取代运行时 absmax/min，生成可审计的校准产物 JSON；
+    跨 4 模型 vs KIVI 同 format 下 PPL $\Delta$ 控制在 $0.15$ PPL 内、Needle 均 $100\%$；
+  \item \textbf{AutoK}（第~\ref{sec:ch3-autok}~节 + 表~\ref{tab:t4-mistral-autok}）：
+    framework 的自然扩展，基于 profile 的 cov$80\%$ coverage 阈值
+    自动提出 budget；Mistral-7B 上作为 strongest single-family 正面案例
+    在 5-task 中赢 3 个。
+\end{itemize}
+Triton 融合量化解码核被定位为 INT8 canonical path 的\textbf{系统落地手段}
+（C2 的工程子项，第~\ref{sec:ch3-triton}~节），
+不作为独立贡献——性能收益详见第~\ref{sec:exp-deployment}~节部署附录。
 
-\textbf{贡献三：$(H_{kv}, \text{seq\_len})$ 空间中的融合核效率相位图与分层部署策略。}
-本文实现了 Triton 融合量化解码注意力核，
-并在 $(H_{kv}, \text{seq\_len})$ 二维空间给出清晰的效率相位图。
-$H_{kv}=8$ 在 32K 序列下相对同配置 INT4 参考实现降低解码延迟约 40\%；
-8B（$H_{kv}=8$, LLaMA）与 14B（$H_{kv}=8$, Qwen）跨越 1.75$\times$ 参数量差距
-与不同模型族，在短序列效率特征上高度一致，
-支持 $H_{kv}$（而非模型规模）为融合核效率的结构性驱动变量。
-基于该相位图，本文给出 NVIDIA H20 平台的分层部署策略：
-$H_{kv}=8$ 在序列长度 $\geq$ 8K 时优先使用融合核；
-$H_{kv}=4$ 在序列长度 $\geq$ 32K 出现边际收益；
-$H_{kv}=2$ 推荐使用 SDPA。
-该"相位图"评估范式为未来的 efficient inference kernel 工作
-提供了一个可推广的汇报模板——
-kernel 的收益应按场景相位图呈现，而非单一平均加速。
+\textbf{贡献三（C3）：跨模型 regime 地图作为 empirical insight。}
+通过在 Qwen2.5-\{3B, 7B, 14B\}、LLaMA-3.1-8B、Mistral-7B 上
+按 \emph{matched INT4 memory budget} 对比 4 policy（uniform / BA-$k$ / heuristic-$k$ / AutoK），
+我们揭示一张由 \textbf{(family, scale, task)} 共同决定的 operating regime 地图
+（第~\ref{sec:exp-cross-model}~节，表~\ref{tab:t3-cross-model-main}，图~\ref{fig:sensitivity-heatmap} / \ref{fig:t7-pareto} / \ref{fig:regime-map}）：
+\begin{itemize}[leftmargin=2em, itemsep=1pt, topsep=2pt]
+  \item \textbf{Small-scale early-layer rescue}（Qwen2.5-3B，§\ref{subsec:exp-per-model-3b}）——
+    BA-$k_1$ 保护 layer 0 把 NarrativeQA 从 heuristic 的 $3.08$ 分回救到 $7.17$，
+    是 behavior-guided 相对位置启发式\textbf{最强的结构性差异化证据}；
+  \item \textbf{Large-scale top-tier without stable winner}（Qwen2.5-14B，§\ref{subsec:exp-per-model-14b}）——
+    4 policy 挤在 top-1 的 $3.5\%$ relative 距离内，没有单一跨任务赢家；
+  \item \textbf{Mistral-specific AutoK win}（§\ref{subsec:exp-per-model-mistral}）——
+    cov$80$ 预算下单模型最清晰的 AutoK 正面案例；
+  \item \textbf{Heuristic as strong baseline}——
+    在多个 regime 区间里，等距位置保护与 behavior-guided 选中集合重合，
+    不是方法失败而是 regime 的\emph{结构性观察}。
+\end{itemize}
+这一 regime map 把本文的贡献从"方法跑分更高"\textbf{抬升为"揭示结构分区"}——
+即 behavior-guided allocator 的真实价值不在数字胜利，
+而在提供了一个\emph{读数工具}让不同 regime 可被识别与命名。
 
-综上，attention-KL 提供了 GQA 架构下 KV Cache 量化的统一校准与诊断原则，
-$H_{kv}$ 则是与低比特失效模式、K/V 角色分化和融合解码效率
-一致性变化的结构性相关变量（非严格因果识别，详见第~\ref{subsec:exp-threats}~节效度威胁声明）。
-图~\ref{fig:ch1-pipeline} 展示了本文的论证结构。
+综合三条贡献，本文给出 KV Cache 量化的第一个
+\textbf{以 attention 行为为统一组织原则}的 framework + 实例化 + 跨模型实证工作。
+图~\ref{fig:framework-overview} 给出完整的论证脉络（§\ref{sec:ch1-structure} Roadmap）。
 
-\begin{figure}[!htbp]
-  \centering
-  \includegraphics[width=0.98\textwidth]{figures/ch1_pipeline.pdf}
-  \caption{本文论证层级总览。以 attention-KL 为统一校准与诊断原则，$H_{kv}$ 作为结构性相关变量（非严格因果识别）：首先比较 KL 与 MSE 校准目标在不同 bit-width 和模型规模下的有效性（C1）；通过 K/V 因子分解诊断 Key 主导退化与 $H_{kv}$ 相关的退化模式，并在 KIVI-style 格式上实例化验证（C2）；最后分析融合核在 $(H_{kv}, \text{seq\_len})$ 空间中的效率特征与部署建议（C3）。}
-  \label{fig:ch1-pipeline}
-\end{figure}
 
 \section{论文组织结构}
+\label{sec:ch1-structure}
 
 图~\ref{fig:framework-overview} 以单一 behavior-guided 原则作为脊柱，
 连接第三章的两层实例化（calibration + allocation）与第四章的实证验证，

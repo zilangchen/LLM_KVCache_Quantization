@@ -1,83 +1,70 @@
 % ============================================================
-% abstract_en.tex — English Abstract
+% abstract_en.tex — English Abstract (Phase 8 M+ rewrite)
+% Aligned with docs/thesis_chapter_drafts_20260420.md §1.4
 % ============================================================
 
 \begin{abstracten}
 
-As the context windows of large language models (LLMs) scale from
-thousands to hundreds of thousands of tokens, KV-cache memory grows
-linearly with sequence length and has become the primary bottleneck
-for long-context inference. INT4 quantization can in principle
-reduce KV-cache memory by a factor of four, yet existing methods
-calibrated against numerical reconstruction error degrade sharply
-in long-context settings: Needle retrieval accuracy drops from
-100\% to 0\%, and perplexity (PPL) rises by more than 15\%. This
-paper proposes the Kullback--Leibler divergence between pre- and
-post-quantization attention distributions (\emph{attention-KL}) as
-a unified principle for KV-cache quantization---defining the
-calibration objective in the output behavior space rather than the
-numerical-error space. With the grouped-query-attention (GQA)
-key-value head count $H_{kv}$ as a structural organizing variable,
-this single principle integrates calibration, diagnosis, and
-fused-decoding efficiency.
+As the context windows of large language models scale from thousands
+to hundreds of thousands of tokens, KV-cache memory grows linearly
+with sequence length and has become the primary bottleneck for
+long-context inference. INT4 quantization can in principle reduce
+KV-cache memory by a factor of four, yet methods calibrated against
+\emph{numerical reconstruction error} (MSE / percentile clipping)
+are unstable in the long-context regime, and most existing work
+treats \emph{calibration} and \emph{budget allocation} as two
+independent optimization problems without a unifying organizing
+principle.
 
-We systematically validate the attention-KL principle on four main
-models (Qwen2.5-1.5B/7B/14B and LLaMA-3.1-8B), with
-Mistral-7B-Instruct-v0.3 as a third-family control, and summarize
-the findings as three contributions.
+This thesis proposes a \textbf{behavior-guided} quantization
+framework in which the attention-distribution shift under quantization
+(behavior preservation) serves as the single organizing objective
+that connects both calibration and layer-wise budget allocation
+through a shared behavior sensitivity profile. We validate the
+framework on six open-source LLMs---Qwen2.5-\{1.5B, 3B, 7B, 14B\},
+LLaMA-3.1-8B, and Mistral-7B-Instruct-v0.3---across five LongBench
+tasks under a clean-provenance protocol (pin=\code{ddada19}), and
+summarize three contributions.
 
-\emph{First}, the attention-KL lens reveals a Key-dominated
-degradation mechanism for INT4 KV-cache quantization. On
-Qwen2.5-14B, a controlled ablation shows that retaining Key in
-FP16 recovers 93\% of the PPL gap while retaining Value in FP16
-recovers only 64\%; cross-model K-only/V-only ablations on four
-main models consistently support this direction. The diagnosis
-naturally derives an asymmetric format that combines per-channel-Key
-and per-token-Value quantization---providing the first
-attention-KL-based mechanistic account of the same format
-independently proposed by KIVI~\cite{liu2024kivi} on engineering
-grounds. At the calibration-objective level, we report a novel
-"convergence--divergence--reconvergence" pattern between
-attention-KL and mean squared error (MSE): under INT8 the two
-objectives converge to the same $(p_c, g)$ point and produce
-bit-identical calibration outputs (driven by the clip-rate $\leq 1\%$
-robust-selection constraint); under INT4 they diverge on the 1.5B
-model ($H_{kv}=2$) and re-converge on the 7B model ($H_{kv}=4$).
+\textbf{First} (C1, framework): we present behavior preservation
+as a single principle that connects calibration and allocation as
+two decisions sharing the same sensitivity profile, grounded in an
+attention error decomposition that attributes output error to (i)
+$K$-error propagating through softmax to distort the attention
+distribution and (ii) $V$-error propagating through weighted
+aggregation to shift the output.
 
-\emph{Second}, we instantiate the asymmetric format through an
-offline attention-KL search and obtain \textbf{INT4-RoleAlign},
-which replaces KIVI's runtime absmax/min statistics with a
-reproducible, auditable offline calibration interface---producing
-frozen quantization parameters suitable for compliance-sensitive
-deployment. Across four main models, INT4-RoleAlign preserves
-100\% Needle retrieval at a KV-cache compression ratio of roughly
-73\%, with PPL degradation decreasing markedly with model scale
-(1.5B: 13.7\%, 7B: 6.1\%, 8B: 2.4\%) and a small marginal
-improvement over the same-format KIVI-style baseline on the
-LongBench synthetic score (1.5B: +0.09, 7B: +0.06). External
-validation on the 14B model further confirms a 100\% Needle pass
-rate over 4K--32K contexts and RULER scores of 96.6--98.5\% over
-4K--16K (14B PPL is measured on a 32K prefix and is reported as
-an external-validity anchor rather than a cross-model comparison).
+\textbf{Second} (C2, method instances): the framework closes a loop
+at two bit-widths. The INT8 canonical path achieves empirical
+indistinguishability from FP16 on Qwen2.5-1.5B (mean $\Delta{=}{+}0.02$
+over three LongBench tasks). INT4-RoleAlign, built on the same
+per-channel-Key/per-token-Value asymmetric format as KIVI but with
+offline KL-based calibration replacing runtime absmax/min, attains
+100\% Needle retrieval and $|\Delta \text{PPL}| \leq 0.15$ across
+four models relative to KIVI. AutoK, a profile-guided coverage-based
+budget proposer (cov$80\%$), emerges as a natural extension of the
+framework and delivers the strongest single-family positive case on
+Mistral-7B (wins 3 of 5 tasks).
 
-\emph{Third}, the Triton fused quantized-decoding kernel exhibits
-a clear efficiency phase diagram across the $(H_{kv},
-\text{seq\_len})$ space: at $H_{kv}=8$, a 32K context length
-yields roughly 40\% decode-latency reduction relative to the
-same-configuration INT4 reference implementation. The 8B-LLaMA
-and 14B-Qwen models, sharing $H_{kv}=8$ across a 1.75$\times$
-parameter gap and different model families, exhibit consistent
-kernel-efficiency profiles---supporting $H_{kv}$ (rather than
-model scale) as the structural driver of fused-kernel efficiency.
-We convert this phase diagram into a layered deployment policy on
-NVIDIA H20.
-
-Together, the three contributions form an attention-KL-centered,
-$H_{kv}$-structured behavior-aligned quantization framework
-spanning diagnosis, calibration, and deployment.
+\textbf{Third} (C3, empirical insight): a cross-model comparison
+under matched INT4 memory budget reveals a
+\textbf{(family, scale, task)-dependent operating regime map}.
+Qwen2.5-3B exhibits a small-scale early-layer rescue regime
+(BA-$k_1$ outperforms heuristic-$k_1$ on NarrativeQA by roughly
+$+4$ points); Qwen2.5-14B exhibits a large-scale top-tier regime
+(top-3 policies lie within $3.5\%$ relative gap); Mistral-7B exhibits
+an AutoK-dominant regime; heuristic position-based allocation
+coincides with behavior-guided allocation in several regimes and
+thereby stands as a strong baseline---this is a structural
+observation rather than a methodological failure. The framework's
+value therefore shifts from "beating a weak baseline" to
+\textbf{"naming structural regimes"}: it provides a readout tool
+that lets heterogeneous behavior patterns across models, scales,
+and tasks be identified and reused, rather than a single globally
+optimal point estimate.
 
 \keywordsen{large language models; KV-cache quantization;
-behavior-aligned calibration; asymmetric quantization;
-grouped-query attention}
+behavior-guided calibration; regime map; asymmetric quantization;
+AutoK; budget allocation}
 
 \end{abstracten}
