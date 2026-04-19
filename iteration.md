@@ -859,3 +859,20 @@ Canonical agent workflow directory is `.agents/`.
   - backend enablement 只完成了 preflight / dry-run 门禁，尚未启动 official smoke/main/ablation
   - 远端 clean workspace `/root/autodl-tmp/LLM_KVCache_Quantization_clean` 含少量 untracked helper 文件，后续 clean-provenance 正式运行前需再次核对
 - Commit: <none>
+
+### 2026-04-20 01:50 | system_vs_kivi runner preflight 补 fail-fast
+- Goal: 修复 official smoke 首次远端启动时暴露的 execution-chain 漏检；在 `longbench_source=jsonl` 下，runner 必须在 phase preflight 就拒绝缺失 dataset path，而不是跑到首个 LongBench job 才失败
+- Changed files:
+  - `scripts/run_system_vs_kivi.py` (新增 `validate_longbench_dataset_config()`，缺失/不存在路径时在 preflight 直接返回 code=2)
+  - `tests/test_run_system_vs_kivi.py` (补 jsonl path 缺失/存在的单测)
+- Commands:
+  - `pytest -q tests/test_run_system_vs_kivi.py`
+- Outputs:
+  - 新增 LongBench dataset preflight 校验
+  - 本地定向测试 `7 passed`
+- Validation:
+  - 现在 `run_system_vs_kivi.py` 在 `jsonl` 模式下会 fail-fast，而不是把错误延后到第一个 `eval_longbench.py`
+- Risks / follow-ups:
+  - 远端 smoke 需要使用显式 `--longbench_dataset_path` 或环境变量重启
+  - 旧的 `4bb1355` remote clean worktree 只应视为失败尝试，不作正式 smoke 证据
+- Commit: <pending>

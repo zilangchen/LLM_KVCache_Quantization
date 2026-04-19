@@ -5,6 +5,7 @@ from pathlib import Path
 from scripts.run_system_vs_kivi import (
     build_jobs,
     resolve_system_run_config,
+    validate_longbench_dataset_config,
     validate_same_format_runtime,
 )
 from scripts.system_vs_kivi_common import build_phase_plan
@@ -67,6 +68,24 @@ def test_validate_same_format_runtime_accepts_allocator_backend(tmp_path: Path):
         resolve_system_run_config("1p5b", "rolealign_allocator_auto_eqmem", repo_root=tmp_path),
     ]
     issues = validate_same_format_runtime(configs)
+    assert issues == []
+
+
+def test_validate_longbench_dataset_config_rejects_missing_jsonl_path():
+    issues = validate_longbench_dataset_config(
+        longbench_source="jsonl",
+        longbench_dataset_path="",
+    )
+    assert issues == ["--longbench_dataset_path is required for longbench_source=jsonl"]
+
+
+def test_validate_longbench_dataset_config_accepts_existing_jsonl_dir(tmp_path: Path):
+    dataset_dir = tmp_path / "longbench_jsonl"
+    dataset_dir.mkdir()
+    issues = validate_longbench_dataset_config(
+        longbench_source="jsonl",
+        longbench_dataset_path=str(dataset_dir),
+    )
     assert issues == []
 
 

@@ -164,6 +164,23 @@ def validate_same_format_runtime(configs: list[SystemRunConfig]) -> list[dict[st
     return issues
 
 
+def validate_longbench_dataset_config(
+    *,
+    longbench_source: str,
+    longbench_dataset_path: str,
+) -> list[str]:
+    source = str(longbench_source).strip().lower()
+    dataset_path = str(longbench_dataset_path).strip()
+    if source != "jsonl":
+        return []
+    if not dataset_path:
+        return ["--longbench_dataset_path is required for longbench_source=jsonl"]
+    path = Path(dataset_path)
+    if not path.exists():
+        return [f"longbench jsonl path not found: {path}"]
+    return []
+
+
 def build_jobs(
     plan: PhasePlan,
     *,
@@ -400,10 +417,19 @@ def main() -> int:
             for system_id in plan.systems
         ]
         format_issues.extend(validate_same_format_runtime(configs))
+    longbench_issues = validate_longbench_dataset_config(
+        longbench_source=args.longbench_source,
+        longbench_dataset_path=args.longbench_dataset_path,
+    )
     if missing:
         print("Preflight failed: missing required assets", file=sys.stderr)
         for path in missing:
             print(f"  {path}", file=sys.stderr)
+        return 2
+    if longbench_issues:
+        print("Preflight failed: LongBench dataset configuration is invalid", file=sys.stderr)
+        for issue in longbench_issues:
+            print(f"  {issue}", file=sys.stderr)
         return 2
     if format_issues:
         print("Preflight failed: same-format runtime gate not satisfied", file=sys.stderr)
