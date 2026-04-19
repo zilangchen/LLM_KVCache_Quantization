@@ -89,16 +89,16 @@
 
 ---
 
-## Phase 4 — 实验 Part B（Ch4 §4.3 主章，最重要）
+## Phase 4 — 实验 Part B（Ch4 §4.3 主章，最重要）✅
 
 | # | 任务 | 状态 | 图表 |
 |---|---|---|---|
-| 4.1 | 写 `scripts/thesis/make_table_cross_model_compare.py` + 生成 **T3** ⭐⭐ | ⬜ | T3 |
-| 4.2 | 写 `scripts/thesis/plot_sensitivity_heatmap.py` + 生成 **图 ④** ⭐⭐ | ⬜ | 图 ④（需 6 calibration JSON） |
-| 4.3 | 核实 `scripts/plot_l2_pareto.py` 生成 thesis-grade **图 ⑦** | ⬜ | 图 ⑦ 沿用 |
-| 4.4 | 写 `scripts/thesis/plot_regime_map.py` + 生成 **图 ⑧** | ⬜ | 图 ⑧ |
-| 4.5 | Ch4 §4.3 cross-model regime 段 + 引用 T3/图 ④/图 ⑦/图 ⑧ | ⬜ | 4 项 |
-| 4.6 | Ch4 §4.3 xelatex 通过 + Phase 4 commit | ⬜ | 4.1-4.5 |
+| 4.1 | 写 `scripts/thesis/make_table_cross_model_compare.py` + 生成 **T3** ⭐⭐ | ✅ | T3（48 cells） |
+| 4.2 | 写 `scripts/thesis/plot_sensitivity_heatmap.py` + 生成 **图 ④** ⭐⭐ | ✅ | 图 ④（4 模型 per-layer bits allocator decision） |
+| 4.3 | 写 `scripts/thesis/plot_l2_pareto.py`（story 说"沿用"但实际需新写）+ 生成 **图 ⑦** | ✅ | 图 ⑦（3 subplot + callouts） |
+| 4.4 | 写 `scripts/thesis/plot_regime_map.py` + 生成 **图 ⑧** | ✅ | 图 ⑧（4×4 heatmap + 红色 winner box） |
+| 4.5 | Ch4 §4.3 cross-model regime 段 + 引用 T3/图 ④/图 ⑦/图 ⑧ | ✅ | 4 项；+2 display math equations（遵守新格式规则） |
+| 4.6 | Ch4 §4.3 xelatex smoke PASS + Phase 4 commit | ✅ | main.pdf 90 → 93 pages |
 
 ---
 

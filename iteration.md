@@ -36,6 +36,37 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 04:57 | Thesis Rewrite Phase 4 — Ch4 §4.3 Cross-Model 主章完整落地（T3 + 图④/⑦/⑧）
+- Goal: 按 M+ 方案 Phase 4（story §3.2 + §11 C3 证据组），在 Ch4 §4.2 Hook 占位之后、§4.5 之前插入新 §4.3 Cross-Model Regime 章，对应论文 C3（regime map）主证据
+- Scope:
+  - 写 `scripts/thesis/make_table_cross_model_compare.py` → **T3**（4 模型 × 4 policy × 3 task，48 cells 主表 ⭐⭐）；per-model best-k 对应 3B k1 / 8B k11 / 14B k7 / Mistral k3
+  - 写 `scripts/thesis/plot_sensitivity_heatmap.py` → **图 ④**（4 模型 × per-layer K/V bit allocation heatmap，protected layer signature 可视化）
+  - 写 `scripts/thesis/plot_l2_pareto.py` → **图 ⑦**（quality × KV memory Pareto 前沿，3 subplot：7B/8B/Mistral；含 callouts "quality cliff" + "Pareto-dominant"）
+  - 写 `scripts/thesis/plot_regime_map.py` → **图 ⑧**（4 × 4 regime map heatmap，row-normalized quality + 红色加粗 best policy box）
+  - Ch4 §4.3 正文（~450 字）：含 matched-budget 定义公式 + 三类 regime readout（scale / family / task）+ 4 paragraph "T3 / 图④ / 图⑦ / 图⑧ readout"
+  - **严格遵守 feedback_math_display_style.md 新规则**：2 个 display math equation 块（matched-budget 公式 + winner 列表 equation\\*）
+- Changed files:
+  - thesis/chapters/ch4_experiments.tex（884 → 1021 行）
+  - scripts/thesis/make_table_cross_model_compare.py / plot_sensitivity_heatmap.py / plot_l2_pareto.py / plot_regime_map.py（新 4 个脚本）
+  - thesis/tables/table_t3_cross_model_main.{tex,md}（新）
+  - thesis/figures/fig4_sensitivity_heatmap.pdf / fig7_pareto.pdf / fig8_regime_map.pdf（新 3 个 PDF）
+- Commands:
+  - `python3 scripts/thesis/make_table_cross_model_compare.py` → T3 生成
+  - `python3 scripts/thesis/plot_sensitivity_heatmap.py` → 图 ④ PDF
+  - `python3 scripts/thesis/plot_l2_pareto.py` → 图 ⑦ PDF
+  - `python3 scripts/thesis/plot_regime_map.py` → 图 ⑧ PDF
+  - **xelatex smoke × 2 pass** → main.pdf **93 pages** (90 → 93)
+- Outputs:
+  - Ch4 新完整结构：§4.1 / §4.2 / §4.3 cross-model / §4.5 / §4.6
+  - 5 个 C3 regime map 证据（T3 + 图④ + 图⑦ + 图⑧ + §4.3 readout）全部闭环
+  - 关键 signature：Mistral-7B cov80=14.764 最强 AutoK 正面案例；14B 42/48 广覆盖
+- Validation:
+  - T3: 48/48 cells + per-model winner multi（3B ba_fixed / 8B ba_fixed / 14B uniform / Mistral ba_auto）
+  - xelatex smoke 93 pages produced
+- Risks / follow-ups:
+  - Phase 5 下一步：§4.5 per-model cases（T4/T5/T6 + 图 ⑨）
+- Commit: <pending 本批>
+
 ### 2026-04-20 04:42 | system_vs_kivi smoke 完整跑完 — execution-chain 全绿但 G1 Fairness Gate 硬 fail（allocator policy 超 budget）
 - Goal: 在 `36bf21c` HEAD 上、用 watchdog 等结束、严格按 G 指令"smoke 收口后再决定是否进入 main"的 gate 逻辑判定 smoke 成败
 - 执行结果:

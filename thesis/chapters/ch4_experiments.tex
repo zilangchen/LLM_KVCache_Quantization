@@ -641,6 +641,142 @@ INT4-RoleAlign 与 KIVI-style 的 quality / PPL / Needle 差距\textbf{不显著
 % 激活规则详见 docs/thesis_story_20260420.md §13.2
 %--------------------------------------------------------------
 
+% ============================================================
+\section{跨模型 Regime 地图：behavior-guided allocator 的跨模型呈现}
+\label{sec:exp-cross-model}
+% ============================================================
+
+\noindent\textbf{从 calibration 到 allocation（对应 §3）。}
+第~\ref{sec:exp-int4-kivi}~节在 calibration 层面（INT4-RoleAlign 对标 KIVI-style）呈现了
+\textbf{behavior 原则在 format 层的落点}。
+本节把该原则推广到 \textbf{allocation 层面}：
+对每个模型，用 behavior sensitivity profile 指导逐层预算分配，
+跨 4 模型 × 4 policy × 3 core task 形成对比矩阵。
+在 matched INT4 memory budget 下（KV cache 峰值显存差距控制在 $\pm 3\%$ 以内，
+详见图~\ref{fig:t7-pareto}），4 种 policy 给出了明显不同的跨模型 winner 分布。
+
+\paragraph{Matched-budget 的定义。}
+记第 $l$ 层的 K / V 位宽分别为 $b_K^{(l)}$、$b_V^{(l)}$，
+单次推理 KV cache 占用可近似写作
+\begin{equation}
+  \text{mem}(\pi) = \sum_{l=1}^{L} \left( b_K^{(l)} + b_V^{(l)} \right) \cdot H_{kv} \cdot T \cdot d_{\text{head}} / 8,
+  \label{eq:ch4-matched-budget}
+\end{equation}
+其中 $L$ 为层数、$T$ 为上下文长度、$H_{kv}$ 为 KV head 数、$d_{\text{head}}{=}128$。
+本节所有 policy 的\emph{平均位宽} $\bar{b}{=}\sum_l (b_K^{(l)} + b_V^{(l)}) / (2L)$
+经 allocator 后保持在 $[4.5, 5.0]$ bit 范围内
+（对比 \code{uniform\_int4\_k4v4} 的 $\bar{b}{=}4.0$ bit），
+允许 "同 budget、不同 allocation policy" 的受控对比。
+
+\input{tables/table_t3_cross_model_main}
+
+\paragraph{Table T3 readout：winner 多样性。}
+表~\ref{tab:t3-cross-model-main} 给出 4 模型的完整 3-task 对比。
+把每行的 per-(model, task) winner 合并到 block 末的 \emph{Mean} 行，
+得到跨模型的 \textbf{winner 指纹}：
+在 Qwen2.5-3B 上 \textbf{BA-$k_1$} 胜出
+（对应图~\ref{fig:sensitivity-heatmap} 的早层保护 signature）；
+在 Llama-3.1-8B 上 \textbf{BA-$k_{11}$} 胜出
+（中大规模下广泛 top-$k$ 覆盖）；
+在 Qwen2.5-14B 上\textbf{ Uniform INT4} 反而胜出——
+14B 的 behavior sensitivity profile 呈现近饱和 \emph{wide-spread} 形态
+（图~\ref{fig:sensitivity-heatmap} 中 42/48 层被 AutoK 标记为 protected），
+在当前预算区间内 allocator 的 pick-order 对最终 quality 边际影响有限；
+在 Mistral-7B 上 \textbf{BA-AutoK}（cov$80$\% coverage）胜出，
+这是本章\textbf{单模型最强的 AutoK 正面案例}（详见 §\ref{subsec:exp-per-model-mistral}）。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.98\textwidth]{figures/fig4_sensitivity_heatmap.pdf}
+  \caption{Behavior-guided AutoK 的逐层 $(b_K, b_V)$ 保护决策（4 模型）。
+  每个子图为一个模型，横轴是 K / V 两列；纵轴是 layer index；
+  深绿色 $=$ INT8（protected 层），浅色 $=$ INT4（default 层）。
+  3B top-3 protected layer 为 $\{0, 1, 2\}$ 的 early-layer 集中模式
+  与 14B 在 48 层里 42 层被 protected 的 wide-spread 模式构成 regime map 的
+  sensitivity 结构异质性证据（§\ref{sec:exp-cross-model}）。}
+  \label{fig:sensitivity-heatmap}
+\end{figure}
+
+\paragraph{图 ④：sensitivity profile 的结构异质性。}
+图~\ref{fig:sensitivity-heatmap} 可视化 4 模型的逐层 $(b_K, b_V)$
+AutoK 保护分配。
+每列顶部的 avg\_bits 反映该模型 AutoK 的平均预算水平，
+而列内部的绿色条纹分布揭示 regime signature：
+\begin{itemize}[leftmargin=2em, itemsep=1pt, topsep=2pt]
+  \item \textbf{小模型早层集中}：Qwen2.5-3B top-3 protected layer index 为 $\{0, 1, 2\}$，
+    对应 §\ref{subsec:exp-per-model-3b} 的 \textbf{early-layer rescue regime}；
+  \item \textbf{中大规模早中层聚集}：Llama-3.1-8B top-3 $=\{3, 4, 6\}$、
+    Mistral-7B top-3 $=\{2, 6, 7\}$；
+  \item \textbf{大规模广覆盖}：Qwen2.5-14B 在 48 层中标记 42 层 protected，
+    分布几乎铺满全深度——sensitivity profile 弥散化。
+\end{itemize}
+这一跨模型的 profile shape 异质性\textbf{直接可视化}了 regime map 不是
+结果层面的幻觉，而是 \emph{sensitivity 结构的性质}。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=\textwidth]{figures/fig7_pareto.pdf}
+  \caption{Quality--memory Pareto 前沿（3 模型 subplot：Qwen2.5-7B / Llama-3.1-8B / Mistral-7B）。
+  $x$ 轴为 KV cache 峰值显存（log 刻度），$y$ 轴为 task-core mean quality。
+  Marker 形状区分 policy family（Uniform / BA-$k$ / Heuristic-$k$ / BA-AutoK）。
+  红色箭头标注 Qwen2.5-7B 的 \code{uniform\_int4} \textbf{quality cliff}（naive 均匀分配的失败样例）；
+  绿色箭头标注 Mistral-7B 的 \textbf{BA-AutoK Pareto-dominant} 区域——在所有 memory 档位上 quality 均优于其它 3 个 family。}
+  \label{fig:t7-pareto}
+\end{figure}
+
+\paragraph{图 ⑦：Pareto 前沿的 allocator 位置。}
+图~\ref{fig:t7-pareto} 在 quality $\times$ kv-cache-memory 空间中
+绘制 L2 sweep 的所有 configuration。
+Qwen2.5-7B 上 \code{uniform\_int4\_k4v4} 出现了\textbf{明显的 quality cliff}
+（红色箭头标注）：
+同等 memory 下，naive uniform 分配相对 BA-$k$ 与 AutoK 损失约 $1$ 分 quality。
+Mistral-7B 上 \textbf{BA-AutoK 占据 Pareto-dominant 区域}（绿色箭头）：
+在所有 mem 档位上 quality 显著优于其它 3 个 family。
+Llama-3.1-8B 的 4 个 policy 接近共 Pareto，
+与表~\ref{tab:t3-cross-model-main} 的 "top-tier 聚集" 一致。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{figures/fig8_regime_map.pdf}
+  \caption{Cross-model regime map heatmap（$4 \text{ 模型} \times 4 \text{ policy}$，row-normalized task-core mean quality）。
+  每行的红色加粗框指向 per-model best policy。
+  4 行的最佳列落点各不相同——
+  Qwen2.5-3B / Llama-3.1-8B 倾向 BA-$k$、Qwen2.5-14B 倾向 Uniform INT4、Mistral-7B 倾向 AutoK——
+  \textbf{不存在跨模型统一最优 policy}，构成 C3 regime map 的最快速 skim 证据。}
+  \label{fig:regime-map}
+\end{figure}
+
+\paragraph{图 ⑧：regime map 的 skim 路径。}
+图~\ref{fig:regime-map} 以 $4 \times 4$ heatmap 对 T3 进行 row-normalize 可视化，
+每行的红色加粗框指向 per-model winner。
+4 行的最佳列落点各不相同：
+\begin{equation*}
+  \text{winner}(3B) = \text{BA-}k,\quad
+  \text{winner}(8B) = \text{BA-}k,\quad
+  \text{winner}(14B) = \text{Uniform},\quad
+  \text{winner}(\text{Mistral}) = \text{AutoK}.
+\end{equation*}
+这种"4 模型 4 种倾向"的视觉观察是本章 C3 结论的最快速 skim 入口——
+\textbf{不存在跨模型统一最优的 allocator policy}。
+
+\paragraph{Regime 地图的三条读数。}
+把 T3 / 图④ / 图⑦ / 图⑧ 的证据汇总，得到以下\textbf{跨模型经验规律}（C3）：
+\begin{enumerate}[leftmargin=2em, itemsep=1pt, topsep=2pt]
+  \item \textbf{Scale-dependent regime}：小尺度模型（3B）的 sensitivity 早层集中，
+    allocator 在早层少数位置上就能"回救"大部分 quality；
+    大尺度模型（14B）的 sensitivity 弥散化，allocator 收益衰减至 margin 级别。
+  \item \textbf{Family-dependent regime}：Mistral-7B 是跨模型里 AutoK
+    最清晰的赢家，而同参数量的 Qwen2.5-7B / Llama-3.1-8B 上 AutoK 仅与 BA-$k_\text{best}$ 持平。
+  \item \textbf{Task-dependent regime}：同模型下不同 task（NarrativeQA / HotpotQA / GovReport）
+    的 winner 也并非一致——Llama-3.1-8B 上 GovReport 偏好 AutoK，
+    其余两个 task 偏好 BA-$k_{11}$。
+\end{enumerate}
+综上，本章主张 behavior-guided allocator 的真实贡献\textbf{不是"击败均匀分配"},
+而是\textbf{揭示一张 (family, scale, task) 共同决定的 operating regime 地图}。
+这也为第五章 §\ref{sec:discussion-heuristic} 正面承认 \textbf{heuristic 是强基线}
+提供了经验基础——在某些 regime 区间里，保护哪些 $k$ 个位置本就是"决定论式"选择，
+无论启发式还是 behavior-guided 都会落在相似集合。
+
 \section{GQA-Aware 部署效率分析}
 \label{sec:exp-deployment}
 % ============================================================

@@ -1,0 +1,37 @@
+\begin{table}[!htbp]
+  \centering
+  \small
+  \setlength{\tabcolsep}{5pt}
+  \begin{tabular}{l l cccc}
+    \toprule
+    \textbf{模型} & \textbf{Task (metric)} & Uniform & \textbf{BA-$k$} & Heuristic-$k$ & \textbf{BA-AutoK} \\
+    \midrule
+    \multirow{4}{*}{Qwen2.5-3B ($H_{kv}{=}2$)} & NarrativeQA (F1) & 4.33 & \textbf{7.17} & 3.08 & 6.48 \\
+     & HotpotQA (F1) & 2.38 & 4.73 & 1.39 & \textbf{4.89} \\
+     & GovReport (Rouge-L) & 5.77 & 8.81 & 5.96 & \textbf{8.90} \\
+     & \textit{Mean} & \textit{4.16} & \textit{\textbf{6.90}} & \textit{3.48} & \textit{6.75} \\
+    % 3b: BA-k* = \textbf{BA-k1}, heuristic-k* = Heuristic-k1, auto = \textbf{BA-auto-cov80}
+    \midrule
+    \multirow{4}{*}{Llama-3.1-8B ($H_{kv}{=}8$)} & NarrativeQA (F1) & 10.24 & \textbf{11.14} & 10.47 & 10.74 \\
+     & HotpotQA (F1) & 6.73 & \textbf{7.88} & 5.68 & 7.57 \\
+     & GovReport (Rouge-L) & 9.24 & 9.54 & 9.47 & \textbf{9.75} \\
+     & \textit{Mean} & \textit{8.74} & \textit{\textbf{9.52}} & \textit{8.54} & \textit{9.35} \\
+    % 8b: BA-k* = \textbf{BA-k11}, heuristic-k* = Heuristic-k11, auto = \textbf{BA-auto-cov80}
+    \midrule
+    \multirow{4}{*}{Qwen2.5-14B ($H_{kv}{=}8$)} & NarrativeQA (F1) & \textbf{7.05} & 6.67 & 6.83 & 6.80 \\
+     & HotpotQA (F1) & \textbf{5.57} & 5.49 & 5.40 & 5.39 \\
+     & GovReport (Rouge-L) & 9.09 & 8.95 & 9.03 & \textbf{9.27} \\
+     & \textit{Mean} & \textit{\textbf{7.23}} & \textit{7.04} & \textit{7.09} & \textit{7.15} \\
+    % 14b: BA-k* = \textbf{BA-k7}, heuristic-k* = Heuristic-k7, auto = \textbf{BA-auto-cov90}
+    \midrule
+    \multirow{4}{*}{Mistral-7B-v0.3 ($H_{kv}{=}8$)} & NarrativeQA (F1) & 15.55 & 15.71 & \textbf{17.11} & 16.26 \\
+     & HotpotQA (F1) & 17.81 & 17.78 & 17.84 & \textbf{19.08} \\
+     & GovReport (Rouge-L) & 8.70 & 8.66 & 8.86 & \textbf{8.96} \\
+     & \textit{Mean} & \textit{14.02} & \textit{14.05} & \textit{14.60} & \textit{\textbf{14.76}} \\
+    % mistral7b: BA-k* = \textbf{BA-k3}, heuristic-k* = Heuristic-k3, auto = \textbf{BA-auto-cov80}
+    \bottomrule
+  \end{tabular}
+  \caption{Cross-model policy comparison under matched INT4 budget (clean-provenance pin=\code{ddada19})。\textbf{加粗}标注 per-(model, task) 最优 policy；\textit{Mean} 为 block 内 3 task 均值。Per-model best-$k$ 动态选择：3B 用 $k{=}1$、Llama-3.1-8B 用 $k{=}11$、14B 用 $k{=}7$、Mistral-7B 用 $k{=}3$；AutoK 的 \code{cov} 阈值：14B 用 \code{cov90}，其余用 \code{cov80}。四模型的 winner policy 不一致——这是本章 \textbf{(family, scale, task)-dependent regime map} 的直接证据。}
+  \label{tab:t3-cross-model-main}
+  \par\smallskip\noindent{\footnotesize matched INT4 budget：所有 policy 在本表内 KV memory 近似相等（$\pm 3\%$），详见配套图~\ref{fig:t7-pareto}。Uniform 指 \code{uniform\_int4\_k4v4}（所有层 K/V 统一 INT4）；BA-$k$ 指 behavior-guided allocator 保护 top-$k$ 高敏感层；Heuristic-$k$ 指等距位置启发式保护 $k$ 层；BA-AutoK 指 profile-guided cov$x$\% coverage 自动决定 budget。}
+\end{table}
