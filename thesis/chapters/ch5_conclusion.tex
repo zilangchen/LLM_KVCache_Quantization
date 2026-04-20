@@ -1,5 +1,5 @@
 % ============================================================
-% ch5_conclusion.tex — 第五章 结论与展望（Phase 8 M+ 重写版）
+% ch5_conclusion.tex — 第五章 结论与展望
 % 对齐 docs/thesis_chapter_drafts_20260420.md §6+§7
 % 保留原 unnumbered chapter 结构（\chapter* + TOC handling）
 % ============================================================
@@ -24,25 +24,25 @@
 
 本文以 behavior-guided 原则组织 KV Cache 量化的 calibration 与 allocation 两层，
 跨 Qwen / LLaMA / Mistral 三个模型家族、1.5B--14B 五个规模与 5 个 LongBench 任务
-给出 5 条 final-ready 的\textbf{经验规律}（clean-provenance pin=\code{ddada19}）。
+给出 5 条\textbf{经验规律}（数据溯源完整，对应提交号 \code{ddada19}）。
 
 \paragraph{发现一：Heuristic 是强基线——结构观察而非方法失败。}
 \label{sec:discussion-heuristic}
 我们的跨模型实验反复呈现同一结果：
 等距位置保护启发式（heuristic-$k$）在多个模型的多个 task 上与 behavior-guided allocator 接近，
 在 Qwen2.5-14B 上甚至反超 BA-$k$（第~\ref{subsec:exp-per-model-14b}~节）。
-我们认为这不是需要 explain away 的现象，而是 framework 自身意义的体现：
-如果 behavior-guided allocator 只靠"击败弱 baseline"成立，它的贡献会非常脆弱；
-而 heuristic 作为强 baseline 的事实，把论文贡献从"方法数字更高"\textbf{抬升为"揭示结构分区"}
+我们认为这不是需要 explain away 的现象，而是 框架 自身意义的体现：
+如果 behavior-guided allocator 只靠"击败弱 基线"成立，它的贡献会非常脆弱；
+而 heuristic 作为强 基线 的事实，把论文贡献从"方法数字更高"\textbf{抬升为"揭示结构分区"}
 （见发现二）。在多个模型上 heuristic 与 BA-$k$ 接近，
-本身就构成 regime map 的证据——在某些 (model, task) 区间里，
+本身就构成 适用区间 map 的证据——在某些 (model, task) 区间里，
 "保护哪些 $k$ 个位置"的选择空间很窄，无论 behavior profile 还是位置启发式
 都会落到相似集合。
 
 \paragraph{发现二：(Family, Scale, Task)-dependent Regime 地图。}
 \label{sec:discussion-regime-map}
 第~\ref{sec:exp-cross-model}~节的 Table~\ref{tab:t3-cross-model-main}
-与 regime heatmap（图~\ref{fig:regime-map}）
+与 适用区间 heatmap（图~\ref{fig:regime-map}）
 在 4 模型 $\times$ 4 policy 空间上给出 per-model winner 分布，
 4 行的最佳列落点各不相同：
 \begin{itemize}[leftmargin=2em, itemsep=1pt, topsep=2pt]
@@ -55,23 +55,23 @@
     AutoK 标记 42/48 层 protected，top-3 policy 挤在 $3.5\%$ relative gap 内
     （§\ref{subsec:exp-per-model-14b}，Table~\ref{tab:t6-14b-toptier}）；
   \item \textbf{Mistral-specific AutoK win}——
-    cov$80\%$ coverage 阈值下 AutoK 在 5-task 中赢 3 个，单模型最强正面案例
+    cov$80\%$ 覆盖度 阈值下 AutoK 在 5-task 中赢 3 个，单模型最强正面案例
     （§\ref{subsec:exp-per-model-mistral}，Table~\ref{tab:t4-mistral-autok}）。
 \end{itemize}
-这一异质性\textbf{不否定} behavior framework 的价值，而是揭示其\emph{作用方式}：
-framework 提供的是一个\emph{读数工具}让不同 regime 可被识别与命名，
+这一异质性\textbf{不否定} behavior 框架 的价值，而是揭示其\emph{作用方式}：
+框架 提供的是一个\emph{读数工具}让不同 适用区间 可被识别与命名，
 而不是一个"永远最优"的 point 估计。
 
 \paragraph{发现三：INT4 vs KIVI 的 Open Question（format vs calibration 耦合）。}
 \label{sec:discussion-int4-openq}
-第~\ref{sec:exp-int4-kivi}~节的 cross-model 对比显示
+第~\ref{sec:exp-int4-kivi}~节的 跨模型 对比显示
 INT4-RoleAlign 与 KIVI 在同 format 下 PPL $\Delta \leq 0.15$、Needle 均 $100\%$。
 由于两者共享 per-channel K + per-token V 格式，本文的对比
 \textbf{只揭示}"同 format 下 calibration philosophy 差异有限"，
 不能\emph{完全解耦} format 与 calibration 各自的独立贡献。
 要完整回答"低比特 KV 量化的主要决定因素究竟是量化架构还是校准策略"，
-未来需要 pure-format ablation（同 calibration、不同 format）
-与 pure-calibration ablation（同 format、不同 calibration）的正交实验
+未来需要 pure-format 消融（同 calibration、不同 format）
+与 pure-calibration 消融（同 format、不同 calibration）的正交实验
 ——这构成 RoleAlign 的\textbf{第一个 open question}。
 
 \paragraph{发现四：INT8 canonical path 的 $\Delta{=}{+}0.02$ 闭环证据（C2 of RQ1）。}
@@ -79,20 +79,20 @@ INT4-RoleAlign 与 KIVI 在同 format 下 PPL $\Delta \leq 0.15$、Needle 均 $1
 在 Qwen2.5-1.5B 上，INT8-ours 相对 FP16 在 3 个 LongBench task 上的
 mean $\Delta = +0.02$（Table~\ref{tab:t1-int8-canonical}），
 在实证上不可区分。这不是"INT8 量化很容易"的废话——
-它证明本文 framework 的 calibration 层在 canonical 规模下\textbf{可闭环}，
+它证明本文 框架 的 calibration 层在 canonical 规模下\textbf{可闭环}，
 即 behavior-guided 原则存在一个\emph{干净的落地实例}，
 剩下的工作是把同一原则推广到更激进的 bit-width 与更复杂的 allocator 层。
 
-\paragraph{发现五：5 条 final-ready supported claims。}
+\paragraph{发现五：5 条核心结论。}
 \label{sec:discussion-final-ready}
-本章总结的 5 条 claim 均由 clean-provenance pin=\code{ddada19} 的
-md5-locked canonical 数据支撑（story 附 B）：
+本章总结的 5 条 claim 均由 数据溯源完整（提交号 \code{ddada19}） 的
+md5-locked canonical 数据支撑（附录 B）：
 \begin{enumerate}[leftmargin=2em, itemsep=1pt, topsep=2pt]
   \item INT8 canonical path fidelity（int8$\leftrightarrow$fp16 $\Delta{=}+0.02$）；
   \item Mistral-specific AutoK win（cov$80\%$ 跨 core+extend task）；
-  \item Qwen2.5-3B early-layer rescue regime；
+  \item Qwen2.5-3B early-layer rescue 适用区间；
   \item Qwen2.5-14B top-tier but no stable winner；
-  \item Heuristic is a strong baseline（结构观察，非方法失败）。
+  \item Heuristic is a strong 基线（结构观察，非方法失败）。
 \end{enumerate}
 
 \paragraph{贡献总结（C1 / C2 / C3 镜像 §\ref{sec:ch1-contribution}）。}
@@ -100,13 +100,13 @@ md5-locked canonical 数据支撑（story 附 B）：
 把\textbf{behavior 保持度}作为 KV Cache 量化的统一组织原则，
 并通过两层实例化与跨模型实证验证其可用性：
 \begin{itemize}[leftmargin=2em, itemsep=1pt, topsep=2pt]
-  \item \textbf{C1}（framework）：behavior 原则同时贯通 calibration 与 allocation 两层，
+  \item \textbf{C1}（框架）：behavior 原则同时贯通 calibration 与 allocation 两层，
     使两者不再是独立优化问题，而是共享同一 behavior sensitivity profile 的两层决策；
-  \item \textbf{C2}（method instance）：INT8 canonical path 与 FP16 实证不可区分，
+  \item \textbf{C2}（method 实例）：INT8 canonical path 与 FP16 实证不可区分，
     INT4 RoleAlign 在低比特非对称 format 下与 KIVI 可比，
-    AutoK 作为 profile-guided budget proposer 是 framework 自然长出的扩展；
-  \item \textbf{C3}（empirical insight）：跨 5 模型、5 任务的 clean-provenance 实验
-    揭示一张 (family, scale, task)-dependent 的 regime 地图，
+    AutoK 作为 profile-guided 预算 proposer 是 框架 自然长出的扩展；
+  \item \textbf{C3}（empirical 洞察）：跨 5 模型、5 任务的 溯源完整 实验
+    揭示一张 (family, scale, task)-dependent 的 适用区间 地图，
     并在此基础上正面承认 heuristic 作为强基线——
     behavior-guided allocator 的真实价值从"击败弱对手"升级为"揭示结构分区"。
 \end{itemize}
@@ -135,15 +135,15 @@ md5-locked canonical 数据支撑（story 附 B）：
   如 §\ref{sec:discussion-int4-openq} 所述，
   RoleAlign 与 KIVI 共享 per-channel K + per-token V 格式，
   不能 isolate 出"同 format 下离线 calibration 相对运行时 absmax/min 的独立增益"。
-  需要 pure-format ablation 与 pure-calibration ablation 的正交实验
+  需要 pure-format 消融 与 pure-calibration 消融 的正交实验
   才能完整回答——这是\textbf{本文 Open Question 1}。
 
   \item \textbf{AutoK 仅在静态层面验证}。
   第~\ref{sec:exp-per-model}~节的 AutoK 是 \emph{model-level} 的 profile-guided
-  proposer（给定模型 calibration，cov$80\%$ 输出固定 budget）；
+  proposer（给定模型 calibration，cov$80\%$ 输出固定 预算）；
   prompt-adaptive 路径（附录~\ref{sec:app-prompt-adaptive-8b}）
   在 Llama-3.1-8B 上 5-task mean 输 fixed-k（仅 lcc 独立赢 $+0.40$），
-  Gate C verdict \textbf{Weak / Mixed}；
+  prompt-adaptive 呈现弱改善或混合特征；
   selector 仍是 task-bucket fallback 实现，未来见第~\ref{sec:conclusion-future}~节。
 
   \item \textbf{Clean-provenance pin 固定的时效性}。
@@ -151,16 +151,16 @@ md5-locked canonical 数据支撑（story 附 B）：
   与 md5-locked manifest；
   该 pin 保证\emph{审计可追溯}但不保证\emph{泛化到未来 transformer 架构}。
   当新的长上下文注意力变体（如 sparse attention、hybrid-state）大量出现时，
-  本文的 regime 地图需要在新架构上重新产出。
+  本文的 适用区间 地图需要在新架构上重新产出。
 
-  \item \textbf{Allocator-vs-KIVI 的 matched-budget formal compare 作为 Future Work}。
-  本文的 cross-model regime 地图在\emph{每 policy 独立最优配置}上对比；
-  严格 matched memory budget 下对 Allocator（含 RoleAlign）与 KIVI 的 formal comparison
+  \item \textbf{Allocator-vs-KIVI 的 matched-预算 formal compare 作为 Future Work}。
+  本文的 跨模型 适用区间 地图在\emph{每 policy 独立最优配置}上对比；
+  严格 matched memory 预算 下对 Allocator（含 RoleAlign）与 KIVI 的 formal comparison
   作为第~\ref{sec:conclusion-future}~节列出的 Future Work 之一。
   本文中 allocator 的定位是\emph{per-layer bit allocation 机制}（第~\ref{sec:ch3-allocator}~节的方法贡献），
   其与 KIVI 的 systematic 对比结论由未来扩展实验给出。
   一次 5-model × 5-task 的探索性对比
-  （matched memory budget 下以 \code{rolealign\_allocator\_auto\_eqmem} 对标 \code{kivi\_style}）
+  （matched memory 预算 下以 \code{rolealign\_allocator\_auto\_eqmem} 对标 \code{kivi\_style}）
   显示 allocator 需要约 1.5--1.8$\times$ 的 KV 内存开销才能换取平均约 1--3\% 的 quality 提升，
   其中约 16\% 的 (model, task) 组合反而劣于 KIVI（尤其 Mistral-7B 上呈 Pareto-dominated），
   cost/benefit 不支持 systematic claim；该对比作为 Future Work 见 §\ref{sec:conclusion-future}。
@@ -171,10 +171,10 @@ md5-locked canonical 数据支撑（story 附 B）：
 \label{sec:conclusion-future}
 % ============================================================
 
-基于本文的 regime 地图与 open questions，我们识别出 3 条最有价值的方向：
+基于本文的 适用区间 地图与 open questions，我们识别出 3 条最有价值的方向：
 
 \paragraph{未来工作一：Per-Prompt Routing。}
-附录~\ref{sec:app-prompt-adaptive-8b} 的 8B Gate C 数据揭示
+附录~\ref{sec:app-prompt-adaptive-8b} 的 8B 补充数据揭示
 \textbf{prompt\_adaptive 在 lcc 上独立赢 $+0.40$ 分}
 （vs auto\_k），尽管 5-task mean 不及 fixed\_k；
 附录~\ref{sec:app-prompt-adaptive-offprotocol} 的 1.5B/7B
@@ -194,17 +194,17 @@ K 与 V 的 layer-wise 联合优化（例如 $(b_K^{(l)}, b_V^{(l)})$ 作为 pai
 值得作为专项工作。
 
 \paragraph{未来工作三：Allocator-vs-KIVI Matched-Budget Formal Compare。}
-本文在 matched-budget 下\emph{未}对 allocator-enabled RoleAlign 与 KIVI-style 做 formal compare。
+本文在 matched-预算 下\emph{未}对 allocator-enabled RoleAlign 与 KIVI-style 做 formal compare。
 本轮探索性对比（详见 §\ref{sec:conclusion-limitations} 第 5 条 Limitation）
 在 bit dictionary $\{4, 8, 16\}$ 与固定 5-model × 5-task 矩阵下
-未能在严格 matched memory budget 下取得 systematic 优势：
+未能在严格 matched memory 预算 下取得 systematic 优势：
 allocator 平均需 1.5--1.8$\times$ KV 内存开销换取约 1--3\% quality 提升，
 且 16\% 的 cell 反向劣于 KIVI（Mistral-7B Pareto-dominated）。
 将来若扩展 bit dictionary（如 2-bit / 3-bit 粒度）或在更长 context / 新架构上重新搜索
-budget-matched policy，可再次评估是否存在让 behavior-guided allocator
-相对 KIVI 稳定占优的\emph{具体 regime 带}——
+预算-matched policy，可再次评估是否存在让 behavior-guided allocator
+相对 KIVI 稳定占优的\emph{具体 适用区间 带}——
 这构成 allocator 线方法贡献（§\ref{sec:ch3-allocator}）
-与 KIVI 格式 baseline 之间的自然延伸工作。
+与 KIVI-style 格式 基线 之间的自然延伸工作。
 
 % ============================================================
 \section{结语}
@@ -215,18 +215,18 @@ KV Cache 量化不是一个"找最佳 bit-width"的优化问题，
 而是一个需要\textbf{组织原则}的系统设计问题。
 本文把\emph{behavior 保持度}作为 KV Cache 量化的 first principle，
 完成了 calibration 与 allocation 两层的统一组织，
-并通过 clean-provenance 跨 5 模型实证
-交付了一张\textbf{可读数的 operating regime 地图}。
+并通过 溯源完整 跨 5 模型实证
+交付了一张\textbf{可读数的 operating 适用区间 地图}。
 
 Regime 地图的价值不在于给出"通用最优"，
 而在于使原本隐藏在"多方法跨模型平均数"背后的结构差异可\textbf{被命名、被复用}：
 3B 的 early-layer rescue、14B 的 top-tier wide-spread、Mistral 的 AutoK cov80 胜利、
-以及 heuristic 在多个 regime 区间里与 behavior-guided 重合的结构观察——
-这 4 条命名规律构成 behavior framework 实证结果的\textbf{操作化入口}。
+以及 heuristic 在多个 适用区间 区间里与 behavior-guided 重合的结构观察——
+这 4 条命名规律构成 behavior 框架 实证结果的\textbf{操作化入口}。
 
 对 KV Cache 社区，本文的贡献是一组\textbf{工具与方法论}：
-一个统一的 calibration-allocation framework、
+一个统一的 calibration-allocation 框架、
 一组可审计的实例化路径（INT8 canonical / INT4 RoleAlign / AutoK）、
-以及一张跨模型 regime 地图与三条诚实的 open question。
+以及一张跨模型 适用区间 地图与三条诚实的 open question。
 我们希望这些工作能为未来的 KV Cache 研究提供\emph{读数尺度}，
 而不仅是一个 point 估计。

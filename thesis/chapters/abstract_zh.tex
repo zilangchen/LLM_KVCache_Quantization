@@ -1,5 +1,5 @@
 % ============================================================
-% abstract_zh.tex — 中文摘要（Phase 8 M+ 重写版）
+% abstract_zh.tex — 中文摘要
 % 对齐 docs/thesis_chapter_drafts_20260420.md §1.3
 % ============================================================
 
@@ -22,10 +22,10 @@ $V$ 误差经加权聚合偏移输出，两侧\emph{耦合}而非正交；
 保持分布 $a$ 的同时也约束了聚合侧项里的 $\hat a_i$ 因子，
 因此以\textbf{分布侧 KL 散度}作为可优化的工程代理，
 可以同时约束两条误差传播路径。
-该 framework 把 calibration 与 budget allocation 两层组织到同一 behavior sensitivity profile
+该 框架 把 calibration 与 预算 allocation 两层组织到同一 behavior sensitivity profile
 作为共享输入的结构下。
 在 Qwen 2.5-\{1.5B, 3B, 7B, 14B\}、LLaMA-3.1-8B 与 Mistral-7B-Instruct-v0.3
-共 6 个模型、5 个 LongBench 任务、clean-provenance pin=\code{ddada19}
+共 6 个模型、5 个 LongBench 任务、数据溯源完整（提交号 \code{ddada19}）
 的实验集合上系统验证该框架，形成三方面贡献。
 
 \textbf{第一}，框架层面，本文以 behavior 保持度
@@ -41,21 +41,21 @@ INT8 canonical path 在 Qwen 2.5-1.5B 上相对 FP16 的 mean $\Delta{=}{+}0.02$
 （3 task 实证不可区分），证明校准层在 canonical 规模下可闭环；
 INT4-RoleAlign 在 KIVI 同 format 下以离线 KL 搜索取代运行时 absmax/min，
 跨 4 模型保持 100\% Needle 与 PPL $\Delta \leq 0.15$；
-AutoK 作为 profile-guided budget proposer 以 cov$80\%$ coverage
+AutoK 作为 profile-guided 预算 proposer 以 cov$80\%$ 覆盖度
 自动确定预算，在 Mistral-7B 上单模型最强正面案例（5 task 赢 3）。
 
 \textbf{第三}，实证层面，跨模型实验揭示一张
-\textbf{(family, scale, task)-dependent 的 operating regime 地图}：
+\textbf{(family, scale, task)-dependent 的 operating 适用区间 地图}：
 Qwen 2.5-3B 呈\emph{小模型早层脆弱}
 （BA-$k_1$ 相对 heuristic-$k_1$ 在 NarrativeQA 上回救 $\Delta \approx {+}4$ 分）；
 Qwen 2.5-14B 呈\emph{大模型 top-tier 共存}
 （top-3 policy 挤在 $3.5\%$ 相对距离内）；
-Mistral-7B 呈 AutoK 胜出；多个 regime 区间里 heuristic 与 behavior-guided
+Mistral-7B 呈 AutoK 胜出；多个 适用区间 区间里 heuristic 与 behavior-guided
 选中集合重合，正面承认 heuristic 为强基线。
-framework 的价值因此从"击败弱对手"\textbf{抬升为"揭示结构分区"}——
-提供一个\textbf{可读数的 regime 工具}，而不是一个"永远最优"的 point 估计。
+框架 的价值因此从"击败弱对手"\textbf{抬升为"揭示结构分区"}——
+提供一个\textbf{可读数的 适用区间 工具}，而不是一个"永远最优"的 point 估计。
 
-\keywordszh{大语言模型；KV Cache 量化；behavior-guided 校准；regime 地图；
+\keywordszh{大语言模型；KV Cache 量化；behavior-guided 校准；适用区间 地图；
 非对称量化；AutoK；预算分配}
 
 \end{abstractzh}
