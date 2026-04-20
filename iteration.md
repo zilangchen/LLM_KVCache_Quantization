@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-21 01:13 | Ch3 逐节优化 Round 2: §3.3 行为引导校准方法清理（10 处 surgical）
+- Goal: §3.3 结构/内容 depth 合适无需重写，但存在 meta 自我否定 + 散装英文 + 错位加粗 + 内部注释泄露等 surgical 问题
+- Scope: thesis/chapters/ch3_method.tex §3.3 L154-284
+- Changed files: ch3_method.tex (10 处替换)
+- 10 处清单:
+  - HIGH H1: 删除 L245 meta 自我否定句 "$H_{kv}$... 而非全文的组织脊柱" (违反纪律一正向陈述)
+  - HIGH H2: L244 空格 artifact "提供了 行为引导 校准目标" → "提供了行为引导校准目标"
+  - HIGH H3: L179 `\textbf{完整流程}` 错位加粗 → 去 textbf + 重写"在离线校准阶段可视化"
+  - HIGH H4: L248 label 内部注释 "% 保留 label 用于 backward-compat" 删除
+  - MED M1: L243 "bit-width" → "位宽"
+  - MED M2a: L265 "robust 优先策略" → "稳健优先策略"
+  - MED M2b: L272 "完整 calibration 过程" → "完整校准过程"
+  - MED M2c: L280 "diagnostic 观察" → "诊断观察"
+  - MED M2d: L282 "在 calibration 与推理阶段" → "在校准与推理阶段"
+  - MED M3a: L180+L181 "两条 path" × 2 → "两条路径"
+  - MED M3b: L182 "降级为附录 diagnostic note" → "降级为附录诊断说明"
+- 保留: 三点选 KL 理由 / forward vs reverse KL / epsilon 截断数值分析 / 专业术语英文 (softmax/mass-covering/Jensen-Shannon)
+- Commands: python heredoc 10 处 str.replace (比 Edit tool 单处替换更快) + xelatex ×2
+- Outputs: main.pdf 99 pages / 1.64 MB
+- Validation: 0 undefined / 0 multiply-defined / 0 dim-too-large / 0 error
+- Risks / follow-ups: 下一步 Round 3 §3.4 (10 subsec 的行为引导 INT8/INT4 实现，最长一节)
+
 ### 2026-04-21 01:05 | Ch3 逐节优化 Round 1: §3.1 微调 + §3.2 完全重写 + 全章空格 sweep
 - Goal: 用户启动"一节一节优化"模式。Round 1 目标：§3.1 两处微调通过（最小 commit），§3.2 大刀阔斧解决三层重复，同时清扫 Stage 2 残留的 13+ 处空格 artifact
 - Scope: thesis/chapters/ch3_method.tex
