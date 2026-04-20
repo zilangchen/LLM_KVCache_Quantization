@@ -36,6 +36,42 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-21 05:18 | Ch2 整章重构 Round 1: 碎 subsec 合并 + §2.4 精简 + 散装英文清理 (20 处)
+- Goal: 用户给 Ch2 3 条指令 + 我补 4 条额外发现; 一次性推到 review-ready
+- Scope: thesis/chapters/ch2_related_work.tex + ch3_method.tex (加 label)
+- Changed files:
+  - ch2_related_work.tex: Phase 1 结构 (13 处) + Phase 2 术语 (7 处)
+  - ch3_method.tex: §3.4.5 加 \label{subsec:ch3-rolealign-vs-kivi} (为 Ch2 ref 服务)
+- Phase 1 结构改动 (13 处):
+  - §2.1 删 3 个 subsec 标题 (Decoder-only / 自注意力计算 / 多头+GQA → 合并为 prose, 无 subsec)
+  - §2.5 删 3 个 subsec 标题 (FlashAttention / PagedAttention / Triton → 同样合并)
+  - §2.4 L293-308 "两正交维度段" (22 行) 精简为 8 行 (去重复 Ch3 内容; 保留 research-gap 定位)
+  - §2.4 "相对 KIVI 的三层关系定位" paragraph (17 行含 itemize) 整段删除 (内容已在 Ch3 §3.4.5 覆盖, cross-ref 到 subsec:ch3-rolealign-vs-kivi)
+  - §2.4.1 温度校正对比段 (25 行 Velickovic/AhaKV + 三点 differences + 未纳入 claim) 瘦身为 6 行
+  - §2.6 删"空白三：温度校正 GQA 尺度依赖"整段 (9 行, 温度校正已降级 appendix; 四空白 → 三空白, 原空白四升为空白三)
+  - §2.6 空白三 (原空白四) 后续段散装清理 (3 空白 → 2 空白 + behavior sensitivity profile / calibration / allocation 术语化)
+  - §2.6 总结段清理 (behavior-guided / attention-KL / behavior sensitivity profile / fused-kernel efficiency phase boundary → 中文化)
+- Phase 2 术语 sweep (7 处):
+  - attention score → 注意力得分
+  - attention 内部 → 注意力内部
+  - output logits → 输出 logits
+  - behavior-guided 框架 → 行为引导框架
+  - KV compression 综述 → KV 缓存压缩综述
+  - KV cache → KV Cache (大小写统一)
+  - 基准 前后空格清理
+- Ch3 附带改动: §3.4.5 "与 KIVI 的设计差异" 加 subsec:ch3-rolealign-vs-kivi label (支撑 Ch2 cross-ref)
+- 新 Ch2 TOC (6 section):
+  - §2.1 Transformer 架构与自注意力机制 (无 subsec, 3 段 prose)
+  - §2.2 KV Cache 机制与显存分析 (保留 2 subsec)
+  - §2.3 模型量化技术基础 (保留 3 subsec)
+  - §2.4 KV Cache 量化相关工作 (4 paragraph + §2.4.1 量化对注意力分布)
+  - §2.5 高效注意力计算 (无 subsec, 3 段 prose)
+  - §2.6 本章小结 (3 空白 + 总结)
+- Commands: 单 python heredoc 一次性 apply + xelatex ×2
+- Outputs: main.pdf 100 → 98 pages (压缩 2 页) / 1.64 MB
+- Validation: 0 undef / 0 multi / 0 dim / 0 error
+- 下一步: 继续 Ch2 可能遗漏项或进 Ch4/Ch5 review
+
 ### 2026-04-21 04:50 | Ch3 Round 8: §3.4 Triton 5 subsec 合并为 1 subsec + 5 paragraph
 - Goal: 用户反馈 §3.4.6/7/8 (INT8 核函数 / INT4 核函数 / INT4 非对称融合核函数) 三个小节应合并为一个"Triton 核函数设计"小节; §3.4.10 标题 "经验交叉点：融合核延迟收益的 (H_kv, seq_len) 空间特征" 太长, 且内容属于 Triton 范畴, 应一并并入
 - Scope: thesis/chapters/ch3_method.tex §3.4.6-10 五 subsec 合并
