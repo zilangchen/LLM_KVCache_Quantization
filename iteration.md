@@ -36,6 +36,29 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-21 04:50 | Ch3 Round 8: §3.4 Triton 5 subsec 合并为 1 subsec + 5 paragraph
+- Goal: 用户反馈 §3.4.6/7/8 (INT8 核函数 / INT4 核函数 / INT4 非对称融合核函数) 三个小节应合并为一个"Triton 核函数设计"小节; §3.4.10 标题 "经验交叉点：融合核延迟收益的 (H_kv, seq_len) 空间特征" 太长, 且内容属于 Triton 范畴, 应一并并入
+- Scope: thesis/chapters/ch3_method.tex §3.4.6-10 五 subsec 合并
+- Changed files: ch3_method.tex (5 处 subsec → paragraph demotion)
+- 改动清单:
+  - §3.4.6 "INT8 核函数设计" subsection → "Triton 核函数设计" subsection (保留 sec:ch3-triton label), 原 body 成 `\paragraph{INT8 核函数}` (保留 subsec:ch3-triton-int8)
+  - §3.4.7 "INT4 核函数设计" subsec → `\paragraph{INT4 核函数}` (保留 subsec:ch3-triton-int4)
+  - §3.4.8 "INT4 非对称融合核函数" subsec → `\paragraph{INT4 非对称核函数}` (保留 subsec:ch3-triton-int4-asym)
+  - §3.4.9 "GQA 支持机制" subsec → `\paragraph{GQA 支持}` (保留 subsec:ch3-gqa, 顺手简化标题)
+  - §3.4.10 "经验交叉点: ..." 长标题 subsec → `\paragraph{经验交叉点}` (保留 subsec:ch3-phase-boundary, 去 texorpdfstring)
+- 新 §3.4 TOC (从 10 → 6 subsec):
+  - §3.4.1 静态 Scale 的设计
+  - §3.4.2 自适应保护机制
+  - §3.4.3 从对称到非对称的格式升级
+  - §3.4.4 Behavior-Guided Percentile 校准
+  - §3.4.5 与 KIVI 的设计差异
+  - §3.4.6 Triton 核函数设计 (含 INT8/INT4/INT4 非对称/RoleAlign 分工/GQA/经验交叉点 6 paragraph)
+- Commands: python heredoc str.replace ×5 + xelatex ×2
+- Outputs: main.pdf 99 pages / 1.64 MB (保持, 因为内容等量保留)
+- Validation: 0 undef / 0 multi / 0 dim / 0 error; 所有 label (sec:ch3-triton / subsec:ch3-triton-int8/int4/int4-asym/gqa/phase-boundary) 保留跨章 ref 兼容
+- Tag: `thesis-m-plus-v5.1` (标记 Ch3 subsec 合并后的稳定版本)
+- 下一步: 继续 Ch3 review 或开 Ch4
+
 ### 2026-04-21 04:40 | Ch3 Round 7: Codex adversarial-review 5 issues 全修 (7a + 7b 共 14 处)
 - Goal: Codex 过审 Ch3 v4 发现 2 HIGH + 1 MED + 2 LOW 全是真问题 (verdict: needs-attention)；按 Round 7a (快速) + Round 7b (HIGH 1 口径统一) 两子轮全修
 - Scope: thesis/chapters/ch3_method.tex
