@@ -36,6 +36,43 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 22:27 | Codex 7 issues 全修 + 写作纪律固化（memory）
+- Goal: 用户审批 Codex adversarial-review 的 8 条意见全部为真问题，按 1-7 顺序全修（P2.8 图 vs 文档归为 control doc 层低优先做）；同时用户提出两条贯穿全文的写作纪律——正向陈述不写反向、学术论文语气不写技术报告——固化到 memory 并应用到这一轮所有修改
+- 写作纪律固化：
+  - `feedback_thesis_writing_style.md` 新建：两条纪律（正向陈述 / 不堆 bullet / 不暴露 internal terms）+ 正反例
+  - MEMORY.md 索引追加；未来论文写作贯穿适用
+- Codex 7 issues 修复（按 1-7 顺序执行）：
+  1. **P1.3 附录 A/B 数字错**：从 `results/l2_prompt_adaptive_summary_final.csv`（frozen CSV）+ `completion_report 8B table` 重生附录 A（8B）与附录 B（1.5B/7B）的 15 row × 3 variant 完整数据，学术段落替代 "Gate C / OFF-PROTOCOL / Weak-Mixed" 等 internal verdict
+  2. **P2.6 + Ch4 §4.6 旧叙事孤岛**：Ch4 §4.6 "综合讨论"开头 "以 H_kv 为组织轴" 段 + 3 bulleted "主要发现"（旧 KL-MSE/Key 主导/融合核相位图 = 旧 5-Contribution summary）整段重写为 behavior-guided framework 贯通 C1/C2/C3 的连贯叙事段；威胁效度第 1 条"H_kv 与规模共变" 降级为"$H_{kv}$ 作为解释变量，不是全文组织脊柱"；Ch2 §2 "研究空白四" 从 "H_kv 组织轴" 重构为 "behavior 保持度作为贯通 calibration 与 allocation 的统一目标"；Ch3 §3.2 L248 "以 H_kv 为结构性相关变量的实验起点" 也改
+  3. **P1.1 provenance + P1.2 matched-budget 口径统一**：Ch4 clean-provenance 段落从"本章所有正文数字"软化为"final-ready 数据来自 clean-provenance + supporting 对比跨模型用 legacy backport"；Ch1 §1.4 C3 + Abstract en + T3 caption + T3 note + Ch4 §4.5.1 Mistral 共 5 处 "matched INT4 budget" → "same-order INT4 budget band" 正向表述；T3 note "±3%" 改为指向 budget band 定义段的 forward ref；Ch2/Ch4/Ch5 中 3 处 "本章不包含 X" / "只做 X，不做 Y" 反向陈述改为正向 scope 声明
+  4. **P2.5 Ch3 tau⁻¹ 主体内部冲突**：§3.2 在线推理阶段 tau⁻¹ 预缩放描述 → 静态 Scale-only 在线路径；§3.3 "两阶段搜索策略" subsection 重写为 "Scale 搜索策略"（第二阶段 tau⁻¹ 搜索段改写为 "温度校正的历史定位" —— 诊断观察在 appendix 保留）；§3.5 生成循环集成 tau⁻¹ hook 注入描述 → 静态 Scale 路由；tab:ch3-kv-modes 的 $\tau^{-1}$ 列删除（6 列→5 列）；复杂度段 "第二阶段 tau⁻¹ 搜索" 删除；校准产物存储段 tau⁻¹ 删除
+  5. **P1.4 §4.1 scope 分层**：L47 "实验覆盖四个开源大语言模型" → "六个开源大语言模型...依 experimental role 分为三类 (canonical validation / cross-model main matrix / supporting reference)"；LongBench-style 7 任务 benchmark vs 5 task main matrix 关系补写
+  6. **P2.7 附录 internal terms**：与 #1 合并处理，附录 A/B 重写时全部清零
+  7. **P2.8 图 vs 画图文档漂移**：tracker 追加"图表与 doc 对齐说明"；story §11 图④ spec 由用户手动调整（接受 linter 改动不 revert）
+- Changed files:
+  - thesis/chapters/ch1_introduction.tex (matched-budget)
+  - thesis/chapters/ch2_related_work.tex (H_kv 组织轴 + 空白四 + positioning 段)
+  - thesis/chapters/ch3_method.tex (tau⁻¹ 主体清理 × 5 处)
+  - thesis/chapters/ch4_experiments.tex (provenance + scope + §4.6 整段 + matched-budget × 3)
+  - thesis/chapters/ch5_conclusion.tex (Limitation 5 正向化)
+  - thesis/chapters/abstract_en.tex (matched-budget → same-order)
+  - thesis/chapters/appendix.tex (附录 A + B 重生 with frozen CSV + internal terms 清零)
+  - thesis/tables/table_t3_cross_model_main.tex (caption + note 改口径)
+  - scripts/thesis/make_table_cross_model_compare.py (脚本 source 同步)
+  - docs/thesis_rewrite_tracker_20260420.md (figure sync note)
+  - ~/.claude/...memory/feedback_thesis_writing_style.md (新建, 写作纪律 memory)
+  - ~/.claude/...memory/MEMORY.md (索引追加)
+- Validation:
+  - xelatex × 2 pass → main.pdf 100 → 101 pages, 1.64 MB
+  - 0 undefined ref / 0 undefined cite / 0 multiply-defined / 0 Dimension too large / 0 error
+  - grep 附录 A 新数字（9.73/10.77/12.16/10.03）✓ 匹配 frozen CSV
+  - grep Hook-conditional 语言 → 0 match
+  - grep H_kv 组织轴 → 清理到合理引用
+- Risks / follow-ups:
+  - 进入"逐段 collaborative review"模式（用户明确要求）
+  - main.pdf 100 → 101（+1 from §4.6 重写 + 附录扩写）
+- Commit: <pending 本批>
+
 ### 2026-04-20 21:57 | Thesis Hook closure 落地 — Ch4/Ch5 条件性 Hook 条款全部清除
 - Goal: 响应 `docs/allocator_vs_kivi_closed_20260420.md` §5 的 thesis-side action list，把 Ch4 / Ch5 里所有"若 Hook 激活..." / "条件 Future Work" / "story §13 Hook" 类 conditional 措辞全部改为非条件的 past-tense 陈述（L4_CLOSED 决定后不保留后门式 disclaimer）
 - Scope:

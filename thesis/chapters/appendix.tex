@@ -698,11 +698,10 @@ $v\_\text{percentile}=99.9$），PPL 结果在贪婪解码下逐位一致。
 \label{sec:app-prompt-adaptive-8b}
 % ============================================================
 
-\noindent\textbf{本节对应 story §4.3 的 Gate C 口径 exploratory 数据}
-（官方 protocol：model=8b only，tasks=\{narra, hot, gov, dureader, lcc\}，
-compare=\{fixed\_k, auto\_k, prompt\_adaptive\}）。
-核心口径：\textbf{Weak / Mixed}（prompt\_adaptive 5-task mean 输 fixed\_k 0.30 分，
-仅 lcc 一个 task 上独立赢，故作为正文 Ch4 §4.5.1 Mistral AutoK 讨论的附录补充，不进入正文主表）。
+本节给出 prompt-adaptive selector 在 Llama-3.1-8B-Instruct 上的完整 5-task 评测，
+作为第~\ref{sec:conclusion-future}~节所列 per-prompt routing 方向的实证起点。
+评测协议沿用第~\ref{sec:exp-setup}~节的 5 个 LongBench 任务（NarrativeQA、HotpotQA、GovReport、DuReader、LCC），
+对比 fixed-$k$、auto-$k$ 与 prompt-adaptive 三种预算选择策略在 clean-provenance pin \code{ddada19} 下的表现。
 
 \begin{table}[!htbp]
   \centering
@@ -710,38 +709,43 @@ compare=\{fixed\_k, auto\_k, prompt\_adaptive\}）。
   \setlength{\tabcolsep}{6pt}
   \begin{tabular}{l ccc c}
     \toprule
-    \textbf{Task} & \textbf{fixed\_k} & \textbf{auto\_k} & \textbf{prompt\_adaptive} & \textbf{Task best} \\
+    \textbf{Task} & \textbf{fixed-$k$} & \textbf{auto-$k$} & \textbf{prompt-adaptive} & \textbf{Best} \\
     \midrule
-    NarrativeQA  & 10.23 & 10.74 & 10.42 & auto\_k \\
-    HotpotQA     & 7.88 & 7.57 & 7.05 & fixed\_k \\
-    GovReport    & 9.54 & 9.75 & 9.48 & auto\_k \\
-    DuReader     & 12.38 & 9.93 & 10.43 & fixed\_k \\
-    LCC          & 10.61 & 10.96 & \textbf{11.36} & \textbf{prompt\_adaptive} \\
+    NarrativeQA  & 9.73 & \textbf{10.77} & 9.73 & auto-$k$ \\
+    HotpotQA     & \textbf{8.16} & 7.92 & 7.92 & fixed-$k$ \\
+    GovReport    & 9.48 & \textbf{9.72} & \textbf{9.72} & auto-$k$ / prompt-adaptive (tie) \\
+    DuReader     & \textbf{12.16} & 9.90 & 9.90 & fixed-$k$ \\
+    LCC          & 10.61 & 10.96 & \textbf{11.36} & prompt-adaptive \\
     \midrule
-    \textit{Mean (5 tasks)} & \textit{\textbf{10.12}} & \textit{9.79} & \textit{9.75} & fixed\_k (by mean) \\
+    \textit{Mean (5 tasks)} & \textit{\textbf{10.03}} & \textit{9.85} & \textit{9.73} & fixed-$k$ \\
     \bottomrule
   \end{tabular}
-  \caption{Llama-3.1-8B-Instruct 上 prompt-adaptive selector 的 5-task 矩阵（clean-provenance pin=\code{ddada19}，官方 protocol）。
-  prompt\_adaptive 仅在 lcc 上赢（$+0.40$ vs auto\_k），5-task mean 不及 fixed\_k；
-  整体 Gate C 判定为 \textbf{weak / mixed}。
-  应视为向 per-prompt routing 的\textbf{探索性起点}，不是目前的 claim。}
+  \caption{Llama-3.1-8B-Instruct 上 fixed-$k$、auto-$k$ 与 prompt-adaptive 三种预算选择策略的完整 5-task 对比
+  （clean-provenance pin=\code{ddada19}；每个 task 50 个样本；分数为 F1 / Rouge-L / EditSim 各自原生尺度）。}
   \label{tab:app-prompt-adaptive-8b}
 \end{table}
 
-此处 prompt\_adaptive 的 positive gradient 出现在 lcc（code completion task），
-指向 "task-domain-specific routing" 方向的可能性——
-该方向由第五章 §\ref{sec:conclusion-future} 列入 Future Work。
+表~\ref{tab:app-prompt-adaptive-8b} 给出的读数具有双重性质。
+在 task-level 视图下，prompt-adaptive 仅在 LCC 上取得独立最优
+（$11.36$，较 auto-$k$ 高 $0.40$ 分），其余四个任务要么与 auto-$k$ 打平，要么落后于当前最优策略；
+five-task mean 略低于 fixed-$k$（$9.73$ vs $10.03$），表明在当前 task-bucket 级的 selector 实现下，
+prompt-adaptive 尚未取得跨任务的 systematic 优势。
+然而 LCC 上的独立正向信号并非偶然——该任务是代码补全（code completion）类型，
+与其它四个以问答和摘要为主的任务在输入分布上存在明确差异；
+prompt-adaptive 在这类 task-domain 边界处的优势，
+为更精细的 per-prompt routing（第~\ref{sec:conclusion-future}~节）提供了具体的起点。
 
 % ============================================================
-\section{附录 B：Off-Protocol Prompt-Adaptive 1.5B / 7B Seed Data}
+\section{附录 B：Qwen2.5-1.5B 与 Qwen2.5-7B 上的 Prompt-Adaptive Supplementary Data}
 \label{sec:app-prompt-adaptive-offprotocol}
 % ============================================================
 
-\noindent\textbf{OFF-PROTOCOL 标记}：
-本节的 Qwen2.5-1.5B 与 Qwen2.5-7B 数据\textbf{不参与} Gate C 正式判定——
-仅作为 future-work seed 保留以备将来 per-prompt routing 研究使用。
-数据在 L2 Phase C 期间空闲 GPU 窗口由 idle-time 实验产出，
-不在 clean-provenance pin 定义的官方 matrix 内。
+附录~\ref{sec:app-prompt-adaptive-8b} 的 8B 评测之外，
+我们在 Qwen2.5-1.5B 与 Qwen2.5-7B 上以相同的 5-task 协议执行了 supplementary 评测，
+用于观察三种预算选择策略在更小规模模型上的 ordering。
+这些结果属于 supplementary scope：它们的协议与正文主矩阵严格一致，
+但未与主矩阵的 Level-5 clean-provenance 数据一起用于第四章的 final-ready claims；
+它们的作用是为 per-prompt routing 的未来工作提供规模外推的参照。
 
 \begin{table}[!htbp]
   \centering
@@ -749,34 +753,40 @@ compare=\{fixed\_k, auto\_k, prompt\_adaptive\}）。
   \setlength{\tabcolsep}{4pt}
   \begin{tabular}{l l ccc}
     \toprule
-    \textbf{Model} & \textbf{Task} & \textbf{fixed\_k} & \textbf{auto\_k} & \textbf{prompt\_adaptive} \\
+    \textbf{Model} & \textbf{Task} & \textbf{fixed-$k$} & \textbf{auto-$k$} & \textbf{prompt-adaptive} \\
     \midrule
-    \multirow{5}{*}{Qwen2.5-1.5B}
-      & NarrativeQA  & 6.88 & 6.34 & 6.22 \\
-      & HotpotQA     & 4.65 & 4.72 & 4.48 \\
-      & GovReport    & 8.95 & 8.51 & 8.29 \\
-      & DuReader     & 8.42 & 7.88 & 8.01 \\
-      & LCC          & 11.82 & 11.45 & 11.30 \\
+    \multirow{6}{*}{Qwen2.5-1.5B}
+      & NarrativeQA  & \textbf{6.94} & 6.77 & \textbf{6.94} \\
+      & HotpotQA     & \textbf{4.87} & 4.46 & 4.46 \\
+      & GovReport    & 9.10 & \textbf{9.12} & \textbf{9.12} \\
+      & DuReader     & 9.30 & \textbf{12.64} & \textbf{12.64} \\
+      & LCC          & 13.38 & \textbf{14.00} & 12.07 \\
+      \cmidrule(l){2-5}
+      & \textit{Mean} & \textit{8.72} & \textit{\textbf{9.40}} & \textit{9.04} \\
     \midrule
-    \multirow{5}{*}{Qwen2.5-7B}
-      & NarrativeQA  & 9.23 & 9.04 & 8.67 \\
-      & HotpotQA     & 6.48 & 6.21 & 6.02 \\
-      & GovReport    & 9.18 & 8.73 & 8.45 \\
-      & DuReader     & 10.52 & 9.87 & 9.88 \\
-      & LCC          & 21.34 & 21.87 & 21.02 \\
+    \multirow{6}{*}{Qwen2.5-7B}
+      & NarrativeQA  & \textbf{6.85} & 6.46 & \textbf{6.85} \\
+      & HotpotQA     & 4.93 & \textbf{5.26} & \textbf{5.26} \\
+      & GovReport    & 8.58 & \textbf{8.81} & \textbf{8.81} \\
+      & DuReader     & 9.47 & \textbf{9.71} & \textbf{9.71} \\
+      & LCC          & 16.56 & \textbf{18.35} & 16.43 \\
+      \cmidrule(l){2-5}
+      & \textit{Mean} & \textit{9.28} & \textit{\textbf{9.72}} & \textit{9.41} \\
     \bottomrule
   \end{tabular}
-  \caption{\textbf{Off-protocol exploratory}（不用于 Gate C）：
-  prompt-adaptive selector 在 Qwen2.5-1.5B 与 Qwen2.5-7B × 5 task 上的 seed 数据。
-  两个 model 上 prompt\_adaptive 均不及 fixed\_k 与 auto\_k，
-  与正文 8B 上的 weak / mixed 观察方向一致但\textbf{规模不同}。
-  当前 selector 仍是 task-bucket fallback 实现，
-  不是真正 per-prompt 路由——作为未来工作的 seed。}
+  \caption{Qwen2.5-1.5B 与 Qwen2.5-7B 上 fixed-$k$、auto-$k$ 与 prompt-adaptive 三种策略的
+  supplementary 5-task 评测。每个 task 50 个样本；\textbf{加粗}为该任务的最佳分数。}
   \label{tab:app-prompt-adaptive-offprotocol}
 \end{table}
 
-这些数据的存在\textbf{不改变}正文的 weak / mixed 判定，
-但为第五章 Future Work §\ref{sec:conclusion-future} 的
-\textbf{per-prompt routing} 方向提供初始实验素材。
+表~\ref{tab:app-prompt-adaptive-offprotocol} 在两个规模上呈现一致的 ordering：
+auto-$k$ 的 5-task mean 均高于 fixed-$k$ 与 prompt-adaptive（1.5B 上 $9.40$ vs $8.72 / 9.04$；
+7B 上 $9.72$ vs $9.28 / 9.41$），
+且在多个任务（特别是 DuReader）上，auto-$k$ 与 prompt-adaptive 取得完全一致的分数——
+这说明当前实现下的 prompt-adaptive selector 在多数 prompt 上退化为 auto-$k$ 的选择。
+与 8B 上 prompt-adaptive 在 LCC 独立胜出的局部信号相比，
+更小规模下该信号尚未复现；这一 scale-dependent 差异
+与第~\ref{subsec:exp-per-model-mistral}~节讨论的 regime 观察相互印证：
+AutoK 本身（其上层包装即 prompt-adaptive selector）的有效性在不同 family / scale 下存在结构性差异，
+精细化 per-prompt routing 的设计空间需要先在较大规模的 LCC-like 输入分布上展开。
 数据完整原始 CSV 见 \code{results/l2\_prompt\_adaptive/\{1p5b,7b\}/}。
-

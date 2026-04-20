@@ -196,7 +196,23 @@
 
 ---
 
-## 最后一次更新：2026-04-20 04:31 — Phase 1 + Phase 2 + Phase 3 完成
+## 最后一次更新：2026-04-20 22:XX — Hook L4_CLOSED + Codex 7 issues 全修
+
+**Phase 后续修订（Phase 3-10 之后的修订）**：
+- Hook closure（commit `1a65d46`）：Allocator-vs-KIVI 条件性语言全部清除，allocator 作为方法贡献保留
+- Codex 7 issues 全修：provenance 口径精确化 / matched-budget → budget band 改口径 /
+  Prompt-adaptive 附录 A/B 用 frozen CSV 重生 / Ch4 §4.6 从旧叙事 summary 重写为 behavior framework 贯通三层 /
+  Ch3 tau⁻¹ 主体清理（在线推理段 + 两阶段搜索 subsection + 复杂度段 + 产物存储）/
+  §4.1 scope 分层（6 model / 4 main / 1.5B canonical / 7B supporting + 5-task main 从 7-task benchmark 中选取）/
+  附录 internal terms 清零（Gate C / OFF-PROTOCOL / idle-time）
+
+**当前图表与画图文档的对齐说明**：
+图表实际产出（main.pdf）的成图形态与本文档 §16 早期 spec 之间存在因数据可行性导致的调整，
+正文 caption 已按实际成图对齐；
+若后续需要重新生成任一图表，以 scripts/thesis/plot_*.py 的实际输出为准，
+本文档 §11 / §16 的早期 spec 仅保留作设计意图参考。
+
+## 前期更新：2026-04-20 04:31 — Phase 1 + Phase 2 + Phase 3 完成
 
 - Phase 1 ✅ Ch1 §1.2 / §1.3 / §1.4（Codex adversarial-review 2 轮 pass）
 - Phase 2 ✅ Ch3 全章重写（+140 行）

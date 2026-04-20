@@ -28,11 +28,15 @@
 第~\ref{sec:exp-discussion}~节把本章的经验结论收束到第五章的讨论起点。
 
 \paragraph{Clean-provenance 数据基线。}
-本章所有正文数字来自 \textbf{clean-provenance pin \code{ddada19}} 下重跑的 canonical 数据
-（\code{results/clean\_rerun\_20260419T09/}），
-runtime 文件以 md5-locked manifest 固化，校准产物统一重建，
-以排除早期多轮迭代中的配置漂移影响；
-exploratory / off-protocol 数据仅在附录出现并明确标记。
+本章的 final-ready 数据（INT8 canonical 保真度、cross-model regime map 主矩阵、
+以及 Mistral / 3B / 14B 的 per-model case 表）来自 \textbf{clean-provenance pin \code{ddada19}}
+下重跑的 canonical 数据（\code{results/clean\_rerun\_20260419T09/}），
+runtime 文件以 md5-locked manifest 固化，校准产物统一重建。
+跨模型 INT4 vs KIVI supporting 对比（表~\ref{tab:t2-int4-kivi}）
+在 Qwen2.5-1.5B 上与 clean-provenance 路径已交叉验证一致，
+其 7B / 8B / 14B 行沿用 legacy 产物作为 external-validity 参照；
+supplementary 评测数据（附录~\ref{sec:app-prompt-adaptive-8b}--\ref{sec:app-prompt-adaptive-offprotocol}）
+在附录中明确其 scope。
 
 % ============================================================
 \section{实验设置}
@@ -44,7 +48,19 @@ exploratory / off-protocol 数据仅在附录出现并明确标记。
 \label{subsec:exp-model-hardware}
 % ------------------------------------------------------------
 
-实验覆盖四个开源大语言模型（跨三个模型族），配置汇总见表~\ref{tab:ch4-models}。
+实验覆盖六个开源大语言模型，跨越 Qwen2.5、LLaMA-3.1、Mistral 三个模型族与 1.5B 至 14B 的参数规模，
+配置汇总见表~\ref{tab:ch4-models}。
+这六个模型在本章评测体系中承担三类不同角色。
+\emph{Canonical validation}：Qwen2.5-1.5B-Instruct 作为主规范模型，
+承担 INT8 canonical path 保真度证据（表~\ref{tab:t1-int8-canonical}）
+及完整的量化模式对照基线；其数据在第~\ref{subsec:exp-int8-canonical}~节独立呈现。
+\emph{Cross-model main matrix}：Qwen2.5-3B-Instruct、Qwen2.5-14B-Instruct、
+LLaMA-3.1-8B-Instruct 与 Mistral-7B-Instruct-v0.3 共四个模型
+构成第~\ref{sec:exp-cross-model}~节的 regime map 主矩阵，
+跨模型呈现 per-model 最优预算分配策略的异质性。
+\emph{Supporting reference}：Qwen2.5-7B-Instruct 作为同族规模对照与 KIVI-style 跨模型参照
+出现于表~\ref{tab:t2-int4-kivi}，并在附录~\ref{sec:app-prompt-adaptive-offprotocol}
+的 supplementary 评测中参与。
 头维度统一为 128；所有实验在单张 NVIDIA H20 GPU（98~GB HBM）上完成。
 软件环境为 Python 3.12、PyTorch 2.8.0（CUDA 12.8）、Transformers 库和 Triton 编译器，
 完整依赖版本记录在 \code{env/versions.txt} 和 \code{env/requirements\_freeze.txt} 中。
@@ -110,8 +126,11 @@ exploratory / off-protocol 数据仅在附录出现并明确标记。
 
 \textbf{（3）LongBench-style 合成评测。}
 借鉴 LongBench~\cite{bai2024longbench} 的任务分类体系，
-本文自行实现了确定性合成 QA 生成器，
-覆盖 7 个代表性任务类别：
+本文自行实现了确定性合成 QA 生成器，作为 benchmark 定义覆盖 7 个代表性任务类别。
+第~\ref{sec:exp-cross-model}--\ref{sec:exp-per-model}~节的 cross-model main matrix
+从中抽取 5 个任务（NarrativeQA、HotpotQA、GovReport、DuReader、LCC）作为主评测；
+其余任务作为 benchmark 背景描述出现。
+7 个任务的完整类别如下：
 单文档问答（narrativeqa、dureader）、
 多文档问答（hotpotqa）、
 摘要生成（gov\_report、vcsum）、
@@ -305,9 +324,9 @@ INT8 canonical path 以离线 KL 行为对齐校准得到逐层 scale，
 §\ref{subsec:exp-int4-cross-model} 以 Table~\ref{tab:t2-int4-kivi} 给出跨 4 模型的 RoleAlign vs KIVI 对比；
 §\ref{subsec:exp-int4-honest} 给出本节的\textbf{三层诚实分析}
 （L1 事实 / L2 suggests / L3 open question）。
-本章不包含 matched-budget 下的 Allocator-vs-KIVI formal comparison——
-allocator 作为方法贡献在第三章保留（§\ref{sec:ch3-allocator}），
-但本论文不就"系统性超越 KIVI"作 claim；相关讨论见 §\ref{sec:conclusion-future}。
+本章将 allocator 定位为第三章所提出的 per-layer bit allocation 方法贡献
+（§\ref{sec:ch3-allocator}），其与 KIVI 之间严格 matched-budget 下的 systematic 对比
+作为第~\ref{sec:conclusion-future}~节列出的 Future Work 延展方向。
 
 \paragraph{对称 INT4 的阶跃崩塌（motivation）。}
 在 INT8 下可行的 behavior-guided 对称量化在 INT4 下遇到实证瓶颈：
@@ -799,9 +818,9 @@ Qwen2.5-1.5B 与 Qwen2.5-3B 的小模型趋势合并叙述于 §\ref{subsec:exp-
 \label{subsec:exp-per-model-mistral}
 % ------------------------------------------------------------
 
-Mistral-7B 是本章 4 模型中 behavior-guided AutoK 最清晰的赢家：
-在 matched INT4 budget 下跨 5 task（3 core + 2 extend）对比
-4 种 allocator policy，\textbf{BA-AutoK（cov$80$\%）在 3 个 task 上取得 best、mean 上领先其它 3 个 family}。
+在本章 4 个 cross-model 评测模型中，Mistral-7B 是 behavior-guided AutoK 最清晰的正面案例：
+在同量级 INT4 budget band 内（定义见第~\ref{para:ch4-budget-band}~节）跨 5 task（3 core + 2 extend）对比
+4 种 allocator policy，\textbf{BA-AutoK（cov$80$\%）在 3 个 task 上取得 best，5-task mean 亦领先其它 3 个策略族}。
 数据详见表~\ref{tab:t4-mistral-autok}。
 
 \input{tables/table_t4_mistral_autok}
@@ -1055,25 +1074,39 @@ INT4 量化在所有模型上均实现约 73\% 的 KV Cache 压缩率。
 \label{sec:exp-discussion}
 % ============================================================
 
-本节以 $H_{kv}$ 为组织轴汇总三条核心发现，
-讨论 PPL 非单调现象，
-并给出效度威胁声明。
+本节把第~\ref{sec:exp-setup}--\ref{sec:exp-deployment}~节的实证证据按本文框架的三层贡献重新汇合，
+讨论 PPL 退化随规模变化的一个非单调观察，
+并在小节末给出效度威胁声明，明确结论在跨硬件、跨分布与跨规模情形下可靠外推的边界。
 
 % ------------------------------------------------------------
 \subsection{主要发现}
 \label{subsec:exp-findings}
 % ------------------------------------------------------------
 
-综合各节实验证据，本章在 $H_{kv}$ 组织下得到三条主发现：
-(i) 校准目标的 KL-vs-MSE 分歧呈 bit-width $\times$ 规模双重依赖
-（INT8 下趋同，INT4 下在 $H_{kv}=2$ 分化而在 $H_{kv}=4$ 趋同）；
-(ii) Key 主导退化在四模型 K/V 消融上一致
-（14B 保留 Key 为 FP16 恢复 93\% PPL 退化），
-诊断导出的 per-channel K + per-token V 格式（INT4-RoleAlign）
-保持四模型 Needle 100\% 与 KV 压缩约 73\%；
-(iii) 融合核效率在 $(H_{kv}, \text{seq\_len})$ 空间中分化
-（$H_{kv}=8$ 在 32K 下延迟减少约 40\%，$H_{kv}=2$ 下始终慢于 SDPA）。
-完整表述与部署建议见第~\ref{chap:conclusion}~章。
+本章的实证结果落在贯穿全文的 behavior-guided 框架下，沿三层贡献汇集为一条连贯论证。
+框架层面（C1），\textbf{behavior 保持度}作为 calibration 与 allocation 两层共享的统一目标函数
+在本章得到系统性检验：第~\ref{subsec:exp-int8-canonical}~节的 INT8 canonical path
+相对 FP16 在三任务上取得 mean $\Delta{=}{+}0.02$，在实证上不可区分，
+证明该原则在\emph{canonical} 规模下存在干净闭环；
+第~\ref{sec:exp-kv-sensitivity}~节的 K/V 独立消融
+（Qwen2.5-14B 保留 Key 为 FP16 即可恢复 $93\%$ 的 PPL 退化，保留 Value 仅恢复 $64\%$）
+为 behavior 原则推理到非对称量化格式的架构选择提供 empirical bridge。
+
+方法层面（C2），框架在更激进的 INT4 比特宽度上通过
+INT4-RoleAlign 实例化：
+在 Qwen / LLaMA 共四个模型上相对 KIVI-style 同 format baseline
+PPL 差距控制在 $0.15$ 内、Needle 四模型一致 $100\%$，
+取得可审计的离线校准接口；profile-guided 预算提议机制 AutoK 则作为框架的自然延伸，
+在 Mistral-7B 上取得 $5$ 个任务中 $3$ 个任务的最优 quality。
+
+实证层面（C3），第~\ref{sec:exp-cross-model}~节的跨模型对比
+在同量级 INT4 预算带内呈现出 per-model 最优策略的显著异质性——
+3B 上 BA-$k_1$ 的早层保护在 NarrativeQA 上相对等距位置启发式实现约 $+4$ 分回救，
+14B 上 top-3 策略相互挤在 $3.5\%$ 的相对距离内而没有稳定最优，
+Mistral-7B 上 AutoK 在 5 task 上取得 $3$ 个独立最优，
+而 heuristic 位置保护在多个 regime 区间内与 behavior-guided 落点重合。
+这四条合起来构成本章所呈现的 \emph{(family, scale, task)-dependent} operating regime 地图。
+完整部署层面的讨论与 five final-ready claim 的整合见第~\ref{chap:conclusion}~章。
 
 \paragraph{PPL 非单调现象}
 PPL 退化随模型规模总体减弱（1.5B: 13.7\%，7B: 6.1\%，8B: 2.4\%），
@@ -1115,12 +1148,14 @@ PPL 测量窗口的差异无法完全分离，14B 7.6\% 应视为外部效度锚
 
 本文的实验结论应在以下六条效度威胁声明的边界内理解：
 
-\textbf{威胁一：$H_{kv}$ 与规模共变。}
-$H_{kv}$ 与模型规模部分共变（1.5B/$H_{kv}$=2, 7B/4, 8B/8, 14B/8）。
-8B 与 14B 共享 $H_{kv}=8$ 但参数量差 1.75$\times$，
-短序列 交叉点 幅度一致（$\Delta\approx-0.4$~ms），
-为 $H_{kv}$ 结构性相关提供支持。
-但相关结论应理解为结构性证据而非严格受控因果识别。
+\textbf{威胁一：$H_{kv}$ 与模型规模的共变。}
+在本文的评测集合中，$H_{kv}$ 与模型规模部分共变（1.5B/$H_{kv}{=}2$、7B/4、8B/8、14B/8）。
+第~\ref{sec:exp-deployment}~节的 8B 与 14B 控制对照
+在共享 $H_{kv}{=}8$ 而参数量差 $1.75\times$ 的情形下呈现一致的短序列交叉点幅度
+（$\Delta \approx -0.4$~ms），为 $H_{kv}$ 作为\emph{结构性相关变量}提供局部支持。
+涉及 $H_{kv}$ 的结论（如低比特鲁棒性的差异与融合核效率的 phase boundary）
+应理解为结构性相关而非严格受控的因果识别；
+$H_{kv}$ 在本文的作用是\emph{解释变量}，不是全文的组织脊柱。
 
 \textbf{威胁二：解码策略依赖。}
 所有实验使用 greedy decoding（temp=0）。

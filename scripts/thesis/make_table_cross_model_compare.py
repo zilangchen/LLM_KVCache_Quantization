@@ -226,14 +226,16 @@ def main():
 
     tex_body = build_tex_body(pivot)
     caption = (
-        r"Cross-model policy comparison under matched INT4 budget (clean-provenance pin=\code{ddada19})。"
+        r"Cross-model policy comparison within a same-order INT4 budget band "
+        r"(clean-provenance pin=\code{ddada19})。"
         r"\textbf{加粗}标注 per-(model, task) 最优 policy；\textit{Mean} 为 block 内 3 task 均值。"
         r"Per-model best-$k$ 动态选择：3B 用 $k{=}1$、Llama-3.1-8B 用 $k{=}11$、14B 用 $k{=}7$、Mistral-7B 用 $k{=}3$；"
         r"AutoK 的 \code{cov} 阈值：14B 用 \code{cov90}，其余用 \code{cov80}。"
-        r"四模型的 winner policy 不一致——这是本章 \textbf{(family, scale, task)-dependent regime map} 的直接证据。"
+        r"四模型的最优 policy 分布呈现明显异质性——这构成 \textbf{(family, scale, task)-dependent regime map} 的直接证据。"
     )
     note = (
-        r"matched INT4 budget：所有 policy 在本表内 KV memory 近似相等（$\pm 3\%$），详见配套图~\ref{fig:t7-pareto}。"
+        r"Budget band 的定义见第~\ref{para:ch4-budget-band}~节；"
+        r"quality--memory 的 Pareto 视图见配套图~\ref{fig:t7-pareto}。"
         r"Uniform 指 \code{uniform\_int4\_k4v4}（所有层 K/V 统一 INT4）；"
         r"BA-$k$ 指 behavior-guided allocator 保护 top-$k$ 高敏感层；"
         r"Heuristic-$k$ 指等距位置启发式保护 $k$ 层；"
