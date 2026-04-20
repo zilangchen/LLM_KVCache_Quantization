@@ -36,6 +36,37 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 21:57 | Thesis Hook closure 落地 — Ch4/Ch5 条件性 Hook 条款全部清除
+- Goal: 响应 `docs/allocator_vs_kivi_closed_20260420.md` §5 的 thesis-side action list，把 Ch4 / Ch5 里所有"若 Hook 激活..." / "条件 Future Work" / "story §13 Hook" 类 conditional 措辞全部改为非条件的 past-tense 陈述（L4_CLOSED 决定后不保留后门式 disclaimer）
+- Scope:
+  - **Ch4 §4.2 opening**（L305-309）："为 §2.5 预留的 Allocator-vs-KIVI matched-budget 正式对比留出 Hook 位置"→ 改为"本章不包含 matched-budget 下的 formal comparison；allocator 作为方法贡献在 §\ref{sec:ch3-allocator} 保留，本论文不就系统性超越 KIVI 作 claim"
+  - **Ch4 §4.2.3 HOOK POSITION LaTeX 注释块**（L636-644，9 行）：整块删除（Hook 永不激活，占位注释变死代码）
+  - **Ch4 §4.3 Budget band 段**（L678-679）："作为条件 Future Work（story §13 Hook、...）"→ "作为 Future Work（§\ref{sec:conclusion-future}），不在本文 scope"
+  - **Ch5 §5.1 发现三 末尾**（L76）："若 Hook（story §13）激活则可具体化为正式 claim。"→ 整句删除
+  - **Ch5 §5.2 第 5 条 Limitation**（L157-162）：旧"【条件性 Limitation】...若 Hook 激活则 limitation 可删除"→ 新写为普通 Limitation，含 G2 探索性实证事实："allocator 需 1.5-1.8× KV 内存换 1-3% quality 提升 + 16% (model,task) 反向劣于 KIVI，cost/benefit 不支持 systematic claim"
+  - **Ch5 §5.3 Future Work 3**（L192-199）：旧"story §13 Hook 的正式对比包...若达到 L1/L2 则升级为正式 claim + ExecPlan 骨架冻结"→ 新写为非条件延伸工作描述（bit dictionary 扩展 / 新 context / 新架构下重新搜索 budget-matched policy）
+- Changed files:
+  - thesis/chapters/ch4_experiments.tex（3 处 Hook-conditional 清除）
+  - thesis/chapters/ch5_conclusion.tex（3 处 Hook-conditional 清除，含 Limitation 第 5 条实证事实扩写）
+- Commands:
+  - Read docs/allocator_vs_kivi_closed_20260420.md §5 action list
+  - grep 定位当前 Ch4/Ch5 Hook 残留行（Phase 10 后行号偏移）
+  - 6 组 Edit 逐个清理
+  - xelatex × 2 pass → main.pdf 99 → **100 pages** (+1 from Limitation 5 + Future Work 3 扩写)
+  - grep verify：0 residual Hook refs
+- Outputs:
+  - Ch4 / Ch5 不再出现任何"若 Hook 激活" / "条件 Future Work" / "story §13 Hook" / "升级为正式 claim" 类措辞
+  - Limitation 第 5 条从 meta 条件性改为实证事实陈述（符合 feedback_meta_disclaimers 纪律）
+  - Future Work 3 保留但去 conditional framing，允许未来 revisit 时自然延伸（不是"激活开关"）
+- Validation:
+  - xelatex: 100 pages, no halt, 0 undefined ref / 0 undefined cite / 0 multiply-defined
+  - grep -rn 'Hook|若 Hook|条件 Future Work|story §13' thesis/chapters/ → 0 match
+- Risks / follow-ups:
+  - docs/allocator_vs_kivi_closed_20260420.md §6 保留 infrastructure 未动（allocator 方法 / calibration JSON / scripts 等）
+  - §7 禁止事项：不启 ablation / 不扩 bit dictionary / 不重跑 policy 搜索——全部遵守
+  - 下一步：进入用户指定的"逐段 collaborative review"模式
+- Commit: <pending 本批>
+
 ### 2026-04-20 21:48 | Allocator vs KIVI Hook 最终 L4 关闭 — 用户决定不写此 claim
 - Goal: 在 main phase 完整收口（5 model × 5 task × 3 system = 360 CSV, 0 failure）+ G2 Claim Strength aggregate 产出后，按实际数据做 claim 层最终决定
 - G2 aggregate 数据:

@@ -55,7 +55,7 @@ exploratory / off-protocol 数据仅在附录出现并明确标记。
   \label{tab:ch4-models}
   \small
   \begin{threeparttable}
-  \begin{tabular}{llcccl}
+  \begin{tabularx}{\textwidth}{@{}llccc>{\raggedright\arraybackslash}X@{}}
     \toprule
     模型 & 模型族 & 参数 & GQA ($H_q$, $H_{kv}$) & Layers & 实验角色 \\
     \midrule
@@ -72,16 +72,15 @@ exploratory / off-protocol 数据仅在附录出现并明确标记。
     Mistral-7B-Instruct-v0.3~\cite{jiang2023mistral}
       & Mistral & 7B   & (32, 8)  & 32 & AutoK strongest positive case（T4） \\
     \bottomrule
-  \end{tabular}
+  \end{tabularx}
   \begin{tablenotes}
     \small
     \item 注：$H_q$ 为 query heads 数，$H_{kv}$ 为 KV heads 数。头维度均为 128。
     Qwen2.5-14B 与 LLaMA-3.1-8B 共享 $H_{kv}{=}8$，为 $H_{kv}$ 的跨模型族控制提供条件。
-    校准产物：
-    \code{artifacts/kv\_calib\_kl\_qwen25\_\{1p5b,3b,14b\}\_int8.json}、
-    \code{artifacts/kv\_calib\_kl\_qwen25\_7b\_int8.json}（复用 b10 variant）、
-    \code{artifacts/kv\_calib\_kl\_llama31\_8b\_int8.json}、
-    \code{artifacts/kv\_calib\_kl\_mistral7b\_int8.json}。
+    校准产物清单见
+    \path{docs/freeze_20260419.md}
+    与
+    \path{docs/clean_rerun_20260419T09/MANIFEST.md}。
   \end{tablenotes}
   \end{threeparttable}
 \end{table}
@@ -305,8 +304,10 @@ INT8 canonical path 以离线 KL 行为对齐校准得到逐层 scale，
 \textbf{INT4-RoleAlign}——behavior-guided framework 在低比特的第二个实例化。
 §\ref{subsec:exp-int4-cross-model} 以 Table~\ref{tab:t2-int4-kivi} 给出跨 4 模型的 RoleAlign vs KIVI 对比；
 §\ref{subsec:exp-int4-honest} 给出本节的\textbf{三层诚实分析}
-（L1 事实 / L2 suggests / L3 open question），
-并为 §2.5 预留的 Allocator-vs-KIVI matched-budget 正式对比留出 Hook 位置。
+（L1 事实 / L2 suggests / L3 open question）。
+本章不包含 matched-budget 下的 Allocator-vs-KIVI formal comparison——
+allocator 作为方法贡献在第三章保留（§\ref{sec:ch3-allocator}），
+但本论文不就"系统性超越 KIVI"作 claim；相关讨论见 §\ref{sec:conclusion-future}。
 
 \paragraph{对称 INT4 的阶跃崩塌（motivation）。}
 在 INT8 下可行的 behavior-guided 对称量化在 INT4 下遇到实证瓶颈：
@@ -634,16 +635,6 @@ INT4-RoleAlign 与 KIVI-style 的 quality / PPL / Needle 差距\textbf{不显著
 正式的 Allocator-vs-KIVI matched-budget 对比构成一个独立的实验包，
 见第五章 §5.3 open questions。
 
-%--------------------------------------------------------------
-% HOOK POSITION（§2.5 Allocator-vs-KIVI matched-budget formal compare）
-% 当前状态：Hook BLOCKED（2026-04-20）
-% 当 Hook 激活到 L1/L2 时，在此插入：
-%   \subsection{Allocator 维度 vs KIVI（matched budget）}
-%   \label{subsec:exp-int4-allocator-vs-kivi}
-%   ...引用 Table T9 / 图 ⑩ ...
-% 激活规则详见 docs/thesis_story_20260420.md §13.2
-%--------------------------------------------------------------
-
 % ============================================================
 \section{跨模型 Regime 地图：behavior-guided allocator 的跨模型呈现}
 \label{sec:exp-cross-model}
@@ -676,8 +667,8 @@ KV memory 差距大约在 $+12.5\%$ 至 $+25\%$ 之间
 本文因此把本节定位为\textbf{regime signature readout}而非\emph{形式化} matched-budget comparison：
 T3 报告的是"在同一数量级预算内不同 allocation 风格跑出什么 quality"，
 图~\ref{fig:t7-pareto} Pareto 前沿直接可视化 quality--memory 权衡。
-严格 matched-budget 的 Allocator-vs-KIVI formal compare 作为条件 Future Work
-（story §13 Hook、第~\ref{sec:conclusion-future}~节）。
+严格 matched-budget 的 Allocator-vs-KIVI formal compare 作为 Future Work
+（第~\ref{sec:conclusion-future}~节），不在本文 scope。
 
 \input{tables/table_t3_cross_model_main}
 
@@ -708,9 +699,10 @@ T3 报告的是"在同一数量级预算内不同 allocation 风格跑出什么 
   \label{fig:sensitivity-heatmap}
 \end{figure}
 
-\paragraph{图 ④：sensitivity profile 的结构异质性。}
+\paragraph{图~\ref{fig:sensitivity-heatmap}：保护决策图中的结构异质性。}
 图~\ref{fig:sensitivity-heatmap} 可视化 4 模型的逐层 $(b_K, b_V)$
-AutoK 保护分配。
+AutoK 保护分配；它展示的是 allocator 下游导出的离散保护决策，
+而不是连续 raw sensitivity scalar。
 每列顶部的 avg\_bits 反映该模型 AutoK 的平均预算水平，
 而列内部的绿色条纹分布揭示 regime signature：
 \begin{itemize}[leftmargin=2em, itemsep=1pt, topsep=2pt]
@@ -727,22 +719,24 @@ AutoK 保护分配。
 \begin{figure}[!htbp]
   \centering
   \includegraphics[width=\textwidth]{figures/fig7_pareto.pdf}
-  \caption{Quality--memory Pareto 前沿（3 模型 subplot：Qwen2.5-7B / Llama-3.1-8B / Mistral-7B）。
-  $x$ 轴为 KV cache 峰值显存（log 刻度），$y$ 轴为 task-core mean quality。
-  Marker 形状区分 policy family（Uniform / BA-$k$ / Heuristic-$k$ / BA-AutoK）。
+  \caption{Quality--budget Pareto 视图（3 模型 subplot：Qwen2.5-7B / Llama-3.1-8B / Mistral-7B）。
+  $x$ 轴为平均 KV bit 预算 $\bar{b}$，$y$ 轴为 task-core mean quality。
+  Marker 形状区分 policy family（Uniform / BA-$k_*$ / Heuristic-$k_*$ / BA-AutoK）。
   红色箭头标注 Qwen2.5-7B 的 \code{uniform\_int4} \textbf{quality cliff}（naive 均匀分配的失败样例）；
-  绿色箭头标注 Mistral-7B 的 \textbf{BA-AutoK Pareto-dominant} 区域——在所有 memory 档位上 quality 均优于其它 3 个 family。}
+  绿色箭头标注 Mistral-7B 的 \textbf{AutoK strongest positive case}——
+  在更高预算带上明显优于其它 3 个 family。}
   \label{fig:t7-pareto}
 \end{figure}
 
-\paragraph{图 ⑦：Pareto 前沿的 allocator 位置。}
-图~\ref{fig:t7-pareto} 在 quality $\times$ kv-cache-memory 空间中
-绘制 L2 sweep 的所有 configuration。
+\paragraph{图~\ref{fig:t7-pareto}：Pareto 前沿的 allocator 位置。}
+图~\ref{fig:t7-pareto} 在 quality $\times$ 平均 bit 预算空间中
+绘制 L2 sweep 的 4 个 policy family，
+把第~\ref{para:ch4-budget-band}~段的 budget-band 口径直接可视化。
 Qwen2.5-7B 上 \code{uniform\_int4\_k4v4} 出现了\textbf{明显的 quality cliff}
 （红色箭头标注）：
-同等 memory 下，naive uniform 分配相对 BA-$k$ 与 AutoK 损失约 $1$ 分 quality。
-Mistral-7B 上 \textbf{BA-AutoK 占据 Pareto-dominant 区域}（绿色箭头）：
-在所有 mem 档位上 quality 显著优于其它 3 个 family。
+在相近预算层级下，naive uniform 分配相对 BA-$k_*$ 与 AutoK 损失约 $1$ 分 quality。
+Mistral-7B 上 \textbf{BA-AutoK 占据 strongest positive region}（绿色箭头）：
+在较高预算带上 quality 明显优于其它 3 个 family。
 Llama-3.1-8B 的 4 个 policy 接近共 Pareto，
 与表~\ref{tab:t3-cross-model-main} 的 "top-tier 聚集" 一致。
 
@@ -752,26 +746,27 @@ Llama-3.1-8B 的 4 个 policy 接近共 Pareto，
   \caption{Cross-model regime map heatmap（$4 \text{ 模型} \times 4 \text{ policy}$，row-normalized task-core mean quality）。
   每行的红色加粗框指向 per-model best policy。
   4 行的最佳列落点各不相同——
-  Qwen2.5-3B / Llama-3.1-8B 倾向 BA-$k$、Qwen2.5-14B 倾向 Uniform INT4、Mistral-7B 倾向 AutoK——
+  Qwen2.5-3B / Llama-3.1-8B 倾向 BA-$k_*$、Qwen2.5-14B 倾向 Uniform INT4、Mistral-7B 倾向 AutoK——
   \textbf{不存在跨模型统一的 point 最优 policy}：每行最亮 cell 应理解为该模型在当前预算带内的 top-tier 落点，而非稳定可迁移的 ``universal winner''。}
   \label{fig:regime-map}
 \end{figure}
 
-\paragraph{图 ⑧：regime map 的 skim 路径。}
+\paragraph{图~\ref{fig:regime-map}：regime map 的 skim 路径。}
 图~\ref{fig:regime-map} 以 $4 \times 4$ heatmap 对 T3 进行 row-normalize 可视化，
 每行的红色加粗框指向 per-model winner。
 4 行的最佳列落点各不相同：
-\begin{equation*}
-  \text{top-tier}(3B) \ni \text{BA-}k,\quad
-  \text{top-tier}(8B) \ni \text{BA-}k,\quad
-  \text{top-tier}(14B) \ni \text{Uniform},\quad
-  \text{top-tier}(\text{Mistral}) \ni \text{AutoK};
-\end{equation*}
+\begin{itemize}[leftmargin=2em, itemsep=1pt, topsep=2pt]
+  \item $\text{top-tier}(3B) \ni \text{BA-}k$;
+  \item $\text{top-tier}(8B) \ni \text{BA-}k$;
+  \item $\text{top-tier}(14B) \ni \text{Uniform}$;
+  \item $\text{top-tier}(\text{Mistral}) \ni \text{AutoK}$.
+\end{itemize}
 这种"4 模型 4 种倾向"的视觉观察是本章 C3 结论的最快速 skim 入口——
 \textbf{不存在跨模型统一最优的 allocator policy}。
 
 \paragraph{Regime 地图的三条读数。}
-把 T3 / 图④ / 图⑦ / 图⑧ 的证据汇总，得到以下\textbf{跨模型经验规律}（C3）：
+把 T3 / 图~\ref{fig:sensitivity-heatmap} / 图~\ref{fig:t7-pareto} / 图~\ref{fig:regime-map}
+的证据汇总，得到以下\textbf{跨模型经验规律}（C3）：
 \begin{enumerate}[leftmargin=2em, itemsep=1pt, topsep=2pt]
   \item \textbf{Scale-dependent regime}：小尺度模型（3B）的 sensitivity 早层集中，
     allocator 在早层少数位置上就能"回救"大部分 quality；
@@ -888,18 +883,19 @@ top-3 policy 全部挤在 top-1 的 $3.5\%$ relative 距离内。
 中 14B winner 是 Uniform 这一看似反直觉结果：\textbf{不是 Uniform 真的"最优"},
 而是该 regime 区间里的 top-$3$ policy 在 $p$-值意义下\emph{不可分辨}。
 
-\paragraph{图 ⑨：跨 scale 的趋势综合视图。}
-图~\ref{fig:scale-trend} 把 4 模型的 4 policy mean quality 对 model scale
-（B params, log-scale）作图，
-把上面 3 个 per-model case 汇总为 scale 维度的连续趋势。
-4 条 policy 线在不同 scale 区间的 dominant 不同——这不是单调 scaling law，
+\paragraph{图~\ref{fig:scale-trend}：按 family/scale 排序的 policy ordering 视图。}
+图~\ref{fig:scale-trend} 把 4 模型的 4 policy mean quality
+按 family/scale 顺序排成离散类别，
+把上面 3 个 per-model case 汇总为 regime ordering 的分类视图。
+4 条 policy 线在不同类别上的 dominant 不同——这不是单调 scaling law，
 而是 scale-dependent regime 的直接可视化。
 
 \begin{figure}[!htbp]
   \centering
   \includegraphics[width=0.85\textwidth]{figures/fig9_scale_trend.pdf}
-  \caption{Quality vs 模型 scale 的 4 policy 趋势图（task-core mean，clean-provenance pin=\code{ddada19}）。
-  4 条线交叉揭示 regime 的 scale-dependent 性质：
+  \caption{按 family/scale 排序的 4 policy 分类折线图（task-core mean，clean-provenance pin=\code{ddada19}）。
+  横轴按模型类别排序而非连续 scaling-law 坐标轴；
+  4 条线的交叉揭示 regime 的 scale-dependent 性质：
   Mistral-7B 上 AutoK 显著高于其他 3 条（strongest positive case），
   其它 scale 上 4 policy 接近共线。}
   \label{fig:scale-trend}
@@ -1005,7 +1001,7 @@ $H_{kv}=4$ 在 32K 处出现 交叉点（$-$7\%）；
 $H_{kv}=8$ 从 8K 起即进入显著加速区间。
 4K 处各模型的差异均在 2~ms 以内，不声称为显著 交叉点。
 
-\subsection{8B vs 14B 同 $H_{kv}$=8 控制对比}
+\subsection{\texorpdfstring{8B vs 14B 同 $H_{kv}=8$ 控制对比}{8B vs 14B 同 Hkv=8 控制对比}}
 \label{subsec:exp-hkv8-control}
 
 8B（LLaMA-3.1, $H_{kv}=8$）与 14B（Qwen2.5, $H_{kv}=8$）
@@ -1023,7 +1019,8 @@ $H_{kv}=8$ 从 8K 起即进入显著加速区间。
   \centering
   \caption{KV Cache 显存对比（seq=4K, batch=1，\textbf{仅 KV Cache 占用}，不含模型权重与激活 peak memory）}
   \label{tab:kv-memory-sweep}
-  \small
+  \footnotesize
+  \resizebox{0.82\textwidth}{!}{%
   \begin{tabular}{lccc}
     \toprule
     \textbf{模型} & \textbf{FP16 KV} & \textbf{INT4 KV} & \textbf{压缩率} \\
@@ -1033,7 +1030,7 @@ $H_{kv}=8$ 从 8K 起即进入显著加速区间。
     8B   & 527.9 MB & 140.5 MB & 73.4\% \\
     14B  & 791.8 MB & 210.8 MB & 73.4\% \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}
 \end{table}
 
 INT4 量化在所有模型上均实现约 73\% 的 KV Cache 压缩率。
