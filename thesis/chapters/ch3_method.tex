@@ -882,7 +882,7 @@ $g=16$ 时 $\text{AI}_{\text{int8}} = 1.6$ FLOP/byte，
 \label{sec:ch3-summary}
 
 本章以假设 H 为出发点，
-给出了 行为引导 量化框架的两层实例化。
+给出了行为引导量化框架的两层实例化。
 
 \textbf{第一层（校准）}：
 以量化前后 attention 分布的 Kullback--Leibler 散度为离线搜索目标，
@@ -892,13 +892,13 @@ $g=16$ 时 $\text{AI}_{\text{int8}} = 1.6$ FLOP/byte，
 配合 Behavior-Guided percentile 离线搜索）两个量化位宽上落成。
 
 \textbf{第二层（分配）}：
-将校准产物的 per-layer sensitivity profile
-作为跨层预算分配的输入，提出 行为引导 allocator；
-进一步引入 AutoK 作为 profile-guided 预算建议机制，
+将校准产物的逐层敏感度画像
+作为跨层预算分配的输入，提出行为引导的层间预算分配器；
+进一步引入 AutoK 作为敏感度引导的预算建议机制，
 以覆盖度阈值 $\rho$ 自适应地为不同模型选择合适的保护层数。
 两层共享同一行为度量 $D_{\KL}$
 （方程~\eqref{eq:ch3-kl}，方程~\eqref{eq:ch3-autok-cov}），
-使 behavior 原则在框架内部贯通校准与分配两个抽象层次。
+使行为引导原则在框架内部贯通校准与分配两个抽象层次。
 
 Triton 融合量化解码核作为 INT8 canonical path 的系统落地实例，
 承担校准方案到可部署推理路径的桥梁角色。
@@ -914,6 +914,6 @@ Triton 融合量化解码核作为 INT8 canonical path 的系统落地实例，
 \begin{itemize}[leftmargin=2em, itemsep=1pt, topsep=2pt]
   \item INT8 canonical path 的保真度（第~\ref{sec:exp-main}~节）；
   \item INT4 RoleAlign 与 KIVI 的跨模型比较；
-  \item 行为引导 allocator 的跨模型适用区间地图（主结果）；
+  \item 行为引导分配器的跨模型适用区间地图（主结果）；
 \end{itemize}
-以及 Mistral、3B、14B 的 per-model 案例分析。
+以及 Mistral、3B、14B 的逐模型案例分析。

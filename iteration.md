@@ -36,6 +36,22 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-21 01:28 | Ch3 逐节优化 Round 5: §3.7 本章小结清理（5 处）+ Ch3 整章优化收尾 tag
+- Goal: §3.7 本章小结的空格 artifact + 散装英文 + sensitivity profile 遗漏，§3.6 复杂度分析扫过基本干净无改动
+- Scope: thesis/chapters/ch3_method.tex §3.7 L881-920
+- Changed files: ch3_method.tex (5 处)
+- 5 处清单:
+  - "给出了 行为引导 量化框架" → "给出了行为引导量化框架" (空格)
+  - L895-897 "per-layer sensitivity profile / 提出 行为引导 allocator / profile-guided 预算建议机制" → "逐层敏感度画像 / 提出行为引导的层间预算分配器 / 敏感度引导的预算建议机制"
+  - L901 "使 behavior 原则在框架内部" → "使行为引导原则在框架内部"
+  - L917 "行为引导 allocator 的跨模型适用区间地图" → "行为引导分配器的跨模型适用区间地图"
+  - L919 "Mistral、3B、14B 的 per-model 案例分析" → "…的逐模型案例分析"
+- 保留: "INT8 canonical path" / attention / KIVI-style 等方法名
+- Commands: python heredoc str.replace ×5 + xelatex ×2
+- Validation: 99 pages / 0 undef / 0 multi / 0 error
+- Ch3 整章优化收尾: Round 1 (§3.1/§3.2/全章空格) + Round 2 (§3.3) + Round 3 (§3.4) + Round 4 (§3.5) + Round 5 (§3.7) 累计 ~60 处 surgical 改动；打 tag `thesis-m-plus-v4` 标记 Ch3 新骨架 + 全章清理完成
+- 下一步: Round 6 跨章审计 (preamble cross-ref / chapter title "Behavior-Guided 量化框架设计" 中英混排判定)，或进入其他章节 review
+
 ### 2026-04-21 01:24 | Ch3 逐节优化 Round 4: §3.5 Allocator + AutoK 清理（13 处）
 - Goal: §3.5 有 scaffold 注释、behavior/sensitivity 散装英文、AutoK 定位段连续两处 meta 否定、一处循环引用
 - Scope: thesis/chapters/ch3_method.tex §3.5 L691-800
