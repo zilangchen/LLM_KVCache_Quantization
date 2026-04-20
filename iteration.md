@@ -36,6 +36,30 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-21 01:05 | Ch3 逐节优化 Round 1: §3.1 微调 + §3.2 完全重写 + 全章空格 sweep
+- Goal: 用户启动"一节一节优化"模式。Round 1 目标：§3.1 两处微调通过（最小 commit），§3.2 大刀阔斧解决三层重复，同时清扫 Stage 2 残留的 13+ 处空格 artifact
+- Scope: thesis/chapters/ch3_method.tex
+- Changed files:
+  - §3.1 L64-72 两处：`behavior 原则` → `行为引导原则`；L72-75 四句图描述 → 一句 "图可视化了上述两条误差传播路径"
+  - §3.2 L78-224（146 行）→ L78-150（72 行）：intro 段 + 5 subsection（`离线校准阶段 / 在线推理阶段 / KV Cache 管理架构 / 生成循环集成 / 量化模式总览`）全部消解为 3 段连贯 prose + Table 3.1（保留）+ 1 段表后解读；原旧注释 L110-113（tau^-1 scribble）+ L154-155（`% 保持旧 ref 兼容` 内部语言）全删
+  - 全章空格 artifact 全清：stage-2 风格残留 "中文 空格 词 空格 中文" 15 处（框架 ×6 / 基线 ×2 / 总览 ×3 / 流程 ×2 / 适用区间 ×2 / 溯源完整 ×1 / 覆盖度 ×2 / 预算 ×1）
+  - 全章 `behavior-guided` 小写 → 行为引导（9 处，大写 `Behavior-Guided` 作为方法名保留）
+- Commands:
+  - 单 python heredoc 脚本：§3.2 重写 + 全章 bilateral/unilateral 空格 regex sweep
+  - `cd thesis && xelatex -interaction=nonstopmode main.tex` ×2
+- Outputs: main.pdf 100 → 99 pages / 1.64 MB（§3.2 压缩 74 行自然节省 1 页）
+- Validation:
+  - 0 undefined / 0 multiply-defined / 0 error / 0 dimension-too-large
+  - sanity grep: ` 框架 ` / ` 基线 ` / ` 总览 ` / ` 流程 ` / ` 适用区间 ` / ` 溯源完整 ` / ` 覆盖度 ` 全零残留
+  - Ch3 从 1007 → 936 lines（-71，主要来自 §3.2 压缩）
+- §3.2 新骨架 (3 段 + Table):
+  1. 离线阶段：校准目标 + 搜索空间正交维度 + 产物 JSON
+  2. 在线阶段：\code{kv\_mode} 路由 + 四类格式 + Triton 反量化
+  3. 表 3.1 汇总 9 种量化模式 + int8/int4\_ours / kivi\_style / int4\_ours\_asym 定位
+- Risks / follow-ups:
+  - 下一步 Round 2: §3.3 检查（KL 目标 + Scale 搜索），重点审 L319 "H_kv ... 而非全文的组织脊柱" meta 自我否定
+  - §3.4 10 subsection 仍待决定（promote 5 Triton subsec 为 paragraph 还是保持 flat）
+
 ### 2026-04-21 00:50 | Ch3 结构重组：10 section → 7 section（脚本化一次性重排）
 - Goal: 用户对 Ch3 提 7 条重组建议：§3.1 改名为专业术语；§3.2 精简不过度细分；§3.4+§3.5 合并为"行为引导校准的 INT8 和 INT4 实现"；§3.6+§3.7 AutoK 合并；§3.8 Triton 并入 §3.4 末尾作为 §3.4.x（非第二层故事）；§3.9 A 类（系统架构）融入 §3.2，B 类（复杂度）独立
 - Scope: thesis/chapters/ch3_method.tex 一次性重排；新增 refactor_ch3_structure.py 可复用脚本
