@@ -36,6 +36,25 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-21 03:22 | Ch3 逐节优化 Round 6: preamble 清理 + chapter/section title 一致中化 + 裸 label 归位（9 处）
+- Goal: Round 5 tag thesis-m-plus-v4 后 user 选 A "Ch3 最后遗漏项"：chapter title 中英混排 + preamble L6-14 散装英文 + 2 个裸 label (sec:ch3-rolealign / sec:ch3-triton) 定位问题
+- Scope: thesis/chapters/ch3_method.tex L1-18 + L385 + L544 + L426/L558 + L691
+- Changed files: ch3_method.tex (9 处)
+- 改动清单:
+  - 1. L4 chapter title 中文化: "Behavior-Guided 量化框架设计" → "行为引导量化框架设计"
+  - 2. L6 preamble 空格 artifact: "形式化 行为引导 量化" → "形式化行为引导量化"
+  - 3. L13 preamble 散装: "per-layer 敏感度画像" → "逐层敏感度画像"
+  - 4. L14 preamble 空格+散装: "行为引导 allocator 与 profile-guided 预算建议机制" → "行为引导的层间预算分配器与敏感度引导的预算建议机制"
+  - 5. §3.5 section title 一致化: "Behavior-Guided 层间预算分配器" → "行为引导的层间预算分配器" (与 chapter title 一致; 方法名英文保留在正文 inline terms)
+  - 6. 裸 label `sec:ch3-rolealign` L385 删除 + 挪到 §3.4.3 "从对称到非对称的格式升级" 下 → aux resolve 为 3.4.3 (原解为 3.4)
+  - 7. 裸 label `sec:ch3-triton` L544 删除 + 挪到 §3.4.6 "INT8 核函数设计" 下 → aux resolve 为 3.4.6 (原解为 3.4)
+- Commands: python heredoc str.replace ×9 + xelatex ×2
+- Validation:
+  - 0 undefined / 0 multi / 0 error
+  - aux label 验证: rolealign→3.4.3 / triton→3.4.6 / autok→3.5.4 全部指向具体 subsection
+- Ch3 终局: Rounds 1-6 累计 ~69 处 surgical 改动；tag `thesis-m-plus-v4` 之前已打，本轮后考虑补 v4.1 或直接继续下一章（Ch4/Ch5 逐节优化或 Codex adversarial-review）
+- 下一步 candidate: Ch4 逐节优化 (8 subsection) / Ch5 逐节优化 (3 节 + 小结) / Codex 过审 Ch3 v4+
+
 ### 2026-04-21 01:28 | Ch3 逐节优化 Round 5: §3.7 本章小结清理（5 处）+ Ch3 整章优化收尾 tag
 - Goal: §3.7 本章小结的空格 artifact + 散装英文 + sensitivity profile 遗漏，§3.6 复杂度分析扫过基本干净无改动
 - Scope: thesis/chapters/ch3_method.tex §3.7 L881-920

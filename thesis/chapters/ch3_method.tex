@@ -1,17 +1,17 @@
 % ============================================================
 % ch3_method.tex — 第三章 行为引导量化框架设计
 % ============================================================
-\chapter{Behavior-Guided 量化框架设计}
+\chapter{行为引导量化框架设计}
 
-本章形式化 行为引导 量化的统一视角，并给出两层实例化。
+本章形式化行为引导量化的统一视角，并给出两层实例化。
 第~\ref{sec:ch3-problem}~节从注意力计算的误差传播结构出发形式化问题，
 呼应引言中提出的假设 H。
 第~\ref{sec:ch3-overview}~节给出框架总体架构。
 \textbf{校准层}以注意力行为偏移为离线 KL 搜索目标，
 分别在 INT8 对称路径（第~\ref{sec:ch3-static-scale}~节）
 与 INT4 非对称路径 RoleAlign（第~\ref{sec:ch3-rolealign}~节）上落成；
-\textbf{分配层}将校准产物的 per-layer 敏感度画像作为输入，
-引入 行为引导 allocator 与 profile-guided 预算建议机制 AutoK
+\textbf{分配层}将校准产物的逐层敏感度画像作为输入，
+引入行为引导的层间预算分配器与敏感度引导的预算建议机制 AutoK
 （第~\ref{sec:ch3-allocator}~节）。
 Triton 融合量化解码核函数（第~\ref{sec:ch3-triton}~节）
 作为 INT8 canonical path 的系统落地实例之一，
@@ -380,10 +380,6 @@ $s_{\text{dynamic}} \leq s_{\text{static}}$，最终使用静态 Scale 保持校
 无需修改搜索框架的核心逻辑。
 
 
-% ============================================================
-
-\label{sec:ch3-rolealign}
-
 INT4-RoleAlign（INT4 Role-Aware 量化）是在 KIVI~\cite{liu2024kivi} 提出的
 per-channel Key + per-token Value 非对称格式上，
 以 attention-KL 为目标的行为引导实例化。
@@ -424,6 +420,7 @@ Key 决定了注意力的``看哪里''（attention logits 的排序结构），
 以适配两者不同的数值分布特性与功能角色。
 
 \subsection{从对称到非对称的格式升级}
+\label{sec:ch3-rolealign}
 
 基于上述诊断发现，本节提出 \textbf{INT4-RoleAlign}
 （Role-Aware Asymmetric Quantization with Behavior-Guided Calibration），
@@ -539,10 +536,6 @@ KIVI-style 的 absmax/min 配置对应 RoleAlign 搜索空间的端点 $(p_K, p_
 因此二者的比较建立在``同一搜索空间的两个点''而非``两种不同方法''的基础上。
 
 
-% ============================================================
-
-\label{sec:ch3-triton}
-
 本节给出行为引导校准方案对应的 Triton 融合核函数实现，
 作为 INT8 canonical path 从校准产物到可部署推理路径的系统桥梁。
 在自回归解码阶段，每步仅生成一个 token（$q_{\text{len}} = 1$），
@@ -557,6 +550,7 @@ KIVI-style 的 absmax/min 配置对应 RoleAlign 搜索空间的端点 $(p_K, p_
 
 \subsection{INT8 核函数设计}
 \label{subsec:ch3-triton-int8}
+\label{sec:ch3-triton}
 
 INT8 融合核函数沿用 FlashAttention~\cite{dao2022flashattention} 的 online softmax 思想
 将反量化与注意力计算融合在单个 GPU kernel 内，
@@ -688,7 +682,7 @@ naive 路径 TPOT 为 $T_{\text{naive}}$，则\emph{经验交叉点}定义为满
 
 
 % ============================================================
-\section{Behavior-Guided 层间预算分配器}
+\section{行为引导的层间预算分配器}
 \label{sec:ch3-allocator}
 
 校准层为每个模型产出一份 per-layer sensitivity profile——
