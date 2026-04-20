@@ -36,6 +36,79 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-20 21:48 | Allocator vs KIVI Hook 最终 L4 关闭 — 用户决定不写此 claim
+- Goal: 在 main phase 完整收口（5 model × 5 task × 3 system = 360 CSV, 0 failure）+ G2 Claim Strength aggregate 产出后，按实际数据做 claim 层最终决定
+- G2 aggregate 数据:
+  - 25 cells: win 7 (28%) / tie 14 (56%) / lose 4 (16%)
+  - mean Δ = +0.192（quality 量级 5-20，相当 ~1-3% 相对提升）
+  - budget ratio: 1.501×–1.818×（allocator 用 50-80% 额外内存）
+  - per-model 极化：14b (60% win / 0 lose) vs mistral7b (20% win / 60% lose) vs 3b (100% tie)
+  - aggregate 产物: `results/system_vs_kivi/aggregate/main/{summary_long,summary_wide,g2_judgment}.{csv,md,json}`
+- 决策过程:
+  - 我初判 L3 framing（mean Δ 微正 + 14b 干净赢 → 想包装成 Pareto advantage）
+  - 用户质疑 "是不是跑偏了" → 我回退承认这是美化数据
+  - 诚实定位：花 50-80% 额外内存换 ≤3% quality 且 16% 反向输，不是 Pareto advantage，符合 §13.2 L4 "mechanism-only"
+  - **用户最终决定**（原话）："我们用了更多的成本还不一定能保证稳赢的话，那我们为什么还要再做这个呢？"
+- 落地:
+  - `docs/thesis_story_20260420.md` §13.1 Hook 状态从 "L3-pending" 改为 **"L4_CLOSED"**，附决定日期 + 依据 + 数据沉没成本保留说明
+  - §13.4 激活清单 3 个 gate 全部 ✅，最终判定 L4，其余清单项关闭
+  - allocator 作为 §3 方法贡献保留（"behavior-guided per-layer bit allocation"），不 claim 系统性超越 KIVI
+  - thesis chapters 里的 "conditional Future Work" / "Hook position" 注释（ch2_related_work §... / ch4_experiments §4.X / ch5_conclusion §... "条件 Limitation + 条件 Future Work"）由写作 session 下次按 L4 规则简化：去掉 "若 Hook 激活到 L1/L2 则..." 条款，保留 "matched-budget formal compare 作为 Future Work" 一条
+- Changed files:
+  - `docs/thesis_story_20260420.md`
+  - `iteration.md`
+- 保留 infrastructure（未来扩展 bit dictionary 或 re-search policy 时可复用）:
+  - `scripts/system_vs_kivi_common.py`（含 pareto/strict gate_mode + SVK_MODEL_PATH env override）
+  - `scripts/check_system_vs_kivi_completeness.py`（pareto/strict 双 gate）
+  - `scripts/run_system_vs_kivi.py` + `scripts/aggregate_system_vs_kivi.py`
+  - `scripts/remote_watchdog.sh`（通用 tmux watchdog，已进 .agents/skills/remote-server/SKILL.md）
+  - allocator backend kv_mode `int4_ours_asym_alloc` + `src/cache/role_aware_allocator_cache.py`
+  - 5 rolealign calibration JSON（artifacts/）
+- 未做:
+  - **取消 ablation phase 启动**（L4 定位下 ablation 无 claim 支撑作用，跑 3-5h × 3卡 ≈ 9-15 GPU-hour 为不支撑 claim 的实验做 mechanism 分解，不符合科研纪律）
+- Commit: <pending>
+
+### 2026-04-20 07:38 | Thesis figure/format finalize — hard compile issues cleared + core figures repainted
+- Goal: 清掉 thesis 当前的硬格式问题，并把 `fig4/fig7/fig8/fig9` 与 `kv_ablation_summary_ruler` 收口到可审阅状态。
+- Scope: thesis 编译日志清理、Ch4 图文语义对齐、fig7/fig9 重画、fig4/fig8/kv-ablation 版式收尾、PDF 目视验收。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `thesis/chapters/ch4_experiments.tex`
+  - `thesis/chapters/appendix.tex`
+  - `scripts/thesis/plot_sensitivity_heatmap.py`
+  - `scripts/thesis/plot_l2_pareto.py`
+  - `scripts/thesis/plot_regime_map.py`
+  - `scripts/thesis/plot_scale_trend.py`
+  - `scripts/generate_thesis_figures.py`
+  - `thesis/figures/fig4_sensitivity_heatmap.pdf`
+  - `thesis/figures/fig7_pareto.pdf`
+  - `thesis/figures/fig8_regime_map.pdf`
+  - `thesis/figures/fig9_scale_trend.pdf`
+  - `thesis/figures/kv_ablation_summary_ruler.pdf`
+- Commands:
+  - `python3 -m compileall -q scripts/thesis scripts/generate_thesis_figures.py`
+  - `PYTHONPATH=/tmp/codex_pydeps ... python3 scripts/thesis/plot_sensitivity_heatmap.py`
+  - `PYTHONPATH=/tmp/codex_pydeps ... python3 scripts/thesis/plot_l2_pareto.py`
+  - `PYTHONPATH=/tmp/codex_pydeps ... python3 scripts/thesis/plot_regime_map.py`
+  - `PYTHONPATH=/tmp/codex_pydeps ... python3 scripts/thesis/plot_scale_trend.py`
+  - `PYTHONPATH=/tmp/codex_pydeps ... python3 scripts/generate_thesis_figures.py --only kv_ablation_summary --tables_dir results/final/final_data/kv_ablation/tables --out_dir thesis/figures`
+  - `cd thesis && bibtex main && xelatex -interaction=nonstopmode main.tex && xelatex -interaction=nonstopmode main.tex`
+  - `rg -n "undefined references|multiply-defined labels|fig:ch3-framework|sec:app-kv-ablation-full|Missing character: There is no [④⑦⑧⑨]" thesis/main.log -S`
+- Outputs:
+  - `fig7_pareto.pdf` 改为 quality-budget Pareto 视图；
+  - `fig9_scale_trend.pdf` 改为 categorical regime-ordering 图，不再伪装成连续 scaling law；
+  - `fig4_sensitivity_heatmap.pdf` 顶部标注清理并明确为 protection map；
+  - `fig8_regime_map.pdf` 标签改为 `k_*` 语义；
+  - `kv_ablation_summary_ruler.pdf` 的 0 分失败样式从竖排 `FAIL` 改为红色 `x + 0.0`；
+  - thesis 中坏引用、重复 label、圈号缺字问题已清除。
+- Validation:
+  - thesis 成功编译出 `main.pdf`（99 页）；
+  - `main.log` 中已无 `undefined references`、`multiply-defined labels`、`fig:ch3-framework`、`sec:app-kv-ablation-full`、圈号缺字告警；
+  - 核心图经 PDF→PNG 目视复审，`fig7/fig9` 从“不通过”提升为可用稿图。
+- Risks / follow-ups:
+  - 仍有若干历史正文 `Overfull/Underfull` 告警，主要集中在长英文短语与少数旧段落排版，不再属于本轮硬 blocker；
+  - `docs/claude_thesis_outline_pack_v1.md` 仍是无关 dirty，未纳入本轮。
+
 ### 2026-04-20 07:19 | Thesis Phase 10 — references.bib 清理 + cite 位置审计
 - Goal: 按"新叙事相关度"对 references.bib 做清理：删除与 behavior-guided framework / regime map / AutoK 新叙事无关的 unused entries；新增相关但缺失的 cite 位置；保证 xelatex + bibtex 编译无 undefined citation / undefined ref / multiply-defined label
 - Scope:

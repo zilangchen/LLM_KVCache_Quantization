@@ -499,16 +499,19 @@ Pareto 层的发现（7B uniform_int4 崩坏 / auto-k top tier 分布）提示 a
 
 ## 13. 【Hook】Allocator vs KIVI Formal Compare Package 接口说明
 
-### 13.1 Hook 状态（2026-04-20，Pareto framing 升级版）
+### 13.1 Hook 状态（2026-04-20，最终关闭）
 
 | 状态字段 | 值 |
 |---|---|
-| 当前状态 | **L3-pending**（smoke 完成 EXIT=0；main phase 待启动） |
-| 执行 ExecPlan | `.agents/execplans/2026-04-20_allocator-vs-kivi-claim-package.md` |
-| 前置 ExecPlan | `.agents/execplans/2026-04-20_same-format-allocator-backend-enable.md`（B/B/B 版本） |
-| Framing 升级（2026-04-20 03:22 决策） | 从旧 **Framing I "matched-budget winner (±3%)"** → 新 **Framing II "Pareto extension into KIVI-unreachable region"**。原因：`{4,8,16}` bit 字典下 allocator 数学上无法在 ±3% 内与 KIVI 纯 INT4 同预算（allocator 必退化为 KIVI）。新 framing 把 budget drift 作为**设计特性**公开披露。 |
-| Smoke 实测（2026-04-20 04:40 收口） | 1p5b allocator 12.64MB vs KIVI 8.42MB（+50.1%）；8b allocator 66.62MB vs KIVI 38.50MB（+73.0%）。Execution-chain 全绿 / 90 CSV 齐全 / 0 sample failure。 |
-| 完成后插入点 | §2.5（calibration 维度，L3 档）+ §3.5（allocation 维度，L3 档）+ §11 条件表 9 + 图 4（Pareto overlay） |
+| **最终状态** | **L4_CLOSED — Hook 不激活，整体并入 Future Work §6** |
+| **决定日期** | 2026-04-20 |
+| **决定依据** | 5-model × 5-task main matrix EXIT=0 完整收口后 G2 Claim Strength 判定：allocator win rate 28% / tie 56% / lose 16%；mean Δ=+0.192（quality 量级 5-20，相当 ≤3% 相对提升）；budget ratio 1.5×–1.8×。Per-model 高度极化：14b win 60% / mistral7b lose 60%。"花 50-80% 额外内存换 ≤3% 平均 quality + 16% 反向输" 不构成 Pareto 优势，符合 §13.2 L4 "mechanism-only" 定义。 |
+| **决定人** | 用户（陈梓浪）—— "我们用了更多的成本还不一定能保证稳赢的话，那我们为什么还要再做这个呢？" |
+| **数据沉没成本保留** | 已产出的 5-model main CSV（360 files, 远端 `results/system_vs_kivi/raw/main/`）+ smoke CSV（90 files）保留为 audit trail，不进正文；若将来扩展 bit dictionary（加 2-bit）或 policy 重搜后数据可能有 re-read 价值 |
+| **执行 ExecPlan** | `.agents/execplans/2026-04-20_allocator-vs-kivi-claim-package.md` —— 视作 "completed with L4 decision" 归档，不再执行新 phase |
+| **Framing 历史** | Framing I (±3% matched-budget) → Framing II (Pareto extension) → **L4 closed** 三步迁移完整记录在 iteration.md 03:22 / 04:42 / 05:04 / 14:XX 条目 |
+| **Allocator 作为机制保留** | allocator 作为本文 §3 方法贡献 (behavior-guided per-layer bit allocation) 保留；它是 C1/C2/C3 框架内 regime-map 的实证探针，不 claim 系统性超越 KIVI |
+| **Hook 完成后插入点 (取消)** | ~~§2.5 / §3.5 / §11 条件表 9 / 图 4 Pareto overlay~~（全部不激活；已在 thesis chapters 里的 "conditional Future Work" / "Hook position" 注释按 L4 规则简化：见 ch4_experiments.tex §4.X.X + ch5_conclusion.tex 条件 limitation） |
 
 ### 13.2 Hook 四档激活规则
 
@@ -542,15 +545,15 @@ Pareto 层的发现（7B uniform_int4 崩坏 / auto-k top tier 分布）提示 a
 - §2.3 的三层诚实分析（L1 事实 / L2 suggests / L3 open question）**必须始终保留**——它是第一层的底线写法
 - 若实验最终被决定不做，§2.5 / §3.5 / §13 整体作为 "Future Work" 段落并入 §6.2
 
-### 13.4 激活判定清单（Pareto framing 升级后）
+### 13.4 激活判定清单（最终 L4 关闭）
 
-激活前必须满足 ExecPlan 里的硬约束：
-- [x] **G0 Fairness Gate PASS**（same format ✅ + **budget disclosed** (new rule, 替代 matched ±3%) + strongest fair KIVI config frozen + smoke EXIT=0）
-- [ ] G1 Main Matrix Validity Gate PASS（主矩阵完整 + no failed-row + aux 齐全 + 每个 (model, compared-system) pair 的 `info_budget_drift` 行齐全可 aggregate 出 Pareto 图）
-- [ ] G2 Claim Strength Gate 判定到 L1 / L2 / L3 / L4 之一——在 Framing II 下 L1 实际不可达（mathematical reason）；现实预期是 **L3 (Pareto advantage only)**，若 main 显示大部分 (model, task) 的 allocator 跑赢 KIVI 则可升 L2 (quality win + systems non-inferior)
-- [ ] `docs/system_vs_kivi_readout.md` + `docs/system_vs_kivi_claim_audit.md` 产出（aggregate 里 **必须** 包含 budget ratio 表 + Pareto 图）
-- [ ] 本文档 §13.1 Hook 状态表从 "L3-pending" 改成对应的最终 "L2" / "L3" / "L4"
-- [ ] 在附 C 修订记录 "Hook 激活日志" 小节追加条目
+所有 gate 已走完并产生 L4 判定：
+
+- [x] **G0 Fairness Gate PASS**（2026-04-20 smoke EXIT=0，same format + budget disclosed + strongest-fair KIVI frozen）
+- [x] **G1 Main Matrix Validity Gate PASS**（2026-04-20 main EXIT=0，360 CSV，0 sample failure，Pareto gate `ok=true` 5 个 info_budget_drift 行）
+- [x] **G2 Claim Strength Gate → L4_mechanism_only**（aggregate: `results/system_vs_kivi/aggregate/main/g2_judgment.md`）：25 cells → win 7 / tie 14 / lose 4；per-model 极化（14b win 60%，mistral7b lose 60%）；mean Δ +0.192 量级不足以在 1.5-1.8× budget 下成立 "Pareto advantage" 主张
+- [x] **§13.1 Hook 状态** 标记为 `L4_CLOSED`
+- [ ] thesis chapters 里的 "conditional Future Work" / "Hook position" 注释待下一个写作 session 按 L4 规则简化（核心：把 "如 Hook 激活到 L1/L2 则..." 的 conditional 条款去掉；保留 "matched-budget formal compare 作为 Future Work" 这一条）
 
 ---
 
