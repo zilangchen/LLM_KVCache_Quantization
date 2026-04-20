@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-21 04:40 | Ch3 Round 7: Codex adversarial-review 5 issues 全修 (7a + 7b 共 14 处)
+- Goal: Codex 过审 Ch3 v4 发现 2 HIGH + 1 MED + 2 LOW 全是真问题 (verdict: needs-attention)；按 Round 7a (快速) + Round 7b (HIGH 1 口径统一) 两子轮全修
+- Scope: thesis/chapters/ch3_method.tex
+- Round 7a (9 处):
+  - LOW 2: Forward KL "mass-covering (zero-forcing)" → "mass-covering (zero-avoiding)" — 纠正术语错配 (zero-forcing 对应 reverse KL)
+  - LOW 1a: 删 L645-647 "Phase Boundary" 英文别名 (保留 "经验交叉点" 作唯一命名)
+  - LOW 1b-e: 散装 per-layer / allocator 4 处清理 → 逐层敏感度画像 / 分配器
+  - MED 1a: L602 "附录~\ref{subsec:exp-int4-honest}" → "第~\ref...~节" (label 实际在 ch4 不是 appendix)
+  - MED 1b: L732 cross-ref 错链修正 (跨模型实验→sec:exp-cross-model; 第五章→sec:conclusion-future)
+  - HIGH 2: §3.4.8 "核内 Percentile 在线估计" paragraph 重写为 "RoleAlign 与融合核的路径分工" — 明确 RoleAlign 默认路径=torch_ref 消费离线 (p_K,p_V)；融合核=工程可行性验证 (decode M=1 无 Tensor Core); 消除原段"避免校准产物与 kernel 耦合"导致的 RoleAlign 融合核定义歧义
+- Round 7b (5 处, HIGH 1 Static Scale 对象口径统一):
+  - §3.2 L82-89: "逐层 Scale JSON" → "per-layer per-group 静态 Scale 常量 + JSON 不含 adaptive 覆盖"
+  - §3.4.1 eq 3-12 (`s_{b,h,s,j}`) → (`s^{(l)}_j`) 离线校准常量公式, 消除 batch/time 下标歧义
+  - §3.4.1 eq 3-15 (`s_{b,h,t,j}`) → (`s^{\text{cache}}_{b,h,t,j}`) 推理时 per-token scale 快照, 明确 static 路径下=$s^{(l)}_j$, adaptive 触发时=$s_{\text{final}}$
+  - §3.6.2 显存公式前加说明: cache 存 per-token scale 快照以支持 "写入即冻结" adaptive 语义
+  - §3.6.4 JSON 开销: 仅含离线 $\{s^{(l)}_j\}$ + clip percentile + group size, 推理 adaptive 快照不落盘
+- Commands: python heredoc ×2 (7a: 9 处 / 7b: 5 处) + xelatex ×2
+- Outputs: main.pdf 99 → 100 pages (解释增加 1 页) / 1.64 MB
+- Validation: 0 undef / 0 multi / 0 dim / 0 error
+- Tag: `thesis-m-plus-v5` 标记 Ch3 经 Codex review 全修后的稳定版本
+- 下一步 candidate: Codex review round 2 验证 v5 无回归 / 或进入 Ch4 逐节优化
+
 ### 2026-04-21 03:22 | Ch3 逐节优化 Round 6: preamble 清理 + chapter/section title 一致中化 + 裸 label 归位（9 处）
 - Goal: Round 5 tag thesis-m-plus-v4 后 user 选 A "Ch3 最后遗漏项"：chapter title 中英混排 + preamble L6-14 散装英文 + 2 个裸 label (sec:ch3-rolealign / sec:ch3-triton) 定位问题
 - Scope: thesis/chapters/ch3_method.tex L1-18 + L385 + L544 + L426/L558 + L691
