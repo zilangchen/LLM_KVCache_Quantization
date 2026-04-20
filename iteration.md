@@ -36,6 +36,25 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-21 06:07 | Ch3 Round 10: §3.4 方案 M1 合并 — §3.4.1+§3.4.2 合并为 "INT8 对称路径" 单一 subsec
+- Goal: 用户选 M1 方案. §3.4.1 静态 Scale 的设计 + §3.4.2 自适应保护机制 两个 subsec 实际都是 INT8 对称路径（A 线）的实现细节, 合并为一个 subsec 更清晰
+- Scope: ch3_method.tex §3.4.1-§3.4.2 合并
+- 改动 (2 处):
+  - §3.4.1 标题改: "静态 Scale 的设计" → "INT8 对称路径：静态 Scale 与自适应保护"
+    原 body 开头加 \paragraph{静态 Scale 的设计} 保留子标题
+  - §3.4.2 subsection 降级为 paragraph: "\subsection{自适应保护机制}" → "\paragraph{自适应保护机制}"
+    原 §3.4.2 的所有 content 自然并入 §3.4.1 (包括 "\paragraph{自适应保护对历史缓存的影响}")
+- 新 §3.4 TOC (从 6 → 5 subsec):
+  - §3.4.1 INT8 对称路径: 静态 Scale 与自适应保护 (A 线, 含 4 paragraph)
+  - §3.4.2 从对称到非对称的格式升级 (B 线 motivation, 含 2 paragraph)
+  - §3.4.3 Behavior-Guided Percentile 校准 (B 线核心, 含 2 paragraph)
+  - §3.4.4 与 KIVI 的设计差异 (B 线对比, Table 3.2)
+  - §3.4.5 Triton 核函数设计 (系统实现, 含 6 paragraph)
+- Commands: python heredoc 2 处 + xelatex ×2
+- Outputs: main.pdf 99 pages (保持) / 1.64 MB
+- Validation: 0 undef / 0 multi / 0 dim / 0 error
+- 下一步: 继续深入讨论更多 §3.4 subsec 问题, 或进其他章
+
 ### 2026-04-21 05:53 | Ch3 Round 9: 表 3.1 挪附录 + §3.2 TikZ 全景图 + Forward KL 中化 + §3.4 重组 + Triton 散装清理
 - Goal: 用户深度 review Ch3 发现多层结构问题 (表 3.1 位置 / §3.2 缺全景图 / 图 3.2 温度注释 / forward KL 英文 / §3.4.2 content orphan / §3.4.6 散装)
 - Scope: ch3_method.tex + appendix.tex + fig3_calib_pipeline.tex + 新增 fig_ch3_framework_overview.tex
