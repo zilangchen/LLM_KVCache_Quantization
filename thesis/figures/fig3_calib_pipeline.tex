@@ -1,6 +1,6 @@
 % thesis/figures/fig3_calib_pipeline.tex
-% Figure 3: Calibration Pipeline (Ch3 §3.2 对应，story §16.3)
-% 两条 path 共享 KL 目标；显式不画 inv_tau 分支
+% Figure: 行为引导离线校准流程 (Ch3 §3.3 对应)
+% 两条路径共用 KL 散度作为校准目标
 
 \begin{figure}[!htbp]
   \centering
@@ -15,9 +15,9 @@
     int4/.style={rectangle, rounded corners=3pt, draw=orange!80!black, very thick,
                  fill=orange!15, minimum width=4.2cm, minimum height=1.5cm, align=center},
     art/.style={rectangle, rounded corners=2pt, draw=purple!60, thick,
-                fill=purple!8, minimum width=3.0cm, minimum height=0.9cm, align=center},
+                fill=purple!8, minimum width=3.2cm, minimum height=1.0cm, align=center},
     goal/.style={rectangle, rounded corners=3pt, draw=red!60, thick,
-                 fill=red!8, minimum width=7.5cm, minimum height=0.7cm, align=center},
+                 fill=red!8, minimum width=8cm, minimum height=0.8cm, align=center},
     arr/.style={-stealth, thick},
     sharr/.style={-stealth, thick, dashed, gray!70},
   ]
@@ -27,46 +27,46 @@
     \node[fp]   (fwd)  at (-1.0, 3.2) {FP16 前向\\ 提取 $(Q, K, V)$};
     \draw[arr] (data.east) -- (fwd.west);
 
-    % ──── Step 2: 共享 behavior 目标 ────
+    % ──── Step 2: 校准目标 (KL 散度最小化) ────
     \node[goal] (goal) at (-1.0, 2.0) {
-      \textbf{共享校准目标：}\
-      $\min\ D_{\mathrm{KL}}\!\bigl(a_{\text{ref}} \,\|\, a_{\text{quant}}\bigr)$
-      \ \footnotesize (attention 分布偏移度)
+      \textbf{校准目标：}\ $D_{\mathrm{KL}}\!\bigl(\bm{a}_{\mathrm{ref}} \,\|\, \bm{a}_{\mathrm{quant}}\bigr)$ 最小化\
+      \footnotesize (注意力分布偏移度)
     };
     \draw[arr] (fwd.south) -- (goal.north);
 
     % ──── Step 3: 两路搜索（左 INT8 / 右 INT4-RoleAlign）────
     \node[int8] (int8) at (-5.3, 0.0) {
-      \textbf{INT8 path}（canonical）\\[3pt]
+      \textbf{INT8 对称路径}\\[3pt]
       \footnotesize 搜索 $(p_c, g)$ 网格\\
       \footnotesize 对称 per-group 量化
     };
     \node[int4] (int4) at (3.2, 0.0) {
-      \textbf{INT4-RoleAlign path}\\[3pt]
-      \footnotesize 搜索 $(p_K, p_V)$ 非对称\\
+      \textbf{INT4-RoleAlign 非对称路径}\\[3pt]
+      \footnotesize 搜索 $(p_K, p_V)$\\
       \footnotesize per-channel K + per-token V
     };
     \draw[arr] (goal.south) -| (int8.north);
     \draw[arr] (goal.south) -| (int4.north);
 
-    % ──── Step 4: 输出（校准产物 JSON）────
-    \node[art] (art_int8) at (-5.3, -1.8) {\code{kv\_calib\_kl\_*\_int8.json}\\ \footnotesize per-layer scales};
-    \node[art] (art_int4) at (3.2, -1.8) {\code{kv\_calib\_kl\_*\_int4.json}\\ \footnotesize $(p_K, p_V)$ per-layer};
+    % ──── Step 4: 输出（校准产物：参数类型而非文件名）────
+    \node[art] (art_int8) at (-5.3, -1.8) {
+      \textbf{INT8 校准产物}\\
+      \footnotesize 逐层 per-group 静态 Scale
+    };
+    \node[art] (art_int4) at (3.2, -1.8) {
+      \textbf{INT4-RoleAlign 校准产物}\\
+      \footnotesize 逐层 $(p_K, p_V)$ 参数
+    };
     \draw[arr] (int8.south) -- (art_int8.north);
     \draw[arr] (int4.south) -- (art_int4.north);
 
-    % ──── 连线：两路共享同一目标 ────
-    \draw[sharr] (int8.east) -- node[midway, above, font=\scriptsize\itshape, gray]
-      {共享 KL 目标} (int4.west);
-
-    % ──── 底部备注：不画 inv_tau ────
-    \node[align=center, font=\footnotesize\itshape, gray] at (-1.0, -3.0)
-      {注：$\tau^{-1}$ 温度校正路径已降级为附录 diagnostic note，不在主线中。};
+    % ──── 连线：两路共享同一校准目标（纯箭头, 无冗余 label）────
+    \draw[sharr] (int8.east) -- (int4.west);
 
   \end{tikzpicture}
-  \caption{离线 behavior-guided 校准 pipeline。两条 path（INT8 canonical / INT4-RoleAlign）
-  共享同一 \textbf{KL 散度目标}——对 attention 行为分布 $a$ 的偏移取最小。
-  搜索空间的差异（$(p_c, g)$ 对称 per-group \textit{vs.} $(p_K, p_V)$ 非对称 per-channel/per-token）
-  来自量化格式本身，而非目标函数。产物为可审计的校准 JSON，推理时只读。}
+  \caption{行为引导离线校准流程。两条路径（INT8 对称 / INT4-RoleAlign 非对称）
+  共用 KL 散度作为校准目标——对注意力分布偏移度取最小；搜索空间的差异
+  （$(p_c, g)$ 对称 per-group \textit{vs.} $(p_K, p_V)$ 非对称 per-channel/per-token）
+  来自量化格式本身，而非目标函数。校准产物为推理时只读的离线参数集。}
   \label{fig:calib-pipeline}
 \end{figure}

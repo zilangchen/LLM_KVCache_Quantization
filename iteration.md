@@ -36,6 +36,37 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-21 05:53 | Ch3 Round 9: 表 3.1 挪附录 + §3.2 TikZ 全景图 + Forward KL 中化 + §3.4 重组 + Triton 散装清理
+- Goal: 用户深度 review Ch3 发现多层结构问题 (表 3.1 位置 / §3.2 缺全景图 / 图 3.2 温度注释 / forward KL 英文 / §3.4.2 content orphan / §3.4.6 散装)
+- Scope: ch3_method.tex + appendix.tex + fig3_calib_pipeline.tex + 新增 fig_ch3_framework_overview.tex
+- 改动清单:
+  1. **§3.2 重写** (Block A): 旧 3 段 prose + Table 3.1 → 新 prose + TikZ 全景图
+     - 加可视化全景图 (fig_ch3_framework_overview.tex, 新建): 顶层 BG 原则 → 中层校准/分配两层 → 底层两路实例化 + Triton 系统落地
+     - §3.2 prose 重写: 强调行为引导统一组织原则 + 两层贯通 + 离线/在线阶段
+     - 表 3.1 挪到附录 §sec:app-kv-modes (新 appendix section)
+  2. **图 3.2 (fig3_calib_pipeline.tex) 3 改**:
+     - 删底部 "$\tau^{-1}$ 温度校正路径已降级" 反向陈述
+     - "共享校准目标: min D_KL" → "校准目标: D_KL 最小化"
+     - JSON 文件名 (kv_calib_kl_*_int8.json) → 参数类型描述 (INT8 校准产物/逐层 per-group 静态 Scale)
+     - 删底部冗余 "共享 KL 目标" dashed label
+  3. **§3.3.1 前向/反向 KL 中化** (Block B):
+     - forward KL → 前向 KL 散度
+     - reverse KL → 反向 KL 散度
+     - mass-covering (zero-avoiding) → 概率质量覆盖 (mass-covering / zero-avoiding)
+  4. **§3.4 加 section intro** (Block C1): 介绍 A 线 (INT8 对称) + B 线 (INT4 非对称 RoleAlign) + Triton 系统落地 的组织
+  5. **§3.4.2 → §3.4.3 content 挪位** (Block C2): "向非对称格式的扩展" paragraph + 40 行 orphan 内容 (RoleAlign intro + 正交性 paragraph + 格式升级动机) 从 §3.4.2 末尾挪到 §3.4.3 subsection 内部
+  6. **§3.4.6 Triton 散装英文清理** (Block D, 14 处):
+     - online softmax 思想 → 在线 softmax 技术
+     - bit-packing / packed / signed INT8 / zero-point / split-channel / nibble → 中化
+     - program 实例 / naive 路径 / roofline → 中化
+     - attention-KL / attention logits → 注意力 KL / 注意力 logits
+- 新增文件: thesis/figures/fig_ch3_framework_overview.tex (TikZ BG 框架两层全景图)
+- 新增附录 section: appendix.tex §sec:app-kv-modes "量化模式配置汇总" 含 Table 3.1
+- Commands: Write + Edit + python heredoc + xelatex ×2
+- Outputs: main.pdf 99 pages (保持) / 1.64 MB
+- Validation: 0 undef / 0 multi / 0 dim / 0 error
+- 下一步: Codex review 验证 Ch3 整体一致性; 或继续用户指出的更多 §3.4 subsec 合理性讨论
+
 ### 2026-04-21 05:18 | Ch2 整章重构 Round 1: 碎 subsec 合并 + §2.4 精简 + 散装英文清理 (20 处)
 - Goal: 用户给 Ch2 3 条指令 + 我补 4 条额外发现; 一次性推到 review-ready
 - Scope: thesis/chapters/ch2_related_work.tex + ch3_method.tex (加 label)

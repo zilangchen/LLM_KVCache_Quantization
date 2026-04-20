@@ -113,6 +113,58 @@ PPL/Needle/RULER/LongBench 四类指标均已进入平坦收敛域，
 推理时一次性加载到 GPU 显存，不引入运行时校准开销。
 
 % ============================================================
+\section{量化模式配置汇总}
+\label{sec:app-kv-modes}
+% ============================================================
+
+表~\ref{tab:ch3-kv-modes} 汇总本框架支持的 9 种量化模式及其核心特征，
+对应第三章方法框架中各条路径的实验配置。
+
+\begin{table}[!htbp]
+  \centering
+  \caption{本框架支持的量化模式（实验配置）}
+  \label{tab:ch3-kv-modes}
+  \zihao{5}
+  \begin{threeparttable}
+  \begin{tabular}{llccl}
+    \toprule
+    \textbf{模式名称} & \textbf{位宽} & \textbf{静态 Scale} & \textbf{融合 Kernel} & \textbf{说明} \\
+    \midrule
+    fp16            & 16-bit & ---  & ---  & FP16 全精度基线 \\
+    int8\_baseline  & 8-bit  & 否   & 否   & INT8 动态量化基线 \\
+    int8\_ours      & 8-bit  & 是   & 是   & 本文方法（INT8） \\
+    int4\_baseline  & 4-bit  & 否   & 否   & INT4 动态量化基线 \\
+    int4\_fused     & 4-bit  & 是   & 是   & INT4 行为引导 + 融合 \\
+    int4\_ours      & 4-bit  & 是   & 否   & INT4 行为引导 \\
+    kivi\_style     & 8/4-bit\tnote{$\ddagger$} & ---  & 否   & KIVI 风格非对称量化 \\
+    int4\_ours\_asym & 4-bit  & 是\tnote{$\star$} & 是\tnote{$\dagger$} & INT4-RoleAlign \\
+    int4\_ours\_mixed & 4-bit & 是   & 否   & MixedKV (K@8+V@4) \\
+    \bottomrule
+  \end{tabular}
+  \begin{tablenotes}
+    \small
+    \item 注：基线模式使用 PyTorch 参考实现（\code{torch\_ref}），
+    ours/fused 模式中的``融合 Kernel''指 Triton 融合量化解码注意力核函数。
+    INT4-Fused 与 INT4 对称共享相同的校准参数，
+    仅在推理实现路径上有区别（Triton 融合核 vs PyTorch 参考实现），
+    用于在第四章中分离校准收益与核函数加速的各自贡献。
+    KIVI-style 支持 INT8 和 INT4 两种精度。
+    INT4-RoleAlign 与 KIVI-style INT4 共享量化格式但使用行为引导校准。
+    \item[$\star$] INT4-RoleAlign 使用行为引导 percentile 校准（非 per-group 静态 Scale），
+    量化轴为 per-channel K + per-token V 非对称。
+    \item[$\dagger$] INT4-RoleAlign 的融合核函数为专用的 INT4 非对称融合核
+    （第~\ref{subsec:ch3-triton-int4-asym}~节），采用分通道设计，
+    与 INT8 对称核函数的 per-group broadcast 设计不同；
+    端到端评测中 RoleAlign 默认使用 \code{torch\_ref} 参考实现，
+    融合核因缺少 Tensor Core 利用而未达延迟加速
+    （可行性验证见第~\ref{sec:exp-deployment}~节）。
+    \item[$\ddagger$] KIVI-style 支持 INT8（8-bit）与 INT4（4-bit）两种精度；
+    本文第四章对比使用 KIVI-style INT4（与 INT4-RoleAlign 同格式，作为非校准对照）。
+  \end{tablenotes}
+  \end{threeparttable}
+\end{table}
+
+% ============================================================
 \section{校准超参数搜索空间}
 \label{sec:app-calib-search-space}
 % ============================================================

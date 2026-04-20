@@ -1,0 +1,83 @@
+% thesis/figures/fig_ch3_framework_overview.tex
+% Figure: 行为引导量化框架两层总览（Ch3 §3.2 承担 framework overview 角色）
+
+\begin{figure}[!htbp]
+  \centering
+  \begin{tikzpicture}[
+    every node/.style={font=\small},
+    goal/.style={rectangle, rounded corners=4pt, draw=red!60, very thick,
+                 fill=red!8, minimum width=11cm, minimum height=1.1cm, align=center},
+    layer/.style={rectangle, rounded corners=3pt, draw=blue!55!black, thick,
+                  fill=blue!10, minimum width=5.2cm, minimum height=1.2cm, align=center},
+    impl/.style={rectangle, rounded corners=2pt, draw=green!50!black, thick,
+                 fill=green!12, minimum width=4.2cm, minimum height=1.0cm, align=center},
+    sys/.style={rectangle, rounded corners=2pt, draw=orange!80!black, thick,
+                fill=orange!15, minimum width=4.2cm, minimum height=1.0cm, align=center},
+    arr/.style={-stealth, thick},
+    dashedarr/.style={-stealth, thick, dashed, gray!70},
+  ]
+    % ==== 顶层：统一目标 (行为引导原则) ====
+    \node[goal] (bg) at (0, 4.5) {
+      \textbf{注意力行为保持度} — 行为引导（BG）统一原则\\
+      \footnotesize 以 KL 散度 $D_{\mathrm{KL}}(\bm{a}_{\mathrm{ref}} \,\|\, \bm{a}_{\mathrm{quant}})$ 为量化损伤的直接度量
+    };
+
+    % ==== 中层：两个抽象层 ====
+    \node[layer] (calib) at (-3.5, 2.5) {
+      \textbf{校准层}（§\ref{sec:ch3-calibration}）\\
+      \footnotesize KL 散度作为目标函数\\
+      \footnotesize 搜索最优量化参数
+    };
+    \node[layer] (alloc) at (3.5, 2.5) {
+      \textbf{分配层}（§\ref{sec:ch3-allocator}）\\
+      \footnotesize 逐层 KL 敏感度画像\\
+      \footnotesize 驱动跨层预算决策
+    };
+
+    % ==== 底层：校准层两路实例化 + 系统落地 + 分配器实例 ====
+    \node[impl] (int8) at (-5.5, 0.3) {
+      \textbf{INT8 对称路径}\\
+      \footnotesize 静态 Scale + 自适应保护
+    };
+    \node[impl] (int4) at (-1.0, 0.3) {
+      \textbf{INT4-RoleAlign 非对称路径}\\
+      \footnotesize $(p_K, p_V)$ 行为引导校准
+    };
+    \node[sys] (allo_impl) at (3.5, 0.3) {
+      \textbf{层间预算分配器 + AutoK}\\
+      \footnotesize 逐层 top-$k$ + 覆盖度阈值
+    };
+
+    % ==== 系统层：Triton 融合核 (INT8 canonical) ====
+    \node[sys] (triton) at (-5.5, -1.6) {
+      \textbf{Triton 融合解码核}\\
+      \footnotesize INT8 canonical 系统落地
+    };
+
+    % ==== 箭头：顶层 → 中层 ====
+    \draw[arr] (bg.south) to[out=-90, in=90]
+      node[midway, left, font=\scriptsize\itshape, gray] {作为目标函数}
+      (calib.north);
+    \draw[arr] (bg.south) to[out=-90, in=90]
+      node[midway, right, font=\scriptsize\itshape, gray] {作为敏感度度量}
+      (alloc.north);
+
+    % ==== 箭头：校准层 → 两路实例化 ====
+    \draw[arr] (calib.south) to[out=-90, in=90] (int8.north);
+    \draw[arr] (calib.south) to[out=-90, in=90] (int4.north);
+
+    % ==== 箭头：分配层 → 分配器实例 ====
+    \draw[arr] (alloc.south) -- (allo_impl.north);
+
+    % ==== 箭头：INT8 路径 → Triton 系统落地 ====
+    \draw[dashedarr] (int8.south) --
+      node[midway, right, font=\scriptsize\itshape, gray] {系统落地}
+      (triton.north);
+  \end{tikzpicture}
+  \caption{行为引导量化框架两层总览。顶层的注意力行为保持度以 KL 散度作为统一度量：
+  在校准层（§\ref{sec:ch3-calibration}）作为目标函数搜索最优量化参数，
+  在分配层（§\ref{sec:ch3-allocator}）作为逐层敏感度驱动预算决策。
+  校准层落成两条实例化路径——INT8 对称与 INT4-RoleAlign 非对称；
+  INT8 路径进一步由 Triton 融合解码核承担系统落地。}
+  \label{fig:ch3-framework-overview}
+\end{figure}
