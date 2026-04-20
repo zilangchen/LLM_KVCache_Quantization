@@ -36,6 +36,33 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-21 00:50 | Ch3 结构重组：10 section → 7 section（脚本化一次性重排）
+- Goal: 用户对 Ch3 提 7 条重组建议：§3.1 改名为专业术语；§3.2 精简不过度细分；§3.4+§3.5 合并为"行为引导校准的 INT8 和 INT4 实现"；§3.6+§3.7 AutoK 合并；§3.8 Triton 并入 §3.4 末尾作为 §3.4.x（非第二层故事）；§3.9 A 类（系统架构）融入 §3.2，B 类（复杂度）独立
+- Scope: thesis/chapters/ch3_method.tex 一次性重排；新增 refactor_ch3_structure.py 可复用脚本
+- Changed files:
+  - scripts/thesis/refactor_ch3_structure.py (new, 180 lines) — section parse + 按新骨架 concatenate
+  - thesis/chapters/ch3_method.tex (1008 → 1010 lines，内容等价保留，只重排 section/subsection 层次)
+- 新 7-section 骨架:
+  - §3.1 注意力近似误差分析（原"问题形式化"重命名）
+  - §3.2 方法框架总览（原 §3.2 精简"系统架构概述" subsection 标题 + 融入原 §3.9.1-3 A 类 KV Cache 管理/生成循环/量化模式总览）
+  - §3.3 行为引导校准方法（保留）
+  - §3.4 行为引导校准的 INT8 和 INT4 实现（合并原 §3.4+§3.5+§3.8 Triton，共 10 subsections；用户明确 Triton 信息全保留不压缩）
+  - §3.5 Behavior-Guided 层间预算分配器（合并原 §3.6+§3.7 AutoK 为 5 subsections）
+  - §3.6 复杂度与资源分析（原 §3.9 B 类独立，§3.9.4 升级为 section 标题，其余为 subsection）
+  - §3.7 本章小结
+- Commands:
+  - `python3 scripts/thesis/refactor_ch3_structure.py`
+  - `xelatex -interaction=nonstopmode main.tex` ×2
+- Outputs: main.pdf 100 pages / 减 1 页（合并 section 节省 break space）
+- Validation:
+  - 0 undefined references / 0 multiply-defined / 0 error
+  - sec:ch3-problem / sec:ch3-calibration / sec:ch3-allocator / sec:ch3-system / sec:ch3-complexity 全部 resolve
+  - TOC 结构从 aux 核对：7 section + 每节 subsection 保序
+- Risks / follow-ups:
+  - §3.4 有 10 subsection 可能偏多（需 user 审视是否要 promote 部分为 subsubsection/paragraph）
+  - §3.2 现有 5 subsection（2 个原 §3.2 + 3 A 类），可进一步精简用户若觉得细
+  - 下一步：tag `thesis-m-plus-v3` 标记新骨架，memory 已更新写作纪律第三条
+
 ### 2026-04-21 00:37 | 术语统一 + 散装英文中文化 + 内部工作语言清理（281 处批处理）
 - Goal: 用户对 Ch3 结构重组 + 术语命名提议中发现 7 条术语冲突 + 26 个散装英文词 + 大量内部工作语言（Phase 1/3/8/9、Gate C、final-ready、Level-5、story §X.Y、Weak/Mixed、clean-provenance pin=）泄露进论文正文；约定先做全局术语清理再动 Ch3 结构（顺序反了会漏清理）
 - Scope: thesis/chapters/ 8 个 tex 文件批处理，281 处替换 (stage1=39 / stage2=186 / stage3=55 / comments=7)；新增 normalize_terminology.py 可复用脚本
