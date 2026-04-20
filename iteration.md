@@ -36,6 +36,30 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-21 01:24 | Ch3 逐节优化 Round 4: §3.5 Allocator + AutoK 清理（13 处）
+- Goal: §3.5 有 scaffold 注释、behavior/sensitivity 散装英文、AutoK 定位段连续两处 meta 否定、一处循环引用
+- Scope: thesis/chapters/ch3_method.tex §3.5 L691-800
+- Changed files: ch3_method.tex (13 处)
+- HIGH (7 处):
+  - H1: 删 L755-757 scaffold 注释 + 挪 `\label{sec:ch3-autok}` 到 §3.5.4 subsection 下 (修复裸 label)
+  - H2: L699 "behavior 原则" → "行为引导原则"
+  - H4: L740 "第五章 future work" → "第五章"
+  - H5a: L751 "operating 适用区间" → "适用区间特征"
+  - H5b: L752 "supporting case" → "佐证案例"
+  - H6: AutoK 定位段 (§3.5.5) 整段重写 — 去除 "而非宣称...普适最优策略" 连续两处 meta 否定 + "行为引导 框架" 空格，改为正向 "AutoK 作为自然延伸 + 定位于具体场景"
+  - H7: L786 循环引用 `\ref{sec:ch3-autok}` parenthetical 删除
+- MEDIUM (6 处):
+  - M1a: L719 "heuristic 选择器" → "启发式选择器"
+  - M1b: L722 "sensitivity 信息" → "敏感度信息"
+  - M1c: L723 "Heuristic 在实验章节作为强基线被正面承认" → "启发式选择器在实验章节中作为强基线与行为引导策略并列比较" (去 awkward 被动 + 散装)
+  - M2: L732 "Role-aware allocator" → "Role-Aware Allocator" (全文大小写统一)
+  - M3a: L745 "Per-layer sensitivity" → "逐层敏感度"
+  - M3b: L765 "sensitivity profile" → "敏感度画像"
+- 保留: top-k 公式 / K-V 非对称预算公式 / cov80-90 阈值 / 术语 AutoK/fixed-k/Role-Aware
+- Commands: python heredoc str.replace ×13 + xelatex ×2
+- Validation: 99 pages / 0 undef / 0 multi / 0 error
+- 剩余 follow-ups: Round 5 §3.7 本章小结 (~8 处空格+散装) + §3.6 已扫过基本干净
+
 ### 2026-04-21 01:19 | Ch3 逐节优化 Round 3: §3.4 INT8+INT4 实现清理（10 处 surgical + 3 处 meta 否定重写）
 - Goal: §3.4 是 Ch3 最长节（411 行 / 10 subsec），结构 OK 但 Triton 尾部有连续 meta 否定 + scaffold 注释 + 中英空格
 - Scope: thesis/chapters/ch3_method.tex §3.4 L284-695
