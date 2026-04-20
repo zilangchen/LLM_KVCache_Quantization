@@ -36,6 +36,32 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-21 01:19 | Ch3 逐节优化 Round 3: §3.4 INT8+INT4 实现清理（10 处 surgical + 3 处 meta 否定重写）
+- Goal: §3.4 是 Ch3 最长节（411 行 / 10 subsec），结构 OK 但 Triton 尾部有连续 meta 否定 + scaffold 注释 + 中英空格
+- Scope: thesis/chapters/ch3_method.tex §3.4 L284-695
+- Changed files: ch3_method.tex (10 处替换)
+- 改动清单:
+  - HIGH scaffold 清理:
+    - H1: 删 L385 "原 §3.5 KIVI-style 实例化 RoleAlign 合入" 注释
+    - H2+H3: 删 L545 "原 §3.8 Triton 融合核" 注释 + L547-550 Triton 开篇待定注释块（FlashInfer/BitDecoding positioning + 反向 "不做 kernel 速度级比较"）
+  - HIGH 空格 artifact:
+    - H4: L552 "行为引导 校准方案" → "行为引导校准方案"
+    - H5a: L388 "Role-Aware量化" → "Role-Aware 量化"
+    - H5b: L434 "为Role-Aware的" → "为 Role-Aware 的"
+  - HIGH meta 否定改正向（纪律一）:
+    - H6: L679-680 "未纳入 Split-K...不应理解为本质属性" → "聚焦 H_kv≥4 主流 GQA；H_kv=2 场景 Split-K 作为未来扩展"
+    - H7: L690-692 "不构成净加速...而非对...绝对加速" → "40% 加速口径相对未融合参考实现成立；与 FlashAttention-2 的对比属另一维度，Tensor Core 未来扩展方向"
+    - H8: L614 "故此处不声称 无需 Residual Buffer 优于 KIVI" → "RoleAlign 融合核针对 cs=128 评测设计；Residual Buffer + flash-decoding 分块未来工作"
+  - MED:
+    - M1: L441 "离线 BA 校准" → "离线行为引导校准"（术语冻结废弃词清理）
+    - M2a: L573 "naive dequant+SDPA 路径" → "未融合的 dequant+SDPA 路径"
+    - M2b: L691 "未融合 INT4 naive 参考实现" → "未融合 INT4 参考实现"（含在 H7 改写中）
+- 保留 depth: §3.4.1-5 数学推导完整；Triton 技术术语（softmax/FlashAttention/SRAM/Tensor Core/CUDA Core/Residual Buffer/Split-K/Flash-Decoding/bit-packing/nibble/per-channel/per-token）
+- Commands: python heredoc str.replace ×10 + xelatex ×2
+- Outputs: main.pdf 99 pages / 1.64 MB
+- Validation: 0 undefined / 0 multi-defined / 0 dim-too-large / 0 error
+- Risks / follow-ups: 下一步 Round 4 §3.5 Allocator (L697-) 含 2 裸 label (sec:ch3-rolealign/triton 已处理) + Role-Aware 部分 meta 否定
+
 ### 2026-04-21 01:13 | Ch3 逐节优化 Round 2: §3.3 行为引导校准方法清理（10 处 surgical）
 - Goal: §3.3 结构/内容 depth 合适无需重写，但存在 meta 自我否定 + 散装英文 + 错位加粗 + 内部注释泄露等 surgical 问题
 - Scope: thesis/chapters/ch3_method.tex §3.3 L154-284

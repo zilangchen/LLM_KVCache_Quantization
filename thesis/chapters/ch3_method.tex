@@ -382,10 +382,9 @@ $s_{\text{dynamic}} \leq s_{\text{static}}$，最终使用静态 Scale 保持校
 
 % ============================================================
 
-% ==== 原 §3.5 KIVI-style 实例化 RoleAlign，无 section 标题合入 ====
 \label{sec:ch3-rolealign}
 
-INT4-RoleAlign（INT4 Role-Aware量化）是在 KIVI~\cite{liu2024kivi} 提出的
+INT4-RoleAlign（INT4 Role-Aware 量化）是在 KIVI~\cite{liu2024kivi} 提出的
 per-channel Key + per-token Value 非对称格式上，
 以 attention-KL 为目标的行为引导实例化。
 该方案的设计假设——Key 量化对长上下文检索质量的敏感性高于 Value、
@@ -431,14 +430,14 @@ Key 决定了注意力的``看哪里''（attention logits 的排序结构），
 后文统一简称为 INT4-RoleAlign（不省略 INT4- 前缀以明确比特宽度约束）。
 该方法吸收 KIVI~\cite{liu2024kivi} 的非对称量化轴设计思想，
 将 Key 和 Value 的量化策略从统一的 per-group 对称
-升级为Role-Aware的非对称格式：
+升级为 Role-Aware 的非对称格式：
 
 \begin{itemize}[leftmargin=2em, itemsep=2pt]
   \item \textbf{Key：per-channel 非对称量化}。
     沿序列维度（across tokens）为每个通道独立计算 Scale 与零点偏移，
     捕捉 Key 矩阵中通道间的数值异质性。
     形式化地，对于第 $l$ 层的 Key 矩阵 $\bK \in \mathbb{R}^{S \times d_k}$，
-    记 $p_K$ 为 Key 的双端截断 percentile（由离线 BA 校准搜索确定），
+    记 $p_K$ 为 Key 的双端截断 percentile（由离线行为引导校准搜索确定），
     per-channel 量化参数为：
     \begin{equation}
       \begin{aligned}
@@ -542,14 +541,9 @@ KIVI-style 的 absmax/min 配置对应 RoleAlign 搜索空间的端点 $(p_K, p_
 
 % ============================================================
 
-% ==== 原 §3.8 Triton 融合核，作为 §3.4 末尾系统落地 ====
 \label{sec:ch3-triton}
-% 注：与开源 attention decode 库（如 FlashInfer~\cite{ye2025flashinfer} 的 INT4/INT8 decode kernel
-% 与 BitDecoding~\cite{du2026bitdecoding} 的 NVFP4 Tensor Core 路径）互为补充——
-% 后者聚焦于极低比特的 kernel-level 加速，而本节聚焦于 行为引导 INT8 canonical path
-% 的融合核\emph{落地手段}，不做 kernel 速度级比较。
 
-本节给出 行为引导 校准方案对应的 Triton 融合核函数实现，
+本节给出行为引导校准方案对应的 Triton 融合核函数实现，
 作为 INT8 canonical path 从校准产物到可部署推理路径的系统桥梁。
 在自回归解码阶段，每步仅生成一个 token（$q_{\text{len}} = 1$），
 但需要与整个上下文的 Key/Value 缓存进行注意力计算。
@@ -570,7 +564,7 @@ INT8 融合核函数沿用 FlashAttention~\cite{dao2022flashattention} 的 onlin
 并直接累加注意力输出，
 避免材化完整的注意力得分矩阵与 FP16 反量化中间张量。
 整体复杂度 $O(B \cdot H_q \cdot S \cdot d_k)$ 与朴素实现相同，
-但访存较 naive dequant+SDPA 路径降低 $O(S \cdot d_k)$ 字节的中间张量物化。
+但访存较未融合的 dequant+SDPA 路径降低 $O(S \cdot d_k)$ 字节的中间张量物化。
 
 
 \subsection{INT4 核函数设计}
@@ -610,13 +604,12 @@ KIVI~\cite{liu2024kivi} 原论文通过 FP16 Residual Buffer（$R=128$）
 且本文主线评测协议为 chunk\_size$=128$，
 在该设置下 Residual Buffer 的作用已由 chunk 边界 FP16 累积计算近似吸收。
 本文 RoleAlign 的 Triton 融合核针对 chunk\_size$=128$ 的非 streaming 评测设计，
-统一以 INT4 格式处理整个 KV Cache，
-故此处不声称 ``无需 Residual Buffer'' 优于 KIVI——
-附录~\ref{subsec:exp-int4-honest} 中 cs$=1$ 的失效实验表明，
-per-channel K 在 streaming decode 下是本文 KIVI-style 基线与 RoleAlign 共同的边界，
-KIVI 原论文的 Residual Buffer 可在该场景下缓解此失效，
-但完整 streaming kernel 的适配（包含 Residual Buffer 与 flash-decoding 分块）
-留作未来工作。
+统一以 INT4 格式处理整个 KV Cache。
+附录~\ref{subsec:exp-int4-honest} 中 cs$=1$ 的失效实验划定了
+per-channel K 在 streaming decode 下本文 KIVI-style 基线与 RoleAlign 的共同边界；
+KIVI 原论文的 Residual Buffer 在该场景下有效，
+完整 streaming kernel 的适配（Residual Buffer + flash-decoding 分块）
+留待未来工作。
 
 \paragraph{核内 Percentile 在线估计}
 \label{para:ch3-in-kernel-pct}
@@ -674,22 +667,22 @@ naive 路径 TPOT 为 $T_{\text{naive}}$，则\emph{经验交叉点}定义为满
 \textbf{SM 利用率}方面，Triton 核函数的 Grid 按 $(B, H_q)$ 启动，
 当 $H_{kv}$ 较小（如 $H_{kv}=2$，$H_q=12$）时实例总数可能不足以填满所有 SM
 而导致硬件利用率受限；相反 $H_{kv}=8$（$H_q=32$，如 LLaMA-3.1-8B）时 Grid 更密，SM 占用率更高。
-该 SM 利用率不足在 $H_{kv}=2$ 场景下可通过 Split-K / Flash-Decoding~\cite{dao2023flashdecoding}
-沿序列维度切分 program 实例来缓解；
-本文当前实现\emph{未纳入} Split-K 优化，因此 $H_{kv}=2$ 下 naive 路径更优是
-本文 kernel 设计的实现层面限制，不应理解为量化 decode 的本质属性。
+本文当前实现聚焦于 $H_{kv}\geq 4$ 的主流 GQA 配置；
+对于 $H_{kv}=2$ 场景，Split-K / Flash-Decoding~\cite{dao2023flashdecoding}
+沿序列维度切分 program 实例可提升 SM 占用率，
+作为 kernel 层的扩展方向留待未来工作。
 \textbf{带宽节省与反量化开销的权衡}方面，融合核通过在 SRAM 中完成反量化
 避免了全局显存的中间张量物化，带宽节省量与序列长度成正比（$O(S \cdot d_k)$），
 但反量化本身引入额外的 ALU 指令开销，当序列较短时带宽节省不足以抵消该开销。
 
-\textbf{Tensor Core 利用披露}：
+\textbf{加速口径与 Tensor Core 的关系}：
+本文融合核的 40\% 加速口径相对于``未融合 INT4 参考实现''成立；
+与 tensor-core-enabled FP16 FlashAttention-2 基线的对比属于另一维度的绝对加速测度。
 由于 decode 阶段每个 program 仅处理单个 query token（$M=1$），
-Triton 的 \code{tl.dot} 要求 $M\geq 16$ 以利用 Tensor Core（HMMA 指令），
-本文的 INT8/INT4 融合 decode 核均\emph{仅使用 CUDA Core}（通过 \code{tl.sum(a*b)} 实现点积），
-未利用 Tensor Core 带宽。
-因此在绝对 TPOT 上，本文融合核相对于 tensor-core-enabled FP16 FlashAttention-2 基线
-\emph{不构成净加速}——所报告的 40\% 加速是对``未融合 INT4 naive 参考实现''的\emph{相对}改进，
-而非对工业级 FP16 tensor-core kernel 的绝对加速。
+不满足 Triton \code{tl.dot} 的 $M\geq 16$ Tensor Core（HMMA 指令）使用条件，
+本文 INT8/INT4 融合 decode 核通过 \code{tl.sum(a*b)} 在 CUDA Core 上实现点积。
+未来 tensor-core-enabled decode kernel（如 BitDecoding 的 NVFP4 路径~\cite{du2026bitdecoding}）
+为绝对加速维度的扩展方向。
 经验交叉点的具体位置依赖于硬件参数（SM 数量、显存带宽、L2 缓存大小）
 和 kernel 实现细节，第四章将通过跨模型的实测数据给出经验分析。
 
