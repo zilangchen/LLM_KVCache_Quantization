@@ -1,89 +1,132 @@
 \begin{figure}[!htbp]
   \centering
-  \begin{minipage}[t]{0.56\textwidth}
-    \centering
-    \begin{tikzpicture}[x=1cm,y=0.03cm]
-      \definecolor{konly}{HTML}{16A34A}
-      \definecolor{vonly}{HTML}{60A5FA}
-      \definecolor{k4v8}{HTML}{EF4444}
-      \definecolor{mixedkv}{HTML}{8B5E34}
-
-      % axes
-      \draw[->, thick] (0,0) -- (0,108) node[above, font=\scriptsize] {Needle 通过率 (\%)};
-      \draw[thick] (0,0) -- (7.2,0);
-      \foreach \y in {0,25,50,75,100} {
-        \draw (-0.08,\y) -- (0.08,\y);
-        \node[left, font=\scriptsize] at (-0.1,\y) {\y};
-        \draw[densely dashed, gray!35] (0,\y) -- (7.0,\y);
-      }
-
-      % legend
-      \fill[konly] (0.35,103) rectangle +(0.18,4);
-      \node[anchor=west, font=\scriptsize] at (0.58,105) {K-only};
-      \fill[vonly] (1.55,103) rectangle +(0.18,4);
-      \node[anchor=west, font=\scriptsize] at (1.78,105) {V-only};
-      \fill[k4v8] (2.7,103) rectangle +(0.18,4);
-      \node[anchor=west, font=\scriptsize] at (2.93,105) {K4V8};
-      \fill[mixedkv] (3.8,103) rectangle +(0.18,4);
-      \node[anchor=west, font=\scriptsize] at (4.03,105) {MixedKV};
-
-      % group labels
-      \node[font=\scriptsize\bfseries, align=center] at (1.15,-10) {Qwen\\1.5B};
-      \node[font=\scriptsize\bfseries, align=center] at (3.55,-10) {Qwen\\7B};
-      \node[font=\scriptsize\bfseries, align=center] at (5.95,-10) {LLaMA\\8B};
-
-      % bars helper positions
-      % group 1
-      \fill[konly]   (0.45,0) rectangle (0.73,100);
-      \fill[vonly]   (0.82,0) rectangle (1.10,100);
-      \fill[k4v8]    (1.19,0) rectangle (1.47,0);
-      \fill[mixedkv] (1.56,0) rectangle (1.84,100);
-      % group 2
-      \fill[konly]   (2.85,0) rectangle (3.13,100);
-      \fill[vonly]   (3.22,0) rectangle (3.50,100);
-      \fill[k4v8]    (3.59,0) rectangle (3.87,0);
-      \fill[mixedkv] (3.96,0) rectangle (4.24,72.4);
-      % group 3
-      \fill[konly]   (5.25,0) rectangle (5.53,100);
-      \fill[vonly]   (5.62,0) rectangle (5.90,100);
-      \fill[k4v8]    (5.99,0) rectangle (6.27,100);
-      \fill[mixedkv] (6.36,0) rectangle (6.64,100);
-
-      % value annotations
-      \foreach \x/\v in {
-        0.59/100,0.96/100,1.70/100,
-        2.99/100,3.36/100,4.10/72.4,
-        5.39/100,5.76/100,6.13/100,6.50/100} {
-        \node[font=\scriptsize, text=gray!70!black] at (\x,\v+5) {\v};
-      }
-      \foreach \x in {1.33,3.73} {
-        \node[font=\scriptsize\bfseries, text=red!70!black, rotate=90] at (\x,6) {0};
-      }
-    \end{tikzpicture}
-  \end{minipage}\hfill
-  \begin{minipage}[t]{0.40\textwidth}
+  \begin{minipage}[t]{0.47\textwidth}
     \centering
     \begin{tikzpicture}[
+      x=1cm, y=1cm,
       every node/.style={font=\small, align=center},
-      obs/.style={rectangle, rounded corners=3pt, draw=blue!55!black, thick,
-                  fill=blue!8, minimum width=4.2cm, minimum height=1.05cm},
-      risk/.style={rectangle, rounded corners=3pt, draw=red!65!black, thick,
-                   fill=red!8, minimum width=4.2cm, minimum height=1.05cm},
-      impl/.style={rectangle, rounded corners=3pt, draw=green!45!black, thick,
-                   fill=green!10, minimum width=4.2cm, minimum height=1.05cm},
-      arr/.style={-stealth, thick}
+      arr/.style={-stealth, line width=0.95pt, draw=black!80},
+      boxbase/.style={
+        rectangle, rounded corners=3.5pt,
+        draw=black!78, line width=0.9pt,
+        text width=6.10cm, minimum height=1.06cm, inner sep=5.0pt
+      },
+      bluebox/.style={boxbase, fill=blue!10},
+      redbox/.style={boxbase, fill=red!10, draw=black!90, line width=1.0pt},
+      yellowbox/.style={boxbase, fill=yellow!16},
+      greenbox/.style={boxbase, fill=green!10}
     ]
-      \node[obs] (o1) at (0,3.7) {\textbf{K-only / V-only}\\单侧压缩仍保持可用检索};
-      \node[risk] (o2) at (0,2.2) {\textbf{K4V8 在 Qwen 上崩塌}\\Key 精度下降先触发失稳};
-      \node[obs] (o3) at (0,0.7) {\textbf{LLaMA-8B 更鲁棒}\\架构结构影响失稳阈值};
-      \node[impl] (o4) at (0,-0.9) {\textbf{MixedKV 恢复可用行为}\\K 优先保护优于对称 INT4};
-      \node[impl] (o5) at (0,-2.5) {\textbf{设计启示}\\对称 INT4 $\rightarrow$ 角色感知格式升级\\$\rightarrow$ \texttt{INT4-RoleAlign}};
-      \draw[arr] (o1.south) -- (o2.north);
-      \draw[arr] (o2.south) -- (o3.north);
-      \draw[arr] (o3.south) -- (o4.north);
-      \draw[arr] (o4.south) -- (o5.north);
+      \node[font=\bfseries\small, text=black] at (0,4.35) {启示链};
+
+      \node[bluebox] (s1) at (0,3.15) {\textbf{问题不在“量化本身”}\\\texttt{FP16}、\texttt{K8V8} 与 \texttt{K8V4}\\都维持可用行为};
+      \node[yellowbox] (s2) at (0,1.15) {\textbf{同预算关键对照是}\\\texttt{K8V4} 与 \texttt{K4V8}\\而不是旧的单侧控制项};
+      \node[redbox] (s3) at (0,-0.85) {\textbf{4-bit 落在 Key 上先触发 cliff}\\\texttt{K4V8} 在 Qwen 系列直接失稳};
+      \node[bluebox] (s4) at (0,-2.85) {\textbf{\texttt{K4V4} 与 \texttt{K4V8} 同向坍塌}\\说明主导触发侧是 Key，\\而不是 Value};
+      \node[greenbox] (s5) at (0,-4.95) {\textbf{设计升级}\\从 bit-layout 诊断过渡到\\Key 优先保护的 \texttt{RoleAlign}};
+
+      \draw[arr] (s1.south) -- (s2.north);
+      \draw[arr] (s2.south) -- (s3.north);
+      \draw[arr] (s3.south) -- (s4.north);
+      \draw[arr] (s4.south) -- (s5.north);
+    \end{tikzpicture}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.50\textwidth}
+    \centering
+    \begin{tikzpicture}[x=1cm,y=0.055cm]
+      \definecolor{cfgGray}{RGB}{120,120,120}
+      \definecolor{cfgGrayFill}{RGB}{239,239,239}
+      \definecolor{cfgBlue}{RGB}{66,108,176}
+      \definecolor{cfgBlueFill}{RGB}{222,231,247}
+      \definecolor{cfgRed}{RGB}{186,86,79}
+      \definecolor{cfgRedFill}{RGB}{246,223,219}
+      \definecolor{cfgGold}{RGB}{176,135,30}
+      \definecolor{cfgGoldFill}{RGB}{248,238,199}
+
+      \node[font=\bfseries\small, text=black] at (3.90,145.0) {五配置角色诊断};
+
+      % legend
+      \draw[black, line width=1.55pt] (0.80,132.0) -- (1.35,132.0);
+      \filldraw[black] (1.075,132.0) circle (2.2pt);
+      \node[anchor=west, font=\scriptsize, text=black] at (1.48,132.0) {FP16};
+
+      \draw[cfgGray, line width=1.70pt] (2.12,132.0) -- (2.67,132.0);
+      \filldraw[cfgGrayFill, draw=cfgGray, line width=1.05pt] (2.395,132.0) circle (2.25pt);
+      \node[anchor=west, font=\scriptsize, text=black] at (2.80,132.0) {\texttt{K8V8}};
+
+      \draw[cfgBlue, line width=1.70pt] (3.55,132.0) -- (4.10,132.0);
+      \filldraw[cfgBlueFill, draw=cfgBlue, line width=1.05pt] (3.825,132.0) circle (2.25pt);
+      \node[anchor=west, font=\scriptsize, text=black] at (4.23,132.0) {\texttt{K8V4}};
+
+      \draw[cfgRed, line width=1.70pt] (4.98,132.0) -- (5.53,132.0);
+      \filldraw[cfgRedFill, draw=cfgRed, line width=1.05pt] (5.255,132.0) circle (2.25pt);
+      \node[anchor=west, font=\scriptsize, text=black] at (5.66,132.0) {\texttt{K4V8}};
+
+      \draw[cfgGold, line width=1.70pt] (0.80,124.0) -- (1.35,124.0);
+      \filldraw[cfgGoldFill, draw=cfgGold, line width=1.05pt] (1.075,124.0) circle (2.25pt);
+      \node[anchor=west, font=\scriptsize, text=black] at (1.48,124.0) {\texttt{K4V4}};
+
+      % axes
+      \draw[->, line width=1.10pt, draw=black!88] (0.82,18) -- (0.82,103);
+      \draw[line width=1.10pt, draw=black!88] (0.82,18) -- (6.90,18);
+      \node[rotate=90, font=\scriptsize, text=black] at (0.18,60.5) {Needle 通过率 (\%)};
+
+      \foreach \yv/\lab in {18/0,39.25/25,60.5/50,81.75/75,103/100} {
+        \draw[draw=black!82] (0.74,\yv) -- (0.90,\yv);
+        \node[left, font=\scriptsize, text=black] at (0.70,\yv) {\lab};
+        \draw[densely dashed, black!15] (0.82,\yv) -- (6.84,\yv);
+      }
+
+      \foreach \x/\lab in {1.55/{Qwen\\1.5B},3.85/{Qwen\\7B},6.15/{LLaMA\\8B}} {
+        \draw[draw=black!82] (\x,18.0) -- (\x,15.8);
+        \node[below, font=\scriptsize\bfseries, align=center, text=black] at (\x,13.5) {\lab};
+      }
+
+      % x positions (slightly offset within each model cluster to avoid overlap)
+      \coordinate (fp1) at (1.23,103);
+      \coordinate (fp2) at (3.53,103);
+      \coordinate (fp3) at (5.83,103);
+
+      \coordinate (u81) at (1.39,103);
+      \coordinate (u82) at (3.69,103);
+      \coordinate (u83) at (5.99,103);
+
+      \coordinate (m1) at (1.55,103);
+      \coordinate (m2) at (3.85,103);
+      \coordinate (m3) at (6.15,103);
+
+      \coordinate (k1) at (1.71,18);
+      \coordinate (k2) at (4.01,18);
+      \coordinate (k3) at (6.31,103);
+
+      \coordinate (u41) at (1.87,18);
+      \coordinate (u42) at (4.17,18);
+      \coordinate (u43) at (6.47,103);
+
+      \draw[black, line width=1.55pt] (fp1)--(fp2)--(fp3);
+      \filldraw[black] (fp1) circle (2.25pt) (fp2) circle (2.25pt) (fp3) circle (2.25pt);
+
+      \draw[cfgGray, line width=1.75pt] (u81)--(u82)--(u83);
+      \filldraw[cfgGrayFill, draw=cfgGray, line width=1.05pt] (u81) circle (2.3pt) (u82) circle (2.3pt) (u83) circle (2.3pt);
+
+      \draw[cfgBlue, line width=1.75pt] (m1)--(m2)--(m3);
+      \filldraw[cfgBlueFill, draw=cfgBlue, line width=1.05pt] (m1) circle (2.3pt) (m2) circle (2.3pt) (m3) circle (2.3pt);
+
+      \draw[cfgRed, line width=1.75pt] (k1)--(k2)--(k3);
+      \filldraw[cfgRedFill, draw=cfgRed, line width=1.05pt] (k1) circle (2.3pt) (k2) circle (2.3pt) (k3) circle (2.3pt);
+
+      \draw[cfgGold, line width=1.75pt] (u41)--(u42)--(u43);
+      \filldraw[cfgGoldFill, draw=cfgGold, line width=1.05pt] (u41) circle (2.3pt) (u42) circle (2.3pt) (u43) circle (2.3pt);
+
+      % numeric labels for the collapsed branches
+      \node[font=\tiny, text=cfgRed!92!black, fill=white, inner sep=1.0pt] at (1.72,23.5) {0};
+      \node[font=\tiny, text=cfgRed!92!black, fill=white, inner sep=1.0pt] at (4.02,23.5) {0};
+      \node[font=\tiny, text=cfgGold!92!black, fill=white, inner sep=1.0pt] at (1.88,23.5) {0};
+      \node[font=\tiny, text=cfgGold!92!black, fill=white, inner sep=1.0pt] at (4.18,23.5) {0};
+
+      % reference note
+      \node[font=\tiny, text=black!70, align=right] at (6.82,111.5) {同口径 Needle 补跑\\2026-04-22};
     \end{tikzpicture}
   \end{minipage}
-  \caption{K/V 量化敏感性不对称的压缩版诊断与设计启示。左侧主纵轴为 Needle 通过率（32K，上下文，seed=1234--1236）；四组配置分别为 \texttt{K-only}、\texttt{V-only}、\texttt{K4V8} 与 \texttt{MixedKV}。右侧给出从压缩版诊断到格式升级方向的结构化归纳。RULER 的同源完整证据保留在第四章第~\ref{sec:exp-kv-sensitivity}~节，正文这里只保留更适合作为动机图的 Needle 主轴。}
+  \caption{K/V 量化敏感性不对称的压缩版诊断与设计启示。左侧将 bit-layout 视角下的角色诊断收束为设计启示链；右侧以同口径 Needle 通过率给出五配置对照：\texttt{FP16} 与 \texttt{K8V8} 构成未量化与高精度量化参考，\texttt{K8V4} 与 \texttt{K4V8} 构成同平均 bit 预算下的角色对照，而 \texttt{K4V4} 提供对称低比特坍塌锚点。}
   \label{fig:ch3-kv-asymmetry}
 \end{figure}

@@ -1,0 +1,1125 @@
+# Chapter 4 Draft
+
+## 文档身份与当前状态
+
+- 文档身份：Chapter 4 正文整合、审校与回写前中间层 source-of-truth。
+- 当前状态：
+  - `4.1–4.7` 已接入并确认为当前 freeze-ready baseline。
+  - 第四章 `4.1–4.7` 的施工层与图表主索引已冻结于 `docs/This is Chapter 4 Writing.md`。
+  - 当前处于“整章正文已接齐、待做整章级审读与统一清洗”的中间层整合阶段。
+  - 尚未进入 `thesis/chapters/ch4_experiments.tex` 回写阶段。
+- 维护边界：
+  - 本文档服务于 Chapter 4 正文整合与审核。
+  - `4.1–4.7` 当前已进入 freeze-ready baseline。
+  - 本文档不是 `objective.md`。
+  - 本文档不是 `docs/thesis_upgrade_live_plan.md`。
+  - 本文档不是 `docs/mainline_execution_queue.md`。
+  - 本文档不是最终 `tex` 成稿。
+
+## 当前审校基线
+
+- 基线时间：`2026-04-23 00:35`
+- 当前线程角色：Chapter 4 正文整合与审核线程
+- 当前默认回写目标：`thesis/chapters/ch4_experiments.tex`
+- 当前 worktree 状态摘要：
+  - 共享写作/实验文件已存在未提交改动。
+  - 本线程创建本文件时，不覆盖现有 `story`、Chapter 4 施工文档、`tex`。
+- 当前只读输入基线：
+  - `AGENTS.md`
+  - `CLAUDE.md`
+  - `objective.md`
+  - `docs/thesis_story_20260420.md`
+  - `docs/This is Chapter 4 Writing.md`
+  - `docs/thesis_upgrade_live_plan.md`
+  - `docs/mainline_execution_queue.md`
+  - `thesis/chapters/ch4_experiments.tex`
+
+## Source-of-Truth 文件列表
+
+| 层级 | 文件 | 本文档使用方式 |
+|---|---|---|
+| 项目协作入口 | `AGENTS.md` | 约束多 Agent 分工、文件职责、主工作流 |
+| 项目级规范 | `CLAUDE.md` | 约束可写文件、Plan 纪律、论文工作方式 |
+| 高层目标 | `objective.md` | 冻结论文高层 mission、边界、成功标准 |
+| 冻结叙事 | `docs/thesis_story_20260420.md` | 冻结 Chapter 4 职责、章节主次、迁移规则与术语边界 |
+| Chapter 4 施工文档 | `docs/This is Chapter 4 Writing.md` | 冻结 `4.1–4.7` 小节职责、图表位置、固定引桥句与图表总表 |
+| 实时工作台 | `docs/thesis_upgrade_live_plan.md` | 只用于确认当前论文升级状态与 runtime 真相，不在本文档中重写 |
+| 执行清单 | `docs/mainline_execution_queue.md` | 只用于确认当前没有剩余实验主任务，不在本文档中承接执行队列职责 |
+| 被审对象 | `thesis/chapters/ch4_experiments.tex` | 记录当前与冻结口径/施工结构的不一致项 |
+
+### 当前 active source-of-truth 三件套
+
+- `docs/Chapter 4 Draft.md`
+- `docs/This is Chapter 4 Writing.md`
+- `docs/thesis_story_20260420.md`
+
+说明：
+- 上述三份文件是当前有效裁决来源。
+- 其他同名或近名旧版文件仅作为历史参考，不再参与当前 Chapter 4 正文裁决。
+
+## 文档分工与边界
+
+| 文件 | 负责什么 | 不负责什么 |
+|---|---|---|
+| `objective.md` | 高层 mission、边界、成功标准、方向分层 | 不负责 Chapter 4 小节施工 |
+| `docs/thesis_story_20260420.md` | 论文唯一主线、章节职责、迁移规则 | 不负责逐段正文审核 |
+| `docs/This is Chapter 4 Writing.md` | `4.1–4.7` 写作施工、图表纪律与图表总表 | 不负责正文整合与逐段接收 |
+| `docs/thesis_upgrade_live_plan.md` | 当前论文升级 live status | 不负责正文裁决 |
+| `docs/mainline_execution_queue.md` | 当前默认执行顺序 | 不负责正文整合 |
+| `docs/Chapter 4 Draft.md` | Chapter 4 正文整合、逐段审核、回写前 source-of-truth | 不替代上述任一权威文件 |
+
+## Chapter 4 冻结结构总览（4.1–4.7）
+
+| 节次 | 冻结职责 | 必须避免 |
+|---|---|---|
+| `4.1` | 实验设置与可信性声明 | 不混任何结果；不让 official LongBench 真实数据对照进入主评测矩阵 |
+| `4.2` | `RQ1`：行为引导校准的保真度验证 | 不提前进入低比特、allocator、泛化过度宣称 |
+| `4.3` | `RQ2`：低比特路径从对称失效到 RoleAlign 恢复 | 不提前进入 allocator 图谱、部署效率或长版机制讨论 |
+| `4.4` | `RQ3`：跨模型预算分配与策略适用区间图谱 | 不写成 matched-budget formal compare；不写成单一赢家叙事 |
+| `4.5` | 部署效率评估 | 不重讲第三章系统设计；不混质量结论 |
+| `4.6` | 实验结果讨论与效度威胁 | 不滑回第二轮结果节；不把讨论写成方法证明 |
+| `4.7` | 本章小结 | 不变成第五章预演；不重报表图细节数字 |
+
+## 高风险冻结口径
+
+### 1. `4.2.2` 的正确定位
+
+- 只能写成：**评测协议一致性检验 / sanity check / credibility supplement**。
+- 不能写成：
+  - 全面真实场景泛化证明
+  - 主评测矩阵的一部分
+  - 已充分证明真实世界全面泛化
+
+### 2. `4.3.1` 的正确定位
+
+- 必须显式容纳 `LLaMA-3.1-8B` 的架构例外。
+- 只能写成：
+  - 对称 `INT4` 的架构依附性失效与阶跃崩塌
+- 不能写成：
+  - 对称 `INT4` 普遍不可用
+  - 对称 `INT4` 对所有架构同样失效
+
+### 3. `4.3.3` 的正确口径
+
+- `INT4-RoleAlign` 与 `KIVI-style` 的比较必须是：
+  - same-format compare
+  - difference concentrated in calibration philosophy
+- 不允许回流成：
+  - `RoleAlign` 由同一个 KL 分数统一选出 `(p_K,p_V)`
+- 正确口径应保持：
+  - `K-path`：attention-distribution KL / robust P95 KL
+  - `V-path`：独立输出扰动代理
+  - 统一的是 workflow、artifact interface 与 robust selection discipline
+
+### 4. `4.4` 的正确定位
+
+- 必须保留 **same-order INT4 budget band** 的诚实口径。
+- 只能支持：
+  - cross-model regime map exists
+  - per-model structural footprint
+- 不能写成：
+  - strict matched-budget formal compare
+  - 某单一 policy 在严格同预算下已被形式化证明更优
+
+### 5. `4.5` 的正确定位
+
+- 只写：
+  - `TPOT`
+  - 长序列扩展
+  - 性能交叉边界
+  - `GQA/H_{kv}` 相关读数
+  - KV Cache 显存压缩率
+  - 部署建议
+- 不写：
+  - kernel 动机与设计原理复述
+  - 质量机制讨论
+  - hardware-agnostic 定律
+
+### 6. `4.6` 的正确定位
+
+- 只做：
+  - 机制辨析
+  - 强基线结构解释
+  - 协议 / 预算 / 硬件 / provenance 边界收束
+- 不做：
+  - 第二轮结果复述
+  - 新主算法引入
+  - 普适性 overclaim
+
+## 真实代码 / 实现语义核对
+
+### A. 当前核对范围
+
+本文件后续接收正文草稿时，默认优先核对以下代码与正文口径是否一致：
+
+- `thesis/chapters/ch4_experiments.tex`
+- `scripts/calibrate_behavior.py`
+- `src/engine/generate_loop.py`
+
+### B. 当前默认核对原则
+
+- 施工层口径以 `docs/This is Chapter 4 Writing.md` 为准
+- 高层章节职责以 `docs/thesis_story_20260420.md` 为准
+- 若正文草稿与代码 / 施工层 / story 冲突，本文档必须逐段标出：
+  - `采用`
+  - `需改写`
+  - `拒绝`
+
+### C. 当前重点核对问题
+
+后续接收正文时，至少要显式检查以下高风险点：
+
+- `4.2.1` 的 canonical 主表是否仍被 `INT4-RoleAlign / KIVI-style` 污染
+- `4.2.2` 是否被写高成“全面真实泛化证明”
+- `4.3.3` 是否回流为 unified-KL 口径
+- `4.4` 是否误写成 matched-budget formal compare
+- `4.5` 是否重复第三章系统实现
+- `4.6` 是否滑回结果复述
+
+## 当前 `Draft ↔ ch4_experiments.tex` 的不一致问题清单
+
+说明：
+- 本区块用于区分：哪些问题已经在 `Draft` 层裁决并收口，哪些问题仍待 `tex` 回写或后续正文补齐。
+
+### 已在 Draft 层收口
+
+- `4.1.3` 三类路径命名与表 4-2 坐标系歧义：已收口为 baseline / behavior-guided symmetric / role-aware 三类路径
+- `4.2.1` canonical 主表净化：已收口为纯 `FP16 vs INT8-Canonical`
+- `4.2.2` overclaim：已收口为 protocol sanity check / credibility supplement
+- `4.3.2` PPL 单侧干预与四配置矩阵口径冲突：已收口为“两层诊断”，并已与第三章 `3.2` 的五配置 bit-layout 视图重新对齐
+- `4.3.3` unified-KL 回流：已收口为 same-format compare + K/V 分路 role-aware calibration
+- `4.3` final keep-set：已收口为 `表 4-5 / 4-6 / 4-7 / 4-8 + 图 4-1 / 图 4-2`
+- `4.4.1` same-order INT4 budget band 的诚实口径：已在正文首段与表注显式锁定
+- `4.4` 的四个 regime node 与 `4.6.3` forward pointer：已按冻结写作计划落位
+- `4.5` 系统节结构压缩：已收口为 `4` 个三级小节、`0` 张图、`表 4-12 / 4-13 / 4-14`
+- `4.5.2 / 4.5.3` 的部署边界综合表：已收口为共用 `表 4-13`
+- `4.5.4` 的部署建议归宿：已收口为并入 `KV Cache` 显存压缩率小节结尾
+- `4.6` discussion 节结构：已收口为 `4` 个三级小节、`0` 张图、`表 4-15` 为唯一 promoted small table
+- `4.6.1` 的 KL/MSE promoted table：已收口为 discussion-friendly 的趋同验证表，不回流为 appendix 风格数据溯源表
+
+### 待在 tex 回写阶段统一落地
+
+- legacy `INT8-ours` 命名仍残留在旧 `tex` 资产中，回写时需统一清洗为 `INT8-Canonical / INT8 规范路径`
+- 旧 canonical 表中残留的 `INT4-RoleAlign / KIVI-style` 参考列，回写时需彻底退出 `RQ1` 主表
+- `4.1–4.3` 的接受版本已在本文件固定，但尚未正式覆盖 `thesis/chapters/ch4_experiments.tex`
+
+### 后续正文待解决
+
+- 暂无新的章节正文待接入；下一步应转入整章级审读、统一清洗与回写前核对
+
+## 外部线程草稿接入规则
+
+后续当外部线程传入 Chapter 4 正文草稿后，统一按下面流程接入：
+
+1. 先按小节归档到对应区块（`4.1–4.7`）
+2. 每个小节逐段判定：
+   - `采用`
+   - `需改写`
+   - `拒绝`
+3. 每一条判定都必须落在以下三类理由之一：
+   - 与 story 主线不符
+   - 与 Chapter 4 施工文档不符
+   - 与真实代码 / 实现语义不符
+4. 被接受的正文块，再进入“最终可回写正文块”汇总区
+
+## GPT / 外部线程正文整合区
+
+说明：
+- `4.1–4.5` 已接入并形成当前 freeze-ready baseline。
+- `4.6` 已接入并形成当前 freeze-ready baseline。
+- `4.7` 已接入并形成当前 freeze-ready baseline。
+
+### 4.1 当前冻结基线（已清洗接入，`2026-04-22 21:16`）
+
+- 审核结论：`采用（经清洗后）`
+- 清洗动作：
+  - 将 legacy 命名统一为 `INT8-Canonical / INT8 规范路径`
+  - 收紧 `4.1.3` 的三类路径命名，使表 4-2 的坐标系更清晰
+  - 将 `INT4-RoleAlign` 的 calibration philosophy 明确为“离线角色感知校准”，避免回流为 unified-KL 口径
+
+```tex
+\section{实验设置与可信性声明}
+\label{sec:ch4-setup}
+
+为保证后续各节证据能够在同一协议下被直接比较，本节集中说明实验模型与实现环境、评测任务与指标、比较方法与配置，以及统计检验与数据溯源规则。除必要的协议说明外，本节不报告任何结果，所有性能与质量读数统一留到后续 \S4.2--\S4.6 中展开。
+
+本节的组织顺序如下：\S4.1.1 说明模型覆盖面与实现环境，\S4.1.2 统一交代评测任务、数据与指标，\S4.1.3 将后文全部比较对象放入一套正交设计维度框架中，\S4.1.4 则给出统计检验、显著性与数据溯源规则。换言之，本节回答的不是“本文发现了什么”，而是“为什么后续各节给出的证据值得被相信”。
+
+\subsection{模型、硬件与实现环境}
+\label{subsec:ch4-model-env}
+
+本文实验覆盖 Qwen2.5、LLaMA-3.1 与 Mistral 三个模型族，共六个开源指令模型，参数规模从 1.5B 延伸至 14B，同时覆盖 $H_{kv}=2$、4 与 8 三种 GQA 配置。这样的模型矩阵并非为了追求规模铺陈，而是有意在 family、scale 与 GQA/$H_{kv}$ 三个维度上形成异质覆盖，使后文的跨模型读数能够被解释为结构差异，而不是个别模型的偶然现象。所有模型的头维度统一为 128。
+
+\begin{table}[t]
+  \centering
+  \caption{本章实验所用 6 个模型与 GQA 配置}
+  \label{tab:ch4-model-matrix}
+  \small
+  \begin{tabular}{lcccccc}
+    \toprule
+    模型 & 模型族 & 参数规模 & GQA $(H_q,H_{kv})$ & Layers & 头维度 & 实验角色 \\
+    \midrule
+    Qwen2.5-1.5B-Instruct & Qwen2.5 & 1.5B & $(12,2)$ & 28 & 128 & INT8 规范路径与真实数据对照锚点 \\
+    Qwen2.5-3B-Instruct   & Qwen2.5 & 3B   & $(16,2)$ & 36 & 128 & 早层保护回救区间 \\
+    Qwen2.5-7B-Instruct   & Qwen2.5 & 7B   & $(28,4)$ & 28 & 128 & 同族 supporting case \\
+    Qwen2.5-14B-Instruct  & Qwen2.5 & 14B  & $(40,8)$ & 48 & 128 & 高性能簇共存而无稳定最优 \\
+    LLaMA-3.1-8B-Instruct & LLaMA-3.1 & 8B & $(32,8)$ & 32 & 128 & 中等规模共识区间与 $H_{kv}=8$ 对照 \\
+    Mistral-7B-Instruct-v0.3 & Mistral & 7B & $(32,8)$ & 32 & 128 & AutoK 的最显著正向案例 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+表~\ref{tab:ch4-model-matrix} 同时承担本章后续典型剖面的角色锚定：Qwen2.5-1.5B-Instruct 作为 INT8 规范路径与官方 LongBench 真实数据对照的锚点模型，Qwen2.5-3B-Instruct 作为早层保护回救区间的代表，Qwen2.5-7B-Instruct 作为同族 supporting case，LLaMA-3.1-8B-Instruct 作为中等规模共识区间与 $H_{kv}=8$ 架构对照，Mistral-7B-Instruct-v0.3 作为 AutoK 的最显著正向案例，而 Qwen2.5-14B-Instruct 则作为高性能簇共存而无稳定最优的代表性大模型。这里的“实验角色”只表示后续证据承载功能，而不预告任何结果。
+
+所有实验均在单张 NVIDIA H20 GPU（98\,GB HBM）上完成。软件环境统一为 Python 3.12、PyTorch 2.8.0（CUDA 12.8）、Transformers 与 Triton，完整依赖版本冻结在 \texttt{env/versions.txt} 与 \texttt{env/requirements\_freeze.txt} 中。除特别说明外，所有解码相关实验统一采用贪婪设置\footnote{除特别说明外，所有实验采用贪婪解码：\texttt{temperature=0.0}、\texttt{top\_p=1.0}、\texttt{top\_k=0}。}，以消除采样随机性带来的额外方差；这一统一设置同时服务于质量评测与吞吐量测试。
+
+\subsection{评测任务、数据与指标}
+\label{subsec:ch4-benchmarks}
+
+本章的评测协议覆盖五个互补维度：语言建模质量、精确检索、长文档理解、合成推理压测以及系统效率。它们共同服务于第四章的三个研究问题：PPL 负责观察语言建模层面的整体退化，Needle-in-a-Haystack 负责提供最敏感的长距离精确检索信号，LongBench 风格合成基准任务负责承接任务级功能表现，RULER 负责给出更高压力下的长上下文推理压测，而 TPOT、KV Cache memory 与 peak memory 则共同构成部署层指标。按照本章冻结写作纪律，官方 LongBench 真实数据对照不属于本节主评测矩阵，而在 \S4.2.2 中单独承担评测协议一致性检验。
+
+语言建模质量采用 PPL 评测。为保证不同量化路径在相同时间语义下比较，PPL 使用统一的 32K 上下文协议，并将 \texttt{chunk\_size} 固定为 128；这一设置决定了交叉熵累计时每个位置所能访问的历史窗口，因此不能被视为可随意替换的工程细节。对显存充足的模型，PPL 在完整测试集协议下报告；对 14B 模型，由于 H20 显存约束，仅在测试集前固定前缀上评测，因此其绝对值不与其他模型做跨协议直接比较。
+
+精确检索能力通过 Needle-in-a-Haystack 评测。该评测在 4K、8K、16K 与 32K 四个上下文长度上进行，并沿 needle 深度设置统一的层级扫描；主结果中仅使用精确匹配通过率作为指标，从而把量化误差是否已经越过“可用/不可用”的功能边界压缩成一眼可读的检索信号。
+
+任务级主矩阵统一采用 LongBench 风格合成基准任务。当前正文主表围绕 task-core 子集展开，核心任务覆盖单文档问答、多文档问答与摘要三类功能。不同任务沿用其对应的评分器，例如问答任务主要使用 F1，摘要任务使用 Rouge-L，个别扩展任务使用 Edit Similarity 等文本相似度指标。由于主矩阵采用的是为复现实验管线而构造的确定性合成数据源，其绝对值不与社区官方榜单直接对齐，但同一协议下的方法间相对差异仍具有解释意义。
+
+长上下文推理压测采用 RULER。该评测由四个子任务构成，并在多个长度点上报告宏平均通过率。与 Needle 的单一精确检索信号不同，RULER 更接近高压组合式长上下文任务的表现，因此在正文中承担的是与 Needle 互补而非重复的角色：前者更敏感，后者更综合。设置节在此只说明任务组成、长度点与宏平均读法，不进入任何模式比较。
+
+系统效率指标统一采用 TPOT、KV Cache memory 与 peak memory。其中，TPOT 用于刻画 decode 阶段的单 token 时间开销，KV Cache memory 用于刻画量化路径在缓存存储上的直接收益，peak memory 则用于观察整体运行时显存压力。后文的部署层结论将严格在这些指标与当前硬件环境下解释，而不会把它们拔高为跨硬件、跨 runtime 的普适定律。
+
+\subsection{比较方法与配置}
+\label{subsec:ch4-method-config}
+
+为了避免后文比较退化成若干基线名字的并列罗列，本章将所有量化路径统一放入一套正交设计维度框架中讨论。具体而言，后文比较对象分为三类：第一类是数值分布参考路径，即基于 percentile 的 INT8/INT4 baseline；第二类是 behavior-guided 的对称路径，包括 INT8 规范路径与对称 INT4；第三类是 role-aware 的低比特路径，包括 INT4-RoleAlign 与 same-format 的 KIVI-style 基线。三类路径再沿 calibration philosophy、量化轴与 scale 时间语义三个维度进一步展开。
+
+\begin{table}[t]
+  \centering
+  \caption{比较方法与配置总表}
+  \label{tab:ch4-method-config}
+  \small
+  \begin{tabular}{llllcc}
+    \toprule
+    量化模式 & calibration philosophy & 量化轴 & Key bit & Value bit & 默认后端 \\
+    \midrule
+    FP16 & -- & -- & FP16 & FP16 & FP16 \\
+    INT8 baseline & percentile & 对称 per-group & 8 & 8 & torch\_ref / triton\_ra \\
+    INT8-Canonical & KL-guided & 对称 per-group + 自适应保护 & 8 & 8 & triton\_ra \\
+    INT4 percentile baseline & percentile & 对称 per-group & 4 & 4 & torch\_ref \\
+    对称 INT4（behavior-guided） & KL-guided & 对称 per-group & 4 & 4 & torch\_ref \\
+    INT4-RoleAlign & role-aware offline calibration & per-channel K + per-token V & 4 & 4 & torch\_ref \\
+    KIVI-style & runtime absmax/min & per-channel K + per-token V & 4 & 4 & torch\_ref \\
+    MixedKV & diagnostic & K@INT8 + V@INT4 & 8 & 4 & torch\_ref \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+表~\ref{tab:ch4-method-config} 固定了承重比较对象。在 calibration philosophy 维度上，percentile 路径只利用数值分布的截断信息，离线 behavior-guided 路径则以 attention behavior 的分布偏移为工程代理，而 INT4-RoleAlign 进一步将这一原则落实为角色感知的离线校准；KIVI-style 的 \texttt{absmax/min} 则在运行时根据统计量更新。量化轴维度用于区分对称 per-group 与非对称 per-channel K + per-token V 两类格式；在这个维度上，INT4-RoleAlign 与 KIVI-style 共享相同的 cache format，因此两者的差异被明确限制在 calibration philosophy 上，而不是格式本身。Scale 时间语义则进一步区分离线固化、逐 token 动态更新以及 K/V 混合时间语义三类部署方式。
+
+这里还需给出两条边界声明。第一，MixedKV 仅用于 \S4.3.2 的 K/V 角色敏感性诊断，不参与主线方法比较。第二，逐头温度校正 \verb|inv_tau| 已降级为附录中的诊断性历史探索项，本章主线配置一律不启用。这样安排的目的，是让第四章后续所有比较都回到同一张设计坐标系中，而不是在不同格式、不同校准哲学和不同运行时语义之间交叉混写。
+
+\subsection{统计检验、显著性与数据溯源}
+\label{subsec:ch4-statistics}
+
+除实验矩阵与比较对象外，第四章还需要给出一套可审计的统计与 provenance 规则。除特别标明的官方 LongBench 一致性检验外，正文主结果均以 clean-provenance rerun 为准，数据溯源通过固定的 provenance pin 进行冻结；若个别 supporting rows 采用 legacy 或 backport 结果，则必须在对应表注中显式说明，而不在正文主结论中与 canonical rerun 等权使用。这样处理的目的，是把“数据从哪里来、哪些行可以当主证据、哪些行只能当 supporting evidence”在章首一次交代清楚。
+
+随机性控制采用统一的固定种子与统一解码策略。质量评测统一使用 5 个固定 seeds，吞吐量测试统一使用 8 个固定 seeds；所有 decode 相关实验采用贪婪解码，从而将采样噪声从比较中剥离出去。在此基础上，质量指标的区间估计采用基于 10{,}000 次重采样的 95\% Bootstrap 置信区间，配对比较采用符号翻转置换检验，多重比较则使用 Benjamini--Hochberg 控制假发现率。按照本文的统计口径，Bootstrap 倾向于在小样本下给出偏保守的区间，因此正文中的“未显著”应优先理解为当前统计 power 下的不可分辨，而不是正面证明“方法无差异”。
+
+本章还采用一个与一般 LLM 评测略有不同的读法：PPL 在统一硬件、统一软件栈和统一解码设置下是确定性的，因此其可靠性主要由效应量本身而非 $p$ 值承担。换言之，PPL 不读统计显著性，而读数值幅度；相反，任务级分数、吞吐量等会随种子或系统噪声波动的指标，才配合 Bootstrap、sign-flip 与 BH-FDR 一并解释。与此同时，本文在正文中使用的 non-inferiority 口径只是“置信区间上界与容忍边界”的 operational reading，而不是独立的正式检验框架。
+
+最后，后文所有主表、主图与典型案例，都应在上述协议之下理解：不同协议之间的绝对分数不做直接横向比较；官方 LongBench 真实数据对照只承担 \S4.2.2 的一致性检验职责；部署效率结论严格限定于当前 H20 硬件、固定软件栈与当前 backend 组合；而正文的主结论只由 clean-provenance 主结果承担。这样，第四章接下来的真正问题就不再是“你到底怎么测的”，而是“这些证据是否成立、成立到哪里为止”。
+```
+
+### 4.2 当前冻结基线（已清洗接入，`2026-04-22 21:25`）
+
+- 审核结论：`采用（经轻度清洗后）`
+- 清洗动作：
+  - 保持 `4.2` 为 `RQ1-only / INT8-only / 校准层-only` 的双证据链
+  - 保持 `4.2.1` 的 canonical 主表为纯 `FP16 vs INT8-Canonical`
+  - 将 `4.2.1` 中可能被误读为统计显著性结论的表述收紧为“高度接近且未见系统性偏移”
+  - 保持 `4.2.2` 为官方 LongBench 的 protocol sanity check / credibility supplement，不上升为全面泛化证明
+
+```tex
+\section{RQ1：行为引导校准的保真度验证}
+\label{sec:ch4-rq1}
+
+第~\ref{sec:ch4-setup} 节已经交代统一实验协议。本节转而回答第一个研究问题：behavior-guided calibration 是否能够在最保守位宽上形成稳定、可复现的基础保真路径。按照本章冻结后的结构，\S4.2 只负责验证校准层本身是否先能站住，而不讨论低比特恢复、预算分配或部署效率。
+
+为避免在更激进的低比特路径与跨模型比较中混入额外变量，本节按照两步证据链组织。首先，在 \S\ref{subsec:ch4-int8-canonical} 中以 \texttt{INT8-Canonical} 作为规范路径实例，检验 behavior-guided calibration 在 canonical scale 下是否能够保持与 FP16 可比的任务行为。随后，在 \S\ref{subsec:ch4-longbench-official} 中以前文主矩阵之外的一块官方 LongBench 真实数据对照，检查本文的合成 LongBench 风格评测是否会系统性高估该规范路径的保真度。两步证据的共同目标不是宣称“INT8 很强”，而是先证明框架在最容易审计的 setting 上已经成立。
+
+\subsection{INT8 规范路径保真度}
+\label{subsec:ch4-int8-canonical}
+
+本文首先在 \texttt{INT8} 位宽下给出 behavior-guided calibration 的规范路径验证。这里的 \texttt{INT8-Canonical} 并不承担极限压缩方案的角色，而是作为框架在最保守位宽下的规范实例，用于回答一个更基础的问题：如果只考察离线行为引导校准本身，它能否在一个最稳定、最可复现的设置上形成闭环。
+
+\begin{table}[t]
+  \centering
+  \caption{INT8 规范路径保真度（Qwen2.5-1.5B-Instruct，clean-provenance pin=ddada19）}
+  \label{tab:ch4-int8-canonical}
+  \small
+  \begin{tabular}{lccc}
+    \toprule
+    任务 & FP16 & INT8-Canonical & $\Delta$ \\
+    \midrule
+    NarrativeQA (F1)        & 7.07 & 7.16 & +0.09 \\
+    HotpotQA (F1)           & 4.90 & 4.88 & -0.02 \\
+    GovReport (Rouge-L)     & 9.21 & 9.20 & -0.01 \\
+    Mean                    & 7.06 & 7.08 & +0.02 \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.35em}
+  \begin{minipage}{0.94\linewidth}
+    \footnotesize
+    注：本表仅保留 \texttt{FP16} 与 \texttt{INT8-Canonical} 两条规范路径，用于回答 \S4.2 的 RQ1；旧稿中与本表同列展示的 \texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 参考值，在正式版中不再保留为同权主列，以避免低比特证据提前侵入 RQ1。
+  \end{minipage}
+\end{table}
+
+表~\ref{tab:ch4-int8-canonical} 汇总了 Qwen2.5-1.5B-Instruct 在三个 task-core LongBench 风格合成基准任务上的规范路径读数。可以看到，\texttt{INT8-Canonical} 相对 \texttt{FP16} 的平均差异仅为 $+0.02$。更重要的是，这一微小差异并不呈现统一方向：NarrativeQA 上为 $+0.09$，HotpotQA 上为 $-0.02$，GovReport 上为 $-0.01$。这种“方向不一致但幅度都很小”的模式，更接近于量化噪声下的微小波动，而不是一种系统性的行为偏移。
+
+因此，本节真正建立的不是“INT8 明显优于 FP16”，而是：在当前 canonical setting 下，behavior-guided calibration 已经能够把 \texttt{INT8} 路径维持在与 \texttt{FP16} 高度接近、且未见系统性偏移的范围内。换言之，框架先在最容易审计的位宽上形成了基础保真闭环。
+
+这里还需要明确一条边界：表~\ref{tab:ch4-int8-canonical} 所反映的是校准产物本身的保真度，而不是某个 decode backend 的速度收益。也就是说，本小节证明的是 behavior-guided calibration 在 canonical scale 下能够保持任务行为，而不是 Triton 融合核“让质量变好”；后者只在 \S4.5 的部署效率中讨论。
+
+\subsection{评测协议一致性检验：官方 LongBench 真实数据对照}
+\label{subsec:ch4-longbench-official}
+
+前文主矩阵中的 LongBench 评测均建立在 LongBench 风格合成基准任务之上。这样的主协议适合做 controlled comparison，但其绝对值不与社区官方榜单直接对齐。因此，在规范路径已经通过 \S\ref{subsec:ch4-int8-canonical} 立住之后，还需要一块范围受控的官方真实数据对照，来检查本文主评测协议的方向性结论是否会被系统性带偏。
+
+为此，本文从官方 LongBench 数据集中选取三个代表性子任务进行对照实验：NarrativeQA（单文档问答，F1）、HotpotQA（多文档问答，F1）与 GovReport（摘要，Rouge-L）。实验模型固定为 Qwen2.5-1.5B-Instruct，上下文截断至 32K，随机种子固定为 \texttt{1234}，每个任务最多采样 50 个官方样本；量化配置固定为 \texttt{INT8-Canonical} 主线配置。上述设定的作用，是对主文合成协议做一块最小但可信的 sanity check，而不是替代整章跨模型主实验。
+
+\begin{table}[t]
+  \centering
+  \caption{官方 LongBench 真实数据对照（protocol sanity check）}
+  \label{tab:ch4-longbench-official}
+  \small
+  \begin{tabular}{lccc}
+    \toprule
+    官方任务 & FP16 & INT8-Canonical & $\Delta$ (pp) \\
+    \midrule
+    NarrativeQA (F1)        & 7.07 & 6.64 & -0.43 \\
+    HotpotQA (F1)           & 4.90 & 5.21 & +0.31 \\
+    GovReport (Rouge-L)     & 9.21 & 9.29 & +0.08 \\
+    宏平均                  & 7.06 & 7.05 & -0.01 \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.35em}
+  \begin{minipage}{0.94\linewidth}
+    \footnotesize
+    注：Qwen2.5-1.5B-Instruct，32K，上下文截断，\texttt{seed=1234}，每任务最多 50 个样本；本表仅用于评测协议一致性检验，不构成全面统计检验，也不进入主评测矩阵。
+  \end{minipage}
+\end{table}
+
+表~\ref{tab:ch4-longbench-official} 表明，官方真实数据上的单任务差异均控制在 $0.5$ pp 以内：NarrativeQA 为 $-0.43$ pp，HotpotQA 为 $+0.31$ pp，GovReport 为 $+0.08$ pp，而宏平均仅相差 $0.01$ pp。与 \S\ref{subsec:ch4-int8-canonical} 相似，这里同样没有出现“统一朝某一方向偏移”的现象；差异方向在任务间有正有负，且幅度都很小，因此更像量化噪声下的微小波动，而不是协议切换导致的系统偏移。
+
+本节据此只能得出一个克制的结论：在最保守的 \texttt{INT8 canonical path} 上，本文的合成 LongBench 风格评测并没有把 fidelity 的方向性结论读错；官方真实数据给出的结论方向与主文一致，因此这是一块有价值的 credibility supplement，而不是“真实场景全面泛化”已经被充分证明。关于为何本文在校准层采用 KL 而非 MSE，以及该选择在不同规模上的必要性差异，将在 \S4.6.1 中进一步讨论。
+
+至此，behavior-guided calibration 已在 canonical 位宽上建立基础保真路径；接下来的问题，不再是这一原则是否成立，而是当位宽继续压低到 \texttt{INT4} 时，它会在哪里失效、又如何被恢复。
+```
+
+### 4.3 当前冻结基线（已清洗接入，`2026-04-22 21:25`）
+
+- 审核结论：`采用（经轻度清洗后）`
+- 清洗动作：
+  - 保持 `4.3.1 → 4.3.2 → 4.3.3` 的 `failure → diagnosis → recovery` 证据链
+  - 保持 `LLaMA-3.1-8B` 的架构例外，不把对称 `INT4` 写成无条件普遍失效
+  - 删除 `:contentReference[oaicite:...]` 残标
+  - 将 `4.3.2` 收紧为“两层诊断”：PPL 单侧干预锚点 + 检索/任务层四配置矩阵
+  - 将图路径改为 final keep-set 对应的 Chapter 4 图文件
+  - 将 `RoleAlign` 从 unified-KL 旧口径收紧回 “K-path / V-path 分路的 role-aware calibration”
+
+```tex
+\section{RQ2：低比特路径从对称失效到 RoleAlign 恢复}
+\label{sec:ch4-rq2}
+
+第~\ref{sec:ch4-rq1} 节已经在 \texttt{INT8 canonical path} 上建立了 behavior-guided calibration 的基础保真路径。本节进一步回答第二个研究问题：当位宽继续压低到 \texttt{INT4} 时，这一路径会在何处失效，又如何被恢复。按照 frozen story，本节必须沿着一条明确的 failure $\rightarrow$ diagnosis $\rightarrow$ recovery 证据链展开，而不是把若干低比特结果并列堆叠在一起。
+
+具体而言，\S\ref{subsec:ch4-int4-cliff} 先立住对称 \texttt{INT4} 的架构依附性阶跃崩塌，说明 \texttt{INT8} 的成功并不能机械地下推到更低位宽；\S\ref{subsec:ch4-kv-diagnosis} 再通过完整的 K/V 独立消融诊断，把 low-bit cliff 定位为由 Key 侧精度下降主导触发；最后，\S\ref{subsec:ch4-rolealign-kivi} 在共享非对称格式的条件下比较 \texttt{INT4-RoleAlign} 与 \texttt{KIVI-style}，从而完成低比特恢复路径的闭环验证。整个 \S4.3 只服务于 \textbf{RQ2}，不提前进入 allocator 图谱、部署效率或长版机制讨论。
+
+\subsection{对称 INT4 的架构依附性失效与阶跃崩塌}
+\label{subsec:ch4-int4-cliff}
+
+\texttt{INT8} 规范路径的成立，并不意味着只需将同一对称量化思路机械地下推到 \texttt{INT4} 即可得到一条可用的低比特路径。当前证据更支持一种更强也更窄的判断：当有效量化等级从 \texttt{INT8} 的 255 个骤降到对称 \texttt{INT4} 的 15 个时，退化不再表现为温和的连续滑落，而会在部分模型上直接跨过功能临界点，出现检索能力从“可用”到“不可用”的阶跃式崩塌。与此同时，这种崩塌又并非对所有架构强度相同，因此本节必须把它写成\textbf{架构依附性失效}，而不是无条件的“系统性失效”。
+
+\begin{table}[t]
+  \centering
+  \caption{对称 INT4 的 cliff summary}
+  \label{tab:ch4-int4-cliff}
+  \small
+  \begin{tabular}{lcccc}
+    \toprule
+    模型 & $H_{kv}$ & FP16 Needle & 对称 INT4 Needle & 诊断标签 \\
+    \midrule
+    Qwen2.5-1.5B & 2 & 100\% & 0\%  & 阶跃崩塌；PPL 退化 $>15\%$ \\
+    Qwen2.5-7B   & 4 & 100\% & 0\%  & 阶跃崩塌；PPL 退化 $>15\%$ \\
+    LLaMA-3.1-8B & 8 & 100\% & 98\% & 架构例外；Needle 仍保持可用 \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.35em}
+  \begin{minipage}{0.94\linewidth}
+    \footnotesize
+    注：本表压缩汇总对称 \texttt{INT4} 的 cliff pattern。Qwen2.5-1.5B/7B 上出现“100\%\,$\rightarrow$\,0\%”的检索阶跃；LLaMA-3.1-8B（$H_{kv}=8$）是当前主矩阵中的架构例外，其对称 \texttt{INT4} Needle 仍维持 98\%。这一小表是 \S4.3.1 的独立承重件，不替代后续 \S4.3.2 的完整诊断。
+  \end{minipage}
+\end{table}
+
+表~\ref{tab:ch4-int4-cliff} 直接给出了这一 cliff pattern 的最小证据：在 Qwen2.5-1.5B 与 Qwen2.5-7B 上，对称 \texttt{INT4} 使 Needle 从 100\% 直接跌至 0\%，同时伴随语言建模层面的明显退化；而 LLaMA-3.1-8B 则是当前主实验矩阵中的唯一显式例外，其对称 \texttt{INT4} Needle 仍维持在 98\%。因此，\S4.3.1 所确认的不是“\texttt{INT4} 普遍不可用”，而是：\textbf{对称 \texttt{INT4} 会在一类模型上出现架构依附性的阶跃崩塌。} 这一现象的直接含义是，低比特问题的性质已经从“参数再调一调”转变为“量化格式与误差传播结构是否匹配”。
+
+造成这种阶跃而非平滑退化的原因，与 softmax 对 $QK^\top$ 分数的指数敏感性有关。一旦 Key 量化噪声将目标 token 的分数挤出 top-$k$ 区域，softmax 会把概率质量迅速转移到错误位置，因而检索能力会从 100\% 直接跌到 0\%，而不会出现 50\%/30\%/10\% 这类线性衰减轨迹。与之对照，LLaMA-3.1-8B 上 98\% 的剩余 Needle 则提示：在 $H_{kv}=8$ 的更强 GQA 噪声稀释条件下，极低比特 Key 噪声的有效幅度尚未完全越过崩塌阈值。于是，接下来的关键问题就不再是“对称 \texttt{INT4} 会不会崩”，而是：\textbf{这一崩塌究竟首先由 Key 侧还是 Value 侧触发。}
+
+\subsection{K/V 角色敏感性与 MixedKV 完整诊断}
+\label{subsec:ch4-kv-diagnosis}
+
+第三章 \S3.2 已经给出了压缩版动机诊断，但当前压缩版并不是对本节四配置矩阵的逐项复刻，而是从本节同源结果中抽取出的 bit-layout 诊断视图：\texttt{FP16} 与 \texttt{K8V8} 构成未量化与高精度量化参考，\texttt{K8V4} 与 \texttt{K4V8} 构成同平均 bit 预算下的角色对照，而 \texttt{K4V4} 提供对称低比特坍塌锚点。本节则给出支撑该判断的完整版证据。这里的完整诊断分为两层：第一层是在语言建模层面使用单侧极端干预，分别观察高精度或低精度的 Key / Value 单独变化时会不会触发 PPL cliff；第二层是在检索与任务层面使用统一的四配置矩阵，即 \texttt{K-only}、\texttt{V-only}、\texttt{K4V8} 与 \texttt{MixedKV}，以建立跨任务、跨模型的一致方向。
+
+在 PPL 层面，本文首先报告 Qwen2.5-1.5B 上的单侧干预结果：\texttt{K@INT8+V@FP16} 用于检验高精度 Key 是否足够安全，\texttt{K@FP16+V@INT8} 用于检验高精度 Value 是否带来额外收益，\texttt{K@INT4+V@FP16} 与 \texttt{K@FP16+V@INT4} 则分别隔离极低精度 Key 与极低精度 Value 的单侧影响。随后，在检索与任务层面，再统一切换到四配置矩阵 \texttt{K-only / V-only / K4V8 / MixedKV}，以建立跨模型、跨任务的角色敏感性诊断。其中，第三章压缩视图中的 \texttt{K8V4} 与本节的恢复性配置 \texttt{MixedKV} 对应；因此，\S3.2 与本节共享同一设计结论，但图面组织方式并不要求逐配置同构。
+
+\begin{table}[t]
+  \centering
+  \caption{Key/Value 单侧干预的 PPL 诊断表（Qwen2.5-1.5B-Instruct，WikiText-2，\texttt{chunk\_size=128}）}
+  \label{tab:ch4-kv-ppl}
+  \small
+  \begin{tabular}{lcc}
+    \toprule
+    消融配置 & PPL $\downarrow$ & 相对 FP16 变化 \\
+    \midrule
+    FP16（参考）              & 9.31   & -- \\
+    K@INT8 + V@FP16          & 9.33   & +0.2\% \\
+    K@FP16 + V@INT8          & 9.31   & +0.0\% \\
+    K@INT4 + V@FP16          & 1290.9 & +13{,}774\% \\
+    K@FP16 + V@INT4          & 9.35   & +0.4\% \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.35em}
+  \begin{minipage}{0.94\linewidth}
+    \footnotesize
+    注：PPL 为贪婪解码下的位级确定量，固定 \texttt{seed=1234} 报告；追加种子的数值与 \texttt{1234} 逐位一致，因此本表不适用 Bootstrap CI 或符号翻转检验。该表承担 \S4.3.2 的最强单表证据：在 Qwen2.5-1.5B 上，真正首先触发 cliff 的是 \texttt{K@INT4}，而不是 \texttt{V@INT4}。
+  \end{minipage}
+\end{table}
+
+表~\ref{tab:ch4-kv-ppl} 先从语言建模层面给出最锋利的一刀。在 Qwen2.5-1.5B 上，仅将 Key 压到 \texttt{INT4}（\texttt{K@INT4 + V@FP16}）就会把 PPL 从 9.31 直接推高到 1290.9，相对 FP16 达到 $+13{,}774\%$；相比之下，仅将 Value 压到 \texttt{INT4}（\texttt{K@FP16 + V@INT4}）时，PPL 只有 9.35，相对 FP16 仅增加 $0.4\%$，而 \texttt{K@INT8 + V@FP16} 也只增加 $0.2\%$。这说明对当前 low-bit path 而言，决定“是否越过功能临界点”的不是 Value 量化，而是 Key 精度是否已经被压到破坏 attention ranking 的区域。换言之，\texttt{Key-first protection} 不是经验偏好，而是由最强单表证据直接推出的设计方向。
+
+\begin{table}[t]
+  \centering
+  \caption{K/V 消融多任务结果}
+  \label{tab:ch4-kv-multitask}
+  \small
+  \begin{tabular}{lccccc}
+    \toprule
+    \multicolumn{6}{l}{\textbf{Panel A. RULER 通过率（\%，32K，上下文）}} \\
+    \midrule
+    模型 & FP16 & K-only & V-only & K4V8 & MixedKV \\
+    \midrule
+    Qwen2.5-1.5B & 24.38 & 24.61 $\pm$ 0.00 & 23.83 $\pm$ 0.39 & 0.00 $\pm$ 0.00 & 24.87 $\pm$ 0.20 \\
+    Qwen2.5-7B   & 24.92 & 25.39 $\pm$ 0.68 & 25.13 $\pm$ 0.45 & 0.00 $\pm$ 0.00 & 25.16 $\pm$ 0.45 \\
+    LLaMA-3.1-8B & 31.48 & 29.82 $\pm$ 1.26 & 36.72 $\pm$ 1.56 & 31.12 $\pm$ 0.90 & 33.28 $\pm$ 0.75 \\
+    \midrule
+    \multicolumn{6}{l}{\textbf{Panel B. LongBench 风格合成基准任务综合评分（$\times 100$，32K）}} \\
+    \midrule
+    模型 & FP16 & K-only & V-only & K4V8 & MixedKV \\
+    \midrule
+    Qwen2.5-1.5B & 4.82 & 4.57 $\pm$ 0.01 & 4.54 $\pm$ 0.04 & 2.58 $\pm$ 0.08 & 4.47 $\pm$ 0.05 \\
+    Qwen2.5-7B   & 3.78 & 4.10 $\pm$ 0.11 & 3.85 $\pm$ 0.02 & 0.80 $\pm$ 0.05 & 4.27 $\pm$ 0.06 \\
+    LLaMA-3.1-8B & 7.92 & 7.31 $\pm$ 0.43 & 6.21 $\pm$ 0.66 & 8.92 $\pm$ 0.79 & 7.42 $\pm$ 0.83 \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.35em}
+  \begin{minipage}{0.94\linewidth}
+    \footnotesize
+    注：Panel A 为 RULER 宏平均通过率，Panel B 为 LongBench 风格 task-core 综合评分。Mistral-7B 的 LongBench 消融因合成数据源全部为 1.0、不具跨模型可比性，移至附录。该双 panel 表由原 RULER 与 LongBench-style 两张正式表合并而成，以保持 \S4.3.2 的完整诊断职责，同时减少正式表数量。
+  \end{minipage}
+\end{table}
+
+表~\ref{tab:ch4-kv-multitask} 进一步在检索与任务级指标上建立了同方向证据。首先，\texttt{K@INT8} 的退化极小：在三个主评测模型上，\texttt{K-only} 的 RULER 几乎贴着各自 FP16 基线，说明 \texttt{INT8} 精度对 Key 的表达已经足够安全。其次，\texttt{V@INT4} 的影响有限：\texttt{V-only} 在 RULER 与 LongBench-style 指标上总体保持接近 FP16 的可用水平，符合 Value 侧“主要作为 softmax 加权求和目标”的角色。真正的 cliff 发生在 \texttt{K4V8}：在 Qwen2.5-1.5B 与 Qwen2.5-7B 上，RULER 直接坍缩为 0\%，而 LongBench-style 综合分也分别降至 2.58 与 0.80；但在 LLaMA-3.1-8B 上，\texttt{K4V8} 仍保留 31.12 的 RULER 与 8.92 的 LongBench-style 综合分，说明共同方向依然是 Key 主导退化，但其强度受 family、scale 与 $H_{kv}$ 调制。
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\linewidth]{figures/ch4/fig_ch4_01_kv_ruler32.pdf}
+  \caption{K/V 精度敏感性机制图（RULER，32K）。每组柱分别比较 \texttt{K-only}、\texttt{V-only}、\texttt{K4V8} 和 \texttt{MixedKV} 在各模型上的质量表现。该图将表格中的机制结论直接可视化：Key 量化主导质量退化，而保持 \texttt{K@INT8} 的 \texttt{MixedKV} 明显优于均匀 INT4 路径。}
+  \label{fig:ch4-kv-ruler32}
+\end{figure}
+
+图~\ref{fig:ch4-kv-ruler32} 将上述模式压缩成最易读的机制摘要图。Qwen2.5-1.5B 与 Qwen2.5-7B 上，\texttt{K4V8} 在 RULER 上直接跌到 0，而 \texttt{MixedKV} 则分别恢复到 24.87 与 25.16，重新回到与 FP16 同一量级的可用区间；LLaMA-3.1-8B 则同时表现出两件事：一方面 \texttt{K4V8} 没有完全坍缩，另一方面 \texttt{MixedKV} 仍能进一步恢复到 33.28。也就是说，\texttt{MixedKV} 的作用不是制造一个新的“普适最优格式”，而是以最小格式升级证明：\textbf{只要先把 Key 从极低精度 cliff 中拉出来，低比特路径就会重新变得可用。}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/ch4/fig_ch4_02_kv_error_heatmap.pdf}
+  \caption{Qwen2.5-1.5B 与 LLaMA-3.1-8B 的配对 K/V 重建误差热力图（MixedKV，\texttt{K@INT8+V@INT4}，32K 上下文）。上排为 Qwen2.5-1.5B，下排为 LLaMA-3.1-8B；左两列分别为 Key 与 Value 的逐层逐头重建误差，右列为逐层平均误差曲线。统一色标显示：相较于 Qwen2.5-1.5B，LLaMA-3.1-8B 的高误差层段更集中、整体误差更低，与其更强的噪声稀释能力一致。}
+  \label{fig:ch4-kv-error-heatmap}
+\end{figure}
+
+图~\ref{fig:ch4-kv-error-heatmap} 从误差结构侧补充了这种架构依附性。配对热力图显示，在 \texttt{MixedKV} 配置下，Qwen2.5-1.5B 的高误差层段更早、更分散，而 LLaMA-3.1-8B 的误差峰值则更集中于后部层段，整体量级也更低。这张图不是 attention-KL 主指标的替代物，但它支持了与表~\ref{tab:ch4-kv-multitask} 同方向的解释：在更高 $H_{kv}$ 与更平滑的架构条件下，Key 量化噪声更不容易被放大成检索崩塌。
+
+最后，再用一条 supporting extension 把这一结论从小模型与中等规模模型延伸到更大模型。在 Qwen2.5-14B 上，保持 Key 为高精度的 \texttt{K16V4} 可将 PPL 从 full \texttt{INT4} 的 5.040 恢复到 4.709，即恢复约 93\% 的退化；相对地，保持 Value 为高精度的 \texttt{K4V16} 仅能恢复到 4.813，恢复率约 64\%。这说明即使在 14B 规模下，Key 仍然是退化的主导触发侧。至此，本节可以把诊断结论压成一句设计启示：在本文考察的 low-bit 场景中，真正首先触发行为崩塌的是 Key 精度下降；而 \texttt{MixedKV} 的恢复则表明，低比特路径的首要动作不是继续平均压缩 K/V，而是优先保护 Key，并在此基础上升级量化格式。
+
+\subsection{INT4-RoleAlign 与 KIVI-style 的跨模型对比}
+\label{subsec:ch4-rolealign-kivi}
+
+如果 \S\ref{subsec:ch4-kv-diagnosis} 的结论成立，那么下一步就不应再在对称 \texttt{INT4} 的参数空间中继续调参，而应进入 role-aware 非对称格式空间。在这一空间内，本文采用的 \texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 共享相同的 cache format，即 \texttt{per-channel K + per-token V}；因此，本小节比较的不是两个完全不同的方法体系，而是\textbf{在同一量化格式下，离线 behavior-guided calibration 与 runtime statistics calibration 的对照。} 二者在设计层面的差异已在第三章 \S\ref{subsec:ch3-rolealign-vs-kivi} 中说明，这里不再重复放置设计差异表，而只保留 same-format compare 的结果证据。
+
+\begin{table}[t]
+  \centering
+  \caption{INT4-RoleAlign 与 KIVI-style 的跨模型主对比}
+  \label{tab:ch4-rolealign-kivi}
+  \small
+  \begin{tabular}{lccccccc}
+    \toprule
+    模型 & $H_{kv}$ & FP16 PPL & KIVI-style PPL & RoleAlign PPL & $\Delta$PPL & KIVI Needle & RoleAlign Needle \\
+    \midrule
+    Qwen2.5-1.5B & 2 & 9.31 & 10.43 & 10.58 & +0.15 & 100/100\% & 100/100\% \\
+    Qwen2.5-7B   & 4 & 7.14 & 7.53  & 7.58  & +0.05 & 100/100\% & 100/100\% \\
+    LLaMA-3.1-8B & 8 & 6.73 & 6.90  & 6.90  & +0.00 & 100/100\% & 100/100\% \\
+    Qwen2.5-14B  & 8 & 4.68 & --    & 5.04  & --    & --         & 100/100\% \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.35em}
+  \begin{minipage}{0.94\linewidth}
+    \footnotesize
+    注：两者共享 \texttt{per-channel K + per-token V} 非对称格式，唯一差异是 calibration philosophy：\texttt{RoleAlign} 采用离线 role-aware calibration，其中 K-path 由 attention-distribution KL / robust P95 KL 主导，V-path 由独立输出扰动代理主导；\texttt{KIVI-style} 使用运行时 \texttt{absmax/min}。Needle 列中的“100/100”表示 \texttt{Needle-single-retrieval} 与 \texttt{MK-NIAH-2} 两类检索同时恢复到 100\%。Qwen2.5-14B 当前仅有 RoleAlign 行，因此该模型在本表中承担 scope boundary，而不是 fully paired compare。
+  \end{minipage}
+\end{table}
+
+表~\ref{tab:ch4-rolealign-kivi} 显示，在共享非对称格式的前提下，\texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 的经验差距并不是 winner-take-all 式的大缺口。对 1.5B、7B 与 8B 三个 fully paired 模型，RoleAlign 相对 KIVI-style 的 PPL 差距分别为 $+0.15$、$+0.05$ 与 $+0.00$；Needle 则在三者上都恢复到 100/100\%。这一结果首先说明：\textbf{决定 low-bit 检索恢复的关键首先是 role-aware 非对称格式本身。} 一旦从对称 per-group 升级到 \texttt{per-channel K + per-token V}，低比特路径就已经从“完全崩塌”转回“可用状态”。在此基础上，calibration philosophy 的差异更多体现在实例化方式，而不是大幅拉开 quality gap。
+
+但这并不意味着离线 behavior-guided calibration 没有独立价值。当前证据支持的更稳解释是：在 same-format 条件下，\texttt{RoleAlign} 的优势不在于把 \texttt{KIVI-style} 远远甩开，而在于它把低比特路径组织成了一条\textbf{可固化、可审计、可扩展}的实例化路径。前者依赖 runtime \texttt{absmax/min} 重算 scale，后者则将 K-path 与 V-path 的分路校准结果固化为离线 calibration artifact；也正因为如此，\texttt{RoleAlign} 才能自然延伸到后续的 behavior-guided allocator，而不是停留在一个只做 runtime statistics 的 cache-format baseline 上。换言之，本小节支持的是“格式是一阶、离线校准是二阶组织增益”的当前判断，而不是某种普适的经验碾压。
+
+至此，\textbf{RQ2 的证据链已经闭合}：\S\ref{subsec:ch4-int4-cliff} 说明 behavior-guided 原则在对称 \texttt{INT4} 上首先遭遇架构依附性的阶跃失效；\S\ref{subsec:ch4-kv-diagnosis} 进一步表明，该失效主要由 Key 侧精度下降触发，而 \texttt{MixedKV} 的恢复指向“Key-first protection”与 role-aware 格式升级；最后，本小节则说明在共享非对称格式的公平设置下，\texttt{INT4-RoleAlign} 可以把这一路径恢复为一个可审计、可扩展的 low-bit 实例。接下来的问题，不再是 low-bit path 能否被恢复，而是恢复后的行为敏感度画像能否进一步支撑跨模型预算分配，并读出稳定的策略适用区间结构。
+```
+
+### 4.4 当前冻结基线（已清洗接入，`2026-04-22 23:20`）
+
+- 审核结论：`采用（经轻度清洗后）`
+- 清洗动作：
+  - 保持 `4.4` 为 `same-order INT4 budget band` 下的 regime readout，不写成 matched-budget formal compare
+  - 保持四个 regime node：`Mistral-7B / Qwen2.5-3B / LLaMA-3.1-8B / Qwen2.5-14B`
+  - 保持 `4.4.1` 指向 `4.6.3` 的 forward pointer
+  - 将 `图 4-3 ~ 图 4-6` 路径对齐到 Chapter 4 final keep-set 命名，并补齐本地占位资产
+
+```tex
+\section{RQ3：跨模型预算分配与策略适用区间图谱}
+\label{sec:ch4-rq3}
+
+第~\ref{sec:ch4-rq2} 节已经确认，low-bit path 可以在 role-aware 非对称格式下被恢复。本节进一步回答第三个研究问题：由 behavior-guided calibration 产出的 sensitivity profile，是否能够支撑跨模型预算分配，并揭示稳定的策略适用区间结构。按照 frozen story，\S4.4 的目标不是寻找一个 across-model 的 universal winner，而是把 allocator 的结果从若干跑分表提升为一张可命名的 regime map。
+
+为避免将 allocator 结果误读为单一 policy 排名，本节首先在同量级 INT4 预算带内给出跨模型主表，再通过四个典型剖面把主表中的 footprint 命名为不同 regime：小模型的早层保护回救区间、中等规模的共识区间、大模型的高性能簇共存，以及 Mistral 上最显著的 AutoK 正向案例。这里所谓“策略适用区间”，指的是在给定 family、scale 与任务组合下，某类 allocator policy 更容易落在 top-tier 质量区间，而不是在严格 matched-budget 条件下已经被形式化证明更优。
+
+\subsection{同量级预算下的跨模型主表}
+\label{subsec:ch4-regime-main}
+
+本节首先需要把比较口径写死。表~\ref{tab:ch4-regime-main} 报告的是 \emph{same-order INT4 budget band} 内的结构读数，而不是严格 matched memory 的 $\pm 3\%$ 对照。当前各 allocator policy 的平均位宽大致落在 $4.5\text{--}5.0$ bit 带内，而 uniform \texttt{INT4} 对应 $\bar b = 4.0$ bit，因此这里的章职能是 \emph{signature readout}：回答“在同一数量级预算内，不同 allocation 风格会在不同模型上落到哪里”，而不是回答“在严格同预算下谁被形式化证明更优”。这一诚实边界同时也是本节与未来 matched-budget formal compare 的分界线。
+
+\begin{table}[t]
+  \centering
+  \caption{同量级 INT4 预算带内的跨模型主表（clean-provenance pin=ddada19）}
+  \label{tab:ch4-regime-main}
+  \small
+  \begin{tabular}{llcccc}
+    \toprule
+    模型 & 任务/汇总 & Uniform INT4 & BA-k & Heuristic-k & BA-AutoK \\
+    \midrule
+    \multirow{4}{*}{Qwen2.5-3B ($H_{kv}=2$)} 
+      & NarrativeQA (F1)    & 4.33 & \textbf{7.17} & 3.08 & 6.48 \\
+      & HotpotQA (F1)       & 2.38 & 4.73 & 1.39 & \textbf{4.89} \\
+      & GovReport (Rouge-L) & 5.77 & 8.81 & 5.96 & \textbf{8.90} \\
+      & Mean                & 4.16 & \textbf{6.90} & 3.48 & 6.75 \\
+    \midrule
+    \multirow{4}{*}{LLaMA-3.1-8B ($H_{kv}=8$)}
+      & NarrativeQA (F1)    & 10.24 & \textbf{11.14} & 10.47 & 10.74 \\
+      & HotpotQA (F1)       & 6.73  & \textbf{7.88}  & 5.68  & 7.57 \\
+      & GovReport (Rouge-L) & 9.24  & 9.54 & 9.47 & \textbf{9.75} \\
+      & Mean                & 8.74  & \textbf{9.52} & 8.54 & 9.35 \\
+    \midrule
+    \multirow{4}{*}{Qwen2.5-14B ($H_{kv}=8$)}
+      & NarrativeQA (F1)    & \textbf{7.05} & 6.67 & 6.83 & 6.80 \\
+      & HotpotQA (F1)       & \textbf{5.57} & 5.49 & 5.40 & 5.39 \\
+      & GovReport (Rouge-L) & 9.09 & 8.95 & 9.03 & \textbf{9.27} \\
+      & Mean                & \textbf{7.23} & 7.04 & 7.09 & 7.15 \\
+    \midrule
+    \multirow{4}{*}{Mistral-7B-v0.3 ($H_{kv}=8$)}
+      & NarrativeQA (F1)    & 15.55 & 15.71 & \textbf{17.11} & 16.26 \\
+      & HotpotQA (F1)       & 17.81 & 17.78 & 17.84 & \textbf{19.08} \\
+      & GovReport (Rouge-L) & 8.70  & 8.66  & 8.86 & \textbf{8.96} \\
+      & Mean                & 14.02 & 14.05 & 14.60 & \textbf{14.76} \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.35em}
+  \begin{minipage}{0.94\linewidth}
+    \footnotesize
+    注：本表报告的是 same-order INT4 budget band 内的 cross-model readout，而不是 strict matched-budget compare。Per-model best-$k$ 动态选择为：Qwen2.5-3B 用 $k=1$，LLaMA-3.1-8B 用 $k=11$，Qwen2.5-14B 用 $k=7$，Mistral-7B 用 $k=3$；AutoK 的 coverage 阈值在 14B 上为 cov90，其余模型为 cov80。Uniform 指 \texttt{uniform\_int4\_k4v4}；BA-k 指 behavior-guided allocator 保护 top-$k$ 高敏感层；Heuristic-k 指等距位置启发式保护；BA-AutoK 指 profile-guided coverage proposer 自动确定 budget。
+  \end{minipage}
+\end{table}
+
+表~\ref{tab:ch4-regime-main} 的核心信息不是“哪一列 overall 最强”，而是四个模型的最佳 policy family 并不一致：Qwen2.5-3B 的 best mean 落在 BA-k1，LLaMA-3.1-8B 的 best mean 落在 BA-k11，Qwen2.5-14B 的 top-1 落在 Uniform，而 Mistral-7B 的 best mean 则落在 BA-AutoK。这些差异如果只是噪声，并不会在图~\ref{fig:ch4-autok-protection}--\ref{fig:ch4-regime-heatmap} 中与 sensitivity profile 的形状共同出现；但事实上，表中的落点与 profile 形状高度对齐，因此它们更接近四类不同的结构 footprint，而不是同一 winner 在四个模型上的偶然涨落。
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/ch4/fig_ch4_03_autok_protection_map.pdf}
+  \caption{Behavior-guided AutoK 的逐层保护决策。四个子图分别对应 Qwen2.5-3B、LLaMA-3.1-8B、Qwen2.5-14B 与 Mistral-7B，展示同一 coverage 规则下各模型的保护层结构。该图将跨模型主表背后的 sensitivity shape 直接可视化。}
+  \label{fig:ch4-autok-protection}
+\end{figure}
+
+图~\ref{fig:ch4-autok-protection} 把这种结构差异直接可视化。Qwen2.5-3B 的保护层明显前移并集中于最早层，说明其 sensitivity profile 呈现典型的 early-layer bottleneck；LLaMA-3.1-8B 与 Mistral-7B 则呈现中层簇集，说明在中等规模与特定家族上，真正关键的层已经不是单一首层，而是一簇相邻的高敏感层；Qwen2.5-14B 则近乎铺满全深度，表现为 wide-spread profile，说明大模型的行为敏感度已经显著弥散化。于是，“不同模型 winner 不同”不再只是表格现象，而变成了 sensitivity structure 的差异读数。
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/ch4/fig_ch4_04_pareto_budget_quality.pdf}
+  \caption{Quality--预算 Pareto 视图。三个子图分别对应 Qwen2.5-7B、LLaMA-3.1-8B 与 Mistral-7B；横轴为 average KV bit budget，纵轴为 task-core mean quality。该图用于可视化 same-order INT4 budget band 下不同 policy family 的局部几何关系，而不是 matched-budget formal compare。}
+  \label{fig:ch4-pareto}
+\end{figure}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.92\linewidth]{figures/ch4/fig_ch4_05_regime_heatmap.pdf}
+  \caption{跨模型策略适用区间 heatmap。行对应模型，列对应 policy family；单元格显示行内归一化后的 mean quality，并用边框标出每行 top-tier 落点。该图服务于 \S4.4.1 的 skim readout。}
+  \label{fig:ch4-regime-heatmap}
+\end{figure}
+
+图~\ref{fig:ch4-pareto} 与图~\ref{fig:ch4-regime-heatmap} 进一步把主表读成 regime，而不是排名。前者说明 budget-band 不是口头说说，而是存在清晰的 quality--budget 局部几何：Mistral-7B 上出现最显著的 AutoK 正向区域，LLaMA-3.1-8B 上则形成 near-Pareto cluster，而 Qwen2.5-7B 作为 supporting evidence 则展示了 uniform policy 的明显 quality cliff。后者进一步把四模型压缩成一张“每行一个落点”的 skim-path：Qwen2.5-3B 对应早层保护回救区间，LLaMA-3.1-8B 对应中等规模共识区间，Qwen2.5-14B 对应高性能簇共存区间，Mistral-7B 则对应 AutoK 的最显著正向案例。值得注意的是，position-based heuristic 在多个区间内与 behavior-guided 选中集合发生重合；这一强基线现象的结构性含义，将在 \S4.6.3 中进一步讨论。
+
+\subsection{Mistral-7B：AutoK 的最显著正向案例}
+\label{subsec:ch4-case-mistral}
+
+Mistral-7B 被单独列出，并不是因为它在所有设置下都最好，而是因为它提供了全文最干净、最连续、最容易解释的 AutoK 正向案例。换言之，这一 case 的价值不在于证明“AutoK 普适最优”，而在于回答一个更窄也更重要的问题：当 sensitivity profile 本身具有可压缩的中层簇集结构时，coverage-based budget proposer 是否真的能读对层间结构。
+
+\begin{table}[t]
+  \centering
+  \caption{典型案例表 A：Mistral-7B 与 Qwen2.5-3B}
+  \label{tab:ch4-case-a}
+  \small
+  \begin{tabular}{lcccccc}
+    \toprule
+    \multicolumn{7}{l}{\textbf{Panel A. Mistral-7B：AutoK 的最显著正向案例}} \\
+    \midrule
+    任务 & Uniform & BA-k3 & Heuristic-k3 & BA-AutoK(cov80) & winner & 备注 \\
+    \midrule
+    NarrativeQA (F1)    & 15.55 & 15.71 & \textbf{17.11} & 16.26 & Heur-k3 & \\
+    HotpotQA (F1)       & 17.81 & 17.78 & 17.84 & \textbf{19.08} & AutoK & \\
+    GovReport (Rouge-L) & 8.70  & 8.66  & 8.86 & \textbf{8.96}  & AutoK & \\
+    DuReader (Rouge-L)  & 7.35  & 8.64  & 7.97 & \textbf{11.62} & AutoK & strongest spike \\
+    LCC (EditSim)       & 21.38 & \textbf{22.10} & 20.30 & 19.77 & BA-k3 & \\
+    Mean                & 14.16 & 14.58 & 14.42 & \textbf{15.14} & AutoK & 5-task mean \\
+    \midrule
+    \multicolumn{7}{l}{\textbf{Panel B. Qwen2.5-3B：早层保护回救区间}} \\
+    \midrule
+    任务 & Uniform & BA-k1 & Heuristic-k1 & BA-AutoK(cov80) & Rescue $\Delta$ & 备注 \\
+    \midrule
+    NarrativeQA (F1)    & 4.33 & \textbf{7.17} & 3.08 & 6.48 & +4.09 & rescue \\
+    HotpotQA (F1)       & 2.38 & 4.73 & 1.39 & \textbf{4.89} & +3.33 & rescue \\
+    GovReport (Rouge-L) & 5.77 & 8.81 & 5.96 & \textbf{8.90} & +2.85 & rescue \\
+    Mean                & 4.16 & \textbf{6.90} & 3.48 & 6.75 & +3.42 & largest gap \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.35em}
+  \begin{minipage}{0.94\linewidth}
+    \footnotesize
+    注：Panel A 来自 Mistral-7B-v0.3 的 5-task 扩展 case；Panel B 来自 Qwen2.5-3B 的 3-task task-core case。Mistral 的 AutoK coverage 阈值为 cov80；Qwen2.5-3B 的 behavior-guided best-$k$ 为 $k=1$。本表为 \S4.4.2--\S4.4.3 共用的双 block case 表。
+  \end{minipage}
+\end{table}
+
+表~\ref{tab:ch4-case-a} 的 Panel A 显示，BA-AutoK 在 Mistral-7B 的五个任务中赢下三个任务，并取得最高 mean。最尖锐的证据来自 DuReader：BA-AutoK 达到 11.62，而 Heuristic-k3 只有 7.97，差距达到 3.6 分；同时，它在 HotpotQA 与 GovReport 上也给出最优读数。由于这些增益分散在多个任务上，而不是由单一异常任务硬拉出来，因此这可以被读成真正的 coverage-based 正向信号，而不是某个 dataset artifact。
+
+这一优势与图~\ref{fig:ch4-autok-protection} 中的 profile shape 是一致的。Mistral-7B 的 top protected layers 落在中前层簇集，且 cov80 选择出的保护范围与这种簇集结构相吻合，因此 AutoK 在这里不是“瞎撞中了更好的 budget”，而是 profile-guided proposer 真正读对了层间结构。于是，Mistral-7B 在本文中承担的不是“AutoK 永远最优”的证明，而是“当 profile 具有可压缩簇集结构时，coverage-based proposer 可以给出最干净正向信号”的单模型实例。
+
+\subsection{Qwen2.5-3B：早层保护回救区间}
+\label{subsec:ch4-case-qwen3b}
+
+Qwen2.5-3B 则承担了全文最强的 behavior-guided 与位置启发式差距案例。它之所以单列，不是因为总体分数最高，而是因为它揭示了一类更窄但更重要的 regime：当 behavior sensitivity 极端集中于最早几层时，保护正确的第一层会产生回救式收益，而位置启发式若把预算投向“看起来更居中”的层，几乎等于没有保护。
+
+表~\ref{tab:ch4-case-a} 的 Panel B 给出了这一点的最强数字支撑。对 `BA-k1` 与 `Heuristic-k1` 的直接比较表明，NarrativeQA 上前者相对后者高出 4.09 分，HotpotQA 上高出 3.33 分，GovReport 上高出 2.85 分，mean 差距达到 3.42 分。这里最关键的不是 improvement 的绝对量，而是 improvement 的语义：这些差距不是“多赢一点”，而是把几乎失效的启发式策略直接捞回到可用区间，因此必须被读成 \emph{rescue}。
+
+这一回救与图~\ref{fig:ch4-autok-protection} 的 3B 结构读数完全一致。Qwen2.5-3B 的 sensitivity profile 明显前移，top protected layers 集中在最早层；`BA-k1` 保护的恰恰是 layer 0，而 `Heuristic-k1` 的单层保护则落在中层，于是直接错过了真正的瓶颈层。换言之，3B 并不是在证明“小模型总该用 BA-k1”，而是在定义一种更精确的 regime：当 behavior sensitivity 在最早几层高度集中时，位置启发式会彻底选错层，而 behavior-guided protection 可以产生回救式收益。
+
+\subsection{LLaMA-3.1-8B：中等规模共识区间}
+\label{subsec:ch4-case-llama8b}
+
+LLaMA-3.1-8B 的 case 是本轮 story patch 相对旧稿最重要的新增。它在旧稿中没有独立 case 小节，但 cross-model 主表已经显示出足够清晰的 footprint：best mean 落在 BA-k11，同时 BA-AutoK 与其它 top-tier policy 距离并不远。因此，这一节并不是在补新实验，而是在把主表中已经存在的 regime node 从“一行结果”提升为“一个应被命名的结构区间”。
+
+\begin{table}[t]
+  \centering
+  \caption{典型案例表 B：LLaMA-3.1-8B 与 Qwen2.5-14B}
+  \label{tab:ch4-case-b}
+  \small
+  \begin{tabular}{lcccccc}
+    \toprule
+    \multicolumn{7}{l}{\textbf{Panel A. LLaMA-3.1-8B：中等规模共识区间}} \\
+    \midrule
+    任务 & Uniform & BA-k11 & Heuristic-k11 & BA-AutoK(cov80) & winner & 备注 \\
+    \midrule
+    NarrativeQA (F1)    & 10.24 & \textbf{11.14} & 10.47 & 10.74 & BA-k11 & \\
+    HotpotQA (F1)       & 6.73  & \textbf{7.88}  & 5.68  & 7.57  & BA-k11 & \\
+    GovReport (Rouge-L) & 9.24  & 9.54 & 9.47 & \textbf{9.75} & AutoK & \\
+    Mean                & 8.74  & \textbf{9.52} & 8.54 & 9.35 & BA-k11 & consensus top-tier \\
+    \midrule
+    \multicolumn{7}{l}{\textbf{Panel B. Qwen2.5-14B：高性能簇共存而无稳定最优}} \\
+    \midrule
+    任务 & Uniform & BA-k7 & Heuristic-k7 & BA-AutoK(cov90) & $gap_{\mathrm{rel}}$ & 备注 \\
+    \midrule
+    NarrativeQA (F1)    & \textbf{7.05} & 6.67 & 6.83 & 6.80 & 3.55\% & top-3 clustered \\
+    HotpotQA (F1)       & \textbf{5.57} & 5.49 & 5.40 & 5.39 & 3.05\% & top-3 clustered \\
+    GovReport (Rouge-L) & 9.09 & 8.95 & 9.03 & \textbf{9.27} & 2.59\% & top-3 clustered \\
+    Mean                & \textbf{7.23} & 7.04 & 7.09 & 7.15 & 3.06\% & max $\approx$ 3.5\% \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.35em}
+  \begin{minipage}{0.94\linewidth}
+    \footnotesize
+    注：LLaMA-3.1-8B 的 case 由 cross-model 主表 block 提升而来，承担中等规模共识区间的独立 panel；Qwen2.5-14B 的 \mbox{$gap_{\mathrm{rel}}(t)=(top1(t)-top3(t))/top1(t)$}，最大约 3.5\%，平均约 3.0\%。在当前统计 power 下，14B 的 top-tier policies 应解释为近乎不可分辨的 cluster，而不是稳定 single winner。
+  \end{minipage}
+\end{table}
+
+表~\ref{tab:ch4-case-b} 的 Panel A 表明，LLaMA-3.1-8B 的确存在一个较明确的 BA-k11 node：NarrativeQA 与 HotpotQA 上 BA-k11 都给出最优读数，GovReport 上则由 BA-AutoK 略占优势，最终 mean 由 BA-k11 取得最优。这里最值得强调的不是“BA-k11 压倒了其它一切策略”，而是它与 BA-AutoK 之间的差距非常有限；再结合图~\ref{fig:ch4-pareto} 中的 near-Pareto 几何关系，更合理的读法是：LLaMA-3.1-8B 所代表的，是一个 \emph{consensus top-tier zone}，而不是单点独占。
+
+这一命名与其 profile shape 也是一致的。与 Qwen2.5-3B 的尖锐前层集中不同，LLaMA-3.1-8B 的最佳保护范围已经扩展到更广的中层簇集，best-$k=11$ 本身就意味着“单点保护”不再是合理抽象；但与此同时，它又不像 Qwen2.5-14B 那样弥散到几乎全深度 wide-spread。因此，LLaMA-3.1-8B 最适合被命名为 \textbf{中等规模共识区间}：存在一个相对稳定的 BA-k 节点，但其它 top-tier policy 并未远离。它在本文中还承担一个更克制的对照角色：由于其 $H_{kv}=8$ 设置与较平滑的 allocator footprint 同时出现，我们可以把它当作 GQA 架构稳健性的 supporting case，但不能把它升级为“更高 $H_{kv}$ 必然导向更优 policy”的强结论。
+
+\subsection{Qwen2.5-14B：高性能簇共存而无稳定最优}
+\label{subsec:ch4-case-qwen14b}
+
+Qwen2.5-14B 提供的是这张 regime map 最重要的负例：不是每个模型都会给出清晰 winner。它在跨模型主表中的 top-1 看似落在 Uniform，但这一读数如果被粗暴解读为“Uniform is best”，就会误读 14B 的真正结构形状。对于这个模型，最重要的事实不是谁在 mean 上高出零点几分，而是 top-tier policies 彼此挤得极近，以至于当前统计 power 下几乎不可区分。
+
+表~\ref{tab:ch4-case-b} 的 Panel B 直接支持这一点。三个任务上四类 policy 的数值都非常接近，按照 $gap_{\mathrm{rel}}(t)=(top1(t)-top3(t))/top1(t)$ 的定义，NarrativeQA、HotpotQA 与 GovReport 的 top-3 相对 top-1 gap 分别约为 3.55\%、3.05\% 与 2.59\%，mean 约为 3.06\%。这意味着 14B 的 top-3 policy 全部挤在 top-1 的 3.5\% 相对距离内。再结合现有 bootstrap 读数，更稳的解释不是“Uniform 真正最优”，而是：\textbf{在当前 power 下，14B 的 top-tier policies 尚不可分辨。}
+
+这种“不可分辨”与图~\ref{fig:ch4-autok-protection} 的 wide-spread profile 是一致的。Qwen2.5-14B 的 sensitivity profile 已经近乎铺满全深度，AutoK 在 48 层中标出 42 层 protected，说明它不是由少数关键层决定一切的模型。正因为 profile 本身已经高度弥散，allocator 在当前预算区间中的 pick-order 才只会带来有限边际影响。于是，14B 给这张 regime map 的不是一个正面 winner，而是一条更成熟的结构结论：\textbf{高性能簇共存而无稳定最优。}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.96\linewidth]{figures/ch4/fig_ch4_06_family_scale_summary.pdf}
+  \caption{family/scale 分类排序汇总图。该图在 \S4.4.5 节末作为整节收束图，统一命名四类 regime：早层保护回救区间、中等规模共识区间、高性能簇共存而无稳定最优，以及 AutoK 的最显著正向案例。}
+  \label{fig:ch4-regime-summary}
+\end{figure}
+
+图~\ref{fig:ch4-regime-summary} 将 \S4.4 的四个 per-model footprint 汇总成一张按 family/scale 排列的分类视图：Qwen2.5-3B 对应 early-layer rescue，LLaMA-3.1-8B 对应 mid-scale consensus，Qwen2.5-14B 对应 high-performance cluster without stable winner，而 Mistral-7B 对应 AutoK strongest positive case。由此，\S4.4 真正交付的不是“哪个 policy 全局最好”，而是一张由 family、scale 与任务共同决定的适用区间图谱。
+
+至此，\textbf{RQ3 的证据链已经闭合}：behavior sensitivity profile 不只是校准层的副产物，它还能在同量级预算带内支撑跨模型 budget allocation，并读出稳定而可命名的 structural footprint。这个 footprint 有时表现为最显著的 AutoK 正向案例，有时表现为早层回救，有时表现为中等规模共识，也有时表现为高性能簇共存而无稳定最优。下一节将不再继续讨论 quality regime，而转向这些路径在真实推理系统中的时间与显存边界。
+```
+
+### 4.5 当前冻结基线（已清洗接入，`2026-04-23 00:24`）
+
+- 审核结论：`采用（经轻度清洗后）`
+- 清洗动作：
+  - 保持 `4.5` 为纯部署效率评估节，不重讲第三章系统设计
+  - 保持 `4.5.2 / 4.5.3` 共用 `表 4-13`
+  - 保持旧 `8B vs 14B` 控制对比只作为 `4.5.3` supporting paragraph
+  - 将 `表 4-14` 补齐为与 final keep-set 一致的列结构
+
+```tex
+\section{部署效率评估}
+\label{sec:ch4-deployment}
+
+第~\ref{sec:ch4-rq1}--\ref{sec:ch4-rq3} 节已经分别回答了 canonical 保真、low-bit 恢复与跨模型策略图谱。本节转向部署层，考察这些路径在真实推理系统中的时间与显存代价。按照本章冻结后的写作纪律，\S4.5 不再重复第三章关于 kernel 设计与离线校准产物的实现细节，而只回答一个更务实的问题：\emph{在什么条件下，当前低比特部署路径值得使用；在什么条件下，又不值得使用。}
+
+为此，本节按“入口读数 $\rightarrow$ 长序列放大 $\rightarrow$ 经验边界 $\rightarrow$ 部署建议”的顺序组织。首先，\S\ref{subsec:ch4-tpot-4k} 给出 4K 序列下的 backend 入口读数，避免把任何后续加速误读为无条件现象；随后，\S\ref{subsec:ch4-tpot-scaling} 展示长序列下融合路径收益如何随上下文增长而放大；在此基础上，\S\ref{subsec:ch4-crossover} 将这些单点与单模型结果上升为一条可读出的性能交叉边界；最后，\S\ref{subsec:ch4-kvcache} 用 `KV Cache` 显存压缩率与当前硬件约束将系统层结论收束为可执行部署建议。
+
+\subsection{4K 序列下的 TPOT 对比}
+\label{subsec:ch4-tpot-4k}
+
+短上下文入口层的读数是部署判断的起点。4K 序列既是最自然的 deployment entry point，也是判断固定 kernel 开销是否已经值得付出的最低长度点。因此，这一小节的目的不是证明融合路径已经普适胜出，而是先把 backend landscape 摆正：在当前硬件与 batch 设定下，哪些模型上 `triton_ra` 仍受固定调度开销拖累，哪些模型上它已经开始逼近甚至略微越过参考路径。
+
+\begin{table}[t]
+  \centering
+  \caption{4K 序列下的 TPOT 对比（seq=4K, gen=128, batch=1, NVIDIA H20；单位：ms）}
+  \label{tab:ch4-tpot-4k}
+  \small
+  \begin{tabular}{lccccccc}
+    \toprule
+    模型 & $H_{kv}$ & FP16 & torch\_ref(INT4) & KIVI(INT4) & triton\_ra(INT4) & FlashInfer(INT4) & 最快项 \\
+    \midrule
+    Qwen2.5-1.5B & 2 & 24.36 & 36.35 & 36.39 & 38.68 & 43.73 & torch\_ref \\
+    Qwen2.5-7B   & 4 & 24.82 & 37.61 & 37.41 & 38.76 & 47.07 & KIVI \\
+    LLaMA-3.1-8B & 8 & 28.55 & 44.88 & 44.70 & \textbf{44.49} & 51.50 & triton\_ra \\
+    Qwen2.5-14B  & 8 & 42.58 & 68.07 & 68.46 & \textbf{67.67} & 85.07 & triton\_ra \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.35em}
+  \begin{minipage}{0.94\linewidth}
+    \footnotesize
+    注：粗体标注同模型 INT4 backend 中最快项。该表服务于 \S4.5.1 的 backend entrance readout，不承担显著加速宣称；真正的收益边界需结合后续长序列读数与性能交叉边界共同解释。
+  \end{minipage}
+\end{table}
+
+表~\ref{tab:ch4-tpot-4k} 给出三类清楚但应被克制解释的现象。第一，在 $H_{kv}=2$ 的 Qwen2.5-1.5B 上，`triton_ra=38.68`\,ms，明显慢于 `torch_ref=36.35`\,ms；第二，在 $H_{kv}=4$ 的 Qwen2.5-7B 上，`triton_ra=38.76`\,ms，仍慢于 `torch_ref=37.61`\,ms；第三，只有在 $H_{kv}=8$ 的 LLaMA-3.1-8B 与 Qwen2.5-14B 上，`triton_ra` 才开始成为该模型的最快 INT4 backend，分别达到 `44.49`\,ms 与 `67.67`\,ms。换言之，4K 入口层的读数不应被写成“融合路径已经普适胜出”；它更像一个前置信号：当 $H_{kv}$ 较小、Grid 规模不足时，Triton 的固定调度开销仍然可见，而在 $H_{kv}=8$ 上，融合路径已开始逼近甚至轻微越过参考路径，但真正的优势仍要到长序列下才能被清晰放大。
+
+\subsection{长序列 TPOT 扩展规律}
+\label{subsec:ch4-tpot-scaling}
+
+如果 4K 入口层只是一个“优势可能开始出现”的信号，那么长序列读数才是判断融合路径是否真正有部署价值的关键。这里选择 Qwen2.5-14B 作为 scaling anchor，不是因为它在所有设置下都最快，而是因为它在 $H_{kv}=8$ 下已经显现出明确的正向趋势，同时长上下文下 memory traffic 足够重，最适合观察融合路径是否会随着历史 KV 的增长而系统性放大收益。
+
+\begin{table}[t]
+  \centering
+  \caption{部署边界综合表}
+  \label{tab:ch4-deployment-boundary}
+  \small
+  \begin{tabular}{lcccccc}
+    \toprule
+    \multicolumn{7}{l}{\textbf{Panel A. 14B 长序列 TPOT 扩展规律（gen=64, runs=10, NVIDIA H20；单位：ms）}} \\
+    \midrule
+    Backend & 4K & 8K & 16K & 32K & $\Delta$（相对 torch\_ref） & 备注 \\
+    \midrule
+    FP16             & 42.28 & 42.81 & 42.64 & 43.13 & -- & baseline \\
+    torch\_ref(INT4) & 68.17 & 86.08 & 119.83 & 190.23 & -- & reference \\
+    KIVI(INT4)       & 68.07 & 86.02 & 121.49 & 187.82 & -- & runtime baseline \\
+    triton\_ra(INT4) & 67.73 & 71.53 & 86.56 & 113.16 & $-0.44 / -14.54 / -33.26 / -77.08$ & fused path \\
+    \midrule
+    \multicolumn{7}{l}{\textbf{Panel B. 跨模型性能交叉边界（$\Delta T = \texttt{triton\_ra} - \texttt{torch\_ref}$；单位：ms）}} \\
+    \midrule
+    模型 & $H_{kv}$ & $\Delta T@4K$ & $\Delta T@8K$ & $\Delta T@16K$ & $\Delta T@32K$ & boundary note \\
+    \midrule
+    Qwen2.5-1.5B & 2 & +1.67 & +4.23 & +9.78 & +15.92 & 全长度下均更慢 \\
+    Qwen2.5-7B   & 4 & +1.03\,n.s. & +1.56\,n.s. & +0.55\,n.s. & -4.90 & 仅 32K 处交叉 \\
+    Qwen2.5-14B  & 8 & -0.44\,n.s. & -14.54 & -33.26 & -77.08 & 8K 起进入加速区 \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.35em}
+  \begin{minipage}{0.94\linewidth}
+    \footnotesize
+    注：Panel A 与 Panel B 分别对应 \S4.5.2 与 \S4.5.3。这里的“性能交叉边界”是经验读数，而不是理论闭式模型；旧 `8B vs 14B` 同 $H_{kv}=8$ 控制对比不再单列成表，仅在 \S4.5.3 正文中作为 supporting paragraph 报告。对 4K 处 $|\Delta T|<2$\,ms 的读数，按旧稿口径统一标记为 `n.s.`，不宣称为显著交叉点。
+  \end{minipage}
+\end{table}
+
+表~\ref{tab:ch4-deployment-boundary} 的 Panel A 说明，融合路径的部署价值并不是在 4K 就被证明，而是在序列拉长之后才被系统性放大。具体而言，Qwen2.5-14B 上 `triton_ra` 相对 `torch_ref` 的时间差在 4K 处仅为 `-0.44`\,ms，可视为噪声范围；但从 8K 开始，这一差值迅速扩大到 `-14.54`\,ms，在 16K 进一步扩大到 `-33.26`\,ms，而在 32K 达到 `-77.08`\,ms，对应约 `-17\%`、`-28\%` 与 `-40\%` 的相对降幅。更重要的是，这个趋势是单调的：优势不是在 4K 就被“看出来”，而是在 8K 之后随历史 KV 变长而持续放大。于是，\S4.5.2 真正证明的不是“14B 在某个点更快”，而是“当 memory traffic 持续上升时，融合路径的带宽节省可以逐步压过固定调度开销”。
+
+\subsection{性能交叉边界与 GQA 影响}
+\label{subsec:ch4-crossover}
+
+如果说 \S\ref{subsec:ch4-tpot-4k} 给的是入口层 readout、\S\ref{subsec:ch4-tpot-scaling} 给的是单模型 scaling 证据，那么本节的任务就是把这些读数上升成一条可命名的经验边界。这里的“性能交叉边界”严格指经验量 $\Delta T = \texttt{triton\_ra} - \texttt{torch\_ref}$ 的符号变化，不是理论闭式模型，也不是严格因果识别。按照旧稿口径，4K 处 $|\Delta T|<2$\,ms 的情况统一视为 `n.s.`，因此本节真正关心的不是“某个 backend 是否快了 0.4\,ms”，而是它何时稳定进入加速区间，以及这条边界如何随 $H_{kv}$ 与序列长度共同移动。
+
+表~\ref{tab:ch4-deployment-boundary} 的 Panel B 清楚给出三条边界路径。对于 Qwen2.5-1.5B（$H_{kv}=2$），$\Delta T$ 在 `4K/8K/16K/32K` 上分别为 `+1.67 / +4.23 / +9.78 / +15.92`\,ms，说明融合路径在全长度下都不划算；对于 Qwen2.5-7B（$H_{kv}=4$），$\Delta T$ 在 `4K/8K/16K` 仍为正或近似零，直到 `32K` 才降为 `-4.90`\,ms，说明交叉点被推迟到更长序列；而对于 Qwen2.5-14B（$H_{kv}=8$），$\Delta T$ 从 `8K` 起就显著为负，并在更长上下文下持续放大。这条经验边界可以压成一句话：\textbf{$H_{kv}$ 越高，交叉点越早；序列越长，融合路径越占优。}
+
+旧稿 `4.5.4` 中的 `8B vs 14B` 同 $H_{kv}=8$ 控制对比，在新结构下不再单列成节，但它仍然是本节的重要 supporting evidence。LLaMA-3.1-8B 与 Qwen2.5-14B 虽然参数规模相差约 1.75 倍，却共享相同的 $H_{kv}=8$；在 `4K` 处，两者的交叉幅度高度一致，分别为 `-0.39`\,ms 与 `-0.44`\,ms。这支持一种更稳的结构性读法：相较于参数量，$H_{kv}$ 更接近当前交叉边界的主导相关变量。但由于当前模型集合中 $H_{kv}$ 与规模并未被完全独立控制，这里仍只能写成\emph{相关性支持}，而不能上升为严格的因果结论。
+
+因此，部署层真正有用的不是某个 backend 在某个表格里多快几毫秒，而是一条可读出的经验边界：$H_{kv}=2$ 基本落在融合路径不划算区，$H_{kv}=4$ 只有到很长序列才越过边界，$H_{kv}=8$ 则在较早长度点就进入收益区间。部署路径的选择因而不应按模型名字决定，而应按 $(H_{kv}, seq\_len)$ 是否已经越过性能交叉边界决定。
+
+\subsection{KV Cache 显存压缩率与部署建议}
+\label{subsec:ch4-kvcache}
+
+速度边界只给出了一半答案。对于长上下文部署而言，低比特路径是否值得采用，还取决于它在缓存存储上的直接收益是否稳定、可预期。为此，本节最后报告 `KV Cache` 显存压缩率，并在时间边界与硬件约束共同作用下，将系统层结论转写成当前平台上的经验部署建议。按照 frozen keep-set，这一节只保留一张正式表，部署建议不再单独成表。
+
+\begin{table}[t]
+  \centering
+  \caption{KV Cache 显存压缩率对比（seq=4K, batch=1，仅统计 KV Cache，占用单位：MB）}
+  \label{tab:ch4-kvcache-memory}
+  \small
+  \begin{tabular}{lccccc}
+    \toprule
+    模型 & $H_{kv}$ & FP16 KV Cache & INT4 KV Cache & 压缩率 & 备注 \\
+    \midrule
+    Qwen2.5-1.5B & 2 & 115.5 & 30.7  & 73.4\% & \\
+    Qwen2.5-7B   & 4 & 230.9 & 61.5  & 73.4\% & \\
+    LLaMA-3.1-8B & 8 & 527.9 & 140.5 & 73.4\% & \\
+    Qwen2.5-14B  & 8 & 791.8 & 210.8 & 73.4\% & \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.35em}
+  \begin{minipage}{0.94\linewidth}
+    \footnotesize
+    注：本表只统计 KV Cache，占用不包含模型权重与激活峰值；因此它服务于缓存压缩率判断，而不用于替代完整的运行时 peak memory 分析。按照 frozen keep-set，部署建议已从旧稿独立小节合并到 \S4.5.4 正文结尾。
+  \end{minipage}
+\end{table}
+
+表~\ref{tab:ch4-kvcache-memory} 表明，INT4 路径在四个代表性模型上都实现了近乎相同的缓存压缩率：Qwen2.5-1.5B 从 `115.5`\,MB 压缩到 `30.7`\,MB，Qwen2.5-7B 从 `230.9`\,MB 压缩到 `61.5`\,MB，LLaMA-3.1-8B 从 `527.9`\,MB 压缩到 `140.5`\,MB，而 Qwen2.5-14B 从 `791.8`\,MB 压缩到 `210.8`\,MB，压缩率均约为 `73.4\%`。这说明在当前 INT4 路径下，`KV Cache` 的显存收益是稳定且可预估的；它不是只对某个模型成立的偶然现象。
+
+把这一点与前文的时间边界合起来，就得到一个非常重要的部署判断：INT4 路径带来的显存节省是\emph{稳定收益}，而融合 decode 路径的速度收益是\emph{条件性收益}。因此，真正的部署选择不是“要不要压缩”，而是“在既定压缩前提下，何时切到融合 backend 更划算”。在当前 `NVIDIA H20 (sm\_90, 130 SM, 98 GB HBM)` 平台上，更稳的经验规则是：当 $H_{kv}=8$ 且序列长度达到 `8K` 及以上时，优先选择 `triton_ra`；对于 $H_{kv}=4$ 的模型，只有在很长的序列区间（如 `32K` 附近）才值得切换；当 $H_{kv}=2$ 或序列长度短于 `8K` 时，优先使用 `torch_ref`。这些建议严格限定于当前硬件、当前软件栈与当前 backend 组合，跨硬件时交叉边界可能移动，不应被写成硬件无关的普适定律。
+
+至此，第四章的系统层边界已经被限定清楚：INT4 的 `KV Cache` 显存收益是稳定的，而 Triton 融合路径的时间收益则取决于 $(H_{kv}, seq\_len)$ 是否已经越过性能交叉边界。下一节不再继续报结果，而转入对这些结果为何呈现出当前形状的机制辨析。
+```
+
+### 4.6 当前冻结基线（已清洗接入，`2026-04-23 00:31`）
+
+- 审核结论：`采用（经轻度清洗后）`
+- 清洗动作：
+  - 删除 `:contentReference[oaicite:...]` 残标
+  - 将 `表 4-15` 从 appendix 风格的数据溯源表改写为 discussion-friendly 的趋同验证小表
+  - 保持 `4.6` 为纯 discussion section，不新增图，不回滑为第二轮结果复述
+
+```tex
+\section{实验结果讨论与效度威胁}
+\label{sec:ch4-discussion}
+
+第~\ref{sec:ch4-rq1}--\ref{sec:ch4-deployment} 节已经分别回答了规范路径保真、低比特恢复、跨模型策略图谱与部署效率边界。本节不再继续报结果，而转入这些结果为何呈现出当前形状的机制辨析。按照本章冻结后的写作纪律，\S4.6 的职责不是再做一轮长版结果复述，而是把已经成立的证据提升为更稳的条件性判断，并把适用边界统一收口。
+
+为此，本节按四个层次展开。首先，\S\ref{subsec:ch4-disc-kl-mse} 讨论 KL 与 MSE 校准目标在不同规模与位宽上的必要性差异；其次，\S\ref{subsec:ch4-disc-int4} 将 \texttt{INT4} 相关结果提升为分层机制讨论；随后，\S\ref{subsec:ch4-disc-heuristic} 单独解释 heuristic 何以成为强基线；最后，\S\ref{subsec:ch4-disc-validity} 统一收束评测协议、比较口径、硬件环境与数据溯源的边界。这样安排的目的，是把第四章的价值从“证据成立”进一步推进到“证据被解释、被限定、并被正确命名”。
+
+\subsection{KL 与 MSE 校准目标的规模依赖性机制辨析}
+\label{subsec:ch4-disc-kl-mse}
+
+在 canonical \texttt{INT8} 路径已经通过 \S\ref{subsec:ch4-int8-canonical} 与 \S\ref{subsec:ch4-longbench-official} 立住之后，读者自然会追问：既然当前主线校准目标写成 KL，为什么这里不是更常见的 MSE 或其它数值重建代理？这个问题不属于第三章的方法定义层，而属于第四章的必要性边界层。第三章 \S\ref{sec:ch3-calibration} 负责回答“为什么 KL 可作为行为代理”；本节要回答的则是：\emph{在什么条件下，这个代理更必要；又在什么条件下，它会与数值代理趋同。}
+
+本文当前证据支持的不是“KL 永远显著优于 MSE”，而是“KL 的必要性随位宽压缩强度与模型鲁棒性而变化”：当量化扰动足以改变 attention ranking 时，分布侧代理更重要；当量化扰动已经被模型冗余度、位宽与架构平滑性共同吸收时，KL 与数值代理会趋同。换言之，KL 在本文中的角色应理解为\emph{更贴近行为损伤的工程代理}，而不是跨所有 setting 的统一胜利者。
+
+\begin{table}[t]
+  \centering
+  \caption{7B 上 KL 与 MSE 校准目标的趋同验证}
+  \label{tab:ch4-kl-mse-convergence}
+  \small
+  \begin{tabular}{lcccccc}
+    \toprule
+    设置 / path & KL-selected params & MSE-selected params & 参数是否趋同 & KL 结果 (PPL) & MSE 结果 (PPL) & $\Delta$ \\
+    \midrule
+    Qwen2.5-7B-Instruct, INT4-RoleAlign & $(100.0, 99.9)$ & $(100.0, 99.9)$ & 是 & 7.1121 & 7.1121 & 0.0000 \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{0.35em}
+  \begin{minipage}{0.94\linewidth}
+    \footnotesize
+    注：本表由附录 A.19.3 promoted 到正文。FP16 基线 PPL 为 6.7097。KL artifact 为 \texttt{kv\_calib\_rolealign\_7b\_v3.json}，MSE artifact 为 \texttt{kv\_calib\_mse\_7b\_int4\_rolealign\_v1.json}；两者在贪婪解码下用 3 个 seeds 验证逐位一致。该表的职责是支撑“规模依赖性边界”，而不是承担新的主结果宣称。
+  \end{minipage}
+\end{table}
+
+表~\ref{tab:ch4-kl-mse-convergence} 给出了这一边界的最小实证支撑。在 Qwen2.5-7B-Instruct 上，KL 与 MSE 两种目标最终搜索到完全相同的参数组合，即 $k_{\mathrm{pct}}=100.0$、$v_{\mathrm{pct}}=99.9$；两者对应的 \texttt{INT4-RoleAlign} PPL 也完全一致，均为 `7.1121`。因此，7B 这块证据的关键不是“KL 赢了多少”，而是：\textbf{KL 与 MSE 已经在该规模上高度趋同。} 结合附录说明，这种趋同与更小规模模型上的分歧形成对比，说明随着模型冗余度与鲁棒性提升，behavior proxy 与 numerical proxy 的差异会逐步被吸收。
+
+从机制上看，这一现象是合理的。在更敏感的小模型或更激进的低比特 setting 下，softmax 排序对 Key 误差更脆弱，attention 分布的错位会先于张量范数恶化暴露出来，因此 KL 这类分布代理更有诊断价值；而在较大模型、较高位宽或更平滑的架构上，quantization noise 不足以把 ranking 推离原本稳定区域，于是 KL 与 MSE 选出的参数会逐步收敛。需要强调的是，这仍然是一种\emph{解释性推断}，而不是定理式证明。
+
+因此，本文对 KL 的主张应理解为：在 attention ranking 容易被量化噪声改写的场景中，KL 是更贴近行为损伤的工程代理；而在较稳的规模与较缓和的 setting 下，它会与 MSE 逐步趋同，而不是始终制造同样大的经验优势。这样写，既保留了 behavior-guided 主线，也避免把校准目标写成普适性 overclaim。
+
+\subsection{INT4 结果的分层机制辨析}
+\label{subsec:ch4-disc-int4}
+
+\texttt{INT4} 相关结果在前文已经成立；本节讨论的是它们在机制上能被解释到哪一步，而不是重新比较 \texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 的主表输赢。按照 frozen writing 的要求，这一节保留旧“诚实分析”的三层结构，但把它改写成更正式的学术讨论：先给出事实层，再给出解释层，最后把剩余问题留在开放层。
+
+从事实层看，当前 clean-provenance 范围内、在同一非对称格式 \texttt{per-channel K + per-token V} 下，\texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 在 quality、PPL 与 Needle 上的差距总体很小。前文表~\ref{tab:ch4-rolealign-kivi} 已经显示，三组 fully paired 模型上的 PPL 差距都被压在 $|{\Delta}\mathrm{PPL}|\le 0.15$ 范围内，而 Needle 检索共同恢复到 100/100\%。这组事实首先支持的是：\textbf{low-bit 恢复的一阶条件是 role-aware 非对称格式本身。} 一旦从对称 per-group 升级到 \texttt{per-channel K + per-token V}，检索行为就已经从“崩塌”回到“可用”，而 calibration philosophy 并未先制造出 winner-take-all 的巨大缺口。
+
+从解释层看，当前证据更支持“格式是一阶、校准是二阶组织增益”的判断。所谓“二阶”，不是说离线 behavior-guided calibration 不重要，而是说它的独立价值主要体现为：它把 role-aware 格式背后的架构选择解释化、把参数来源固化为可审计 artifact，并为后续 allocator 留出统一接口。也正因为如此，\texttt{RoleAlign} 在 same-format compare 中的意义，不应被理解为“在 KIVI-style 之上再多赢 0.1 PPL”，而应被理解为“把 low-bit path 组织成一条可固化、可延伸的框架实例”。这里还必须显式锁定口径，避免旧说法回流：所谓 offline role-aware calibration，并不意味着由同一个 KL 分数统一选出 $(p_K,p_V)$；更准确地说，K-path 由 attention-distribution KL / robust P95 KL 主导，V-path 由独立输出扰动代理主导，两者共享的是 workflow、artifact interface 与稳健选择纪律。
+
+进一步地，前文 `4.3.1–4.3.2` 的结果还表明，low-bit cliff 的强度并不只由位宽决定，还受 family、scale 与 $H_{kv}$ 调制。LLaMA-3.1-8B 之所以在对称 \texttt{INT4} 下表现为架构例外，Qwen 系列之所以在 `K4V8` 下更容易完全坍缩，都说明我们面对的不是一条单一位宽规律，而是一类架构依附的误差传播现象。于是，当前章节能够支持的更稳结论是：\texttt{INT4} 的恢复是分层成立的——格式层面强成立，校准层面条件性成立，而跨 family / scale / GQA 的强机制仍应保持克制语气。
+
+附录 `A.19.1–A.19.2` 中的逐头温度校正 `\tau^{-1}` 也应放回这一层历史探索位置来理解。它提供了量化平坦化的动机与 `Q` 预缩放等价实现，但第三章主线已经明确：`RoleAlign` 的默认配置是 `inv_tau=None`，逐头温度校正只保留为诊断性历史探索项。因此，在第四章讨论里，`inv_tau × GQA` 只能被写成一种\emph{架构依附性的 suggestive diagnostic}，而不能重新抬成正文主方法。换言之，它可以提示我们在更高 `H_{kv}` 或更平滑 profile 上是否存在额外温度平坦化收益，但当前证据不足以把它写成主线组件。
+
+真正仍然开放的问题，是：在什么更极端的 setting 下，calibration philosophy 会重新变成一阶因素。例如，更小的 `chunk_size`、更接近 streaming 的 decode 粒度、更大 official task 覆盖、乃至更强的 role-aware allocator 反馈，都可能重新放大 behavior proxy 与 numerical proxy 的差异。当前同-format 对比已经说明，\texttt{RoleAlign} 的价值不在 winner-take-all 跑分差，而在方法组织层；但在哪些更极端条件下这种“二阶组织增益”会重新升级为“一阶经验差异”，仍是后续值得追问的问题。
+
+\subsection{Heuristic 强基线的结构性含义}
+\label{subsec:ch4-disc-heuristic}
+
+如果只把 \S4.4 的 allocator 结果理解成“本文方法没有始终大幅击败 heuristic”，就会误读这张 regime map 的真正贡献。更准确的观察是：在多个模型与预算带内，position-based heuristic 与 behavior-guided policy 的结果非常接近，甚至在选中层集上出现局部重合。这一观察在 frozen story 与施工文档中都被正式提升为结论的一部分：heuristic 是\textbf{强基线}，而且这一点必须被正面承认。
+
+为什么 heuristic 会“强”？一个更结构化的解释是：在某些 regime 下，真正重要的层本来就集中在一个很窄的位置区间，因此“保护哪几层”并不是一个高自由度优化问题，而是一个接近决定论的窄选择空间。此时 heuristic 能逼近 behavior-guided，不是因为它更聪明，而是因为结构本身已经把可行解压窄了。换言之，heuristic 的强不一定是在抢本文方法的功劳，它也可能恰恰是 regime map 自身真实存在的证据。
+
+但这种重合并不是处处发生。Qwen2.5-3B 的 early-layer rescue case 已经给出最强反例：当真正的敏感层极端集中于最早层，而 heuristic 的位置假设偏离到中层时，差距会突然放大到“回救级别”。因此，heuristic 的“强”与 3B 上的“大失败”并不矛盾；前者说明有些模型的可行层集本来就很窄，后者说明一旦该窄区间被位置假设错过，启发式会立刻失效。它们共同构成了 regime map 的两极。
+
+因此，behavior-guided allocator 的价值不应被简单理解为“始终大幅击败 heuristic”，而应理解为：在跨模型条件下识别何时 heuristic 已经足够、何时它会选错关键层。正是这种区分能力，把本文从单纯跑分比较提升为结构图谱工作。于是，heuristic 的强并不是本文贡献的反证；恰恰相反，它说明某些 regime 的可行层集本来就很窄，而本文真正贡献的是识别这种窄区间何时存在、何时失效。
+
+\subsection{威胁效度与外推边界}
+\label{subsec:ch4-disc-validity}
+
+最后，需要把第四章所有结论的适用范围一次性讲清。最重要的边界首先来自评测协议：正文主矩阵统一使用 LongBench 风格合成基准任务，而官方 LongBench 真实数据对照只在 \S\ref{subsec:ch4-longbench-official} 以 `1.5B + 3 任务 + 单种子` 的有限 scope 出现。因此，第四章能够支持的是“主协议没有在 canonical path 上把方向读错”，而不是“真实场景全面泛化已被充分证明”。这一点必须再次重申，因为它是全章最容易被误读成 overclaim 的位置。
+
+第二个边界来自比较口径。第四章的 cross-model allocator 结果统一建立在 \emph{same-order INT4 budget band} 上，而不是严格 matched-budget formal compare。于是，\S4.4 可以支持“regime map exists”“per-model structural footprint”这类结构结论，但不能被外推出“某单一 policy 已在严格同预算下被形式化证明更优”。这条边界不是保守修辞，而是维持全文可信度的必要条件。
+
+第三个边界来自系统与硬件环境。前文 \S4.5 的部署结论严格绑定于当前 `NVIDIA H20`、固定软件栈、`batch=1` 与贪婪解码设定；性能交叉边界的具体位置在其它 GPU、其它 batch、其它 runtime 上都可能移动。因此，\S4.5 支持的是经验边界，而不是 hardware-agnostic 定律。相应地，本章给出的部署建议也应理解为“当前平台上的经验决策规则”，而不是通用工程律。
+
+第四个边界来自数据溯源。正文主结论以 clean-provenance rerun 为准；个别 supporting rows 或 external-validity references 若来自 legacy/backport，必须在表注中显式说明，且不得用于替代主表结论。前文在 \texttt{RoleAlign vs KIVI-style} 对比中对 Qwen2.5-14B 明确写出 scope boundary，正是这一 provenance 纪律的具体体现；这种写法在正式回写 `tex` 时必须保留。
+
+在这些边界之内，第四章的结论已经足够成立；而在这些边界之外，更完整的 official dataset 验证、matched-budget formal compare、更广的 hardware matrix，以及更成熟的 role-aware allocator 与 prompt-adaptive routing，都构成自然的后续工作。但这些后续方向应被理解为\emph{扩大当前结论的适用域}，而不是修补当前结论本身失效。至此，第四章的讨论层任务也完成了：结论不仅成立，而且被清楚限定在一个可审计的协议、预算口径、硬件环境与数据溯源边界之内。
+```
+
+### 4.7 当前冻结基线（已清洗接入，`2026-04-23 00:35`）
+
+- 审核结论：`采用`
+- 清洗动作：
+  - 保持 `4.7` 为 `5` 个短自然段、`0` 图、`0` 表、`0` 个正文显示公式
+  - 保持 `RQ1 → RQ2 → RQ3 → 部署与边界 → 第五章桥接` 的章级收束顺序
+
+```tex
+\section{本章小结}
+\label{sec:ch4-summary}
+
+本章围绕 `RQ1–RQ3` 对 behavior-guided framework 的实证有效性进行了系统验证，并在规范路径保真、低比特恢复、跨模型策略适用区间图谱、部署效率边界与机制讨论五个层面建立了完整证据链。换言之，第四章已经不再只是“给出若干实验结果”，而是把本文的统一原则推进到“是否成立、成立到哪里为止”的章级答案。
+
+针对 `RQ1`，本章首先在 `INT8 canonical path` 上确认了行为引导校准能够形成稳定、可复现的基础保真路径；以 Qwen2.5-1.5B 为锚点模型，规范路径相对 FP16 的三任务平均差异仅为 `mean \Delta = +0.02`。与此同时，官方 LongBench 的小范围真实数据对照进一步表明，该结论与主文合成协议给出的方向一致，从而为规范路径提供了额外的可信度补强，而非另起一套主评测矩阵。
+
+针对 `RQ2`，本章进一步表明：同一原则并不能机械地下推到对称 `INT4`。在低比特场景中，对称 `INT4` 会出现架构依附性的阶跃失效，其主导触发侧来自 Key 精度下降；而在 role-aware 非对称格式下，`INT4-RoleAlign` 则把 low-bit path 恢复为一条可审计、可扩展的行为引导实例。更重要的是，在与 `KIVI-style` 共享同一非对称格式的条件下，低比特恢复的关键首先体现在格式层，而 calibration philosophy 的差异则表现为较小但可解释的组织增益。
+
+针对 `RQ3`，本章证明了行为敏感度画像不仅服务于校准，还能够支撑跨模型预算分配，并揭示由 family、scale 与 task 共同决定的策略适用区间图谱。该图谱既包含 Mistral-7B 上 `AutoK` 的最显著正向案例，也包含 Qwen2.5-3B 的早层保护回救区间、LLaMA-3.1-8B 的中等规模共识区间，以及 Qwen2.5-14B 的高性能簇共存而无稳定最优。与此同时，heuristic 作为强基线的存在被解释为一种结构观察，而非对本文主线的否定：它说明某些 regime 的可行层集本来就很窄，而本文真正的贡献在于识别这种窄区间何时存在、何时失效。
+
+在此基础上，本章还进一步限定了上述结论的系统与外推边界：`INT4` 的 `KV Cache` 压缩收益是稳定的，而融合 decode 路径的速度收益则受 `H_{kv}` 与序列长度共同决定；KL 的价值、`INT4` 的恢复以及 heuristic 的强基线，都应理解为条件性结论，而不是脱离当前协议、预算口径与硬件环境的普适定律。第五章将在这些已被限定的证据基础上，进一步按 `RQ1–RQ3` 对全文结论与学术价值作最终归总。
+```
+
+## 审核协议
+
+### 判定标签
+
+- `采用`
+- `需改写`
+- `拒绝`
+
+### 合法理由分类
+
+- 与 story 主线不符
+- 与 Chapter 4 写作施工文档不符
+- 与真实代码 / 实现语义不符
+
+### 审核纪律
+
+- 逐段审核，不整体放行
+- 不因为语气好看而放过结构或口径错误
+- 不因为接近旧正文而默认采用
+- 所有最终采用文本，都必须能回指到 source-of-truth
+
+## 当前默认整合规则
+
+- 默认按 `4.1–4.7` 的冻结顺序逐节整合；当前优先级已切换为整章级审读与统一清洗
+- 同一小节若存在多版候选正文，以当前“采用（经清洗后）”版本作为唯一 freeze-ready baseline
+- 进入 `tex` 回写阶段前，仍需补一轮整章级编号、桥接句与口径一致性核对
+
+## 最终可回写正文块
+
+说明：
+- 本区块记录当前已冻结、可作为 `tex` 回写基线的小节状态。
+- `4.1–4.7` 已完成首轮审校并形成整章 freeze-ready baseline。
+
+### 4.1
+
+- 当前状态：可作为冻结后回写基线
+- 基线来源：`GPT / 外部线程正文整合区` 中 `4.1 当前冻结基线（已清洗接入，2026-04-22 21:16）`
+- 备注：采用当前版本；尚未回写 `tex`
+
+### 4.2
+
+- 当前状态：可作为冻结后回写基线
+- 基线来源：`GPT / 外部线程正文整合区` 中 `4.2 当前冻结基线（已清洗接入，2026-04-22 21:25）`
+- 备注：采用当前版本；尚未回写 `tex`
+
+### 4.3
+
+- 当前状态：可作为冻结后回写基线
+- 基线来源：`GPT / 外部线程正文整合区` 中 `4.3 当前冻结基线（已清洗接入，2026-04-22 21:25）`
+- 备注：已修复 `4.3.2` 的“单侧干预 PPL 表 vs 四配置矩阵”冲突，并已与第三章 `3.2` 的五配置 bit-layout 视图完成接口同步；尚未回写 `tex`
+
+### 4.4
+
+- 当前状态：可作为冻结后回写基线
+- 基线来源：`GPT / 外部线程正文整合区` 中 `4.4 当前冻结基线（已清洗接入，2026-04-22 23:20）`
+- 备注：已锁定 `same-order INT4 budget band` 诚实口径、四个 regime node 与 `4.6.3` forward pointer；尚未回写 `tex`
+
+### 4.5
+
+- 当前状态：可作为冻结后回写基线
+- 基线来源：`GPT / 外部线程正文整合区` 中 `4.5 当前冻结基线（已清洗接入，2026-04-23 00:24）`
+- 备注：已锁定 `0` 图、`表 4-12 / 4-13 / 4-14`、`4.5.2 / 4.5.3` 共用综合表，以及 `4.5.3` supporting control 段；尚未回写 `tex`
+
+### 4.6
+
+- 当前状态：可作为冻结后回写基线
+- 基线来源：`GPT / 外部线程正文整合区` 中 `4.6 当前冻结基线（已清洗接入，2026-04-23 00:31）`
+- 备注：已锁定 discussion-only 结构、`0` 图、`表 4-15` 为唯一 promoted small table，以及 `4.6.2–4.6.4` 的纯段落讨论边界；尚未回写 `tex`
+
+### 4.7
+
+- 当前状态：可作为冻结后回写基线
+- 基线来源：`GPT / 外部线程正文整合区` 中 `4.7 当前冻结基线（已清洗接入，2026-04-23 00:35）`
+- 备注：已锁定 `5` 个短自然段、`0` 图、`0` 表、`0` 个正文显示公式，以及 `RQ1 → RQ2 → RQ3 → 部署与边界 → 第五章桥接` 的章级收束顺序；尚未回写 `tex`
+
+## 下一轮增量维护规则
+
+- 若只收到单个小节草稿，只更新对应小节，不重写其他区块
+- 若施工文档或 story 再次冻结变更，先更新 source-of-truth，再更新本文档判定
+- 在未进入 `tex` 回写阶段前，本文件持续作为 Chapter 4 正文整合与审核的唯一中间层

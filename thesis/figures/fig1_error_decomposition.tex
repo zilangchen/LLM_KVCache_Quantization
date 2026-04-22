@@ -1,92 +1,93 @@
-% thesis/figures/fig1_error_decomposition.tex
-% Figure 1: Attention Error Decomposition (Ch3 §3.1 末尾，对应 story §16.1)
-% 单 head 示意；不加时间步下标
-
 \begin{figure}[!htbp]
   \centering
   \begin{tikzpicture}[
-    every node/.style={font=\small},
-    fp/.style={rectangle, rounded corners=2pt, draw=blue!55!black, thick,
-               fill=blue!8, minimum width=2.1cm, minimum height=0.7cm, align=center},
-    quant/.style={rectangle, rounded corners=2pt, draw=red!60!black, thick,
-                  fill=red!10, minimum width=2.1cm, minimum height=0.7cm, align=center},
-    prop/.style={rectangle, rounded corners=3pt, draw=orange!70!black, thick,
-                 fill=orange!15, minimum width=4.2cm, minimum height=1.2cm, align=center},
-    arr/.style={-stealth, thick},
-    qarr/.style={-stealth, thick, red!70!black, dashed},
-    node distance=0.9cm,
+    x=1cm, y=1cm,
+    >=Stealth,
+    every node/.style={font=\small, align=center},
+    arr/.style={-stealth, line width=0.95pt},
+    qarr/.style={-stealth, line width=0.95pt, red!70!black, dashed},
+    fp/.style={
+      rectangle, rounded corners=3.5pt,
+      draw=blue!58!black, line width=0.9pt,
+      fill=blue!5, minimum width=2.75cm, minimum height=0.82cm
+    },
+    quant/.style={
+      rectangle, rounded corners=3.5pt,
+      draw=red!62!black, line width=0.95pt,
+      fill=red!5, minimum width=2.35cm, minimum height=0.82cm
+    },
+    kpath/.style={
+      rectangle, rounded corners=4pt,
+      draw=cyan!55!black, line width=1.0pt,
+      fill=cyan!8, minimum width=4.15cm, minimum height=1.06cm
+    },
+    vpath/.style={
+      rectangle, rounded corners=4pt,
+      draw=orange!78!black, line width=1.0pt,
+      fill=orange!10, minimum width=4.15cm, minimum height=1.06cm
+    },
+    eqcard/.style={
+      rectangle, rounded corners=5pt,
+      draw=gray!55, line width=0.95pt,
+      fill=gray!5, minimum width=10.9cm, minimum height=1.25cm
+    },
+    note/.style={
+      rectangle, rounded corners=4pt,
+      draw=gray!45, line width=0.9pt,
+      fill=yellow!9, minimum width=9.9cm, minimum height=0.66cm
+    }
   ]
 
-    % ──── 左栏：attention flow ────
-    \node[fp] (q)  at (-5.4, 3.0) {\(q,\ k_i\)};
-    \node[fp] (zi) at (-5.4, 2.0) {logits \(z_i = q^\top k_i\)};
-    \node[fp] (ai) at (-5.4, 1.0) {\(a_i = \mathrm{softmax}(z)_i\)};
-    \node[fp] (o)  at (-5.4, 0.0) {\(o = \sum_i a_i v_i\)};
+    % Column titles
+    \node[font=\bfseries\small, text=blue!68!black]   at (-4.95,3.06) {FP16 注意力流程};
+    \node[font=\bfseries\small, text=red!72!black]    at (-0.42,3.06) {量化模块};
+    \node[font=\bfseries\small, text=orange!82!black] at (4.55,3.06) {耦合传播路径};
 
-    \draw[arr] (q.south)  -- (zi.north);
-    \draw[arr] (zi.south) -- (ai.north);
-    \draw[arr] (ai.south) -- (o.north);
+    % Left column
+    \node[fp] (in)     at (-4.95,2.25) {\((q, K, V)\)};
+    \node[fp] (logits) at (-4.95,1.20) {\(z = qK^\top / \sqrt{d_k}\)};
+    \node[fp] (attn)   at (-4.95,0.15) {\(a = \mathrm{softmax}(z)\)};
+    \node[fp] (out)    at (-4.95,-0.90) {\(o = aV\)};
 
-    % 左栏标题
-    \node[above=1pt of q, font=\footnotesize\bfseries, blue!55!black]
-      (title1) {Attention flow (FP16)};
+    \draw[arr, blue!68!black] (in.south) -- (logits.north);
+    \draw[arr, blue!68!black] (logits.south) -- (attn.north);
+    \draw[arr, blue!68!black] (attn.south) -- (out.north);
 
-    % ──── 中栏：量化路径 ────
-    \node[quant] (qk)  at (-0.6, 2.5) {\(k_i \to \hat k_i\)};
-    \node[quant] (qv)  at (-0.6, 0.5) {\(v_i \to \hat v_i\)};
+    % Middle column
+    \node[font=\bfseries, text=red!72!black] at (-0.42,2.37) {\(Q(\cdot)\)};
+    \node[quant] (kq) at (-0.42,1.45) {\(K \rightarrow \hat K\)};
+    \node[quant] (vq) at (-0.42,-0.10) {\(V \rightarrow \hat V\)};
 
-    % 中栏标题
-    \node[above=1pt of qk, font=\footnotesize\bfseries, red!60!black]
-      (title2) {Quantization};
+    \draw[qarr] ([xshift=2pt,yshift=5pt]in.east)  to[bend left=11]  (kq.west);
+    \draw[qarr] ([xshift=2pt,yshift=-5pt]in.east) to[bend right=11] (vq.west);
 
-    % 从左栏到中栏的量化箭头
-    \draw[qarr] (q.east)  to[bend left=10]  node[midway, above, font=\scriptsize, red!70!black]
-      {\(Q(\cdot)\)} (qk.west);
-    \draw[qarr] (o.west)   -- (o.west);% placeholder
-    \draw[qarr, <-] (qv.west) to[bend left=10] (o.east);
-
-    % ──── 右栏：传播分支 ────
-    \node[prop] (pk) at (4.2, 2.5) {
-      \textbf{K 误差 $\to$ 分布扭曲}\\[2pt]
-      \footnotesize \(\Delta a_i\) via softmax
+    % Right column
+    \node[kpath] (kp) at (4.55,1.55) {
+      \textbf{Key 误差 \(\rightarrow\) logits 偏移}\\[-1pt]
+      \(\rightarrow\) 分布扭曲 \(\rightarrow \hat a-a\)
     };
-    \node[prop] (pv) at (4.2, 0.5) {
-      \textbf{V 误差 $\to$ 聚合偏移}\\[2pt]
-      \footnotesize \(\Delta o\) via weighted sum
+    \node[vpath] (vp) at (4.55,-0.20) {
+      \textbf{Value 误差 \(\rightarrow\) 聚合内容偏移}\\[-1pt]
+      \(\rightarrow \hat o-o\)
     };
 
-    % 右栏标题
-    \node[above=1pt of pk, font=\footnotesize\bfseries, orange!70!black]
-      (title3) {Two propagation paths};
+    \draw[arr, cyan!60!black]   (kq.east) -- (kp.west);
+    \draw[arr, orange!82!black] (vq.east) -- (vp.west);
 
-    % 从中栏到右栏
-    \draw[arr, red!70!black] (qk.east) -- (pk.west);
-    \draw[arr, red!70!black] (qv.east) -- (pv.west);
+    % Bottom decomposition
+    \node[eqcard] (eq) at (-0.18,-2.20) {};
+    \node[font=\bfseries\small] at (-0.18,-1.80) {精确代数分解};
+    \node[font=\normalsize] at (-0.18,-2.35) {\(
+      \hat o-o
+      = \sum_i(\hat a_i-a_i)v_i
+      + \sum_i \hat a_i(\hat v_i-v_i)
+    \)};
 
-    % ──── 底部：误差分解公式框 ────
-    \node[rectangle, rounded corners=3pt, draw=gray!60, fill=gray!8,
-          minimum width=11cm, minimum height=1.3cm, align=center]
-      (eq) at (-0.6, -1.6) {
-      \textbf{Attention 误差分解：}\\[2pt]
-      \(\displaystyle
-        \hat{o} - o
-        = \underbrace{\textstyle\sum_i (\hat a_i - a_i)\, v_i}_{\text{分布侧项（源自 K 误差）}}
-        + \underbrace{\textstyle\sum_i \hat a_i\, (\hat v_i - v_i)}_{\text{聚合侧项（源自 V 误差）}}
-      \)
-    };
-
-    \draw[arr, gray!60] (pk.south) |- (eq.east);
-    \draw[arr, gray!60] (pv.south) |- (eq.east);
+    % subtle guide marks
+    \draw[blue!18, line width=0.6pt] (-3.15,2.75) -- (-3.15,-1.25);
+    \draw[red!18, line width=0.6pt] (1.05,2.75) -- (1.05,-1.25);
 
   \end{tikzpicture}
-  \caption{Attention 误差的两条\emph{耦合}传播路径（telescoping 分解）：$K$ 误差经过 softmax 扭曲 attention 分布，
-  $V$ 误差经过加权求和偏移输出。底部公式框给出的是 telescoping 恒等式而非正交因子化——
-  聚合侧项 $\sum_i \hat a_i (\hat v_i - v_i)$ 中的 $\hat a_i$ 已经携带 $K$ 扰动信息，
-  两条路径在数学上相互耦合、不可完全 isolate。
-  尽管路径耦合，\textbf{behavior 保持度}（$a$ 与 $o$ 的联合偏移）仍然同时约束两侧：
-  分布 $a$ 的保持度直接限定了第一项；
-  分布 $a$ 保持 $\Rightarrow$ $\hat a_i$ 接近 $a_i$ $\Rightarrow$ 第二项里的聚合权重也受控，
-  使得 behavior 作为联合对象覆盖两条误差来源。
-  单 head 示意，省略时间步与 $\sqrt{d_k}$ 归一化。}
+  \caption{注意力误差的两条耦合传播路径及其精确代数分解。左侧为 FP16 attention flow，中部为量化扰动，右侧为由 Key 与 Value 误差分别触发的两条传播路径，底部给出输出误差的精确代数分解。}
   \label{fig:error-decomposition}
 \end{figure}

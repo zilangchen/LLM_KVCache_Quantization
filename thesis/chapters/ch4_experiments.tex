@@ -346,13 +346,7 @@ LLaMA-3.1-8B（$H_{kv}{=}8$）是唯一例外，其 INT4 Needle 仍能维持 98\
 % ============================================================
 
 \noindent\textbf{误差分解公式~\eqref{eq:ch3-error-decomp} 的实证对照（支撑图~\ref{fig:kv-ablation-summary-ruler}）。}
-第三章误差分解指出两条传播路径：
-K 误差经 softmax 扭曲 attention 分布，V 误差经加权聚合偏移 output。
-本节通过 K/V 独立消融分离二者的 empirical 效应——
-Key 量化主导质量退化，Value 对 INT4 相对鲁棒。
-这一实证事实为下一小节采用 \textbf{per-channel K + per-token V} 的非对称格式
-提供 empirical bridge（RoleAlign 的架构选择来自 框架 的诊断，
-不是 ad hoc 工程决策）。
+第三章 `3.2` 当前采用的是从同源结果中抽取出的 bit-layout 压缩视图：\texttt{FP16}、\texttt{K8V8}、\texttt{K8V4}、\texttt{K4V8} 与 \texttt{K4V4} 用于把“4-bit 落在何侧”这一问题压成最小诊断图；本节则保留完整的 K/V 角色消融证据组织。第三章误差分解指出两条传播路径：K 误差经 softmax 扭曲 attention 分布，V 误差经加权聚合偏移 output。本节通过 K/V 独立消融分离二者的 empirical 效应——Key 量化主导质量退化，Value 对 INT4 相对鲁棒。这里的恢复性配置 \texttt{MixedKV} 与第三章压缩视图中的 \texttt{K8V4} 对应；因此两节共享同一设计结论，但并不要求逐配置同构。这一实证事实为下一小节采用 \textbf{per-channel K + per-token V} 的非对称格式提供 empirical bridge（RoleAlign 的架构选择来自框架的诊断，而不是 ad hoc 工程决策）。
 
 % ------------------------------------------------------------
 \paragraph{消融实验设计}
@@ -550,7 +544,7 @@ Qwen2.5-1.5B 的 $H_{kv}=2$ 更仅有 $1/2$。
 图~\ref{fig:kv-ablation-summary-ruler} 进一步将 K/V 消融与 MixedKV 的 RULER 结果
 压缩为一个机制摘要图：在三个主模型上，K-only 始终维持接近 FP16 的质量，
 V-only 仅出现轻微下降，而 K4V8 在 Qwen 系列上完全崩溃；
-与之相对，MixedKV（K@INT8, V@INT4）恢复了稳定且可用的检索质量。
+与之相对，MixedKV（K@INT8, V@INT4）恢复了稳定且可用的检索质量。对应地，第三章图 3-2 将同源结论进一步压缩成 bit-layout 视角下的五配置诊断图，其中 \texttt{K8V4} 即这里的恢复性 \texttt{MixedKV} 配置。
 
 \begin{figure}[!htbp]
   \centering
