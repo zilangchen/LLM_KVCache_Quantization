@@ -199,8 +199,8 @@
 **本段应写：**
 
 - `KV Cache` 量化真正影响的是注意力计算过程，而不是孤立的张量重建误差。
-- 本文把 attention behavior 视为研究对象。
-- 本节将先形式化 attention，再分析量化误差如何传播。
+- 本文把注意力行为视为研究对象。
+- 本节将先形式化注意力，再分析量化误差如何传播。
 
 **建议风格：**
 
@@ -210,7 +210,7 @@
 
 **目标句：**
 
-> 为了将 behavior-guided 原则落成可分析的数学对象，本节先对单头解码注意力进行形式化，并给出量化误差在注意力计算中的精确传播分解。
+> 为了将行为引导原则落成可分析的数学对象，本节先对单头解码注意力进行形式化，并给出量化误差在注意力计算中的精确传播分解。
 
 ### 第 2 段：标准 attention 与 behavior 对象的定义
 
@@ -614,12 +614,12 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV
 - `K8V8`：高精度量化参考
 - `K8V4 / K4V8`：同平均 bit 预算下的角色对照
 - `K4V4`：对称低比特坍塌锚点
-- `K8V4` 与第四章完整诊断中的 `MixedKV` 对应，但在 `3.2` 中优先使用 bit-layout 命名
+- `K8V4` 与第四章完整诊断中的 `MixedKV` 对应，但在 `3.2` 中优先使用位宽布局命名
 
 然后补一句：
 
 - 诊断覆盖代表性模型，用于观察这种不对称性是否具有跨架构一致性
-- 这是一张从 `4.3.2` 同源完整证据中抽取出来的 **bit-layout 诊断视图**，不是完整四配置矩阵的逐项复刻
+- 这是一张从 `4.3.2` 同源完整证据中抽取出来的 **位宽布局诊断视图**，不是完整四配置矩阵的逐项复刻
 
 **本段不做：**
 
@@ -633,7 +633,7 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV
 
 **本段核心结论应写成：**
 
-> 在本文考察的低比特场景中，Key 精度下降是导致对称 `INT4` 退化的主导因素；Value 量化并非没有影响，但它不是首先触发 attention behavior 崩塌的主因。
+> 在本文考察的低比特场景中，Key 精度下降是导致对称 `INT4` 退化的主导因素；Value 量化并非没有影响，但它不是首先触发注意力行为崩塌的主因。
 
 也可以换一种更完整的写法：
 
@@ -650,14 +650,14 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV
 
 **本段应写：**
 
-- `K/V` 不对称是稳定方向，但其强度受 family / scale / GQA 影响
+- `K/V` 不对称是稳定方向，但其强度受模型家族 / 模型规模 / GQA 影响
 - Qwen 系列在 `K@INT4` 下更容易出现完全崩塌
 - `LLaMA-3.1-8B` 在更高 `H_{kv}` 配置下呈现更强鲁棒性
 - 更大模型上的恢复强度也并不与小模型完全一致
 
 **本段核心判断：**
 
-> Key 主导退化是共同方向，但其表现强度具有 family / scale / GQA 依赖性。
+> Key 主导退化是共同方向，但其表现强度具有模型家族 / 模型规模 / GQA 依赖性。
 
 这一句很重要，它能避免 `3.2` 被写成拍脑袋式规则，同时与全文后面关于 regime 的气质保持一致。
 
@@ -697,7 +697,7 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV
 
 **左面板：设计启示链**
 
-- 用 bit-layout 诊断结论压成 4--5 个逻辑节点
+- 用位宽布局诊断结论压成 4--5 个逻辑节点
 - 建议链路：
   - 问题不在“量化本身”
   - 同预算关键对照是 `K8V4` vs `K4V8`
@@ -890,7 +890,7 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV
 1. **承上启下**：
    把 `3.1` 的“behavior 是联合对象”和 `3.2` 的“Key 主导低比特退化”接起来。
 2. **定义共享画像**：
-   正式引入 behavior sensitivity profile，并说明它是全章的公共中间量。
+   正式引入行为敏感度画像，并说明它是全章的公共中间量。
 3. **拆出两层决策**：
    校准层决定“怎么量化”，分配层决定“哪里优先保护”。
 4. **明确主次关系**：
@@ -919,7 +919,7 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV
 
 核心目标是让读者第一次清楚看到：
 
-> 后文并不是若干分散技巧的堆叠，而是同一个 behavior sensitivity profile 如何同时支撑 calibration 与 allocation 两层决策。
+> 后文并不是若干分散技巧的堆叠，而是同一个行为敏感度画像如何同时支撑 calibration 与 allocation 两层决策。
 
 ---
 
@@ -937,9 +937,9 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV
 
 **推荐开头句：**
 
-> 在第 3.1 节明确量化损伤应以注意力行为偏移而非张量数值误差来刻画、并在第 3.2 节识别出低比特场景下 K/V 敏感性不对称之后，后续问题不再是分别设计若干离散技巧，而是需要一个统一框架，将与 behavior 保持相关的量化决策组织到同一条主线上。
+> 在第 3.1 节明确量化损伤应以注意力行为偏移而非张量数值误差来刻画、并在第 3.2 节识别出低比特场景下 K/V 敏感性不对称之后，后续问题不再是分别设计若干离散技巧，而是需要一个统一框架，将与行为保持相关的量化决策组织到同一条主线上。
 
-### 第 2 段：正式引入共享的 behavior sensitivity profile
+### 第 2 段：正式引入共享的行为敏感度画像
 
 **作用**：第一次把共享画像写成一个正式对象。
 
@@ -959,9 +959,9 @@ s^{(l)} := \operatorname{Agg}_{(x,h,t)\in \mathcal D_{\mathrm{calib}}}
 
 **本段必须强调三点：**
 
-1. profile 不是额外训练出来的黑盒模块，而是从校准样本上对行为偏移进行统计后得到的可读数对象。
-2. 后文两层决策共享的是同一个 profile，而不是“碰巧用了相似指标”。
-3. 本文 §3.3 以 \(\Delta_{\mathrm{beh}}\) 作为\textbf{概念层占位符}，它在两层决策中的具体化路径并不相同：校准层直接以注意力分布 KL 作为可优化 operational proxy（§3.4.1），分配层出于离线复用与成本考量，使用 calibration artifact 中逐层 K/V scale magnitude 作为 \(\Delta_{\mathrm{beh}}\) 的 layer-level proxy readout（§3.6.1 给出完整说明）。两处 operational proxy 共享同一 calibration artifact 来源，但并不要求数值定义层层等价。
+1. 画像不是额外训练出来的黑盒模块，而是从校准样本上对行为偏移进行统计后得到的可读数对象。
+2. 后文两层决策共享的是同一个画像，而不是“碰巧用了相似指标”。
+3. 本文 §3.3 以 \(\Delta_{\mathrm{beh}}\) 作为\textbf{概念层占位符}，它在两层决策中的具体化路径并不相同：校准层直接以注意力分布 KL 作为可优化工程代理（§3.4.1），分配层出于离线复用与成本考量，使用校准产物中逐层 K/V 缩放参数幅值作为 \(\Delta_{\mathrm{beh}}\) 的逐层代理读数（§3.6.1 给出完整说明）。两处工程代理共享同一校准产物来源，但并不要求数值定义层层等价。
 
 ### 第 3 段：校准层在框架中的职责
 
@@ -976,9 +976,9 @@ s^{(l)} := \operatorname{Agg}_{(x,h,t)\in \mathcal D_{\mathrm{calib}}}
 然后文字解释：
 
 - 校准层的输入是候选量化参数空间 \(\Theta\)
-- 它的任务是在该空间内找到 behavior 偏移最小的参数
+  - 它的任务是在该空间内找到行为偏移最小的参数
 - 不同位宽路径只是在参数空间上不同
-- 但它们都服从同一个组织原则：以 behavior 偏移最小为目标来定参数
+  - 但它们都服从同一个组织原则：以行为偏移最小为目标来定参数
 
 **本段不做：**
 
@@ -998,7 +998,7 @@ b^\star = \mathcal A(S;\bar b)
 
 意思是：
 
-- 给定同一个 sensitivity profile \(S\)
+- 给定同一个敏感度画像 \(S\)
 - 在给定预算约束 \(\bar b\) 下
 - 分配器输出逐层或逐角色的预算决策 \(b^\star\)
 
@@ -1010,7 +1010,7 @@ b^\star = \mathcal A(S;\bar b)
 
 **本段必须补一句主次口径：**
 
-> allocation / `AutoK` 是 behavior-guided 框架沿更高决策层的扩展，而不是与 calibration 并列竞争全文主轴的“第三个主方法”。
+> allocation / `AutoK` 是行为引导框架沿更高决策层的扩展，而不是与 calibration 并列竞争全文主轴的“第三个主方法”。
 
 ### 第 5 段：离线形成、在线使用的极简流程
 
@@ -1019,7 +1019,7 @@ b^\star = \mathcal A(S;\bar b)
 **本段只保留：**
 
 - **离线阶段**：
-  从少量校准样本中提取参考行为、计算行为偏移、形成 calibration artifact 与 sensitivity profile
+  从少量校准样本中提取参考行为、计算行为偏移、形成校准产物与敏感度画像
 - **在线阶段**：
   推理时只读取这些固定产物，不再重新组织决策逻辑
 
@@ -1038,14 +1038,14 @@ b^\star = \mathcal A(S;\bar b)
 
 本段只做四件事：
 
-- `3.4` 负责把 \(\Delta_{\mathrm{beh}}\) operationalize 成 KL 目标与搜索准则
+- `3.4` 负责把 \(\Delta_{\mathrm{beh}}\) 具体化为 KL 目标与搜索准则
 - `3.5` 负责把框架实例化到 `INT8` 与 `INT4`
-- `3.6` 负责把同一 profile 延伸到预算分配与 `AutoK`
+- `3.6` 负责把同一画像延伸到预算分配与 `AutoK`
 - `3.7` 负责系统落地与复杂度分析
 
 **推荐收口句：**
 
-> 因此，本文后续并非围绕若干彼此独立的量化技巧展开，而是围绕同一 behavior sensitivity profile 展开的两层决策：校准层回答“如何量化”，分配层回答“哪里优先保护”，两者最终在系统落地中闭环。
+> 因此，本文后续并非围绕若干彼此独立的量化技巧展开，而是围绕同一行为敏感度画像展开的两层决策：校准层回答“如何量化”，分配层回答“哪里优先保护”，两者最终在系统落地中闭环。
 
 ---
 
@@ -1265,12 +1265,12 @@ b^\star = \mathcal A(S;\bar b)
 
 这一节只回答两件事：
 
-1. 为什么使用 KL 作为 behavior 的工程代理
+1. 为什么使用 KL 作为行为偏移的工程代理
 2. KL 在离线校准中如何被统一搜索
 
 因此，读完 `3.4` 之后，评委应当明确两点：
 
-- 本文为什么把分布侧 KL 作为 behavior 的 operational proxy
+- 本文为什么把分布侧 KL 作为行为偏移的工程代理
 - 这个代理如何在统一离线校准工作流中被用于不同路径
 
 ### 22.2 本节不做什么
@@ -1308,8 +1308,8 @@ b^\star = \mathcal A(S;\bar b)
 
 这一节的统一性应当被写成：
 
-> 统一的是 offline calibration workflow、artifact interface 与 robust selection discipline；  
-> 在 role-aware low-bit path 中，Key 与 Value 可以采用不同的行为代理与参数接口。
+> 统一的是离线校准流程、校准产物接口与稳健选择纪律；  
+> 在角色感知低比特路径中，Key 与 Value 可以采用不同的行为代理与参数接口。
 
 因此：
 
@@ -1323,17 +1323,17 @@ b^\star = \mathcal A(S;\bar b)
 
 ### 第 1 段：从概念目标过渡到工程代理
 
-**作用**：把 `3.1` 的 conceptual objective 引到 `3.4` 的 operational proxy。
+**作用**：把 `3.1` 的概念层目标引到 `3.4` 的工程代理。
 
 本段必须明确说：
 
 - `3.1` 提出了联合行为目标
 - 但联合目标本身并不直接对应一个简单可优化的校准目标
-- 因此需要一个与 attention behavior 高度对齐、同时又便于离线搜索的 operational proxy
+- 因此需要一个与注意力行为高度对齐、同时又便于离线搜索的工程代理
 
 **关键词固定为：**
 
-> conceptual objective -> operational proxy
+> 概念层目标 -> 工程代理
 
 ### 第 2 段：本节分工说明
 
@@ -1357,7 +1357,7 @@ b^\star = \mathcal A(S;\bar b)
 \(\rightarrow\)
 **直接优化联合目标过重**
 \(\rightarrow\)
-**选取分布侧 KL 作为 operational proxy**
+**选取分布侧 KL 作为工程代理**
 \(\rightarrow\)
 **它如何同时约束两条误差传播路径**
 
@@ -2367,19 +2367,19 @@ q_{\min}, q_{\max}
 
 这一小节最该强调的点是：
 
-> **behavior-guided allocator 的核心不是“保护前几层”，而是“保护 behavior 偏移最大的层”。**
+> **行为引导分配器的核心不是“保护前几层”，而是“保护行为偏移最大的层”。**
 
 也就是说，它与 `Heuristic-k` 的根本区别不在于“也是选 \(k\) 层”，而在于**选层依据不同**。
 
 ### 39.2 建议公式组织
 
-#### 第一步：从 calibration artifact 读出逐层 role-scale 并聚合为敏感度 proxy
+#### 第一步：从校准产物读出逐层角色尺度并聚合为敏感度代理
 
-分配层的 sensitivity profile 并不在运行时重新计算 attention KL，
-而是直接从 §3.4 离线校准产生的 artifact 中读取逐层 K/V 的 role-scale 张量，
-将其 layer-level magnitude 作为 behavior 偏移度量 \(\Delta_{\mathrm{beh}}\) 的 operational proxy readout。
+分配层的敏感度画像并不在运行时重新计算 attention KL，
+而是直接从 §3.4 离线校准产生的校准产物中读取逐层 K/V 的角色尺度张量，
+将其逐层幅值作为行为偏移度量 \(\Delta_{\mathrm{beh}}\) 的工程代理读数。
 
-记 calibration artifact 中第 \(l\) 层 K 与 V 的 role-scale 为：
+记校准产物中第 \(l\) 层 K 与 V 的角色尺度为：
 
 \[
 \sigma_K^{(l)}\in\mathbb R^{D_K^{(l)}}, \qquad
@@ -2404,12 +2404,12 @@ s^{(l)} = \operatorname{Agg}\!\big(\sigma_K^{(l)}\big).
 
 - \(\operatorname{Agg}\) 是对非 layer 轴的\textbf{一次性}聚合算子，具体取值（\(\max\) 或 \(\mathrm{mean}\)）在 §3.6.3 给定
 - \(s_K^{(l)}\) 作为主 profile 的选择来自 §3.2 诊断结论（Key 主导低比特退化）；\(s_V^{(l)}\) 在角色扩展（§3.6.2）中引入
-- \(\Delta_{\mathrm{beh}}\) 的校准层 operational proxy（注意力分布 KL）与分配层 operational proxy（role-scale magnitude）共享同一 calibration artifact 来源，但处于不同决策粒度，数值定义并不等价
+- \(\Delta_{\mathrm{beh}}\) 的校准层工程代理（注意力分布 KL）与分配层工程代理（角色尺度幅值）共享同一校准产物来源，但处于不同决策粒度，数值定义并不等价
 
 **本段必须写清两条口径纪律：**
 
-1. profile 是\textbf{离线} readout，不是 online KL 重计算——这与 §3.7.1 "在线阶段只读不算" 的边界一致。
-2. role-scale magnitude 作为 behavior 偏移的 proxy 是\textbf{启发式 operational choice}：同层 K/V 分布越宽 / 量化 scale 越大，行为被量化扰动的风险越高。本文不声称 role-scale magnitude 与 attention-KL readout 在数值上等价。
+1. 画像是\textbf{离线}读数，不是 online KL 重计算——这与 §3.7.1 "在线阶段只读不算" 的边界一致。
+2. 角色尺度幅值作为行为偏移的代理是\textbf{启发式工程选择}：同层 K/V 分布越宽 / 量化缩放参数越大，行为被量化扰动的风险越高。本文不声称角色尺度幅值与 attention-KL 读数在数值上等价。
 
 #### 第二步：定义 top-\(k\) 保护集合
 
@@ -2913,7 +2913,7 @@ AutoK 不只是“一个想法”，而是 coverage criterion 的自然输出机
 
 读完 `3.7`，评委脑子里应该只留下这一句：
 
-> **本文前面提出的 behavior-guided 路径不是停留在公式和实验配置层面，而是能被序列化为离线校准产物、被运行时引擎读取执行、并且其时间/显存/访存成本都能被明确定义。**
+> **本文前面提出的行为引导路径不是停留在公式和实验配置层面，而是能被序列化为离线校准产物、被运行时引擎读取执行、并且其时间/显存/访存成本都能被明确定义。**
 
 ### 46.2 总图表配置
 
@@ -2941,7 +2941,7 @@ AutoK 不只是“一个想法”，而是 coverage criterion 的自然输出机
 `3.7` 开头建议先写一个**不编号的短导语**，只做两件事：
 
 1. **承接前文**
-   - `3.4–3.6` 已分别定义 behavior-guided 校准目标、`INT8 / INT4` 路径实例，以及分配层的 allocator / `AutoK`
+   - `3.4–3.6` 已分别定义行为引导校准目标、`INT8 / INT4` 路径实例，以及分配层的 allocator / `AutoK`
 2. **切清本节边界**
    - 本节只说明离线校准产物如何组织
    - 在线推理如何读取并执行这些产物
@@ -2974,7 +2974,7 @@ AutoK 不只是“一个想法”，而是 coverage criterion 的自然输出机
 
 本段应写：
 
-- behavior-guided 搜索发生在离线校准阶段
+- 行为引导搜索发生在离线校准阶段
 - 在线推理阶段不再重新优化，不再重跑搜索
 - 运行时做的只是**读取离线产物并执行既定量化规则**
 
@@ -3035,7 +3035,7 @@ AutoK 不只是“一个想法”，而是 coverage criterion 的自然输出机
 
 图 3-8 不再保留。这里更稳的定稿写法不是再画一张“左—中—右三段式流程图”，而是在 `3.7.1` 的正文里直接补一个系统语义段，把以下信息一次写清：
 
-- 离线阶段基于校准样本执行 behavior-guided 搜索
+- 离线阶段基于校准样本执行行为引导搜索
 - 搜索结果被冻结为只读的路径特定产物 $\mathcal A_{\mathrm{path}}$
 - 在线阶段的 Prefill 只负责按该产物完成量化写入
 - Decode 只负责读取历史量化缓存并路由到对应后端
