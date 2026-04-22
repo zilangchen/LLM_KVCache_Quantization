@@ -1,0 +1,47 @@
+\begin{figure}[!htbp]
+  \centering
+  \begin{tikzpicture}[
+    every node/.style={font=\small, align=center},
+    io/.style={rectangle, rounded corners=3pt, draw=gray!70, thick,
+               fill=gray!10, minimum width=2.4cm, minimum height=0.9cm},
+    ref/.style={rectangle, rounded corners=3pt, draw=blue!55!black, thick,
+                fill=blue!8, minimum width=2.8cm, minimum height=0.95cm},
+    path/.style={rectangle, rounded corners=3pt, draw=green!45!black, thick,
+                 fill=green!10, minimum width=3.2cm, minimum height=1.2cm},
+    split/.style={rectangle, rounded corners=3pt, draw=orange!75!black, thick,
+                  fill=orange!10, minimum width=2.7cm, minimum height=1.0cm},
+    outputbox/.style={rectangle, rounded corners=3pt, draw=purple!60!black, thick,
+                      fill=purple!10, minimum width=2.8cm, minimum height=0.95cm},
+    arr/.style={-stealth, thick}
+  ]
+    \node[io]  (data) at (-6.1,2.8) {校准样本};
+    \node[ref] (fp)   at (-3.2,2.8) {FP16 参考路径};
+    \node[ref] (refa) at (-0.3,2.8) {参考 attention\\分布 / 输出 trace};
+
+    \node[path] (int8) at (-4.8,0.5) {INT8 规范路径\\$(p_c,g,m)$\\attention-distribution KL};
+    \node[path] (int4s) at (-1.4,0.5) {对称 \texttt{INT4}\\$(p_c,g)$\\attention-distribution KL};
+
+    \node[split] (kpath) at (2.1,1.05) {\textbf{K-path}\\$p_K$\\attention-distribution KL};
+    \node[split] (vpath) at (2.1,-0.05) {\textbf{V-path}\\$p_V$\\输出扰动代理};
+    \node[path] (role) at (2.1,0.5) {\texttt{INT4-RoleAlign}\\role-aware low-bit path};
+
+    \node[outputbox] (select) at (5.3,1.5) {robust selection\\尾部稳健优先};
+    \node[outputbox] (artifact) at (5.3,0.2) {路径特定校准产物};
+    \node[outputbox] (readout) at (5.3,-1.1) {共享行为统计读数};
+
+    \draw[arr] (data.east) -- (fp.west);
+    \draw[arr] (fp.east) -- (refa.west);
+    \draw[arr] (refa.south west) |- (int8.north);
+    \draw[arr] (refa.south) |- (int4s.north);
+    \draw[arr] (refa.south east) |- (role.north);
+    \draw[arr] (role.east) -- (select.west);
+    \draw[arr] (int8.east) |- (select.west);
+    \draw[arr] (int4s.east) |- (select.west);
+    \draw[arr] (select.south) -- (artifact.north);
+    \draw[arr] (artifact.south) -- (readout.north);
+    \draw[arr] (kpath.east) -- +(1.0,0);
+    \draw[arr] (vpath.east) -- +(1.0,0);
+  \end{tikzpicture}
+  \caption{行为引导离线校准的统一工作流。统一的是 offline calibration workflow 与稳健选择纪律；不同路径的差异体现在参数接口与行为代理上。对 \texttt{INT4-RoleAlign} 而言，Key 路径由 attention-distribution KL 主导，Value 路径由独立输出扰动代理主导，而不再被压成同一个标量评分函数。}
+  \label{fig:ch3-calibration-workflow}
+\end{figure}

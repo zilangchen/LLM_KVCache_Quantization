@@ -1,0 +1,35 @@
+\begin{figure}[!htbp]
+  \centering
+  \begin{tikzpicture}[
+    every node/.style={font=\small, align=center},
+    box/.style={rectangle, rounded corners=3pt, draw=blue!55!black, thick,
+                fill=blue!8, minimum width=2.6cm, minimum height=1.0cm},
+    box2/.style={rectangle, rounded corners=3pt, draw=green!45!black, thick,
+                 fill=green!10, minimum width=2.6cm, minimum height=1.0cm},
+    arr/.style={-stealth, thick}
+  ]
+    \node[font=\bfseries] at (-3.6,3.0) {逐层分配};
+    \node[box] (sig) at (-5.9,1.6) {$\sigma_K^{(l)},\sigma_V^{(l)}$};
+    \node[box] (agg) at (-3.8,1.6) {$\operatorname{Agg}_{\alpha}$};
+    \node[box] (prof) at (-1.6,1.6) {$S=\{s^{(l)}\}$};
+    \node[box2] (topk) at (-3.8,-0.1) {$\operatorname{TopK}(S,k)$};
+    \node[box2] (bits) at (-1.6,-0.1) {$[b^{(1)},\dots,b^{(L)}]$};
+    \draw[arr] (sig.east) -- (agg.west);
+    \draw[arr] (agg.east) -- (prof.west);
+    \draw[arr] (prof.south) |- (topk.east);
+    \draw[arr] (topk.east) -- (bits.west);
+
+    \node[font=\bfseries] at (3.8,3.0) {角色扩展};
+    \node[box] (sk) at (1.8,1.6) {$S_K$};
+    \node[box] (sv) at (3.8,1.6) {$S_V$};
+    \node[box2] (pk) at (1.8,-0.1) {$\mathcal P_K$};
+    \node[box2] (pv) at (3.8,-0.1) {$\mathcal P_V$};
+    \node[box2] (pair) at (5.9,0.75) {pair-wise\\bit budget};
+    \draw[arr] (sk.south) -- (pk.north);
+    \draw[arr] (sv.south) -- (pv.north);
+    \draw[arr] (pk.east) -- (pair.west);
+    \draw[arr] (pv.east) -- (pair.west);
+  \end{tikzpicture}
+  \caption{行为敏感度画像到预算分配的两级流程：逐层分配与角色扩展。左半部分给出从 artifact-based readout 到排序、再到 top-$k$ 保护集合与 layer-wise bit vector 的生成链；右半部分说明相同框架如何自然扩展到 K/V 角色感知预算接口。}
+  \label{fig:ch3-allocation-flow}
+\end{figure}

@@ -1,0 +1,50 @@
+\begin{figure}[!htbp]
+  \centering
+  \begin{tikzpicture}[
+    every node/.style={font=\small, align=center},
+    topbox/.style={rectangle, rounded corners=4pt, draw=red!60, very thick,
+                   fill=red!8, minimum width=11.6cm, minimum height=1.0cm},
+    core/.style={rectangle, rounded corners=3pt, draw=purple!60!black, very thick,
+                 fill=purple!10, minimum width=4.4cm, minimum height=1.1cm},
+    layer/.style={rectangle, rounded corners=3pt, draw=blue!55!black, thick,
+                  fill=blue!8, minimum width=4.7cm, minimum height=1.2cm},
+    leaf/.style={rectangle, rounded corners=3pt, draw=green!45!black, thick,
+                 fill=green!10, minimum width=3.1cm, minimum height=0.95cm},
+    foot/.style={rectangle, rounded corners=3pt, draw=gray!65, thick,
+                 fill=gray!10, minimum width=8.6cm, minimum height=0.9cm},
+    arr/.style={-stealth, thick}
+  ]
+    \node[topbox] (goal) at (0,4.6) {\textbf{统一原则：attention behavior 保持}\\
+      \footnotesize calibration 与 allocation 共享同一行为组织对象，而非共享同一个单值评分函数};
+
+    \node[core] (profile) at (0,2.9) {\textbf{共享行为敏感度画像 $S$}\\
+      \footnotesize 同源于离线校准链路的 layer-level sensitivity profile};
+
+    \node[layer] (calib) at (-4.0,1.2) {\textbf{校准层：如何量化}\\
+      \footnotesize 选择路径相关参数\\
+      \footnotesize 形成固定离线产物};
+    \node[layer] (alloc) at (4.0,1.2) {\textbf{分配层：哪里优先保护}\\
+      \footnotesize 读取同源 profile\\
+      \footnotesize 输出预算决策 / \texttt{AutoK}};
+
+    \node[leaf] (int8) at (-5.5,-0.8) {INT8 规范路径};
+    \node[leaf] (int4sym) at (-2.5,-0.8) {对称 \texttt{INT4} 试探路径};
+    \node[leaf] (rolealign) at (0.5,-0.8) {\texttt{INT4-RoleAlign}};
+    \node[leaf] (budget) at (4.0,-0.8) {BA-$k$ / \texttt{AutoK}};
+
+    \node[foot] (deploy) at (0,-2.2) {\textbf{部署闭环：离线形成产物，在线读取执行}};
+
+    \draw[arr] (goal.south) -- (profile.north);
+    \draw[arr] (profile.south west) -- (calib.north);
+    \draw[arr] (profile.south east) -- (alloc.north);
+    \draw[arr] (calib.south) -- (-4.0,0.2);
+    \draw[arr] (-4.0,0.2) -- (int8.north);
+    \draw[arr] (-4.0,0.2) -- (int4sym.north);
+    \draw[arr] (-4.0,0.2) -- (rolealign.north);
+    \draw[arr] (alloc.south) -- (budget.north);
+    \draw[arr] (rolealign.south) |- (deploy.west);
+    \draw[arr] (budget.south) |- (deploy.east);
+  \end{tikzpicture}
+  \caption{行为引导量化框架总览：校准与分配共享同一行为敏感度画像。图中强调共享的是离线来源与行为组织原则，校准层回答“如何量化”，分配层回答“哪里优先保护”；系统层则将前两者固化为离线产物与在线执行接口。}
+  \label{fig:ch3-framework-shared-profile}
+\end{figure}

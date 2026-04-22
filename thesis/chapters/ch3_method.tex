@@ -1,7 +1,3 @@
-% ============================================================
-% ch3_method.tex — 第三章 行为引导量化框架设计
-% ============================================================
-
 \chapter{行为引导量化框架设计}
 
 \section{注意力近似误差的代数分解与问题形式化}
@@ -45,6 +41,7 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 
 % 图 3-1 建议置于此处
 % 图题：图 3-1 注意力误差的两条耦合传播路径及其精确代数分解
+\input{figures/fig1_error_decomposition}
 
 上述分解带来的直接启示是：真正影响下游任务的，并不是 $K$ 与 $V$ 的数值距离本身，而是它们共同诱导的注意力行为偏移。Key 误差首先作用于 logits 的相对排序，再经 softmax 放大或重排，进而影响注意力分布；Value 误差则改变被聚合的信息内容，但其影响强度同时受量化后分布 $\hat a$ 的调制。也就是说，若只从张量重建误差出发分析量化质量，则容易忽略 softmax 非线性与加权聚合共同造成的功能失真；相反，若将注意力行为视为联合分析对象，则校准与分配的后续组织都可以建立在同一个更贴近下游功能损伤的基础之上。
 
@@ -62,6 +59,7 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 % 图 3-2 建议置于此处
 % 图题：图 3-2 K/V 量化敏感性不对称的压缩版诊断与设计启示
 % 数据纪律：本图必须是第 4.3.2 节完整证据的压缩视图；主纵轴为 Needle，RULER 仅作图注/脚注支持
+\input{figures/fig_ch3_kv_diag_needle}
 
 进一步地，这种不对称性虽然在不同模型家族中呈现为共同方向，但其强度并不完全一致，而是受到模型规模、家族结构及 GQA 配置的共同影响。本文的代表性诊断表明，一些模型在 Key 降至极低精度后更容易出现近乎完全的检索失稳，而另一些具有更高 $H_{kv}$ 或不同头共享结构的模型则表现出更强的鲁棒性。这意味着“Key 主导退化”应被理解为一个跨模型稳定存在的方向性结论，而非不加区分地适用于所有架构的同强度规则。也正因如此，本文后续并不把该观察简化为单一经验法则，而是将其视为低比特路径设计的结构性约束：后文的方法需要既响应这种总体不对称性，又允许不同 family、scale 与 GQA 结构在恢复强度上呈现差异。
 
@@ -95,6 +93,7 @@ b^\star = \mathcal{A}(S;\bar b),
 
 % 图 3-3 建议置于此处
 % 图题：图 3-3 行为引导量化框架总览：校准与分配共享同一行为敏感度画像
+\input{figures/fig_ch3_framework_shared_profile}
 
 因此，本文后续并非围绕若干彼此独立的量化技巧展开，而是围绕同一 behavior-guided principle 展开的两层决策：校准层负责确定如何量化，分配层负责确定哪里应被优先保护，而系统层则负责把前两者固化为可执行的推理接口。基于这一统一框架，第 \ref{sec:ch3-calibration} 节将首先把行为偏移具体化为校准层的工程代理与稳健选择准则；第 \ref{sec:ch3-paths} 节将进一步给出 \texttt{INT8} 规范路径、对称 \texttt{INT4} 的局限以及 \texttt{INT4-RoleAlign} 的路径实例；第 \ref{sec:ch3-allocator} 节再把同源 sensitivity profile 延伸为逐层预算分配与 \texttt{AutoK} 建议机制；最后，第 \ref{sec:ch3-deployment} 节说明这一整套 framework 如何被落成离线校准产物、在线执行管线与系统层开销分析。
 
@@ -200,9 +199,11 @@ q_{0.95}(\theta).
 
 % 图 3-4 建议置于本小节第 1 段与第 2 段之间
 % 图题：图 3-4 行为引导离线校准的统一工作流
+\input{figures/fig_ch3_calibration_workflow}
 
 % 表 3-1 建议置于本小节第 3 段之后
 % 表题：表 3-1 统一离线校准工作流下的路径参数化接口
+\input{tables/table_ch3_calibration_interfaces}
 
 \section{跨位宽量化路径的实例化设计}
 \label{sec:ch3-paths}
@@ -213,6 +214,7 @@ q_{0.95}(\theta).
 
 % 图 3-5 建议置于此处
 % 图题：图 3-5 跨位宽路径的实例化关系与统一校准工作流
+\input{figures/fig_ch3_paths_instantiation}
 
 \subsection{INT8 规范路径：静态 Scale 与自适应保护}
 
@@ -331,6 +333,7 @@ q_{\min},\,q_{\max}
 
 % 图 3-6 建议置于本小节第 1 段之后、第 2 段之前
 % 图题：图 3-6 INT4-RoleAlign 的角色感知非对称量化轴
+\input{figures/fig_ch3_rolealign_axes}
 
 综上，\texttt{RoleAlign} 的核心不是简单地对 $K$ 和 $V$ 采用不同公式，而是把第 \ref{sec:ch3-motivation-kv} 节识别出的角色不对称，转写为量化轴不对称：Key 侧优先保持 attention ranking，Value 侧在保持可聚合性的前提下承受更激进的压缩。本文最终主线配置因此固定为：$(p_K,p_V)$ 行为引导校准、per-channel Key + per-token Value 非对称量化、且 \texttt{inv\_tau=None}。逐头温度校正 \texttt{inv\_tau} 在非对称格式下未观察到稳定收益，已在第 \ref{sec:ch3-calibration} 节被降格为诊断性历史探索项，详细推导与补充实证保留在附录第~\ref{sec:app-invtau-diagnostic}~节，主线默认不启用。
 
@@ -430,6 +433,7 @@ b_{\mathrm{lo}}
 
 % 图 3-7 建议置于本小节后半段
 % 图题：图 3-7 行为敏感度画像到预算分配的两级流程：逐层分配与角色扩展
+\input{figures/fig_ch3_allocator_flow}
 
 \subsection{K/V 角色感知的预算扩展}
 
@@ -530,6 +534,7 @@ b_{V,\mathrm{lo}}
 
 % 图 3-8 建议置于本小节中部
 % 图题：图 3-8 敏感度覆盖度曲线示意：集中型画像与弥散型画像的预算含义
+\input{figures/fig_ch3_coverage_curves}
 
 从方法层的角度看，$\Gamma(k)$ 的价值在于：它既保留了 layer-wise sensitivity ordering，又避免将 budget proposer 写成“固定保护前 $k$ 层”的经验规则。正因为如此，本文后续才可以把 \texttt{AutoK} 写成 sensitivity profile 的自然输出，而不是另起炉灶再设计一套与前文脱节的 budget tuner。
 
@@ -618,9 +623,11 @@ Q_{\theta_t^{(l)}}\!\left(x_t^{(l)}\right),
 
 % 图 3-9 建议置于此处
 % 图题：图 3-9 离线校准产物到在线推理执行的部署闭环
+\input{figures/fig_ch3_deployment_closure}
 
 % 表 3-4 建议置于本小节末尾
 % 表题：表 3-4 不同量化路径的离线产物、运行时缓存载荷与默认执行后端
+\input{tables/table_ch3_runtime_paths}
 
 \subsection{Triton 融合解码核函数设计}
 \label{subsec:ch3-triton-int4-asym}
@@ -677,6 +684,7 @@ h_{kv}
 
 % 图 3-10 建议置于本小节中部
 % 图题：图 3-10 Triton 融合解码核的数据流：低比特缓存、片上反量化与在线 softmax
+\input{figures/fig_ch3_triton_dataflow}
 
 \subsection{复杂度、访存与存储开销分析}
 

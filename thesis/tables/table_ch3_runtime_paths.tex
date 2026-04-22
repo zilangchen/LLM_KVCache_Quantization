@@ -1,0 +1,16 @@
+\begin{table}[!htbp]
+  \centering
+  \caption{不同量化路径的离线产物、运行时缓存载荷与默认执行后端}
+  \label{tab:ch3-runtime-paths}
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{p{2.4cm}p{2.6cm}p{2.2cm}p{2.5cm}p{2.0cm}p{1.8cm}}
+    \toprule
+    路径 & 离线产物 & append 时确定的量 & 缓存中的主要载荷 & 默认执行后端 & 备注 \\
+    \midrule
+    INT8 规范路径 & per-layer per-group static scale、保护裕度、group metadata & 当前 token 的量化值与可能的 scale snapshot & INT8 载荷 + scale snapshot & Triton fused & 系统主部署路径 \\
+    对称 \texttt{INT4} 试探路径 & 对称 scale、group metadata & packed INT4 值与对应 metadata & packed INT4 + metadata & Triton fused / \texttt{torch\_ref} & 作为低比特试探接口 \\
+    \texttt{INT4-RoleAlign} & $(p_K,p_V)$、K/V 量化轴元数据、角色感知规则 & 当前 token 的 K/V 角色相关量化参数 & 角色感知低比特 K/V 载荷 & \texttt{torch\_ref}（默认） & Triton 非对称核仅作可行性验证 \\
+    \bottomrule
+  \end{tabular}
+\end{table}

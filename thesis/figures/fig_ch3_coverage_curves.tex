@@ -1,0 +1,36 @@
+\begin{figure}[!htbp]
+  \centering
+  \begin{tikzpicture}[x=1.05cm,y=5.0cm]
+    % axes
+    \draw[->, thick] (0,0) -- (6.2,0) node[below, font=\small] {$k$};
+    \draw[->, thick] (0,0) -- (0,1.08) node[left, font=\small] {$\Gamma(k)$};
+    \foreach \y/\lab in {0.0/0,0.4/0.4,0.8/0.8,1.0/1.0} {
+      \draw (-0.05,\y) -- (0.05,\y);
+      \node[left, font=\scriptsize] at (-0.08,\y) {\lab};
+    }
+    \foreach \x in {1,2,3,4,5,6} {
+      \draw (\x,0.0) -- (\x,-0.02);
+      \node[below, font=\scriptsize] at (\x,-0.02) {\x};
+    }
+
+    % thresholds
+    \foreach \y/\txt in {0.80/cov80,0.85/cov85,0.90/cov90} {
+      \draw[densely dashed, gray!60] (0,\y) -- (6.0,\y);
+      \node[right, font=\scriptsize, gray!70!black] at (6.02,\y) {\txt};
+    }
+
+    % curves
+    \draw[blue!70!black, very thick]
+      plot[smooth] coordinates {(0.6,0.46) (1.2,0.72) (2.0,0.86) (3.0,0.93) (4.2,0.97) (5.6,1.0)};
+    \draw[orange!85!black, very thick]
+      plot[smooth] coordinates {(0.6,0.18) (1.2,0.34) (2.0,0.50) (3.0,0.66) (4.2,0.80) (5.6,0.92)};
+
+    % k* markers
+    \draw[densely dotted, blue!70!black] (2.0,0) -- (2.0,0.86);
+    \draw[densely dotted, orange!85!black] (4.2,0) -- (4.2,0.80);
+    \node[font=\scriptsize, blue!70!black] at (1.55,0.96) {集中型 profile};
+    \node[font=\scriptsize, orange!85!black] at (4.9,0.62) {弥散型 profile};
+  \end{tikzpicture}
+  \caption{敏感度覆盖度曲线示意：集中型画像与弥散型画像的预算含义。相同覆盖阈值下，集中型 profile 会在更小的 $k$ 上达到目标覆盖度，而弥散型 profile 需要更大的保护层数；这正是 \texttt{AutoK} 将 profile 形状转写为预算建议的核心直觉。}
+  \label{fig:ch3-coverage-curve}
+\end{figure}

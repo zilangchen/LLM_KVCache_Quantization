@@ -1,0 +1,19 @@
+\begin{table}[!htbp]
+  \centering
+  \caption{统一离线校准工作流下的路径参数化接口}
+  \label{tab:ch3-calibration-interfaces}
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{p{2.2cm}p{2.0cm}p{1.8cm}p{2.8cm}p{1.8cm}p{2.3cm}p{1.2cm}}
+    \toprule
+    路径 & 校准接口 & 量化粒度 & 主代理 / 主要选择统计 & 辅助约束 & 输出产物 & 后续展开 \\
+    \midrule
+    INT8 规范路径 & $(p_c,g,m)$ & 对称 per-group & attention-distribution KL；robust P95 & 裁剪率约束 & 静态 scale + 保护元数据 & 3.5.1 \\
+    对称 \texttt{INT4} 试探路径 & $(p_c,g)$ & 对称 per-group & attention-distribution KL；robust P95 & 裁剪率约束 & 静态 scale & 3.5.2 \\
+    \texttt{INT4-RoleAlign} & K-path: $p_K$；V-path: $p_V$ & K: per-channel；V: per-token & K: attention KL / P95；V: 输出扰动代理 & 路径相关稳健约束 & role-aware artifact（K/V 参数与轴元数据） & 3.5.3 \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{4pt}
+  \parbox{0.96\textwidth}{\footnotesize 注：统一的是 offline calibration workflow 与稳健选择纪律，不同路径的差异体现在参数接口与行为代理上；在 \texttt{INT4-RoleAlign} 中，Key 路径由 attention-distribution KL 主导，Value 路径由独立的输出扰动代理主导。}
+\end{table}

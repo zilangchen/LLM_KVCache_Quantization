@@ -1,0 +1,89 @@
+\begin{figure}[!htbp]
+  \centering
+  \begin{minipage}[t]{0.56\textwidth}
+    \centering
+    \begin{tikzpicture}[x=1cm,y=0.03cm]
+      \definecolor{konly}{HTML}{16A34A}
+      \definecolor{vonly}{HTML}{60A5FA}
+      \definecolor{k4v8}{HTML}{EF4444}
+      \definecolor{mixedkv}{HTML}{8B5E34}
+
+      % axes
+      \draw[->, thick] (0,0) -- (0,108) node[above, font=\scriptsize] {Needle 通过率 (\%)};
+      \draw[thick] (0,0) -- (7.2,0);
+      \foreach \y in {0,25,50,75,100} {
+        \draw (-0.08,\y) -- (0.08,\y);
+        \node[left, font=\scriptsize] at (-0.1,\y) {\y};
+        \draw[densely dashed, gray!35] (0,\y) -- (7.0,\y);
+      }
+
+      % legend
+      \fill[konly] (0.35,103) rectangle +(0.18,4);
+      \node[anchor=west, font=\scriptsize] at (0.58,105) {K-only};
+      \fill[vonly] (1.55,103) rectangle +(0.18,4);
+      \node[anchor=west, font=\scriptsize] at (1.78,105) {V-only};
+      \fill[k4v8] (2.7,103) rectangle +(0.18,4);
+      \node[anchor=west, font=\scriptsize] at (2.93,105) {K4V8};
+      \fill[mixedkv] (3.8,103) rectangle +(0.18,4);
+      \node[anchor=west, font=\scriptsize] at (4.03,105) {MixedKV};
+
+      % group labels
+      \node[font=\scriptsize\bfseries, align=center] at (1.15,-10) {Qwen\\1.5B};
+      \node[font=\scriptsize\bfseries, align=center] at (3.55,-10) {Qwen\\7B};
+      \node[font=\scriptsize\bfseries, align=center] at (5.95,-10) {LLaMA\\8B};
+
+      % bars helper positions
+      % group 1
+      \fill[konly]   (0.45,0) rectangle (0.73,100);
+      \fill[vonly]   (0.82,0) rectangle (1.10,100);
+      \fill[k4v8]    (1.19,0) rectangle (1.47,0);
+      \fill[mixedkv] (1.56,0) rectangle (1.84,100);
+      % group 2
+      \fill[konly]   (2.85,0) rectangle (3.13,100);
+      \fill[vonly]   (3.22,0) rectangle (3.50,100);
+      \fill[k4v8]    (3.59,0) rectangle (3.87,0);
+      \fill[mixedkv] (3.96,0) rectangle (4.24,72.4);
+      % group 3
+      \fill[konly]   (5.25,0) rectangle (5.53,100);
+      \fill[vonly]   (5.62,0) rectangle (5.90,100);
+      \fill[k4v8]    (5.99,0) rectangle (6.27,100);
+      \fill[mixedkv] (6.36,0) rectangle (6.64,100);
+
+      % value annotations
+      \foreach \x/\v in {
+        0.59/100,0.96/100,1.70/100,
+        2.99/100,3.36/100,4.10/72.4,
+        5.39/100,5.76/100,6.13/100,6.50/100} {
+        \node[font=\scriptsize, text=gray!70!black] at (\x,\v+5) {\v};
+      }
+      \foreach \x in {1.33,3.73} {
+        \node[font=\scriptsize\bfseries, text=red!70!black, rotate=90] at (\x,6) {0};
+      }
+    \end{tikzpicture}
+  \end{minipage}\hfill
+  \begin{minipage}[t]{0.40\textwidth}
+    \centering
+    \begin{tikzpicture}[
+      every node/.style={font=\small, align=center},
+      obs/.style={rectangle, rounded corners=3pt, draw=blue!55!black, thick,
+                  fill=blue!8, minimum width=4.2cm, minimum height=1.05cm},
+      risk/.style={rectangle, rounded corners=3pt, draw=red!65!black, thick,
+                   fill=red!8, minimum width=4.2cm, minimum height=1.05cm},
+      impl/.style={rectangle, rounded corners=3pt, draw=green!45!black, thick,
+                   fill=green!10, minimum width=4.2cm, minimum height=1.05cm},
+      arr/.style={-stealth, thick}
+    ]
+      \node[obs] (o1) at (0,3.7) {\textbf{K-only / V-only}\\单侧压缩仍保持可用检索};
+      \node[risk] (o2) at (0,2.2) {\textbf{K4V8 在 Qwen 上崩塌}\\Key 精度下降先触发失稳};
+      \node[obs] (o3) at (0,0.7) {\textbf{LLaMA-8B 更鲁棒}\\架构结构影响失稳阈值};
+      \node[impl] (o4) at (0,-0.9) {\textbf{MixedKV 恢复可用行为}\\K 优先保护优于对称 INT4};
+      \node[impl] (o5) at (0,-2.5) {\textbf{设计启示}\\对称 INT4 $\rightarrow$ 角色感知格式升级\\$\rightarrow$ \texttt{INT4-RoleAlign}};
+      \draw[arr] (o1.south) -- (o2.north);
+      \draw[arr] (o2.south) -- (o3.north);
+      \draw[arr] (o3.south) -- (o4.north);
+      \draw[arr] (o4.south) -- (o5.north);
+    \end{tikzpicture}
+  \end{minipage}
+  \caption{K/V 量化敏感性不对称的压缩版诊断与设计启示。左侧主纵轴为 Needle 通过率（32K，上下文，seed=1234--1236）；四组配置分别为 \texttt{K-only}、\texttt{V-only}、\texttt{K4V8} 与 \texttt{MixedKV}。右侧给出从压缩版诊断到格式升级方向的结构化归纳。RULER 的同源完整证据保留在第四章第~\ref{sec:exp-kv-sensitivity}~节，正文这里只保留更适合作为动机图的 Needle 主轴。}
+  \label{fig:ch3-kv-asymmetry}
+\end{figure}

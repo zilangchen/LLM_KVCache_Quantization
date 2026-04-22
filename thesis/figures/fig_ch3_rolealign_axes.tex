@@ -1,0 +1,42 @@
+\begin{figure}[!htbp]
+  \centering
+  \begin{tikzpicture}[
+    every node/.style={font=\small, align=center},
+    mat/.style={rectangle, draw=blue!55!black, thick, minimum width=2.5cm, minimum height=2.5cm},
+    note/.style={rectangle, rounded corners=3pt, draw=gray!70, thick, fill=gray!10,
+                 minimum width=2.9cm, minimum height=0.9cm},
+    arr/.style={-stealth, thick}
+  ]
+    % K side
+    \node[font=\bfseries] at (-4.2,3.2) {Key side: ranking};
+    \node[mat] (kmat) at (-4.2,1.2) {};
+    \foreach \x in {-5.0,-4.5,-4.0,-3.5} {\draw[gray!55] (\x,0.0) -- (\x,2.4);}
+    \foreach \y in {0.6,1.2,1.8} {\draw[gray!55] (-5.4,\y) -- (-3.0,\y);}
+    \node[rotate=90, font=\scriptsize] at (-5.8,1.2) {token};
+    \node[font=\scriptsize] at (-4.2,-0.45) {channel};
+    \draw[arr, red!70!black] (-4.8,2.8) -- (-4.8,2.0);
+    \draw[arr, red!70!black] (-4.3,2.8) -- (-4.3,2.0);
+    \draw[arr, red!70!black] (-3.8,2.8) -- (-3.8,2.0);
+    \node[note] (kagg) at (-4.2,-1.6) {沿 token 方向聚合\\每个 channel 独立确定 $(s_K,z_K)$};
+    \node[note] (kpk) at (-4.2,-3.0) {$p_K$ percentile\\attention-distribution KL};
+    \draw[arr] (kmat.south) -- (kagg.north);
+    \draw[arr] (kagg.south) -- (kpk.north);
+
+    % V side
+    \node[font=\bfseries] at (4.2,3.2) {Value side: content};
+    \node[mat] (vmat) at (4.2,1.2) {};
+    \foreach \x in {3.4,3.9,4.4,4.9} {\draw[gray!55] (\x,0.0) -- (\x,2.4);}
+    \foreach \y in {0.6,1.2,1.8} {\draw[gray!55] (3.0,\y) -- (5.4,\y);}
+    \node[rotate=90, font=\scriptsize] at (2.6,1.2) {token};
+    \node[font=\scriptsize] at (4.2,-0.45) {channel};
+    \draw[arr, orange!80!black] (3.2,1.8) -- (4.0,1.8);
+    \draw[arr, orange!80!black] (3.2,1.2) -- (4.0,1.2);
+    \draw[arr, orange!80!black] (3.2,0.6) -- (4.0,0.6);
+    \node[note] (vagg) at (4.2,-1.6) {沿 channel 方向聚合\\每个 token 独立确定 $(s_V,z_V)$};
+    \node[note] (vpv) at (4.2,-3.0) {$p_V$ percentile\\输出扰动代理};
+    \draw[arr] (vmat.south) -- (vagg.north);
+    \draw[arr] (vagg.south) -- (vpv.north);
+  \end{tikzpicture}
+  \caption{\texttt{INT4-RoleAlign} 的角色感知非对称量化轴。Key 侧沿 token 方向聚合、对每个 channel 单独确定非对称量化参数，以优先保持 attention ranking；Value 侧沿 channel 方向聚合、对每个 token 单独确定非对称量化参数，以适应内容侧的动态范围变化。}
+  \label{fig:ch3-rolealign-axis}
+\end{figure}
