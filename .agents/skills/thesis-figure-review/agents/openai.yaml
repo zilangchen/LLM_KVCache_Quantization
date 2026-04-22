@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thesis Figure Review"
+  short_description: "Review and polish thesis figures to publication quality"
+  default_prompt: "Use $thesis-figure-review to review and iteratively polish this thesis figure until it is publication-ready."
