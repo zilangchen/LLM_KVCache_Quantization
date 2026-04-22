@@ -199,7 +199,7 @@ C1 的 框架 在两层、两个 bit-width 上实现闭环验证：
     Qwen2.5-1.5B 上 INT8-ours 相对 FP16 mean $\Delta{=}{+}0.02$，
     在 3 个 LongBench task 上\textbf{在实证上不可区分}，
     证明 框架 的 calibration 层在 canonical 规模下可闭环；
-  \item \textbf{INT4-RoleAlign}（第~\ref{sec:exp-int4-kivi}~节 + 表~\ref{tab:t2-int4-kivi}/\ref{tab:s3-rolealign-vs-kivi}）：
+  \item \textbf{INT4-RoleAlign}（第~\ref{sec:exp-int4-kivi}~节 + 表~\ref{tab:t2-int4-kivi}/\ref{tab:ch3-rolealign-vs-kivi}）：
     在 KIVI-style 的 per-channel K + per-token V 非对称格式上以\textbf{离线 KL 搜索}
     取代运行时 absmax/min，生成可审计的校准产物 JSON；
     跨 4 模型 vs KIVI 同 format 下 PPL $\Delta$ 控制在 $0.15$ PPL 内、Needle 均 $100\%$；

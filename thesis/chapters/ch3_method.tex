@@ -27,7 +27,7 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 \begin{equation}
 \min_{\theta_K,\theta_V}\Delta_{\mathrm{beh}}\big((a,o),(\hat a,\hat o)\big),
 \end{equation}
-其中 $\Delta_{\mathrm{beh}}$ 表示量化前后注意力行为的联合偏移度量。需要强调的是，上式仅用于刻画本文希望控制的对象，即注意力行为本身；其可优化的工程代理将在后续小节中进一步具体化。
+其中 $\Delta_{\mathrm{beh}}$ 表示量化前后注意力行为的联合偏移度量。需要强调的是，上式仅用于刻画本文希望控制的对象，即注意力行为本身；在后续方法展开中，它会被降解为路径相关、可执行的工程代理：对称路径主要由 attention-distribution KL 刻画，而 role-aware low-bit path 则分别使用 K-path 与 V-path 的分角色代理。
 
 由 $\hat o=\sum_{i=1}^{S}\hat a_i \hat v_i$ 与 $o=\sum_{i=1}^{S}a_i v_i$ 出发，输出误差可作如下精确的代数展开：
 \begin{align}
@@ -52,7 +52,7 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 
 第 \ref{sec:ch3-problem} 节表明，Key 与 Value 的量化误差会分别沿注意力分布扭曲与加权聚合偏移两条路径共同作用于输出，但这并不意味着二者在低比特场景下具有相同的脆弱性。对于后续的格式设计而言，真正关键的问题不是“量化是否会带来误差”，而是：在受限位宽预算下，究竟是哪一侧更先触发注意力行为的系统性失稳。只有先回答这一问题，后续低比特路径的格式选择才具有明确的结构性依据，而不会退化为针对具体模型或具体任务的经验调参。
 
-为此，本文不再把旧的单侧控制项作为图面的唯一组织方式，而是从第 \ref{sec:exp-kv-sensitivity} 节同源的完整证据中抽取一个 bit-layout 诊断视图。具体地，\texttt{FP16} 作为未量化参考，\texttt{K8V8} 作为高精度量化参考，\texttt{K8V4} 与 \texttt{K4V8} 构成同平均 bit 预算下的角色对照，而 \texttt{K4V4} 则提供对称低比特坍塌锚点。其中，\texttt{K8V4} 与第四章完整诊断中的恢复性配置 \texttt{MixedKV} 对应，保留这一桥接仅用于帮助读者将压缩版诊断与后文的完整四配置证据对齐。上述五配置视图并不承担完整实验比较职责，其作用只是用最小但足够的 bit-layout 集合回答：在受限位宽预算下，4-bit 究竟应优先落在 Key 还是 Value；完整的跨模型读数、逐任务结果与统计检验仍在第 \ref{sec:exp-kv-sensitivity} 节中统一给出。
+为突出低比特失稳的角色依赖性，本文从第 \ref{sec:exp-kv-sensitivity} 节同源的完整证据中抽取一个 bit-layout 诊断视图。具体地，\texttt{FP16} 作为未量化参考，\texttt{K8V8} 作为高精度量化参考，\texttt{K8V4} 与 \texttt{K4V8} 构成同平均 bit 预算下的角色对照，而 \texttt{K4V4} 则提供对称低比特坍塌锚点。其中，\texttt{K8V4} 与第四章完整诊断中的恢复性配置 \texttt{MixedKV} 对应，用于与后文完整四配置证据对齐。上述五配置视图并不承担完整实验比较职责，其作用只是用最小但足够的 bit-layout 集合回答：在受限位宽预算下，4-bit 究竟应优先落在 Key 还是 Value；完整的跨模型读数、逐任务结果与统计检验仍在第 \ref{sec:exp-kv-sensitivity} 节中统一给出。
 
 压缩版诊断首先揭示了一个更尖锐的结构性事实：问题不在于“量化本身”，而在于“4-bit 落在何侧”。在本文考察的三个代表性模型上，\texttt{FP16}、\texttt{K8V8} 与 \texttt{K8V4} 都维持了可用行为，说明高精度量化本身并不会自动导致功能失稳；真正的分裂出现在同平均 bit 预算的 \texttt{K8V4} 与 \texttt{K4V8} 之间。当 4-bit 落在 Value 侧时，系统仍可工作；当 4-bit 落在 Key 侧时，Qwen 系列则直接出现检索与语言建模层面的崩塌。再进一步，\texttt{K4V4} 与 \texttt{K4V8} 在 Qwen 模型上呈现同向坍塌，则说明对称 INT4 的失效并不是由 Value 的同步压缩主导，而是由 Key 精度首先跌破功能临界点所触发。该观察与第 \ref{sec:ch3-problem} 节的误差传播分析一致：Key 扰动一旦改变 logits 的相对排序，softmax 的非线性会进一步放大这种偏移，使注意力分布在功能意义上偏离参考路径；而单独的 Value 扰动虽然同样会进入聚合侧误差项，但其影响通常滞后于分布结构的失稳。
 
@@ -73,19 +73,19 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 
 形式上，本文将逐层行为敏感度画像记为
 \begin{equation}
-S=\{s^{(l)}\}_{l=1}^{L},
+\mathcal{S}=\{s^{(l)}\}_{l=1}^{L},
 \end{equation}
-其中 $s^{(l)}$ 表示第 $l$ 层对量化扰动的行为敏感度读数。这里需要强调的是，$S$ 在本章中首先是一个概念层对象：它刻画“某一层的量化更容易引起 attention behavior 扰动”的相对强弱，而不预设必须由某一个固定的数值表达式在所有决策层面直接给出。具体而言，在校准层，behavior 偏移将通过注意力分布侧的工程代理来具体化；在分配层，出于离线复用与成本控制考虑，本文从同一离线校准链路产生的 calibration artifact 中读取逐层可聚合的 readout，形成与校准层同源的 layer-level sensitivity profile。换言之，本文后续两层决策共享的是同一离线校准来源与同一行为组织原则，而不是要求二者在数值上使用完全相同的 operational expression。
+其中 $s^{(l)}$ 表示第 $l$ 层对量化扰动的行为敏感度读数。这里需要强调的是，$\mathcal{S}$ 在本章中首先是一个概念层对象：它刻画“某一层的量化更容易引起 attention behavior 扰动”的相对强弱，而不预设必须由某一个固定的数值表达式在所有决策层面直接给出。具体而言，在校准层，behavior 偏移将通过注意力分布侧的工程代理来具体化；在分配层，出于离线复用与成本控制考虑，本文从同一离线校准链路产生的校准产物中读取逐层可聚合的统计读数，形成与校准层同源的逐层敏感度画像。换言之，本文后续两层决策共享的是同一离线校准来源与同一行为组织原则，而不是要求二者在数值上使用完全相同的表达式。
 
 在框架的第一层，即校准层，问题被组织为参数选择问题。设候选量化参数空间为 $\Theta$，则校准层的目标可抽象写为
 \begin{equation}
 \theta^\star = \arg\min_{\theta\in\Theta}\Delta_{\mathrm{beh}}^{\mathrm{cal}}(\theta),
 \end{equation}
-其中 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 表示在校准层对行为偏移的工程化刻画。对本文而言，这一层回答的是“如何量化”：给定某一条路径及其对应的候选参数家族，如何在离线阶段选择一组最能保持 attention behavior 的量化参数。不同 bit-width、不同量化格式的差异主要体现在候选参数家族不同，而其共同点则在于都服从同一 behavior-guided 组织原则。后续第 \ref{sec:ch3-calibration} 节将把这一问题具体化为可执行的离线校准目标与稳健选择准则，第 \ref{sec:ch3-paths} 节再将其分别实例化到 \texttt{INT8} 规范路径与低比特 role-aware 路径上。
+其中 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 表示在校准层对行为偏移的工程化刻画。这里的写法仍然是统一占位符，而不是要求全文共享同一个单值评分函数；真正执行时，具体代理会随着路径而变化。对本文而言，这一层回答的是“如何量化”：给定某一条路径及其对应的候选参数家族，如何在离线阶段选择一组最能保持 attention behavior 的量化参数。不同 bit-width、不同量化格式的差异主要体现在候选参数家族不同，而其共同点则在于都服从同一 behavior-guided 组织原则。后续第 \ref{sec:ch3-calibration} 节将把这一问题具体化为可执行的离线校准目标与稳健选择准则，第 \ref{sec:ch3-paths} 节再将其分别实例化到 \texttt{INT8} 规范路径与低比特 role-aware 路径上。
 
 在框架的第二层，即分配层，问题被组织为预算决策问题。设平均 KV bit 预算为 $\bar b$，则分配器可抽象写为
 \begin{equation}
-b^\star = \mathcal{A}(S;\bar b),
+b^\star = \mathcal{A}(\mathcal{S};\bar b),
 \end{equation}
 其中 $b^\star$ 表示逐层或逐角色的预算决策向量。与校准层不同，分配层回答的是“哪里优先保护”：在总预算受限时，哪些层更值得保留较高精度，哪些层可以接受更激进的压缩。最基础的情形是逐层预算分配；在此之上，还可以扩展到 K/V 角色感知的预算接口，以及进一步发展出基于 sensitivity profile 形状的自动预算建议机制。需要明确的是，allocation / \texttt{AutoK} 在本文中被定位为 behavior-guided 框架的扩展层，而不是与校准层并列竞争主轴的另一套独立方法。它的理论合法性来自与校准层共享同源的 behavior sensitivity profile，而不是来自一个与校准层割裂的全新目标函数。
 
@@ -102,7 +102,7 @@ b^\star = \mathcal{A}(S;\bar b),
 
 第 \ref{sec:ch3-problem} 节将 KV Cache 量化形式化为一个注意力行为联合保持问题，并指出真正需要被约束的对象是量化前后注意力分布与聚合输出的联合偏移；第 \ref{sec:ch3-framework} 节则进一步说明，这一联合目标应在统一的 behavior-guided 框架下被组织为校准层与分配层两类决策。然而，联合行为目标本身并不直接对应一个简单、可执行、且适合离线搜索的优化对象。为此，本节的任务是将前述概念层目标转写为可操作的工程代理与稳健选择准则：首先说明为什么采用注意力分布侧的 KL 散度作为校准层的 behavior proxy；随后给出统一离线校准工作流下的参数搜索与选择纪律。
 
-需要强调的是，本文在本节所统一的并不是“所有路径共享同一个数值评分函数”，而是同一套 offline calibration workflow、离线校准产物接口与 robust selection discipline。对称路径与 role-aware low-bit path 在候选参数家族上不同，在行为代理的具体定义上也可以不同；但它们都服从同一校准逻辑：以 behavior 保持为原则、在可行域约束下优先控制尾部坏案例，并将最终选择结果固化为可审计的离线校准产物。基于这一边界，第 \ref{sec:ch3-paths} 节将继续把本节给出的工作流实例化到 \texttt{INT8} 规范路径与低比特 role-aware 路径上。
+需要强调的是，本文在本节所统一的并不是“所有路径共享同一个数值评分函数”，而是同一套离线校准工作流、离线校准产物接口与稳健选择纪律。对称路径与 role-aware low-bit path 在候选参数家族上不同，在行为代理的具体定义上也可以不同；但它们都服从同一校准逻辑：以 behavior 保持为原则、在可行域约束下优先控制尾部坏案例，并将最终选择结果固化为可审计的离线校准产物。基于这一边界，第 \ref{sec:ch3-paths} 节将继续把本节给出的工作流实例化到 \texttt{INT8} 规范路径与低比特 role-aware 路径上。
 
 \subsection{注意力分布 KL 散度目标}
 
@@ -193,9 +193,9 @@ q_{0.95}(\theta).
 \end{equation}
 若所有候选均不满足裁剪率约束，则退化为优先最小化总裁剪负担 $c_K(\theta)+c_V(\theta)$，再以尾部统计与平均 KL 作为后续排序依据。该规则体现了本文一贯的校准纪律：不是简单选择“均值最小”的候选，而是优先压制长上下文场景中更具破坏性的尾部异常。
 
-对于 \texttt{INT4-RoleAlign}，离线搜索不再被写成“同一个 P95 KL 统一选出 $(p_K,p_V)$”，而是拆分为同一工作流中的两条角色感知接口。其一，\textbf{K-path} 以 $p_K$ 为候选参数，在 per-channel Key 非对称量化格式上使用 attention-distribution KL 作为主代理，并由相应的 robust P95 KL 读数完成选择；其二，\textbf{V-path} 以 $p_V$ 为候选参数，在 per-token Value 非对称量化格式上采用独立的输出扰动代理，并据此形成自身的稳健选择统计。也就是说，对 \texttt{RoleAlign} 而言，变化的是各路径的参数家族与行为代理；不变的是离线校准 workflow、可行域约束、尾部稳健优先与产物输出接口。正因为如此，本文后续才能在同一 framework 下同时讨论对称路径与 role-aware path，而不必为了维持表面统一性而误把两条角色路径压成一个数学上并不存在的单一目标。
+对于 \texttt{INT4-RoleAlign}，离线搜索不再被写成“同一个 P95 KL 统一选出 $(p_K,p_V)$”，而是拆分为同一工作流中的两条角色感知接口。其一，\textbf{K-path} 以 $p_K$ 为候选参数，在 per-channel Key 非对称量化格式上使用 attention-distribution KL 作为主代理，并在同一套稳健搜索纪律下完成选择；其二，\textbf{V-path} 以 $p_V$ 为候选参数，在 per-token Value 非对称量化格式上采用独立的输出扰动代理。对当前主线实现而言，这一路径对应 \texttt{role\_aware\_axes} 启用后的独立 V-path 校准分支，而不是把更一般的 \texttt{shared} V 校准口径直接重命名为 \texttt{RoleAlign}。也就是说，对 \texttt{RoleAlign} 而言，变化的是各路径的参数家族与行为代理；不变的是离线校准工作流、可行域约束、尾部稳健优先与产物输出接口。正因为如此，本文后续才能在同一 framework 下同时讨论对称路径与 role-aware path，而不必为了维持表面统一性而误把两条角色路径压成一个数学上并不存在的单一目标。
 
-从输出形式上看，离线校准工作流统一产生两类结果：一类是\emph{路径特定校准产物}，包括静态 scale、zero-point、percentile 参数、group metadata 与保护参数等，用于在线推理时的直接读取与执行；另一类是\emph{共享行为统计读数}，它们来自同一离线校准链路，并将在第 \ref{sec:ch3-allocator} 节中被进一步组织为逐层行为敏感度画像。换言之，校准层不仅回答“如何量化”，也为后续的预算分配提供同源 readout。逐头温度校正等附加组件在本文主线中统一降格为诊断性探索项，仅在附录中保留说明；主线方法默认不依赖 \texttt{inv\_tau}。
+从输出形式上看，离线校准工作流统一产生两类结果：一类是\emph{路径特定校准产物}，包括静态 scale、zero-point、percentile 参数、group metadata 与保护参数等，用于在线推理时的直接读取与执行；不同路径对应的字段集合可以不同，但都服从同一只读 artifact 接口。另一类是\emph{共享行为统计读数}，它们来自同一离线校准链路，并将在第 \ref{sec:ch3-allocator} 节中被进一步组织为逐层行为敏感度画像。换言之，校准层不仅回答“如何量化”，也为后续的预算分配提供同源 readout。逐头温度校正等附加组件在本文主线中统一降格为诊断性探索项，仅在附录中保留说明；主线方法默认不依赖 \texttt{inv\_tau}。
 
 % 图 3-4 建议置于本小节第 1 段与第 2 段之间
 % 图题：图 3-4 行为引导离线校准的统一工作流
@@ -212,9 +212,9 @@ q_{0.95}(\theta).
 
 需要强调的是，本节的目标不是在方法章内提前报告完整实验结果，而是说明同一框架如何在不同 bit-width 与不同量化格式约束下落成具体路径。换言之，后续路径之间变化的是参数接口、量化轴与行为代理的具体定义，不变的是第 \ref{sec:ch3-calibration} 节已经建立的 offline calibration workflow、可行域约束与稳健选择纪律。正是在这一点上，本文的方法实例既保持了跨位宽的一致性，也为后续 allocator 与系统落地提供了统一接口。
 
-% 图 3-5 建议置于此处
-% 图题：图 3-5 跨位宽路径的实例化关系与统一校准工作流
-\input{figures/fig_ch3_paths_instantiation}
+% 表 3-2 建议置于此处
+% 表题：表 3-2 跨位宽路径的实例化关系与统一校准工作流
+\input{tables/table_ch3_path_instantiation}
 
 \subsection{INT8 规范路径：静态 Scale 与自适应保护}
 
@@ -278,17 +278,17 @@ M_{l,j}^{K}
 =
 \operatorname{Percentile}\!\big(K^{(l)}_{:,j};\,p_K\big),
 \end{equation}
-由此得到 Key 侧的 scale 与 zero-point：
+由此得到 Key 侧的 scale 与仿射偏移项：
 \begin{equation}
 s_{l,j}^{K}
 =
 \frac{M_{l,j}^{K}-m_{l,j}^{K}}{q_{\max}-q_{\min}},
 \qquad
-z_{l,j}^{K}
+o_{l,j}^{K}
 =
 m_{l,j}^{K}-q_{\min}s_{l,j}^{K}.
 \end{equation}
-这里的关键在于：分位数统计沿序列维度聚合、并对每个通道单独确定 $(s,z)$，从而更好地保持 Key 通道间的幅值异质性与相对排序结构。
+这里的关键在于：分位数统计沿序列维度聚合、并对每个通道单独确定 $(s,o)$，从而更好地保持 Key 通道间的幅值异质性与相对排序结构。
 
 对 Value 而言，本文采用逐 token（per-token）的非对称量化。设第 $l$ 层 Value 矩阵为 $V^{(l)}\in\mathbb{R}^{S\times d_v}$，则对第 $t$ 个 token，其分位数裁剪边界定义为
 \begin{equation}
@@ -300,13 +300,13 @@ M_{l,t}^{V}
 =
 \operatorname{Percentile}\!\big(V^{(l)}_{t,:};\,p_V\big),
 \end{equation}
-由此得到 Value 侧的 scale 与 zero-point：
+由此得到 Value 侧的 scale 与仿射偏移项：
 \begin{equation}
 s_{l,t}^{V}
 =
 \frac{M_{l,t}^{V}-m_{l,t}^{V}}{q_{\max}-q_{\min}},
 \qquad
-z_{l,t}^{V}
+o_{l,t}^{V}
 =
 m_{l,t}^{V}-q_{\min}s_{l,t}^{V}.
 \end{equation}
@@ -317,13 +317,13 @@ m_{l,t}^{V}-q_{\min}s_{l,t}^{V}.
 q
 =
 \operatorname{clamp}\!\left(
-\operatorname{round}\!\left(\frac{x-z}{s}\right),
+\operatorname{round}\!\left(\frac{x-o}{s}\right),
 q_{\min},\,q_{\max}
 \right),
 \qquad
-\hat x = q\,s+z.
+\hat x = q\,s+o.
 \end{equation}
-真正使 \texttt{RoleAlign} 成立的，并不是上述统一公式本身，而是参数 $(p_K,p_V)$ 的来源具有明确的角色划分：其中 $p_K$ 通过 per-channel Key 路径上的 attention-distribution KL 搜索得到，并在正文口径上概括为以 attention KL 主导的 behavior-aligned K-path；而 $p_V$ 则由 per-token Value 路径上的独立输出扰动代理确定，而非由同一个 attention-distribution KL 与 $p_K$ 一起联合选出。也就是说，\texttt{RoleAlign} 在低比特场景中保持统一的是 workflow，不是把 K/V 两侧压成同一个单一 score function。
+这里的 $o$ 表示仿射偏移项，用于和第二章标准非对称量化定义中的整数 zero-point 记号作区分。真正使 \texttt{RoleAlign} 成立的，并不是上述统一公式本身，而是参数 $(p_K,p_V)$ 的来源具有明确的角色划分：其中 $p_K$ 通过 per-channel Key 路径上的 attention-distribution KL 搜索得到，并在正文口径上概括为以 attention KL 主导的 behavior-aligned K-path；而 $p_V$ 则由 per-token Value 路径上的独立输出扰动代理确定。对当前主线实现而言，这一独立 V-path 代理对应 \texttt{role\_aware\_axes} 启用后的 \texttt{token\_ce} 分支，而不是把更一般的 \texttt{shared} 校准模式直接等同为 \texttt{RoleAlign}。也就是说，\texttt{RoleAlign} 在低比特场景中保持统一的是 workflow，不是把 K/V 两侧压成同一个单一 score function。
 
 在这一参数化下，
 \begin{equation}
@@ -331,8 +331,8 @@ q_{\min},\,q_{\max}
 \end{equation}
 对应标准 min-max 非对称量化端点。该端点解释的是格式空间本身：它说明 \texttt{RoleAlign} 的 percentile parameterization 严格包含了最朴素的 min-max 非对称表示作为边界情形，从而使本文后续与 \texttt{KIVI-style} 的比较能够建立在同一 role-aware format family 下，而不是建立在跨格式比较之上。
 
-% 图 3-6 建议置于本小节第 1 段之后、第 2 段之前
-% 图题：图 3-6 INT4-RoleAlign 的角色感知非对称量化轴
+% 图 3-5 建议置于本小节第 1 段之后、第 2 段之前
+% 图题：图 3-5 INT4-RoleAlign 的角色感知非对称量化轴
 \input{figures/fig_ch3_rolealign_axes}
 
 综上，\texttt{RoleAlign} 的核心不是简单地对 $K$ 和 $V$ 采用不同公式，而是把第 \ref{sec:ch3-motivation-kv} 节识别出的角色不对称，转写为量化轴不对称：Key 侧优先保持 attention ranking，Value 侧在保持可聚合性的前提下承受更激进的压缩。本文最终主线配置因此固定为：$(p_K,p_V)$ 行为引导校准、per-channel Key + per-token Value 非对称量化、且 \texttt{inv\_tau=None}。逐头温度校正 \texttt{inv\_tau} 在非对称格式下未观察到稳定收益，已在第 \ref{sec:ch3-calibration} 节被降格为诊断性历史探索项，详细推导与补充实证保留在附录第~\ref{sec:app-invtau-diagnostic}~节，主线默认不启用。
@@ -342,7 +342,7 @@ q_{\min},\,q_{\max}
 
 由于 \texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 共享角色差异化的量化轴，即均采用 per-channel Key 与 per-token Value 的非对称格式，因此有必要在方法章中明确二者到底共享什么、又在哪一层分叉。否则，后续第四章中的跨模型对比容易被误读为“两个完全不同的方法体系之间的竞赛”，而不是“同一 role-aware format family 下，两种 calibration philosophy 的比较”。
 
-从格式层看，二者的共同点十分明确：都承认 $K$ 与 $V$ 在低比特场景下不应被统一对待，并都采用 $K$ 侧更强调通道异质性、$V$ 侧更强调时序动态范围的角色差异化表示。真正的分叉发生在校准哲学与接口层。\texttt{KIVI-style} 的核心是直接依赖运行时统计量确定量化范围，不要求离线校准产物；而 \texttt{INT4-RoleAlign} 则把 K/V 两侧都纳入离线、可审计、可复现的 role-aware calibration interface：其中 Key 侧由 attention-KL 主导，Value 侧由独立输出扰动代理主导，并最终将两侧参数与量化轴元数据共同固化为可部署的 artifact。也正因为如此，\texttt{RoleAlign} 不只是一个“选择了不同 percentile”的技巧，而是一套可向预算分配与系统落地自然延伸的 low-bit path。
+从格式层看，二者的共同点十分明确：都承认 $K$ 与 $V$ 在低比特场景下不应被统一对待，并都采用 $K$ 侧更强调通道异质性、$V$ 侧更强调时序动态范围的角色差异化表示。真正的分叉发生在校准哲学与接口层。\texttt{KIVI-style} 的核心是直接依赖运行时统计量确定量化范围，不要求离线校准产物；而 \texttt{INT4-RoleAlign} 则把 K/V 两侧都纳入离线、可审计、可复现的 role-aware calibration interface：其中 Key 侧以 attention-KL 为主代理，并在离线搜索纪律下确定参数，Value 侧由独立输出扰动代理主导，并最终将两侧参数与量化轴元数据共同固化为可部署的 artifact。也正因为如此，\texttt{RoleAlign} 不只是一个“选择了不同 percentile”的技巧，而是一套可向预算分配与系统落地自然延伸的 low-bit path。
 
 进一步地，\texttt{RoleAlign} 与 \texttt{KIVI-style} 的关系不应被理解为“两个完全异构的方法竞争”，而应被理解为：在共享角色差异化量化格式的前提下，本文将 calibration philosophy 从 runtime statistics 提升为 offline role-aware calibration，并由此获得可审计的产物接口与可扩展的后续 readout。换言之，两者的差异主要不在格式层，而在于是否显式把 behavior-guided 原则写入离线校准工作流。正因为这一边界足够清楚，第四章第 \ref{subsec:exp-int4-cross-model} 节中的对比结果才可以被解释为“在同一 role-aware format family 下，离线行为引导校准是否带来额外价值”，而不是被误读为跨格式、跨实现、乃至跨问题设定的 apples-to-oranges 比较。
 
@@ -350,18 +350,21 @@ q_{\min},\,q_{\max}
   \centering
   \caption{\texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 的设计边界比较}
   \label{tab:ch3-rolealign-vs-kivi}
-  \begin{tabular}{p{0.18\textwidth}p{0.24\textwidth}p{0.24\textwidth}p{0.24\textwidth}}
+  \scriptsize
+  \setlength{\tabcolsep}{1.8pt}
+  \renewcommand{\arraystretch}{1.12}
+  \begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{1.45cm}>{\raggedright\arraybackslash}p{2.0cm}>{\raggedright\arraybackslash}p{2.35cm}X}
     \toprule
     维度 & \texttt{KIVI-style} & \texttt{INT4-RoleAlign} & 含义 \\
     \midrule
-    量化格式 & per-channel K + per-token V & 相同 & 比较建立在同一 role-aware format family 下 \\
+    量化格式 & per-channel K\newline + per-token V & 相同 & 比较建立在同一 role-aware format family 下 \\
     校准来源 & runtime statistics & offline role-aware calibration & 比较的是 calibration philosophy \\
-    参数确定 & 即时统计量 & K-path: $p_K$；V-path: $p_V$ & 两侧均被纳入可审计的离线接口 \\
-    行为代理 & 无显式 behavior proxy & K: attention-distribution KL；V: 输出扰动代理 & 显式区分 ranking 与 content 两侧 \\
-    推理接口 & 无离线产物 & 有固定校准产物 & 便于审计、冻结和部署一致性 \\
-    向 \ref{sec:ch3-allocator} 扩展 & 无共享 profile 接口 & 可共享 behavior sensitivity profile & 可自然延伸到 allocator / \texttt{AutoK} \\
+    参数确定 & 即时统计量 & K-path: $p_K$\newline V-path: $p_V$ & 两侧均被纳入可审计的离线接口 \\
+    行为代理 & 无显式\newline behavior proxy & K: attention-distribution KL\newline V: 输出扰动代理 & 显式区分 ranking 与 content 两侧 \\
+    推理接口 & 无离线产物 & 有固定校准产物 & 便于审计、冻结\newline 和部署一致性 \\
+    向 \ref{sec:ch3-allocator} 扩展 & 无共享 profile 接口 & 可共享 behavior\newline sensitivity profile & 可自然延伸到\newline allocator/\texttt{AutoK} \\
     \bottomrule
-  \end{tabular}
+  \end{tabularx}
 \end{table}
 
 \section{行为敏感度驱动的层间预算分配与 AutoK}
@@ -385,13 +388,13 @@ q_{\min},\,q_{\max}
 
 \subsection{逐层敏感度构建与分配策略}
 
-行为引导分配层与校准层共享同一离线 provenance，但其操作对象并不是在线重新计算的 attention-KL，而是由离线校准链路产出的 calibration artifact 所诱导的层级可读数。记第 $l$ 层从 artifact 中读取的 K/V 角色相关 scale 张量为
+行为引导分配层与校准层共享同一离线 provenance，但其操作对象并不是在线重新计算的 attention-KL，而是由离线校准链路产出的校准产物所诱导的层级可读数。记第 $l$ 层从 artifact 中读取的 K/V 角色相关 scale 张量为
 \begin{equation}
 \sigma_K^{(l)}, \qquad \sigma_V^{(l)},
 \end{equation}
 它们分别表示该层在离线校准后固化下来的 Key 与 Value 侧 role-scale readout。这里需要明确两点：其一，这些读数来自离线校准产物，而不是在分配阶段重新对样本逐 token / 逐 head 计算 attention-KL；其二，它们在本节中承担的是 behavior sensitivity 的 \emph{operational proxy} 角色，而不是被宣称为与校准层的 attention-KL 数值等价。
 
-在最基础的逐层 allocator 中，本文采用 K 侧 role-scale 作为默认的 layer-level sensitivity proxy。其理由与第 \ref{sec:ch3-motivation-kv} 节中的低比特动机诊断一致：在当前实现与本文主线叙事下，Key 精度下降是导致对称 \texttt{INT4} 崩塌的主导因素，因此优先使用 K 侧读数构建 layer-wise profile 更符合低比特预算分配的结构需要。记聚合模式为 $\alpha\in\{\max,\mathrm{mean}\}$，则第 $l$ 层的逐层敏感度写为
+在最基础的逐层 allocator 中，本文采用 K 侧 role-scale 作为默认的 layer-level sensitivity proxy。其理由与第 \ref{sec:ch3-motivation-kv} 节中的低比特动机诊断一致：在当前研究族与本文关注的低比特 regime 下，Key 精度下降是导致对称 \texttt{INT4} 崩塌的主导因素，因此优先使用 K 侧读数构建 layer-wise profile 更符合当前预算分配的结构需要。这里的写法应被理解为工作性 proxy，而不是对所有 family、scale 与 GQA 结构都成立的普适 allocator 原理。记聚合模式为 $\alpha\in\{\max,\mathrm{mean}\}$，则第 $l$ 层的逐层敏感度写为
 \begin{equation}
 s_{\alpha}^{(l)}
 =
@@ -431,8 +434,8 @@ b_{\mathrm{lo}}
 \end{equation}
 这说明 $k$ 在本节中不应被理解为一个任意经验数字，而应被理解为在固定两级位宽设置下控制预算强度的结构参数。换言之，BA-$k$ 的本质不是“保护前几层”，而是在预算受限时保护 behavior proxy 最高的若干层。
 
-% 图 3-7 建议置于本小节后半段
-% 图题：图 3-7 行为敏感度画像到预算分配的两级流程：逐层分配与角色扩展
+% 图 3-6 建议置于本小节后半段
+% 图题：图 3-6 行为敏感度画像到预算分配的两级流程：逐层分配与角色扩展
 \input{figures/fig_ch3_allocator_flow}
 
 \subsection{K/V 角色感知的预算扩展}
@@ -532,8 +535,8 @@ b_{V,\mathrm{lo}}
 \end{equation}
 这一函数把“profile 是集中还是弥散”转写成了一个预算上可解释的对象：若某模型的敏感度主要集中在少数层，则 $\Gamma(k)$ 会在较小的 $k$ 上迅速上升；若某模型的敏感度在多层之间更加弥散，则达到同一覆盖阈值所需的 $k$ 会显著增大。也就是说，覆盖度曲线不是另一个结果图，而是把 sensitivity profile 的形状转化为 budget decision language 的中间桥梁。
 
-% 图 3-8 建议置于本小节中部
-% 图题：图 3-8 敏感度覆盖度曲线示意：集中型画像与弥散型画像的预算含义
+% 图 3-7 建议置于本小节中部
+% 图题：图 3-7 敏感度覆盖度曲线示意：集中型画像与弥散型画像的预算含义
 \input{figures/fig_ch3_coverage_curves}
 
 从方法层的角度看，$\Gamma(k)$ 的价值在于：它既保留了 layer-wise sensitivity ordering，又避免将 budget proposer 写成“固定保护前 $k$ 层”的经验规则。正因为如此，本文后续才可以把 \texttt{AutoK} 写成 sensitivity profile 的自然输出，而不是另起炉灶再设计一套与前文脱节的 budget tuner。
@@ -570,24 +573,25 @@ b_{\mathrm{lo}}
 
 需要明确的是，\texttt{AutoK} 的定位是 budget proposer，而不是“第三个主方法”或“对所有模型稳定取胜的 universal policy”。它的价值在于：将 sensitivity profile 的形状直接转写为无需人工扫 $k$ 的预算建议，从而使同一 behavior-guided framework 在跨模型迁移时具备更强的可读性与可复用性。至于不同 aggregation mode、不同覆盖阈值是否在所有 family / scale / task 上都表现一致，则属于后续第四章的实证问题，而不在本节作先验结论。
 
-% 表 3-3 建议置于本小节末尾
-% 表题：表 3-3 分配层策略的输入、选择规则与对应记号
+% 表 3-4 建议置于本小节末尾
+% 表题：表 3-4 分配层策略的输入、选择规则与对应记号
 \begin{table}[!htbp]
   \centering
   \caption{分配层策略的输入、选择规则与对应记号}
   \label{tab:ch3-allocator-policies}
   \small
-  \setlength{\tabcolsep}{4pt}
-  \begin{tabular}{p{1.7cm}p{1.7cm}p{3.4cm}c p{2.0cm} p{2.0cm} p{2.5cm}}
+  \setlength{\tabcolsep}{3pt}
+  \renewcommand{\arraystretch}{1.12}
+  \begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{1.35cm}>{\raggedright\arraybackslash}p{1.3cm}X>{\centering\arraybackslash}p{0.95cm}>{\raggedright\arraybackslash}p{1.35cm}>{\raggedright\arraybackslash}p{1.45cm}X}
     \toprule
-    \textbf{策略} & \textbf{输入} & \textbf{保护层选择规则} & \textbf{是否需人工扫描参数} & \textbf{输出} & \textbf{第四章记号} & \textbf{方法定位} \\
+    \textbf{策略} & \textbf{输入} & \textbf{保护规则} & \textbf{扫描?} & \textbf{输出} & \textbf{实验记号} & \textbf{方法定位} \\
     \midrule
     Uniform & 无 & 所有层统一默认低 bit & 否 & 统一预算向量 & Uniform & 低预算参考策略 \\
-    BA-$k$ & $(S, k)$ & 保护 sensitivity 最高的 $k$ 层 & 是 & 分层 bit 向量 & BA-k & 主体 layer-wise allocator \\
+    BA-$k$ & $(S, k)$ & 保护 sensitivity 最高的 $k$ 层 & 是 & 分层 bit 向量 & BA-k & 分层 allocator 主体 \\
     Heuristic-$k$ & $(L, k)$ & 按固定位置规则保护 $k$ 层 & 是 & 分层 bit 向量 & Heuristic-k & 强基线 \\
-    BA-AutoK & $(S, \rho)$ & 取满足 coverage 的最小 $k^\star$ & 否 & 分层 bit 向量 & BA-AutoK & profile-guided budget proposer \\
+    BA-AutoK & $(S, \rho)$ & 取满足 coverage 的最小 $k^\star$ & 否 & 分层 bit 向量 & BA-AutoK & coverage 驱动预算建议 \\
     \bottomrule
-  \end{tabular}
+  \end{tabularx}
 \end{table}
 
 \section{系统级部署实现与开销分析}
@@ -617,16 +621,14 @@ m_{\mathrm{path}}^{(l)}
 =
 Q_{\theta_t^{(l)}}\!\left(x_t^{(l)}\right),
 \end{equation}
-其中 $\theta_t^{(l)}$ 由离线校准产物与当前运行时上下文共同决定。这里需要特别说明两点：其一，历史 token 一旦以某组量化参数写入缓存，其量化值与对应 metadata 不再被回写；其二，自适应保护若在当前时刻触发，只影响当前 token 的写入，不会 retroactively 修改已存历史缓存。这一“append 时确定、历史不回写”的语义，是本文后续所有缓存管理与融合 kernel 设计的基础。
+其中 $\theta_t^{(l)}$ 由离线校准产物与当前运行时上下文共同决定。这里需要特别说明两点：其一，历史 token 一旦以某组量化参数写入缓存，其量化值与对应 metadata 不再被回写；其二，自适应保护若在当前时刻触发，只影响当前 token 的写入，不会逆向修改已存历史缓存。这一“append 时确定、历史不回写”的语义，是本文后续所有缓存管理与融合 kernel 设计的基础。
 
 从系统流程上看，Prefill 阶段根据路径规则将当前块的 K/V 写入量化缓存，Decode 阶段则读取历史量化缓存，并将其路由到对应的 attention backend。由于在线阶段不再重跑离线校准，推理系统真正需要解决的问题就不再是“如何选参数”，而是“如何让低比特缓存尽可能直接地参与解码注意力计算”。这正是下一小节 Triton 融合解码 kernel 所要承担的角色。
 
-% 图 3-9 建议置于此处
-% 图题：图 3-9 离线校准产物到在线推理执行的部署闭环
-\input{figures/fig_ch3_deployment_closure}
+若把上述部署闭环改写为系统语义，则其核心链路可以概括为：离线阶段基于校准样本执行 behavior-guided 搜索，并将结果固化为只读的路径特定产物 $\mathcal A_{\mathrm{path}}$；在线阶段的 Prefill 只负责依据该产物完成量化写入，Decode 则只负责读取历史量化缓存并路由到对应后端执行。换言之，运行时真正被保留下来的不是离线搜索过程本身，而是其冻结后的参数接口、元数据接口以及“append 时确定、历史不回写”的缓存语义。正因为这一闭环已经在系统层被固定下来，下一小节才可以把关注点进一步收缩到：这些低比特缓存如何在 decode 阶段以尽量少的中间物化直接参与注意力计算。
 
-% 表 3-4 建议置于本小节末尾
-% 表题：表 3-4 不同量化路径的离线产物、运行时缓存载荷与默认执行后端
+% 表 3-5 建议置于本小节末尾
+% 表题：表 3-5 不同量化路径的离线产物、运行时缓存载荷与默认执行后端
 \input{tables/table_ch3_runtime_paths}
 
 \subsection{Triton 融合解码核函数设计}
@@ -680,11 +682,9 @@ h_{kv}
 \end{equation}
 这样，kernel 可以按 $(B,H_q)$ 或其等价 grid 组织并行，而无需显式复制 KV heads。该映射的作用在于在保持 GQA 结构语义正确的同时，使 query heads 与共享 KV heads 之间的访问关系在融合路径中得到直接表达。
 
-最后需要再次诚实说明的是：本文的主系统落地路径是 \texttt{INT8} 融合 kernel；对 \texttt{INT4-RoleAlign} 而言，默认质量评测路径仍是 \texttt{torch\_ref} 参考实现，而对应的 Triton 非对称融合核主要承担工程可行性验证的角色，不应在第三章中被写成第四章主速度结论的默认来源。也就是说，本小节的职责是解释“如何实现”，而不是在这里提前讨论“哪条路径更快”。
+最后需要再次诚实说明的是：本文的主系统落地路径是 \texttt{INT8} 融合 kernel。对 \texttt{INT4-RoleAlign} 而言，\texttt{torch\_ref} 在本文中承担 correctness / reference path，用于质量回归与接口核对；与之并行，\texttt{triton\_fused} 以及面向非对称 \texttt{INT4} 的 Triton / FlashInfer 后端构成可用的快速路径与工程实现候选。第三章在这里只说明这些后端的系统角色，而不把其中任何一条直接写成第四章速度结论的默认来源。
 
-% 图 3-10 建议置于本小节中部
-% 图题：图 3-10 Triton 融合解码核的数据流：低比特缓存、片上反量化与在线 softmax
-\input{figures/fig_ch3_triton_dataflow}
+若把朴素路径与融合路径并列成系统数据流，则前者遵循“低比特缓存 $\rightarrow$ 完整 FP16 K/V 物化 $\rightarrow$ 标准 attention”的执行顺序，而后者遵循“低比特 K/V 与 metadata $\rightarrow$ block load $\rightarrow$ 片上解包与反量化 $\rightarrow$ $qK^\top$ 与 online softmax $\rightarrow$ 输出累加”的执行顺序。二者的本质差异并不在 softmax 定义本身，而在于 fused decode 将完整 FP16 K/V 与完整 attention matrix 的物化都排除在主路径之外；与此同时，GQA 的头映射也被直接并入同一 decode 数据流，而不是在核外先做额外重排。因此，Triton 融合核在系统层真正承担的是“消除中间物化、压缩全局内存传输”的角色，而不是引入另一套不同的注意力算法。
 
 \subsection{复杂度、访存与存储开销分析}
 
@@ -754,7 +754,7 @@ AI_{\mathrm{INT4}}
 \end{equation}
 这些表达式本身并不给出任何实测速率结论，但它们清楚说明：在相似计算量下，低比特融合路径通过减少全局内存传输而改变了 decode 阶段的开销组成。这一分析在本节中的作用，是为系统实现的 memory-bound 特征提供理论解释，而不是在方法章内提前给出经验速度判断。
 
-\label{subsec:ch3-phase-boundary}
+\label{subsec:ch3-system-overhead}
 最后，离线校准产物本身的存储开销相对模型权重与运行时 KV Cache 而言通常可以忽略。对称 INT8 规范路径的 artifact 规模大致为
 \begin{equation}
 \mathcal O\!\left(\frac{L d_k}{g}\right),
