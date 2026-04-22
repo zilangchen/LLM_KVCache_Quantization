@@ -661,7 +661,7 @@ s_K^{(l)},\,s_V^{(l)};\bar b
 
 - 已完成 `3.5–3.8` 的术语一致性扫尾。
 - 本轮统一决议：
-  - `INT8 canonical path` 作为 `3.5–3.8` 的统一路径名称，不再在章末总结中混写成“INT8 规范路径”。
+  - `INT8 规范路径（INT8 canonical path）` 作为首次正式命名，后文统一简称“INT8 规范路径”。
   - `INT4-RoleAlign` 作为统一主方法名称，保持 role-aware low-bit path 的单一命名。
   - `allocation / AutoK` 在 `3.6–3.8` 中统一保持为 behavior-guided framework 的扩展层 / budget proposer 口径，不与 calibration 并列争主轴。
   - `3.8` 只保留方法闭环与验证桥接，不再引入 `torch_ref`、Triton 非对称核或 `KIVI-style` 的实现细节回顾。
@@ -745,6 +745,7 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 &=\sum_{i=1}^{S}\hat a_i\hat v_i-\sum_{i=1}^{S}a_i v_i \\
 &=\sum_{i=1}^{S}(\hat a_i\hat v_i-\hat a_i v_i)+\sum_{i=1}^{S}(\hat a_i v_i-a_i v_i) \\
 &=\sum_{i=1}^{S}\hat a_i(\hat v_i-v_i)+\sum_{i=1}^{S}(\hat a_i-a_i)v_i.
+\label{eq:ch3-error-decomp}
 \end{align}
 上式是一个精确的代数 telescoping 恒等式，而不是将 Key 误差与 Value 误差作因果上彼此独立的正交分离。相应地，量化造成的输出偏移可被理解为两条相互耦合的传播路径：一条是 Key 扰动经 logits 进入 softmax 后引起注意力分布偏移，并通过 $\sum_i(\hat a_i-a_i)v_i$ 传递到输出；另一条是 Value 扰动通过 $\sum_i\hat a_i(\hat v_i-v_i)$ 直接改变被聚合的内容。尤其需要指出的是，第二项中的权重为 $\hat a_i$ 而非 $a_i$，这意味着 Value 路径并不是在“固定注意力”条件下独立发生的，它本身已经携带了由 Key 扰动引入的分布变化信息，因此两条路径在数学上是耦合传播而非彼此隔离的。
 
@@ -794,6 +795,7 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 ```tex
 \section{行为引导量化框架总览}
 \label{sec:ch3-framework}
+\label{sec:ch3-overview}
 
 在第 \ref{sec:ch3-problem} 节中，本文已经说明 KV Cache 量化真正破坏的不是孤立的张量数值距离，而是由注意力分布与加权聚合共同构成的 attention behavior；第 \ref{sec:ch3-motivation-kv} 节进一步表明，在低比特场景下，这种行为损伤对 Key 与 Value 并不呈对称展开。由此，后续问题不再是为不同 bit-width 或不同组件分别设计若干离散技巧，而是需要一个统一框架，将与 behavior 保持相关的量化决策组织到同一条主线上。本文将这一框架称为 behavior-guided quantization framework，其核心目标是在同一组织原则下同时回答两个问题：其一，如何选择量化参数以最小化行为偏移；其二，在给定位宽预算约束下，哪些层或哪些角色应被优先保护。
 
@@ -884,6 +886,7 @@ p_{\theta}^{(l,h,t)}
 在实际计算中，为避免极端尾部概率导致的数值不稳定，实践上对分布进行小常数 $\varepsilon$ 截断，再计算 KL 散度。需要特别声明的是，KL 在不同模型规模与不同 bit-width 下“多有必要”属于后续实验讨论的问题，而非本节的方法前提；相关的规模依赖性边界将在第四章讨论节中统一分析。此外，attention-distribution KL 直接服务于 \emph{Key-sensitive} 的分布侧校准；对于 Value 路径，当前实现采用独立的输出扰动代理，不将其强行写成同一个 attention-distribution KL 目标。也就是说，本节所确立的是校准层的主代理与基本原则，而不是要求 K/V 两侧在所有路径上都共享同一个具体数值目标。
 
 \subsection{参数搜索空间与稳健选择准则}
+\label{subsec:ch3-two-stage}
 
 在上述代理定义之上，本文将离线校准组织为一个路径相关、但流程统一的参数搜索问题。给定某一路径对应的候选参数集合 $\Theta_{\mathrm{path}}$，其最优参数可抽象写为
 \begin{equation}
@@ -894,7 +897,7 @@ R_{\mathrm{path}}(\theta),
 \end{equation}
 其中 $R_{\mathrm{path}}(\theta)$ 表示该路径上的稳健风险统计量。这里的“统一”体现在工作流与纪律层面：都需要在校准样本上生成参考行为、计算路径对应的行为代理、聚合尾部与整体统计量、并在可行域约束下给出最终参数；但这并不要求所有路径都必须共享同一个标量 score function。对称路径可直接用 attention-KL 定义风险，而 role-aware low-bit path 则允许在 K 与 V 两侧使用不同的行为代理。
 
-对称路径（包括 \texttt{INT8 canonical path} 与对称 \texttt{INT4} 试探路径）的选择纪律可写为一组统一的稳健统计。设校准样本集合为 $\mathcal D_{\mathrm{calib}}$，则可定义整体均值、尾部统计与 K/V 两侧的裁剪率：
+对称路径（包括 INT8 规范路径与对称 \texttt{INT4} 试探路径）的选择纪律可写为一组统一的稳健统计。设校准样本集合为 $\mathcal D_{\mathrm{calib}}$，则可定义整体均值、尾部统计与 K/V 两侧的裁剪率：
 \begin{equation}
 \mu(\theta)
 =
@@ -948,16 +951,16 @@ q_{0.95}(\theta).
 \section{跨位宽量化路径的实例化设计}
 \label{sec:ch3-paths}
 
-第 \ref{sec:ch3-calibration} 节已经将 behavior-guided 原则具体化为统一的离线校准工作流与稳健选择纪律，但这一工作流本身并不规定唯一的位宽或唯一的量化格式。对本文而言，真正需要回答的问题是：当 bit-width 与格式约束发生变化时，同一行为原则如何被实例化为可执行的量化路径。基于这一思路，本节按照由保守到激进的顺序组织三条路径：首先给出 \texttt{INT8 canonical path}，作为 behavior-guided 校准最干净、最可审计的验证实例；随后说明直接将同一思路机械降到对称 \texttt{INT4} 为什么会遇到结构性困难；最后引入 \texttt{INT4-RoleAlign} 作为角色感知的低比特实例，并在方法层面将其与 \texttt{KIVI-style} 的设计边界明确区分开来。
+第 \ref{sec:ch3-calibration} 节已经将 behavior-guided 原则具体化为统一的离线校准工作流与稳健选择纪律，但这一工作流本身并不规定唯一的位宽或唯一的量化格式。对本文而言，真正需要回答的问题是：当 bit-width 与格式约束发生变化时，同一行为原则如何被实例化为可执行的量化路径。基于这一思路，本节按照由保守到激进的顺序组织三条路径：首先给出 \texttt{INT8 规范路径（INT8 canonical path）}，作为 behavior-guided 校准最干净、最可审计的验证实例；随后说明直接将同一思路机械降到对称 \texttt{INT4} 为什么会遇到结构性困难；最后引入 \texttt{INT4-RoleAlign} 作为角色感知的低比特实例，并在方法层面将其与 \texttt{KIVI-style} 的设计边界明确区分开来。
 
 需要强调的是，本节的目标不是在方法章内提前报告完整实验结果，而是说明同一框架如何在不同 bit-width 与不同量化格式约束下落成具体路径。换言之，后续路径之间变化的是参数接口、量化轴与行为代理的具体定义，不变的是第 \ref{sec:ch3-calibration} 节已经建立的 offline calibration workflow、可行域约束与稳健选择纪律。正是在这一点上，本文的方法实例既保持了跨位宽的一致性，也为后续 allocator 与系统落地提供了统一接口。
 
 % 图 3-5 建议置于此处
 % 图题：图 3-5 跨位宽路径的实例化关系与统一校准工作流
 
-\subsection{INT8 canonical path：静态 Scale 与自适应保护}
+\subsection{INT8 规范路径：静态 Scale 与自适应保护}
 
-本文首先在 \texttt{INT8} 位宽下给出 behavior-guided 校准的规范路径，其目的不是追求极限压缩，而是建立一个最干净、最稳定、最便于审计的验证实例。相较于 \texttt{INT4}，\texttt{INT8} 提供更细的量化网格，因此更适合作为校准层闭环是否成立的第一性验证对象。也正因为如此，本文将该路径称为 \texttt{INT8 canonical path}：它在方法论上承担“规范验证实例”的角色，而不是在压缩率层面承担“最终目标路径”的角色。
+本文首先在 \texttt{INT8} 位宽下给出 behavior-guided 校准的 INT8 规范路径，其目的不是追求极限压缩，而是建立一个最干净、最稳定、最便于审计的验证实例。相较于 \texttt{INT4}，\texttt{INT8} 提供更细的量化网格，因此更适合作为校准层闭环是否成立的第一性验证对象。也正因为如此，本文将该路径定位为 INT8 规范路径：它在方法论上承担“规范验证实例”的角色，而不是在压缩率层面承担“最终目标路径”的角色。
 
 在该路径中，Key 与 Value 均采用对称、逐组（per-group）的静态量化。记第 $l$ 层第 $j$ 个 group 内的待量化张量为 $x_{l,j}$，对给定校准百分位参数 $p_c$ 与分组大小 $g$，其静态 scale 定义为
 \begin{equation}
@@ -979,7 +982,7 @@ q
 \end{equation}
 这里真正由第 \ref{sec:ch3-calibration} 节确定的是 $(p_c,g)$ 如何被搜索与筛选；本小节关心的则是这些离线选出的参数如何被具体地转写为一条对称 \texttt{INT8} 路径。
 
-在静态 scale 之外，本文还为 \texttt{INT8 canonical path} 引入自适应保护机制，用以处理运行时输入分布超出校准覆盖范围的情况。记由当前写入 token 估计得到的动态尺度为 $s_{l,j}^{\mathrm{dyn}}$，保护裕度参数为 $m$，则最终使用的 scale 可写为
+在静态 scale 之外，本文还为 INT8 规范路径引入自适应保护机制，用以处理运行时输入分布超出校准覆盖范围的情况。记由当前写入 token 估计得到的动态尺度为 $s_{l,j}^{\mathrm{dyn}}$，保护裕度参数为 $m$，则最终使用的 scale 可写为
 \begin{equation}
 s_{l,j}^{\mathrm{final}}
 =
@@ -991,7 +994,7 @@ s_{l,j}^{\mathrm{dyn}}
 \end{equation}
 这一设计的作用不是把路径重新变回 runtime calibration，而是在离线校准主导的前提下，对极端分布漂移进行保守防护。换言之，静态 scale 仍是主路径，自适应保护只是一个在必要时触发的安全阀，用于避免异常输入导致的剧烈裁剪。关于该机制在缓存写入时的具体系统语义——例如其是否会回写历史缓存——统一留到第 \ref{sec:ch3-deployment} 节再说明。
 
-因此，\texttt{INT8 canonical path} 在本文中的地位应被理解为：它是 behavior-guided calibration 的规范实例，而不是极限压缩方案。它证明在最保守的位宽设置下，attention behavior 可以被稳定地对齐和保持，并为后续更激进的低比特路径提供一个方法上可审计、实现上可复现的参照基线。
+因此，INT8 规范路径在本文中的地位应被理解为：它是 behavior-guided calibration 的规范实例，而不是极限压缩方案。它证明在最保守的位宽设置下，attention behavior 可以被稳定地对齐和保持，并为后续更激进的低比特路径提供一个方法上可审计、实现上可复现的参照基线。
 
 \subsection{对称 INT4 的局限与格式升级动因}
 
@@ -1003,6 +1006,7 @@ s_{l,j}^{\mathrm{dyn}}
 
 \subsection{INT4-RoleAlign：角色感知非对称量化}
 \label{subsec:ch3-rolealign}
+\label{sec:ch3-rolealign}
 
 \texttt{INT4-RoleAlign} 是 behavior-guided 框架在低比特场景下的角色感知实例。其核心思想是：在保持统一离线校准工作流与稳健选择纪律不变的前提下，不再要求 $K$ 与 $V$ 共享相同的量化轴，而是根据二者在注意力计算中的不同角色，分别采用不同的非对称量化形式。更具体地说，Key 侧优先保持 attention ranking 与通道异质性，Value 侧则在保持可聚合性的前提下适配时序动态范围变化。由此，\texttt{RoleAlign} 的关键不在于“比对称 \texttt{INT4} 多了一个公式”，而在于将第 \ref{sec:ch3-motivation-kv} 节识别出的角色不对称，转写为低比特路径中的量化轴不对称。
 
@@ -1072,7 +1076,7 @@ q_{\min},\,q_{\max}
 % 图 3-6 建议置于本小节第 1 段之后、第 2 段之前
 % 图题：图 3-6 INT4-RoleAlign 的角色感知非对称量化轴
 
-综上，\texttt{RoleAlign} 的核心不是简单地对 $K$ 和 $V$ 采用不同公式，而是把第 \ref{sec:ch3-motivation-kv} 节识别出的角色不对称，转写为量化轴不对称：Key 侧优先保持 attention ranking，Value 侧在保持可聚合性的前提下承受更激进的压缩。本文最终主线配置因此固定为：$(p_K,p_V)$ 行为引导校准、per-channel Key + per-token Value 非对称量化、且 \texttt{inv\_tau=None}。逐头温度校正 \texttt{inv\_tau} 在非对称格式下未观察到稳定收益，已在第 \ref{sec:ch3-calibration} 节被降格为诊断性历史探索项，详细推导与补充实证保留在附录中，主线默认不启用。
+综上，\texttt{RoleAlign} 的核心不是简单地对 $K$ 和 $V$ 采用不同公式，而是把第 \ref{sec:ch3-motivation-kv} 节识别出的角色不对称，转写为量化轴不对称：Key 侧优先保持 attention ranking，Value 侧在保持可聚合性的前提下承受更激进的压缩。本文最终主线配置因此固定为：$(p_K,p_V)$ 行为引导校准、per-channel Key + per-token Value 非对称量化、且 \texttt{inv\_tau=None}。逐头温度校正 \texttt{inv\_tau} 在非对称格式下未观察到稳定收益，已在第 \ref{sec:ch3-calibration} 节被降格为诊断性历史探索项，详细推导与补充实证保留在附录第~\ref{sec:app-invtau-diagnostic}~节，主线默认不启用。
 
 \subsection{INT4-RoleAlign 与 KIVI-style 的设计差异}
 \label{subsec:ch3-rolealign-vs-kivi}
@@ -1081,10 +1085,25 @@ q_{\min},\,q_{\max}
 
 从格式层看，二者的共同点十分明确：都承认 $K$ 与 $V$ 在低比特场景下不应被统一对待，并都采用 $K$ 侧更强调通道异质性、$V$ 侧更强调时序动态范围的角色差异化表示。真正的分叉发生在校准哲学与接口层。\texttt{KIVI-style} 的核心是直接依赖运行时统计量确定量化范围，不要求离线校准产物；而 \texttt{INT4-RoleAlign} 则把 K/V 两侧都纳入离线、可审计、可复现的 role-aware calibration interface：其中 Key 侧由 attention-KL 主导，Value 侧由独立输出扰动代理主导，并最终将两侧参数与量化轴元数据共同固化为可部署的 artifact。也正因为如此，\texttt{RoleAlign} 不只是一个“选择了不同 percentile”的技巧，而是一套可向预算分配与系统落地自然延伸的 low-bit path。
 
-进一步地，\texttt{RoleAlign} 与 \texttt{KIVI-style} 的关系不应被理解为“两个完全异构的方法竞争”，而应被理解为：在共享角色差异化量化格式的前提下，本文将 calibration philosophy 从 runtime statistics 提升为 offline role-aware calibration，并由此获得可审计的产物接口与可扩展的后续 readout。换言之，两者的差异主要不在格式层，而在于是否显式把 behavior-guided 原则写入离线校准工作流。正因为这一边界足够清楚，第四章第 \ref{sec:exp-int4-cross-model} 节中的对比结果才可以被解释为“在同一 role-aware format family 下，离线行为引导校准是否带来额外价值”，而不是被误读为跨格式、跨实现、乃至跨问题设定的 apples-to-oranges 比较。
+进一步地，\texttt{RoleAlign} 与 \texttt{KIVI-style} 的关系不应被理解为“两个完全异构的方法竞争”，而应被理解为：在共享角色差异化量化格式的前提下，本文将 calibration philosophy 从 runtime statistics 提升为 offline role-aware calibration，并由此获得可审计的产物接口与可扩展的后续 readout。换言之，两者的差异主要不在格式层，而在于是否显式把 behavior-guided 原则写入离线校准工作流。正因为这一边界足够清楚，第四章第 \ref{subsec:exp-int4-cross-model} 节中的对比结果才可以被解释为“在同一 role-aware format family 下，离线行为引导校准是否带来额外价值”，而不是被误读为跨格式、跨实现、乃至跨问题设定的 apples-to-oranges 比较。
 
-% 表 3-2 建议置于此处
-% 表题：表 3-2 INT4-RoleAlign 与 KIVI-style 的设计边界比较
+\begin{table}[!htbp]
+  \centering
+  \caption{\texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 的设计边界比较}
+  \label{tab:ch3-rolealign-vs-kivi}
+  \begin{tabular}{p{0.18\textwidth}p{0.24\textwidth}p{0.24\textwidth}p{0.24\textwidth}}
+    \toprule
+    维度 & \texttt{KIVI-style} & \texttt{INT4-RoleAlign} & 含义 \\
+    \midrule
+    量化格式 & per-channel K + per-token V & 相同 & 比较建立在同一 role-aware format family 下 \\
+    校准来源 & runtime statistics & offline role-aware calibration & 比较的是 calibration philosophy \\
+    参数确定 & 即时统计量 & K-path: $p_K$；V-path: $p_V$ & 两侧均被纳入可审计的离线接口 \\
+    行为代理 & 无显式 behavior proxy & K: attention-distribution KL；V: 输出扰动代理 & 显式区分 ranking 与 content 两侧 \\
+    推理接口 & 无离线产物 & 有固定校准产物 & 便于审计、冻结和部署一致性 \\
+    向 \ref{sec:ch3-allocator} 扩展 & 无共享 profile 接口 & 可共享 behavior sensitivity profile & 可自然延伸到 allocator / \texttt{AutoK} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 ```
 
 ### 3.6
@@ -1098,7 +1117,7 @@ q_{\min},\,q_{\max}
 \section{行为敏感度驱动的层间预算分配与 AutoK}
 \label{sec:ch3-allocator}
 
-第 \ref{sec:ch3-calibration} 节已经将 behavior-guided 原则落实为可执行的离线校准工作流，第 \ref{sec:ch3-paths} 节则给出了 \texttt{INT8 canonical path} 与 \texttt{INT4-RoleAlign} 的跨位宽实例。在这一基础上，本节进一步回答一个更高层的问题：在给定位宽预算约束下，哪些层或哪些角色应被优先保护。也就是说，若校准层回答的是“如何量化”，那么分配层回答的就是“哪里优先保护”。本文将这一层称为 behavior-guided allocation，并强调其角色是统一框架的扩展层，而不是与 calibration 并列竞争主轴的独立方法体系。
+第 \ref{sec:ch3-calibration} 节已经将 behavior-guided 原则落实为可执行的离线校准工作流，第 \ref{sec:ch3-paths} 节则给出了 INT8 规范路径与 \texttt{INT4-RoleAlign} 的跨位宽实例。在这一基础上，本节进一步回答一个更高层的问题：在给定位宽预算约束下，哪些层或哪些角色应被优先保护。也就是说，若校准层回答的是“如何量化”，那么分配层回答的就是“哪里优先保护”。本文将这一层称为 behavior-guided allocation，并强调其角色是统一框架的扩展层，而不是与 calibration 并列竞争主轴的独立方法体系。
 
 为了统一记号，设共有 $L$ 层，第 $l$ 层的 Key 与 Value 位宽分别记为 $b_K^{(l)}$ 和 $b_V^{(l)}$，则平均 KV bit 预算可写为
 \begin{equation}
@@ -1268,6 +1287,7 @@ b_{V,\mathrm{lo}}
 从方法层的角度看，$\Gamma(k)$ 的价值在于：它既保留了 layer-wise sensitivity ordering，又避免将 budget proposer 写成“固定保护前 $k$ 层”的经验规则。正因为如此，本文后续才可以把 \texttt{AutoK} 写成 sensitivity profile 的自然输出，而不是另起炉灶再设计一套与前文脱节的 budget tuner。
 
 \subsection{AutoK 的预算自动建议机制}
+\label{sec:ch3-autok}
 
 在固定 $k$ 的 BA-$k$ 中，预算强度需要由人工扫描决定，而不同模型的 sensitivity profile 形状并不一致，这意味着相同的 $k$ 未必对应相同程度的“行为覆盖”。为减少这种人工扫描负担，本文引入 \texttt{AutoK} 作为 profile-guided budget proposer：它不改变第 \ref{sec:ch3-calibration} 节的校准原则，也不重新训练任何额外模块，而只是将前述覆盖度准则直接转写为最小保护层数建议。
 
@@ -1300,6 +1320,23 @@ b_{\mathrm{lo}}
 
 % 表 3-3 建议置于本小节末尾
 % 表题：表 3-3 分配层策略的输入、选择规则与对应记号
+\begin{table}[!htbp]
+  \centering
+  \caption{分配层策略的输入、选择规则与对应记号}
+  \label{tab:ch3-allocator-policies}
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{p{1.7cm}p{1.7cm}p{3.4cm}c p{2.0cm} p{2.0cm} p{2.5cm}}
+    \toprule
+    \textbf{策略} & \textbf{输入} & \textbf{保护层选择规则} & \textbf{是否需人工扫描参数} & \textbf{输出} & \textbf{第四章记号} & \textbf{方法定位} \\
+    \midrule
+    Uniform & 无 & 所有层统一默认低 bit & 否 & 统一预算向量 & Uniform & 低预算参考策略 \\
+    BA-$k$ & $(S, k)$ & 保护 sensitivity 最高的 $k$ 层 & 是 & 分层 bit 向量 & BA-k & 主体 layer-wise allocator \\
+    Heuristic-$k$ & $(L, k)$ & 按固定位置规则保护 $k$ 层 & 是 & 分层 bit 向量 & Heuristic-k & 强基线 \\
+    BA-AutoK & $(S, \rho)$ & 取满足 coverage 的最小 $k^\star$ & 否 & 分层 bit 向量 & BA-AutoK & profile-guided budget proposer \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 ```
 
 ### 3.7
@@ -1312,6 +1349,7 @@ b_{\mathrm{lo}}
 ```tex
 \section{系统级部署实现与开销分析}
 \label{sec:ch3-deployment}
+\label{sec:ch3-triton}
 
 前述各节已经分别给出了 behavior-guided 校准目标、跨位宽路径实例以及预算分配接口。本节进一步回答一个实现层问题：这些离线定义好的量化规则与预算决策，如何被组织为可部署、可复现、可审计的推理系统语义。需要提前说明的是，本节只讨论离线校准产物、在线推理管线、融合解码 kernel 的数据流，以及相应的理论开销；所有关于 TPOT、性能交叉边界、不同模型之间速度优劣与部署建议的实测结果，统一留到第四章的部署效率小节讨论。
 
@@ -1328,7 +1366,7 @@ behavior-guided framework 采用“离线校准、在线执行”的两阶段分
 m_{\mathrm{path}}^{(l)}
 \right\}_{l=1}^{L},
 \end{equation}
-其中 $\theta_{\mathrm{path}}^{(l)}$ 表示第 $l$ 层的路径相关量化参数，$m_{\mathrm{path}}^{(l)}$ 表示其元数据，例如量化轴、group size、保护裕度与模式标识等。对 \texttt{INT8 canonical path} 而言，产物主要包括逐层逐组的静态 scale、保护参数与 group metadata；对对称 \texttt{INT4} 试探路径而言，其接口与前者相似，但载荷与量化网格更低比特化；对 \texttt{INT4-RoleAlign} 而言，产物则组织为角色感知的 artifact，包括 K/V 的 percentile 参数、量化轴元数据，以及可选的历史探索字段。需要强调的是，这些校准产物在运行时是只读对象，其作用是冻结离线阶段已经确定的行为引导决策，而不是在推理时继续自适应搜索。
+其中 $\theta_{\mathrm{path}}^{(l)}$ 表示第 $l$ 层的路径相关量化参数，$m_{\mathrm{path}}^{(l)}$ 表示其元数据，例如量化轴、group size、保护裕度与模式标识等。对 INT8 规范路径而言，产物主要包括逐层逐组的静态 scale、保护参数与 group metadata；对对称 \texttt{INT4} 试探路径而言，其接口与前者相似，但载荷与量化网格更低比特化；对 \texttt{INT4-RoleAlign} 而言，产物则组织为角色感知的 artifact，包括 K/V 的 percentile 参数、量化轴元数据，以及可选的历史探索字段。需要强调的是，这些校准产物在运行时是只读对象，其作用是冻结离线阶段已经确定的行为引导决策，而不是在推理时继续自适应搜索。
 
 在线推理阶段的核心语义是“写入即冻结”。设第 $t$ 个新 token 在第 $l$ 层待写入缓存的张量为 $x_t^{(l)}$，则当前步的量化写入可写为
 \begin{equation}
@@ -1347,8 +1385,9 @@ Q_{\theta_t^{(l)}}\!\left(x_t^{(l)}\right),
 % 表题：表 3-4 不同量化路径的离线产物、运行时缓存载荷与默认执行后端
 
 \subsection{Triton 融合解码核函数设计}
+\label{subsec:ch3-triton-int4-asym}
 
-在自回归解码阶段，单步计算通常只涉及一个新的 query token，但需要访问全部历史 KV Cache，因此其瓶颈主要在访存而非算术量。若采用朴素路径，系统需要先从低比特缓存中读出 K/V，将其完整反量化为中间 FP16 张量，再把这些中间张量送入标准注意力计算。该过程虽然在功能上是正确的，但会引入额外的中间张量物化与高带宽显存读写开销，从而放大 decode 阶段的 memory-bound 特征。本文在 \texttt{INT8 canonical path} 上采用 Triton 融合解码 kernel，目的正是在不改变注意力算法本身的前提下，尽量消除这类不必要的中间物化。
+在自回归解码阶段，单步计算通常只涉及一个新的 query token，但需要访问全部历史 KV Cache，因此其瓶颈主要在访存而非算术量。若采用朴素路径，系统需要先从低比特缓存中读出 K/V，将其完整反量化为中间 FP16 张量，再把这些中间张量送入标准注意力计算。该过程虽然在功能上是正确的，但会引入额外的中间张量物化与高带宽显存读写开销，从而放大 decode 阶段的 memory-bound 特征。本文在 INT8 规范路径上采用 Triton 融合解码 kernel，目的正是在不改变注意力算法本身的前提下，尽量消除这类不必要的中间物化。
 
 对 \texttt{INT8} 路径而言，融合 kernel 的主数据流可以概括为以下四步。首先，从量化缓存中按 block 读取一块低比特 $K_B, V_B$ 及其对应的 scale / metadata；其次，在片上存储（SRAM / register）内完成解包与反量化；随后，直接在片上计算当前 query 与该块 Key 的点积；最后，利用在线 softmax 维护跨块递推状态，并将结果直接累加到输出而不显式物化完整注意力矩阵。设第 $r$ 个 block 的在线 softmax 状态分别记为最大值、归一化和输出累加器
 \[
@@ -1380,7 +1419,7 @@ e^{m^{(r)}-m^{(r+1)}}\ell^{(r)}o^{(r)}
 \end{equation}
 因此，融合的关键收益不在于改变 softmax 的定义，而在于把“反量化 $\rightarrow$ 点积 $\rightarrow$ online softmax $\rightarrow$ 输出累加”压进同一片上流水线中，从而减少全局内存传输。
 
-对 \texttt{INT4} 路径而言，注意力算法本身并未发生变化，新增复杂度主要来自数据表示。具体地，\texttt{INT4} 采用 nibble packing，即两个 4-bit 整数打包到一个 8-bit 字节中；因此 kernel 的前端需要先完成半字节解包与符号扩展，随后再复用与 \texttt{INT8} 类似的“片上反量化 $\rightarrow$ 点积 $\rightarrow$ online softmax $\rightarrow$ 累加输出”主流水线。从系统视角看，这意味着 \texttt{INT4} 的额外复杂度主要是数据布局与解包开销，而不是注意力计算逻辑的本质改变。正文在此只描述当前默认实现路径；关于融合 kernel 的不同迭代版本、命名与实现差异，统一保留到附录中说明。
+对 \texttt{INT4} 路径而言，注意力算法本身并未发生变化，新增复杂度主要来自数据表示。具体地，\texttt{INT4} 采用 nibble packing，即两个 4-bit 整数打包到一个 8-bit 字节中；因此 kernel 的前端需要先完成半字节解包与符号扩展，随后再复用与 \texttt{INT8} 类似的“片上反量化 $\rightarrow$ 点积 $\rightarrow$ online softmax $\rightarrow$ 累加输出”主流水线。从系统视角看，这意味着 \texttt{INT4} 的额外复杂度主要是数据布局与解包开销，而不是注意力计算逻辑的本质改变。正文在此只描述当前默认实现路径；关于融合 kernel 的不同迭代版本、命名与实现差异，统一保留到附录第~\ref{sec:app-triton-variants}~节说明。
 
 为了兼容 GQA，融合 kernel 还需要将 query heads 映射到共享的 KV heads。设 query 头数为 $H_q$、KV 头数为 $H_{kv}$，则重复因子为
 \begin{equation}
@@ -1396,7 +1435,7 @@ h_{kv}
 \end{equation}
 这样，kernel 可以按 $(B,H_q)$ 或其等价 grid 组织并行，而无需显式复制 KV heads。该映射的作用在于在保持 GQA 结构语义正确的同时，使 query heads 与共享 KV heads 之间的访问关系在融合路径中得到直接表达。
 
-最后需要再次诚实说明的是：本文的主系统落地路径是 \texttt{INT8} 融合 kernel；对 \texttt{INT4-RoleAlign} 而言，默认质量评测路径仍是 \texttt{torch_ref} 参考实现，而对应的 Triton 非对称融合核主要承担工程可行性验证的角色，不应在第三章中被写成第四章主速度结论的默认来源。也就是说，本小节的职责是解释“如何实现”，而不是在这里提前讨论“哪条路径更快”。
+最后需要再次诚实说明的是：本文的主系统落地路径是 \texttt{INT8} 融合 kernel；对 \texttt{INT4-RoleAlign} 而言，默认质量评测路径仍是 \texttt{torch\_ref} 参考实现，而对应的 Triton 非对称融合核主要承担工程可行性验证的角色，不应在第三章中被写成第四章主速度结论的默认来源。也就是说，本小节的职责是解释“如何实现”，而不是在这里提前讨论“哪条路径更快”。
 
 % 图 3-10 建议置于本小节中部
 % 图题：图 3-10 Triton 融合解码核的数据流：低比特缓存、片上反量化与在线 softmax
@@ -1411,7 +1450,7 @@ T_{\mathrm{calib}}^{\mathrm{path}}
 |\Theta_{\mathrm{path}}|\,N\,L\,H_q\,n\,d_k
 \right).
 \end{equation}
-这一表达式的意义在于：不同路径的主要差异并不体现在“是否需要离线校准”，而体现在候选参数集合的大小与结构上。换言之，\texttt{INT8 canonical path}、对称 \texttt{INT4} 与 \texttt{INT4-RoleAlign} 共享的是离线搜索框架，而不是相同规模的搜索空间。
+这一表达式的意义在于：不同路径的主要差异并不体现在“是否需要离线校准”，而体现在候选参数集合的大小与结构上。换言之，INT8 规范路径、对称 \texttt{INT4} 与 \texttt{INT4-RoleAlign} 共享的是离线搜索框架，而不是相同规模的搜索空间。
 
 在缓存显存上，若只考虑 canonical 对称 per-group 表示，则 KV Cache 的精确存储量可写为如下三种情况。FP16 参考开销为
 \begin{equation}
@@ -1469,7 +1508,8 @@ AI_{\mathrm{INT4}}
 \end{equation}
 这些表达式本身并不给出任何实测速率结论，但它们清楚说明：在相似计算量下，低比特融合路径通过减少全局内存传输而改变了 decode 阶段的开销组成。这一分析在本节中的作用，是为系统实现的 memory-bound 特征提供理论解释，而不是在方法章内提前给出经验速度判断。
 
-最后，离线校准产物本身的存储开销相对模型权重与运行时 KV Cache 而言通常可以忽略。对称 canonical path 的 artifact 规模大致为
+\label{subsec:ch3-phase-boundary}
+最后，离线校准产物本身的存储开销相对模型权重与运行时 KV Cache 而言通常可以忽略。对称 INT8 规范路径的 artifact 规模大致为
 \begin{equation}
 \mathcal O\!\left(\frac{L d_k}{g}\right),
 \end{equation}
@@ -1489,9 +1529,9 @@ AI_{\mathrm{INT4}}
 
 本章围绕注意力行为保持这一统一原则，完成了从理论起点到方法框架的系统展开。首先，第 \ref{sec:ch3-problem} 节从注意力近似误差的代数分解出发，说明 KV Cache 量化真正损伤的不是孤立的张量数值距离，而是由注意力分布与聚合输出共同构成的 attention behavior；第 \ref{sec:ch3-motivation-kv} 节进一步给出低比特场景下的压缩版动机诊断，指出导致对称 \texttt{INT4} 路径失稳的主导因素来自 Key 精度下降，从而为后续角色感知的低比特实例化提供了结构性依据。基于这一理论与动机基础，第 \ref{sec:ch3-framework} 节将 calibration 与 allocation 统一组织到同一 behavior-guided framework 下，明确了校准层回答“如何量化”，分配层回答“哪里优先保护”的两层决策关系。
 
-在这一统一框架下，本章进一步将联合行为目标操作化为可执行的离线校准工作流。第 \ref{sec:ch3-calibration} 节以注意力分布 KL 散度作为校准层的工程代理，并给出统一的参数搜索与稳健选择纪律；第 \ref{sec:ch3-paths} 节则沿着由保守到激进的顺序，分别给出 \texttt{INT8 canonical path}、对称 \texttt{INT4} 的局限与格式升级动因，以及 \texttt{INT4-RoleAlign} 的角色感知非对称量化实例，同时在方法层面明确了其与 \texttt{KIVI-style} 的设计边界。进一步地，第 \ref{sec:ch3-allocator} 节将同源的行为敏感度画像延伸为逐层预算分配与 \texttt{AutoK} 预算自动建议机制，使 behavior-guided 原则从参数选择自然扩展到预算决策。
+在这一统一框架下，本章进一步将联合行为目标操作化为可执行的离线校准工作流。第 \ref{sec:ch3-calibration} 节以注意力分布 KL 散度作为校准层的工程代理，并给出统一的参数搜索与稳健选择纪律；第 \ref{sec:ch3-paths} 节则沿着由保守到激进的顺序，分别给出 INT8 规范路径、对称 \texttt{INT4} 的局限与格式升级动因，以及 \texttt{INT4-RoleAlign} 的角色感知非对称量化实例，同时在方法层面明确了其与 \texttt{KIVI-style} 的设计边界。进一步地，第 \ref{sec:ch3-allocator} 节将同源的行为敏感度画像延伸为逐层预算分配与 \texttt{AutoK} 预算自动建议机制，使 behavior-guided 原则从参数选择自然扩展到预算决策。
 
-最后，第 \ref{sec:ch3-deployment} 节说明了上述方法如何被落成为可部署、可复现、可审计的系统接口，包括离线校准产物、在线推理管线、Triton 融合解码核函数以及复杂度、访存与存储开销分析。至此，本文已经在方法层回答了两个核心问题：为何应以 attention behavior 作为 KV Cache 量化的统一组织对象，以及这一原则如何被实例化为可执行的校准路径、预算机制与系统落地方案。下一章将在统一实验协议下，进一步验证本章提出的 \texttt{INT8 canonical path} 保真度、低比特恢复能力、跨模型策略适用区间结构及部署边界。
+最后，第 \ref{sec:ch3-deployment} 节说明了上述方法如何被落成为可部署、可复现、可审计的系统接口，包括离线校准产物、在线推理管线、Triton 融合解码核函数以及复杂度、访存与存储开销分析。至此，本文已经在方法层回答了两个核心问题：为何应以 attention behavior 作为 KV Cache 量化的统一组织对象，以及这一原则如何被实例化为可执行的校准路径、预算机制与系统落地方案。下一章将在统一实验协议下，进一步验证本章提出的 INT8 规范路径保真度、低比特恢复能力、跨模型策略适用区间结构及部署边界。
 ```
 
 ## 下一轮增量维护规则

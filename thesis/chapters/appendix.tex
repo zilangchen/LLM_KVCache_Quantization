@@ -746,6 +746,32 @@ $v\_\text{percentile}=99.9$），PPL 结果在贪婪解码下逐位一致。
 
 
 % ============================================================
+\section{Triton 融合核函数变体说明}
+\label{sec:app-triton-variants}
+% ============================================================
+
+本节仅对正文第~\ref{sec:ch3-deployment}~节提及的 Triton 融合解码后端做实现映射说明，
+其职责是给出仓库中的变体命名与文件对应关系，而不在附录中额外引入新的速度结论。
+当前仓库中的主要相关实现包括：
+\code{src/kernels/triton\_decode\_attn\_int8.py}（INT8 融合核主线实现）、
+\code{src/kernels/triton\_decode\_attn\_int4\_asym.py}
+（INT4 非对称融合核基线版本）、
+\code{src/kernels/triton\_decode\_attn\_int4\_asym\_v2.py}
+（带 autotune 的迭代版本）、
+\code{src/kernels/triton\_decode\_attn\_int4\_asym\_gqa.py}
+（显式兼容 GQA 头映射的版本），以及
+\code{src/kernels/adapters/flashinfer\_adapter.py}
+（外部 backend 适配层）。
+
+需要强调的是，这些变体在论文主线中的地位并不对称。
+正文默认的系统落地主线是 INT8 融合核；
+对 INT4-RoleAlign 而言，默认质量评测路径仍为 \code{torch\_ref}，
+非对称 Triton 变体仅承担工程可行性验证与 backend 扩展接口的角色。
+因此，本附录的作用是补足“变体命名 / 文件落点 / 语义边界”的可审计说明，
+而不是把这些工程迭代版本提升为正文主结果的直接来源。
+
+
+% ============================================================
 \section{附录 A：Prompt-Adaptive Selector 在 Llama-3.1-8B 上的 5-Task Matrix}
 \label{sec:app-prompt-adaptive-8b}
 % ============================================================
