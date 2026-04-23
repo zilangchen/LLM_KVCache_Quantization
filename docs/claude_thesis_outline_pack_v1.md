@@ -13,12 +13,18 @@
 
 当前项目已经完成了主线重构，但现有材料分散在：
 
+- `objective.md`
+- `docs/freeze_20260419.md`
 - `docs/thesis_upgrade_live_plan.md`
+- `docs/mainline_execution_queue.md`
+- `docs/clean_rerun_20260419T09/readout_final.md`
+- `docs/clean_rerun_20260419T09/completion_report_20260419.md`
 - `docs/phase2_data_mainline_audit_20260419.md`
 - `docs/behavior_mainline_reframing_memo.md`
 - `docs/thesis_rewrite_blueprint_v1.md`
 
 这些文件足以支撑内部判断，却不适合直接喂给 Claude 去写论文正文。  
+其中，`objective.md` 负责高层 mission 与边界，frozen state 与 clean rerun readout 负责当前运行时真相，本文件则负责把二者转成可直接驱动正文生成的写作控制项。  
 Claude 如果直接基于这些内部文件写作，很容易出现三类偏差：
 
 1. 写成“内部工作台说明文”
@@ -47,7 +53,41 @@ Claude 的输出目标不是“总结这个文件”，而是：
 - 不替代 LaTeX
 - 不提供 BibTeX
 - 不提供最终图表文件
-- 不把 `candidate-main` 强行升级为 `final-ready`
+- 不替代当前 frozen canonical source
+- 不在这里写死尚未冻结为权威引用的具体数字
+
+### 0.4 Frozen Source-of-Truth Priority
+
+Claude 在使用本文件前，必须先接受以下权威优先级，不得反向用旧 readout 或旧 planning 文档覆盖。
+
+#### 第一优先级：冻结事实源
+
+- `docs/freeze_20260419.md`
+- `docs/thesis_upgrade_live_plan.md` 的 `0'' Frozen State`
+- `docs/clean_rerun_20260419T09/readout_final.md`
+- `docs/clean_rerun_20260419T09/completion_report_20260419.md`
+
+#### 第二优先级：当前 frozen results
+
+- `results/clean_rerun_20260419T09/`
+- `results/l2_kv_asymmetric/`
+- `results/l2_pareto/`
+- `results/l2_prompt_adaptive/`
+
+#### 第三优先级：操作性工作台 / queue
+
+- `docs/mainline_execution_queue.md` 的 `0'' Freeze Update`
+
+这一层只负责承载执行更新与排程状态，**不得反向覆盖第一优先级中的冻结事实**。
+
+#### 仅作历史参考，不得覆盖 frozen facts
+
+- `docs/phase2_final_readout.md`
+- 旧 audit / 旧 readout / 旧 planning 文档
+
+如果 frozen state 与旧 readout、旧工作台或更早期 planning 发生冲突，**一律以 frozen state 与 clean rerun readout 为准**。
+
+同时，`frozen`、`exploratory positive support`、`off-protocol`、`supporting regime case` 等标签是**控制包内部证据标签**。Claude 在正文里必须把它们翻译成正常论文语言，而不是原样输出。
 
 ---
 
@@ -99,6 +139,24 @@ Claude 的输出目标不是“总结这个文件”，而是：
 - 旧论文哪里被击穿
 
 这些内容只服务内部重构，不应大面积进入正文。
+
+### 1.5 当前 frozen 支撑层级
+
+Claude 在写正文时，必须按当前 frozen 状态区分三层证据：
+
+1. **可进入正文主支撑的 5 条 frozen support**
+   - Mistral-specific auto-k win
+   - 3B early-layer rescue regime（限 QA tasks）
+   - 14B top-tier but no stable winner
+   - INT8 canonical path fidelity
+   - heuristic is a strong baseline
+2. **可进入正文次级支撑的扩展证据**
+   - L2 Phase A（K/V asymmetric）作为 exploratory positive support / method-extension evidence
+   - L2 Phase B（Pareto）作为 exploratory positive support / method-extension evidence
+3. **只能写成 mixed / appendix / future-work seed 的内容**
+   - L2 Phase C official（8B × 5 tasks × 3 variants ONLY）= weak / mixed
+   - 1.5B / 7B Prompt-adaptive = off-protocol exploratory only
+   - `lcc` strict win datapoint 只能作为 mixed evidence 中的局部正点
 
 ---
 
@@ -191,6 +249,7 @@ Claude 必须按以下风格写：
 1. 数字服务论证，而不是堆砌结果
 2. 数字应嵌入具体句子，不要只孤立列出
 3. 数字用于支撑现象，不用于制造 winner rhetoric
+4. 任何具体数值都必须可回溯到当前 frozen source-of-truth；若控制包未写死数字，Claude 不得自行补写
 
 ### 3.6 正文术语白名单与映射表
 
@@ -598,28 +657,28 @@ Claude 必须按以下风格写：
 
 第四章是全文中心。它的任务不是展示“谁赢了”，而是：
 
-1. 说明 INT8 路径真正验证了什么
+1. 固定 5 条 frozen `final-ready support` 在正文中的角色
 2. 用跨模型结果证明 allocator 更应理解为分区结构
-3. 给出 auto-k 的正确定位
-4. 明确主文证据边界
+3. 给出 L2 A/B/C 与 auto-k / Prompt-adaptive 的正确定位
+4. 明确主文、次级支撑、附录和 future work 的证据边界
 
 ### 建议节结构
 
-1. 实验设置与证据分层
-2. INT8 规范验证路径：能证明什么，不能证明什么
-3. allocator 的跨模型分区结构读法
-4. 7B：最具辨识度的分区结构发现
-5. 8B：fixed-k 旧叙事失效的转折点
-6. 14B：强基线与宽预算带
-7. Mistral：auto-k 最清晰的正面证据
-8. heuristic 应被重新定位为强基线
-9. auto-k 的定位：强扩展，而非理论中心
-10. 3B：首层瓶颈与首层恢复
+1. 实验设置与 frozen 证据分层
+2. INT8 规范验证路径：当前能证明什么，不能证明什么
+3. allocator 的跨模型分区结构总览
+4. Mistral：Mistral-specific auto-k win
+5. 3B：QA-style compare set 上的 early-layer rescue
+6. 14B：top-tier but no stable winner
+7. heuristic：强基线，但强度同样是 regime-dependent
+8. 7B：supporting regime case，而不是正文中心位
+9. 8B：official Prompt-adaptive matrix 与 mixed signal
+10. L2 A/B/C 的方法扩展位置与对比集合边界
 11. provenance 与对比集合边界
 
 ### 第四章核心命题
 
-> 当前数据最有力的结论不是某个 allocator 普适取胜，而是 mixed-precision KV allocation 在不同模型家族、模型规模和任务类型上表现出不同的分区结构；在这一现实中，heuristic 是强基线，auto-k 是有支撑的预算建议扩展，而不是统一最优方法。这里支撑的是 framework / regime 层级的读法，而不是 superiority proof。
+> 当前 frozen 证据最核心的正文支撑不是某个 allocator 的统一优胜，而是五条已经冻结的结构性结论：INT8 路径具备保真性，Mistral 上出现了 auto-k 的模型特异性正点，3B 在 QA-style compare set 上表现出首层恢复结构，14B 落在高质量但无稳定赢家的宽预算区间，而 heuristic 必须被正面承认为强基线。其余 allocator 与 Prompt-adaptive 结果主要用于补强 framework / regime 的读法，而不是制造新的 winner story。
 
 ### 第四章写作硬规则
 
@@ -627,8 +686,10 @@ Claude 必须按以下风格写：
    - 这一节的核心现象是什么
    - 最稳定的结构性读法是什么
    - 不能从这组结果推出什么
-2. 任何数字都只能服务结构判断，不能单独形成 winner 句。
-3. `表 4-5` 只能服务 auto-k 的角色定位，不能服务跨模型优胜比较。
+2. 任何数字都只能服务结构判断，不能单独形成 winner 句；所有数字都必须可回溯到 frozen source-of-truth。
+3. official Prompt-adaptive 只有 `8B × 5 tasks × 3 variants ONLY`；`1.5B / 7B` 一律按 off-protocol exploratory 处理。
+4. 当前 selector 只能写成 `task-profile-bucket` 或 task-level routing 近似，不能写成已经成立的 per-prompt routing。
+5. `表 4-5` 只能服务 auto-k / Prompt-adaptive 的角色定位，不能服务跨模型优胜比较。
 
 ### 第四章段落级论证清单
 
@@ -637,7 +698,8 @@ Claude 必须按以下风格写：
 要回答：
 
 - 为什么这章不按 winner table 写
-- 当前哪些资产能进主文
+- 当前哪些资产可进入正文主支撑
+- 哪些资产只能作为次级支撑或附录
 
 禁写：
 
@@ -645,16 +707,11 @@ Claude 必须按以下风格写：
 
 #### 4.2 INT8：能证明什么，不能证明什么
 
-必须写入的安全数字：
-
-- `PPL = 9.3367`
-- `Needle = 100%`
-- `RULER = 60.12%`
-
 要写清：
 
-- 它证明了框架路径可落地
+- INT8 路径证明了框架路径可落地且具备 fidelity
 - 它不能证明 `KL > MSE`
+- INT8 的具体数值应以当前 frozen canonical source 为准，本控制包中不写死自由引用数字
 
 #### 4.3 allocator 的跨模型分区结构
 
@@ -662,35 +719,36 @@ Claude 必须按以下风格写：
 
 必须出现的总表观点：
 
-- 7B：aggregation-split
-- 8B：fixed-k 叙事开始失效
-- 14B：heuristic / uniform 仍强
-- Mistral：auto-k 最明确正例
-- 3B：首层瓶颈异常
+- Mistral：当前最清晰的 auto-k 正点，但仍是模型特异性
+- 3B：首层瓶颈与首层恢复只在 core QA-style compare set 上成立
+- 14B：高质量宽预算区间内无稳定 winner
+- heuristic：必须被正面承认为强基线，但其强度也随模型而变
+- 7B：如需出现，只保留为 supporting note，用于补充 aggregation-split 的结构意义
+- 8B：主要承担 fixed-k turning point 与 official Prompt-adaptive matrix 的平台角色
 
 #### 4.4 7B
 
 角色：
 
-- 全文最有辨识度的结构性发现之一
+- 只作 supporting note
+- 只用于展示 aggregation-split 如何补强分区结构读法
+- 不再承担 frozen 主结论中心位，也不宜展开成完整主小节
 
-核心句建议：
+写法要求：
 
-> 7B 的重要性不在于某个策略取得单点最优，而在于它清楚地暴露出 allocator 行为沿 aggregation 方式分裂成不同结构区间。
+- 如正文保留 7B，请压成一段短说明，不要给它独立的强展开段落
+- 不要为 7B 单独制造“最具辨识度发现”的语气
 
 #### 4.5 8B
 
-必须写入的代表性数字：
-
-- `bakv_k11 = 9.5214`
-- `bakv_auto_cov80_max = 9.3543`
-- `bakv_auto_cov90_max = 9.3491`
-- `bakv_auto_cov70_max = 9.2949`
-
 要写清：
 
-- 8B 是旧 fixed-k 叙事失效的转折点
-- auto-k 已有竞争力，但不是最优
+- 8B 是 fixed-k 旧叙事失效的重要平台
+- official Prompt-adaptive 只对应 `8B × 5 tasks × 3 variants ONLY`：`narrativeqa`、`hotpotqa`、`gov_report`、`dureader`、`lcc`
+- 整体结论是 weak / mixed，而不是正式主结论
+- `lcc` 只能作为 mixed evidence 中的局部正点
+- 当前 selector 本质上仍是 `task-profile-bucket` / task-level routing 近似，而不是真正的 per-prompt routing
+- 如写 `lcc` 正点，必须与“不可外推”为同一段连续表述，不得拆成独立积极故事线
 
 #### 4.6 14B
 
@@ -704,7 +762,9 @@ Claude 必须按以下风格写：
 要写清：
 
 - 强基线依然活跃
-- 大模型更像宽预算高质量带
+- 14B 落在高质量宽预算区间
+- 可以写成 top-tier but not winner
+- 不能写成“大模型稳定偏好更大 k”的规模规律
 
 #### 4.7 Mistral
 
@@ -716,7 +776,8 @@ Claude 必须按以下风格写：
 
 必须写成：
 
-- auto-k 最清晰的正面案例
+- auto-k 最清晰的 frozen 正面案例
+- 但其成立方式是 Mistral-specific，而不是跨 family 普适成立
 
 禁写：
 
@@ -728,15 +789,24 @@ Claude 必须按以下风格写：
 
 - heuristic 不是弱基线
 - 正因为它强，allocator 的价值才更应写成结构性现象
+- heuristic 的强度本身也是 regime-dependent
+- 本节首句就应交代其强度也是 regime-dependent
+
+禁写：
+
+- heuristic 是全局稳定强基线
+- heuristic 在所有模型与任务上都强
+- 3B 可以被当作 heuristic 仍然稳定的证据
 
 #### 4.9 auto-k
 
 要写成：
 
 - 预算建议机制
-- 强扩展
-- 已有跨模型支撑
-- 显式胜出目前主要集中于 Mistral
+- 方法扩展层
+- Mistral-specific final-ready support + L2 A/B exploratory positive support
+- 不能写成跨模型统一最优
+- 不能把 L2 C official 的 mixed 结果混写成 auto-k 全面成立
 
 #### 4.10 3B
 
@@ -749,7 +819,9 @@ Claude 必须按以下风格写：
 必须写清：
 
 - 3B 的主角不是 auto-k
-- 而是首层恢复现象
+- 而是 core QA-style compare set 上的首层恢复现象
+- 不能外推成“小模型普遍偏好低层”或“3B 普遍偏好 k=1”
+- 本节首句就应写明“该现象仅限 core QA-style compare set”
 
 #### 4.11 provenance 与对比集合边界
 
@@ -758,7 +830,10 @@ Claude 必须按以下风格写：
 - smoke runs 不进入主文主表
 - `trec`、`vcsum` 不承担 allocator 主结论
 - recursive mixing 不得进入正式统计
-- 未 clean 覆盖前不得写 winner/rank/gap-to-best
+- L2 Phase A/B 只能写成 exploratory positive support / method-extension evidence
+- L2 Phase C official 只能写成 weak / mixed exploratory branch
+- `1.5B / 7B` Prompt-adaptive 只能写成 off-protocol exploratory / future-work seed
+- `lcc` 是 official 8B matrix 中的局部正点，但不能外推为 prompt-level routing 已成立
 
 ### 第四章图表绑定
 
@@ -768,7 +843,7 @@ Claude 必须按以下风格写：
 - **图 4-1**：INT8 规范路径图
 - **表 4-4**：跨模型分区结构总表
 - **图 4-2**：模型分区结构图
-- **表 4-5**：auto-k 跨模型位置表
+- **表 4-5**：auto-k / Prompt-adaptive 当前位置表
 - **图 4-3**：3B 首层恢复图
 - **表 4-6**：对比集合边界表
 
@@ -780,8 +855,8 @@ Claude 必须按以下风格写：
 
 第五章必须完成两件事：
 
-1. 把全文收束成“framework + canonical path + regime + extension”
-2. 在不削弱论文的前提下，明确当前边界和未来方向
+1. 把全文收束成“framework + canonical path + regime + extension + frozen support claims”
+2. 在不削弱论文的前提下，明确当前边界、mixed evidence 与未来方向
 
 ### 建议节结构
 
@@ -792,7 +867,7 @@ Claude 必须按以下风格写：
 
 ### 第五章核心命题
 
-> 本文的最大贡献，不在于证明某个量化方法普适更优，而在于建立了一条更稳健的问题组织方式：以行为为统一分析对象，用 INT8 规范路径验证框架可执行性，再把 allocator 的现实重写为分区结构，并将 auto-k 写成有支撑的预算建议扩展。
+> 本文的最大贡献，不在于证明某个量化方法普适更优，而在于建立了一条更稳健的问题组织方式：以行为为统一分析对象，用 INT8 规范路径验证框架可执行性，再把 allocator 的现实重写为分区结构，并在 frozen 证据边界内将 Mistral-specific auto-k、3B 首层恢复、14B top-tier no-winner 与 heuristic 强基线一并组织为可辩护的正文支撑。
 
 这里支撑的是 framework / regime reading，而不是 superiority proof。
 
@@ -800,12 +875,13 @@ Claude 必须按以下风格写：
 
 #### 5.1 研究结论
 
-必须依次回收四层：
+必须依次回收五层：
 
 1. behavior principle
 2. INT8 canonical
 3. regime-dependent allocation
-4. auto-k extension
+4. frozen 5 claims 的正文位置
+5. auto-k / Prompt-adaptive 的扩展边界
 
 禁写：
 
@@ -815,10 +891,11 @@ Claude 必须按以下风格写：
 
 必须承认：
 
-- 当前结果生产层仍未 clean 覆盖
 - auto-k 显式胜出仍主要集中在 Mistral
-- K/V 非对称 allocator 尚未进入主结果
-- extend-task 信息量不均匀
+- L2 A/B 仍属于方法扩展支撑，不是主心脏
+- Prompt-adaptive official 目前仅得到 weak / mixed 信号
+- `1.5B / 7B` Prompt-adaptive 仍是 off-protocol exploratory only
+- extend-task 信息量不均匀，`lcc` 也只应写成局部正点
 
 #### 5.3 未来工作
 
@@ -826,7 +903,7 @@ Claude 必须按以下风格写：
 
 1. K/V 非对称分配
 2. 质量—成本 Pareto 分析
-3. prompt 自适应策略选择
+3. 真正超越 task-bucket routing 的 per-prompt selector
 
 #### 5.4 结语
 
@@ -857,7 +934,7 @@ Claude 必须按以下风格写：
 | 图 4-1 | 第四章 4.2 | 展示 INT8 规范验证路径 | “图 4-1 展示了 INT8 路径的校准到运行时闭环。” | 强调验证链 | 不写“最优方法流程图” |
 | 表 4-4 | 第四章 4.3 | 固定跨模型分区结构读法 | “表 4-4 概括了不同模型呈现出的 allocator 分区结构。” | 强调结构差异 | 不写“各模型赢家表” |
 | 图 4-2 | 第四章 4.3 后 | 可视化分区结构 | “图 4-2 进一步展示了不同模型在 allocator 空间中的位置差异。” | 强调区间和结构 | 不写“统一规律图” |
-| 表 4-5 | 第四章 4.9 | 固定 auto-k 当前角色 | “表 4-5 对 auto-k 在不同模型中的位置作了汇总说明。” | 强调扩展角色 | 不写“排名榜” |
+| 表 4-5 | 第四章 4.9 | 固定 auto-k / Prompt-adaptive 当前角色 | “表 4-5 对 auto-k 与 Prompt-adaptive 在不同证据层级中的位置作了汇总说明。” | 强调扩展角色与边界 | 不写“排名榜” |
 | 图 4-3 | 第四章 4.10 | 展示 3B 首层恢复 | “图 4-3 直观展示了 3B 中首层保护与中层 heuristic 的差异。” | 强调异常现象 | 不写“普适低层优先规律” |
 | 表 4-6 | 第四章 4.11 | 写死对比集合边界 | “表 4-6 总结了当前主文可使用与不可使用的对比资产。” | 强调边界管理 | 不写“过滤后赢家集合” |
 
@@ -865,43 +942,54 @@ Claude 必须按以下风格写：
 
 ## 6. 数据与 claim 边界表
 
-### 6.1 可以直接写入正文的数字
+### 6.1 正文主支撑：frozen 5 claims
 
-红线：以下数字只可用于支撑结构性读法或边界判断，不可单独形成 winner 句。
+红线：以下内容可进入正文主支撑，但仍必须写成结构性结论，不能展开成 winner rhetoric。
 
-| 位置 | 数字 | 可以支撑什么 |
+| 层级 | 内容 | 写法要求 |
 |---|---|---|
-| 第四章 INT8 | `PPL = 9.3367` | INT8 路径是可闭环的规范验证实例 |
-| 第四章 INT8 | `Needle = 100%` | INT8 路径未破坏关键检索能力 |
-| 第四章 INT8 | `RULER = 60.12%` | INT8 路径具备实际下游可用性 |
-| 第四章 8B | `bakv_k11 = 9.5214` | fixed-k 仍保留局部优势 |
-| 第四章 8B | `bakv_auto_cov80_max = 9.3543` | auto-k 已进入有效竞争区 |
-| 第四章 8B | `bakv_auto_cov90_max = 9.3491` | auto-k 不止单一点可用 |
-| 第四章 14B | `uniform_int4_k4v4 = 7.2345` | 强基线仍活跃 |
-| 第四章 14B | `bakv_auto_cov90_max = 7.1501` | auto-k 已进入高质量区间 |
-| 第四章 14B | `heuristic_k3 = 7.1171` | heuristic 不是弱基线 |
-| 第四章 Mistral | `bakv_auto_cov80_max = 14.7640` | auto-k 在该模型上给出最明确正面信号 |
-| 第四章 Mistral | `heuristic_k3 = 14.6036` | heuristic 仍保持竞争力 |
-| 第四章 3B | `bakv_k1 = 6.9023` | 首层保护具有关键作用 |
-| 第四章 3B | `heuristic_k1 = 3.48` | 中层 heuristic 在该模型上明显失败 |
-| 第四章 3B | `约 +98%` | 3B 首层恢复现象具有明确结构意义 |
+| 正文主支撑 | INT8 canonical path fidelity | 可直接写入正文核心结论，但具体数值必须以 frozen canonical source 为准，不在本控制包中写死 |
+| 正文主支撑 | Mistral-specific auto-k win | 可直接写成模型特异性正点，不可外推为跨 family 普适成立 |
+| 正文主支撑 | 3B early-layer rescue regime（限 QA tasks） | 可直接写成 3B 在 core QA-style compare set 上的结构性现象，不可外推为小模型普遍规律 |
+| 正文主支撑 | 14B top-tier but no stable winner | 可直接写成高质量宽预算区间中的 top-tier 现象，不可写成“更大模型稳定偏好更大 k” |
+| 正文主支撑 | heuristic is a strong baseline | 可直接写成基线结论，但必须同时写清其强度也是 regime-dependent |
 
-### 6.2 只能作为 supporting evidence 的内容
+### 6.2 正文次级支撑：exploratory positive support / method-extension evidence
 
-1. `dureader` 以外的部分 extend-task 结果
-2. `lcc` 的补充读法
-3. `trec`、`vcsum` 当前结果
-4. smoke runs
-5. recursive mixed 统计
+| 层级 | 内容 | 写法要求 |
+|---|---|---|
+| 正文次级支撑 | L2 Phase A（K/V asymmetric） | 只能写成 exploratory positive support / method-extension evidence |
+| 正文次级支撑 | L2 Phase B（Pareto） | 只能写成 exploratory positive support / method-extension evidence |
+| 正文次级支撑 | 8B fixed-k turning point | 只能写成结构转折平台，不写成新的 frozen 主结论 |
 
-### 6.3 绝对不能写成 winner claim 的内容
+### 6.3 Discussion / appendix only
 
-1. 当前任何未经 clean 覆盖的 tight numeric winner
-2. 任何 “rank #1 / best / gap to best” 风格总结
-3. auto-k 的跨模型统一最优说法
-4. uniform / heuristic / fixed-k 的全局胜负结论
+| 层级 | 内容 | 写法要求 |
+|---|---|---|
+| discussion / appendix | L2 Phase C official（8B × 5 tasks × 3 variants ONLY） | 固定写成 weak / mixed exploratory branch，不进入 final claim |
+| discussion / appendix | `lcc` strict win datapoint | 只能写成 official 8B matrix 中的局部正点，不可外推为 prompt-level routing 已成立 |
+| discussion / appendix | 7B aggregation-split | 只保留为 supporting note 或 discussion 段，不再承担第四章中心位 |
+| discussion / appendix | `1.5B / 7B` Prompt-adaptive | 固定写成 off-protocol exploratory / future-work seed |
+| discussion / appendix | `trec`、`vcsum` | 只作边界披露，不承担 allocator 主结论 |
+| discussion / appendix | smoke runs / recursive mixed | 不进入主文主表 |
 
-### 6.4 正文中允许使用的结论动词
+### 6.4 绝对不能写成正文主张的内容
+
+1. 当前任何 “rank #1 / best / gap to best” 风格总结
+2. auto-k 的跨模型统一最优说法
+3. Prompt-adaptive 的 final claim
+4. off-protocol Gate C 结果
+5. uniform / heuristic / fixed-k 的全局胜负结论
+6. “selector 已具备通用 per-prompt 自适应能力”
+7. 把 mixed / 局部正点 自动升级成机制解释或统一规律
+
+### 6.5 冲突判定规则
+
+1. 如果一项结果同时带有正向信号和 mixed / caveat，**一律按更低层级写**。
+2. 如果一项结果既可被写成局部 observation，又可能被误写成机制解释，**一律只写 observation，不写机制**。
+3. 如果某数字缺少 `metric / task set / aggregation / comparison set / status` 中任一锚点，Claude 不得主动补写。
+
+### 6.6 正文中允许使用的结论动词
 
 优先使用：
 
@@ -922,6 +1010,16 @@ Claude 必须按以下风格写：
 - 最优
 - 支配
 
+### 6.7 写作分级表
+
+| 层级 | 内容 | 写法要求 |
+|---|---|---|
+| 正文主结论 | frozen 5 claims | 可直接写，但必须保持结构性、边界化表述 |
+| 正文次级支撑 | L2 Phase A/B | 只能写成 exploratory positive support / method-extension evidence |
+| Discussion / Appendix | 7B aggregation-split、official `lcc` datapoint、Gate C mixed signal | 限定写，不得升级成主结论或第二故事线 |
+| Future Work | true per-prompt selector、更多 family 覆盖、后续 role-aware 扩展 | 只能写成未来方向 |
+| 禁写 | universal winner、Prompt-adaptive final claim、off-protocol Gate C、跨模型 auto-k 统一最优 | 明确禁止 |
+
 ---
 
 ## 7. 给 Claude 的总 Prompt
@@ -934,25 +1032,29 @@ Claude 必须按以下风格写：
 
 请严格遵守以下要求：
 
-1. 使用中文写作，风格贴近一篇已经成型的中文学术论文，而不是英文会议论文的翻译稿。
-2. 行文逻辑要贴近原 thesis / 原 PDF 的章节节奏：先提出问题，再铺必要背景，再展开核心论证，最后自然收束。
-3. 这篇论文的总主线是：
+1. 在写作前，先接受本控制包中的 frozen source-of-truth priority；若旧 readout 与 frozen state 冲突，一律以 frozen state 与 clean rerun readout 为准。
+2. 使用中文写作，风格贴近一篇已经成型的中文学术论文，而不是英文会议论文的翻译稿。
+3. 行文逻辑要贴近原 thesis / 原 PDF 的章节节奏：先提出问题，再铺必要背景，再展开核心论证，最后自然收束。
+4. 这篇论文的总主线是：
    - 行为是 KV Cache 量化中更合适的统一分析对象
    - INT8 是规范验证路径，而不是 superiority 证明
    - allocator 的经验结果应写成分区结构，而不是 winner story
-   - auto-k 是预算建议扩展，而不是全文理论中心
-4. 不要写成工作台说明文，不要解释“为什么现在改主线”，不要写任何内部重构过程。
-5. 不要出现以下写法：
+   - 当前 frozen 5 claims 可以进入正文主支撑
+   - auto-k 是预算建议扩展，Prompt-adaptive 当前只允许写到 mixed / exploratory 边界
+5. 不要写成工作台说明文，不要解释“为什么现在改主线”，不要写任何内部重构过程。
+6. 不要出现以下写法：
    - candidate-main / final-ready
    - 当前最稳的写法
    - supporting evidence
    - 我们决定把……
    - 旧主线被击穿……
-6. Related Work 必须公平准确，正面承认 KIVI、KVTuner、KVmix、AsymKV、H2O、SnapKV、AhaKV、DuoAttention 的位置。
-7. 第四章不得写成 winner table 展示，必须按“INT8 规范验证 → allocator 分区结构 → 7B/8B/14B/Mistral/3B 不同角色 → heuristic 重定位 → auto-k 定位 → 对比集合边界”来组织。
-8. 所有数字只服务论证，不制造 winner rhetoric。
-9. 图表在正文中要像正式论文资产，被自然引出；不要写“图意”“建议内容”“caption 草稿”。
-10. 第五章必须像论文收口，而不是内部总结。
+7. Related Work 必须公平准确，正面承认 KIVI、KVTuner、KVmix、AsymKV、H2O、SnapKV、AhaKV、DuoAttention 的位置。
+8. 第四章不得写成 winner table 展示，必须按“INT8 规范验证 → 跨模型分区结构 → Mistral / 3B / 14B / heuristic / 7B / 8B Prompt-adaptive 的不同角色 → L2 A/B/C 与对比集合边界”来组织。
+9. official Prompt-adaptive 只有 `8B × 5 tasks × 3 variants ONLY`；`1.5B / 7B` 一律不得写成正式 Gate C 或跨模型 Prompt-adaptive 证据。
+10. 当前 selector 只能写成 task-level / task-profile-bucket routing 近似，不能写成已经成立的 per-prompt routing。
+11. 所有数字只服务论证，不制造 winner rhetoric；若本控制包未写死某数字，你不得自行补写。
+12. 图表在正文中要像正式论文资产，被自然引出；不要写“图意”“建议内容”“caption 草稿”。
+13. 第五章必须像论文收口，而不是内部总结。
 
 请严格按照本大纲包的章节结构、段落目标、图表绑定和 claim 边界来写。
 
@@ -1008,19 +1110,22 @@ Claude 必须按以下风格写：
   1. 实验设置与证据分层
   2. INT8 路径的边界
   3. allocator 的跨模型分区结构
-  4. 7B/8B/14B/Mistral/3B 的不同角色
-  5. heuristic 重定位
-  6. auto-k 的正确定位
-  7. provenance 与对比集合边界
-- 你可以使用给定数字，但不要把它们写成胜负榜
+  4. Mistral / 3B / 14B / heuristic / 7B / 8B Prompt-adaptive 的不同角色
+  5. L2 A/B/C 的正确定位
+  6. provenance 与对比集合边界
+- 只允许把 frozen 5 claims 写入正文主支撑
+- official Prompt-adaptive 只能写 `8B × 5 tasks × 3 variants ONLY`，且结论必须是 weak / mixed
+- 当前 selector 只能写成 task-level / task-bucket 近似，而不能写成已成立的 per-prompt routing
+- `1.5B / 7B` Prompt-adaptive 只能写成 off-protocol exploratory / future-work seed
+- 你可以使用给定数字，但不要把它们写成胜负榜，也不要自行补写本控制包未冻结的数字
 
 ### 8.6 第五章 Prompt
 
 请写“第五章 结论与展望”，要求：
 
-- 回收全文四层主线：behavior / INT8 / regime / auto-k
+- 回收全文五层：behavior / INT8 / frozen 5 claims / regime / auto-k 与 Prompt-adaptive 的扩展边界
 - 明确局限性，但不要写得像自我否定
-- 未来工作只保留三条：K/V 非对称分配、质量—成本 Pareto、prompt 自适应分配
+- 未来工作只保留三条：K/V 非对称分配、质量—成本 Pareto、真正超越 task-bucket routing 的 per-prompt selector
 
 ---
 
@@ -1032,7 +1137,9 @@ Claude 必须按以下风格写：
 2. 想把 auto-k 写成整篇论文的主角
 3. 想把 heuristic 写成陪衬
 4. 想把第四章写成排名展示
-5. 想把内部重构语言直接搬进正文
+5. 想把 7B 重新抬回正文中心位
+6. 想把 official Prompt-adaptive 或 `lcc` 局部正点写成 prompt-level routing 已成立
+7. 想把内部重构语言直接搬进正文
 
 Claude 应始终记住：
 

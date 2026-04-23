@@ -1,1067 +1,636 @@
-# 论文升级故事线（2026-04-20）
+# 论文故事线冻结稿（2026-04-21）
 
-**日期**：2026-04-20
-**作者**：Claude（基于与用户 + Codex 的多轮讨论整理）
-**文档身份**：论文升级阶段的**叙事 source-of-truth**
+**文档身份**：论文改写阶段的叙事 source-of-truth  
+**适用范围**：后续 `thesis/chapters/*.tex` 的章节重排、段落改写与图表迁移  
+**对应文档**：
+- 高层目标与边界：`objective.md`
+- 冻结口径：`docs/freeze_20260419.md`
+- 实时工作台：`docs/thesis_upgrade_live_plan.md`
+- 执行清单：`docs/mainline_execution_queue.md`
 
----
-
-## 0. 文档用途
-
-这份文档是论文升级后的**叙事主线文件**。后续改 `thesis/chapters/*.tex` 的叙事起点以本文件为准。
-
-### 它承担什么
-
-- 持久化论文升级后的 7 段故事主线（§1-§7）
-- 固化 L2 三个 Phase 在故事中的精确嵌入位置
-- 固化各模型（Mistral / 3B / 1.5B / 14B / 7B）在故事中的角色分工
-- 给出写作纪律（§8）与数据引用指引（附表）
-
-### 它不承担什么
-
-- 数据结构 / 目录分布 / 文件数量 → 见 `docs/data_asset_inventory_20260420.md`
-- 什么能写 / 不能写的口径边界 → 见 `docs/freeze_20260419.md`
-- 运行时论文升级状态 → 见 `docs/thesis_upgrade_live_plan.md`
-- 实验队列状态 → 见 `docs/mainline_execution_queue.md`
-
-### 维护规则
-
-**只 append，不 rewrite**。如有新判断或修正，在文档末尾 append 一个"修订记录"段，不改 §1-§8 的既定叙事。
+**历史归档**：旧版 story 已归档至  
+`development_history/archive_20260421_story_restructure/thesis_story_20260420_pre_restructure.md`
 
 ---
 
-## 1. 起点：从 attention 误差传播分析推出的假设
+## 0. 文档用途与冻结原则
 
-论文起点不是经验观察，而是一个从 attention 计算过程推出的理论分析。
+这份文档用于冻结论文当前的**唯一主线、章节职责、目录结构、术语规则与关键迁移点**。后续逐章改写时，应以本文件为直接参照，而不是重新发散到旧的实验 hook、历史图表清单或早期叙事分支。
 
-标准 attention：
+### 0.1 它承担什么
 
-$$z_i = \frac{q^\top k_i}{\sqrt{d}}, \quad a_i = \mathrm{softmax}(z)_i, \quad o = \sum_i a_i v_i$$
+- 固定论文唯一主句与主线边界
+- 固定五章体例下的章节职责与目录结构
+- 固定中文标题命名规则与术语替换表
+- 固定正文与附录之间的关键迁移点
+- 固定后续逐章施工顺序
 
-KV Cache 量化后输出误差分解：
+### 0.2 它不承担什么
 
-$$\hat o - o = \underbrace{\sum_i (\hat a_i - a_i) v_i}_{\text{K 误差 → attention 分布扭曲}} + \underbrace{\sum_i \hat a_i (\hat v_i - v_i)}_{\text{V 误差 → content 聚合偏移}}$$
+- 不承担实验状态面板职责
+- 不承担图表落位总表职责
+- 不承担旧 hook 的运行控制职责
+- 不承担脚本、资产清单或 provenance 审计职责
 
-由此提出一个**理论动机驱动的假设**（theoretically motivated hypothesis，非定理）：
+### 0.3 当前冻结边界
 
-> 在 KV Cache 量化中，若以注意力行为的保持度作为优化对象，相比以数值范数作为优化对象，更贴近模型真实的功能损伤。
+后续任何目录改写或段落改写，都不得越过以下主线边界：
 
-整篇论文是一层一层地验证这个假设。
-
-### 关键措辞
-
-- 不说"我们发现 behavior 更重要"
-- 改说"我们从 attention 公式出发提出一个可验证的假设"
-- 前者是事后总结，后者才是研究叙事
-
----
-
-## 2. 第一层：Behavior 作为静态校准原则
-
-### 2.1 INT8 canonical path
-
-INT8 是最干净的验证场景。完成完整闭环：
-- behavior-guided 静态校准目标函数
-- per-layer scales 校准产物
-- 自定义 generate loop + Triton 融合核
-- 与 FP16 近乎无损（int8↔fp16 Δ=+0.02）
-
-**INT8 的位置**：不是"最强设置"，而是"规范验证路径"——证明这套方法论能闭环。
-
-### 2.2 INT4 推进到更困难的低比特
-
-过程记录：
-1. 直接把 INT8 对称方案迁到 INT4 → 效果很差
-2. 引入 K per-channel + V per-token 非对称架构（与 KIVI 同构）+ behavior-guided 离线 percentile → 效果显著改善，接近前沿
-
-**结论**：behavior 原则在 INT4 下仍具备现实意义——前提是量化架构合理。
-
-### 2.3 INT4 略弱于 KIVI 的诚实分析（三层）
-
-| 层 | 内容 | 叙事强度 |
-|---|---|---|
-| L1 经验事实 | 相同协议下静态 INT4-RoleAlign 略弱于动态 KIVI | fact |
-| L2 经验解释 | 低比特下量化架构（K per-channel / V per-token）影响可能大于校准方式 | suggests |
-| L3 开放猜想 | 真正决定 INT4 效果的可能是架构本身 | open question → Discussion |
-
-### 2.4 第一层结论
-
-经过 INT8 + INT4 两层验证，可以稳妥地说：
-
-> Behavior 原则作为静态校准原则是有现实意义的——它已经足够成为一个合理、可执行、被实证支持的设计原则。
-
-这不是"behavior 已严格证明优于所有数值代理"。
+- 主线是 **behavior-guided framework**
+- `INT8 canonical path` 是最干净的验证实例
+- allocator / `AutoK` 是框架扩展层，不是并列主心脏
+- 更稳的解释是 **family-dependent、scale-dependent、task-dependent regimes**
+- heuristic 必须正面承认为强基线
+- Prompt-adaptive 只属于 weak/mixed exploratory branch
+- allocator-vs-`KIVI-style` formal hook 已关闭，不得重新抬为正文主张
 
 ---
 
-## 2.5 【预留接口】INT4 层面 Allocator vs KIVI 正式对比
+## 1. 论文唯一主句
 
-> **状态**：预留接口（hook）。是否激活取决于 `.agents/execplans/2026-04-20_allocator-vs-kivi-claim-package.md` 的执行进度（见 §13）。
-> **激活条件**：实验完成且结论达 L1（systematic win）或 L2（quality win + non-inferior systems）。
-> **未激活时**：§2.3 的三层诚实分析（L1 事实 / L2 suggests / L3 open question）保留为第一层的底线写法，不触发任何其他章节改动。
+本文围绕一个统一主张展开：
 
-### 2.5.1 实验设计要点
+> **attention behavior 可以作为 KV Cache 量化中 calibration 与 allocation 的统一组织原则；`INT8 canonical path` 提供最干净的验证实例，`INT4-RoleAlign` 与 allocator / `AutoK` 则构成这一框架的低比特实例与扩展层。**
 
-- 4 个对比系统：`kivi_style` / `rolealign_static` / `rolealign_allocator_fixed_eqmem` / `rolealign_allocator_auto_eqmem`
-- 同 INT4 cache format（K per-channel + V per-token）
-- Matched KV memory（±3% 硬约束）
-- 5 model × 5 task × {quality, PPL, Needle, RULER, TTFT, TPOT, memory}
+这句话决定了全文的主次关系：
 
-### 2.5.2 四级可能结论
+- 核心不是若干并列的 INT4 技巧
+- 核心不是 universal winner 叙事
+- 核心不是单独强调 Triton 工程实现
+- 核心是同一个 behavior principle 如何贯通校准、低比特实例化与预算分配
 
-| 级 | 条件 | 对本节的影响 |
-|---|---|---|
-| L1 systematic win | quality win + robustness non-inferior + systems non-inferior | 本节 + §3.5 + §9.2 C2 升级 + §11 表 9 全部激活 |
-| L2 quality win + non-inferior systems | quality 系统胜 + latency/memory 不输 | 本节写 quality 级主论点；§3.5 allocator 级从属 |
-| L3 Pareto advantage | 在 Pareto 前沿占据更好位置 | 本节弱化为 Pareto advantage 叙述 |
-| L4 mechanism-only | 仅 allocator 增量可辨识 | 本节删除，证据进 Discussion |
+### 1.1 理论起点与实证支撑的角色区分
 
-### 2.5.3 激活时的论文写法起始句模板
+全文的理论起点是**注意力近似误差传播分析**，而不是某一组经验性消融结果。
 
-> "为进一步检验 behavior-guided 校准在 matched INT4 KV memory budget 下相对 KIVI-style 的系统性关系，我们在 ±3% memory band 内对 `{kivi_style, rolealign_static, rolealign_allocator_*}` 进行 5 model × 5 task 的正式对比。[结果表述] 表 9 给出完整数据。"
+- attention error decomposition 负责给出 foundational motivation
+- K/V 敏感性不对称证据负责给出 empirical support
+- `RoleAlign` 的设计动机应被写成“理论原则在低比特场景下的实例化”，而不是“只因某个消融图而临时产生的技巧”
 
----
+因此，K/V 角色不对称证据在正文中承担的角色是：
 
-## 3. 第二层：Behavior 扩展到预算分配
-
-### 3.1 从 calibration 自然过渡
-
-Calibration 的副产品是每层对 behavior 的敏感度画像。于是一个自然问题出现：
-
-> 既然知道哪些层更敏感，为什么还要全层同预算？
-
-这就是 allocator 的起点——**不是另起一个分支，是同一原则换一个层次**。Behavior 在第一层回答"怎么量化"，在第二层回答"哪里该多保护"。
-
-### 3.2 Allocator 的真实收获是 regime 地图
-
-Allocator 实验没有给出跨模型统一的 fixed-k 最优，而是给出了：
-
-> 不同 family / scale / task 落在不同的 operating regimes。
-
-Allocator 的贡献变成了：
-
-> **把 allocation 从"手工调参问题"推进成"结构识别问题"。**
-> Behavior-guided allocator 的价值在于揭示这张结构地图，而不是在地图上插一面旗。
-
-### 3.3 【L2 Phase A 嵌入】role-aware 粒度扩展
-
-L2 Phase A（K/V asymmetric）把 allocator 颗粒度从 per-layer 进一步细化到 per-role。
-
-**叙事位置**：本章末尾的粒度扩展小节。
-
-**定位（三层诚实度）**：
-- **事实层**：在 role-aware 颗粒度下跑通、呈现与 layer-wise 一致的 regime 结构
-- **比较层**：当前调参水平下尚未超越 strongest auto-k
-- **开放层**："role-aware 是有潜力的方向，但方法未熟"
-
-### 3.4 【L2 Phase B 嵌入】Pareto 评估维度升级 ⭐
-
-L2 Phase B（Pareto）把 allocator 研究问题从"寻找单目标最优 k"升级到"理解 quality × cost 的 Pareto 结构"。
-
-**叙事位置**：本章第二个小高潮（**主图应进正文主图区**）。
-
-**撑起的两个论点**：
-1. **allocator 问题是真实的**：
-   7B uniform_int4 在 Pareto 空间里直接崩坏——这不是抽象"量化降质"，而是一个可视化的、明确的结构事实。
-2. **AutoK 作为扩展有真实信号**：
-   auto-k 在多模型上稳定进入 top tier，Mistral 上是最明确正例——这给第三层（§4）的 AutoK 提供硬证据。
+- 在第三章中作为**压缩版动机诊断**
+- 在第四章中作为**完整版实验支持**
+- 它不是全文理论起点的替代物
 
 ---
 
-## 3.5 【预留接口】Allocator 维度上 vs KIVI 的正式主张
+## 2. 标题命名规则与术语冻结表
 
-> **状态**：预留接口（hook），与 §2.5 共享同一套实验数据但读数维度不同（详见 §13）。
-> **激活条件**：实验完成且结论 ≥ L2。
-> **未激活时**：§3.4 的 Pareto 叙事已足够支撑第二层论点，跳过本节。
+### 2.1 标题命名规则
 
-### 3.5.1 与 §2.5 的分工
+后续所有章节标题、节标题与小节标题统一遵守以下规则：
 
-| 维度 | §2.5（第一层 calibration） | §3.5（第二层 allocation） |
-|---|---|---|
-| 读数焦点 | `rolealign_static` vs `kivi_style` | `rolealign_allocator_auto_eqmem` vs `{kivi_style, rolealign_static}` |
-| 回答的问题 | behavior-guided 静态校准是否 systematic 强于 KIVI 动态校准 | allocator 能否在 static RoleAlign 之上给出可辨识的独立增益 |
-| 对 framework 的影响 | 加强 C2 method instance | 加强 C1 framework 的贯通性论点 |
+1. 一级、二级标题尽量使用**中文名词短语**
+2. 只保留必要专名：
+   `KV Cache`、`Transformer`、`GQA`、`Triton`、`AutoK`、`KIVI-style`、`LongBench`、`MixedKV`、`TPOT`
+3. 不使用口头汇报式标题或结论口号式标题
+4. 标题优先描述**章节功能**，而不是提前喊出结论
+5. 三级标题优先采用“对象 + 动作/功能”的写法
 
-### 3.5.2 激活时的论文写法起始句模板（≥ L2）
+### 2.2 冻结后的术语替换表
 
-> "在 matched INT4 KV memory budget 下，behavior-guided allocator 在 [N] 个模型 / [M] 个任务上给出相对 `kivi_style` 的 [quality / Pareto] 优势。ablation（附录）表明 allocator 贡献了约 Δ 个百分点的独立增益，与 `rolealign_static` 的静态校准增益可分离。"
+| 现有表达 | 冻结后的表达 |
+|---|---|
+| Regime Map | 跨模型策略适用区间图谱 |
+| Early-Layer Rescue Regime | 早层保护回救区间 |
+| Top-Tier but No Stable Winner | 高性能簇共存而无稳定最优 |
+| strongest positive case | 最显著正向案例 |
+| Per-Model Case Analysis | 典型模型剖面分析 |
+| Phase Boundary 分析 | 性能交叉边界分析 |
+| Layer-wise Budget Allocation | 逐层预算分配 |
+| Role-Aware 扩展 | 角色感知扩展 |
+| Coverage-Based k 选择 | 基于覆盖度的 `k` 值选择 |
+| LongBench 任务 | LongBench 风格合成基准任务 |
 
-### 3.5.3 未激活时
+### 2.3 语言风格补充规则
 
-故事线回到 §3.4 原始表述——allocator 的真实收获是 regime 地图而非 universal winner，L2 Phase B 的 Pareto 图已足够撑起 §3 的论点。
-
----
-
-## 4. 第三层：AutoK 作为自然扩展
-
-### 4.1 为什么会有 auto-k
-
-fixed-k 跨模型不稳 + regime 真实存在 → 自然问题：
-
-> 难道每上一个新模型都要手工扫 k ∈ {1, 3, 5, 7, 9, 11}？
-
-AutoK 用 behavior profile 本身提示合理的预算区间，让搜索空间大幅收窄。
-
-### 4.2 AutoK 的正确定位
-
-- **不是**：全文第三个主方法
-- **不是**：下一代普适 allocator
-- **不是**：证明 framework 的关键证据
-- **是**：fixed-k 不稳 + regime 明显时的 profile-guided budget proposer
-- **是**：framework 的自然扩展，不是 framework 本身
-- **是**：已观察到有意义的正面信号、仍有明显优化空间的方法组件
-
-### 4.3 【L2 Phase C 嵌入】从静态 AutoK 到 Prompt-adaptive 的尝试
-
-**叙事位置**：本章末尾的开放段 + §6 future work。
-
-**口径**：
-
-> AutoK 解决了"模型级预算建议"的问题，但它仍是静态策略。一个自然的下一步问题是能否把选择粒度推到 prompt 级——这引出 Prompt-adaptive 的探索。
-
-**当前证据状态**（基于 L2 Phase C 官方 8B × 5 tasks）：
-- prompt_adaptive mean = 9.725 输给 fixed_k mean = 10.027（-0.30）
-- 5 task 中 3/5 错选 fallback / 1/5 tie / 1/5 独立赢（lcc, +0.40）
-- selector 当前实现仍是 task-bucket 级别，**尚未构成 per-prompt routing 成立的充分证据**
+- 标题中避免 `top tier`、`strongest`、`honest analysis` 一类研究笔记体表达
+- 正文中可以在首次出现时保留必要英文专名，但随后以中文表述为主
+- 章节标题与图表标题都应服从同一套中文化标准
 
 ---
 
-## 5. 模型角色分工
+## 3. 研究问题与贡献排序
 
-各模型在新故事里不是一条独立实验，而是**在主故事中扮演一个有明确职责的角色**。
+### 3.1 研究问题
 
-### 5.1 Mistral-7B —— AutoK 的 strongest positive case
+- **RQ1**：行为引导校准是否能够形成稳定、可复现的基础保真路径？
+- **RQ2**：在低比特场景下，行为引导路径能否把由对称低比特压缩触发的显著失稳，恢复为一条可用、可审计的低比特路径？
+- **RQ3**：行为敏感度画像能否支撑跨模型预算分配，并揭示稳定的策略适用区间结构？
 
-**核心证据**：官方 cov80=14.76 跨 core+extend task；Pareto top tier 定位明确。
+### 3.2 贡献排序
 
-**它在故事里回答的问题**：
-> AutoK 这条路，在至少一个明确的 family 上，能够以论文可接受的强度给出正面证据。
+后续全文的贡献排序固定为：
 
-**它不回答**：auto-k 已普适胜利（错误外推）。
+1. **统一原则**
+   attention behavior 作为 calibration 与 allocation 的统一组织对象
+2. **方法实例**
+   `INT8 canonical path` 与 `INT4-RoleAlign` 作为框架实例，allocator / `AutoK` 作为扩展机制
+3. **实证图谱**
+   跨模型策略适用区间图谱，而不是单一策略的普适胜利
 
-### 5.2 3B —— 小模型的早层结构瓶颈
+### 3.3 Triton 与系统实现的定位
 
-**核心证据**：首层保护极其关键；中层 heuristic 可能灾难性失败。
+`Triton`、离线校准产物、推理管线与复杂度分析属于**系统落地支撑层**。
 
-**它在故事里回答的问题**：
-> Allocator 效果与模型内部结构瓶颈强相关，不同模型有非常不同的脆弱点。
-
-**它不回答**：所有小模型都需要早层保护（需结合 1.5B 综合判断，见 §5.3）。
-
-### 5.3 1.5B —— 小模型趋势的辅助证据
-
-**核心证据**：在低预算 regime 下呈现与 3B 同向的早层敏感性趋势。
-
-**它在故事里的写法**（与 3B 合起来）：
-
-> 3B 明确呈现早层瓶颈现象；1.5B 在其低预算 regime 下呈现同向趋势。两者共同指向小模型在早层保护上的敏感性，是一个值得关注的结构特征。
-
-**不独立写成主张**。
-
-### 5.4 14B —— 大模型上仍保持高质量区间
-
-**核心证据**：多策略进 top tier，无单一稳定赢家。
-
-**它在故事里回答的问题**：
-> 这套方法在大模型上会不会失效？
-
-**答案**：在更大规模上，behavior-guided 的调参方式依然能稳定落在高质量区间；虽然没有单一稳定赢家，但整个 top tier 里都能看到 behavior-guided 方案的身影。
-
-**它不回答**：14B 上某策略胜出（错误写法）。
-
-### 5.5 7B —— Aggregation-split 的 supporting regime case
-
-**核心证据**：k=1 下 mean 显著优于 max；k=5 下反过来（max 优于 mean）。
-
-**它在故事里的位置**：
-> Allocation 的结果会沿 aggregation 维度发生**结构分裂**——一个具体可辨识的结构现象。
-
-**定位**：supporting regime case in main text（正文保留，不作为主轴）；需引用 `results/phase2_c2b_local/` 的诊断数据。
+- 它们说明方法可部署、可复现、可审计
+- 它们不与统一原则、方法实例、策略图谱并列竞争论文主轴
 
 ---
 
-## 6. 边界与未来方向
+## 4. 五章冻结版目录
 
-### 6.1 Heuristic 作为强基线的地位
+## 第一章 绪论
 
-**必须在正文正面承认**：
+### 1.1 研究背景
 
-> Heuristic（等距位置保护）在很多场景下是一个非常强的 baseline。
+- 交代长上下文推理的发展、`KV Cache` 显存线性增长的部署瓶颈，以及 `INT8/INT4` 压缩的现实价值
+- 不在本节展开正式公式推导
 
-**为什么这是好事**：它让 behavior-guided allocator 的贡献无法靠"打败弱基线"成立——必须靠"**揭示结构分区 + 在特定 regime 下自然匹配**"这个更难的故事成立。而这正是本论文真正想讲的故事。
+### 1.2 问题定义与研究动机
 
-### 6.2 Per-prompt routing —— Future Work（由 L2 Phase C 指向）
+- 仅保留直觉版动机：softmax 非线性会放大 Key 扰动，使数值误差与行为失真脱钩
+- 完整的 telescoping 分解下移至第三章
 
-**引入方式**：
-> 既然不同任务落在不同 regime，能否把选择粒度推到 prompt 层面做在线 routing？L2 Phase C 的初步实验给出该方向存在局部信号的提示（如 lcc 上的独立 prompt-level win），但当前 selector 本质仍是 task-bucket 级别的策略路由，尚未构成对 per-prompt routing 成立的充分证据。更成熟的 per-prompt selector 留作 framework 的下一步开放方向。
+### 1.3 国内外研究现状概述
 
-### 6.3 更成熟的 role-aware allocator —— Future Work（由 L2 Phase A 指向）
+- 只做高层综述：模型量化、`KV Cache` 量化、高效推理
+- 详细对比和文献表放入第二章
 
-Role-aware allocator 的粒度扩展已跑通，但尚未超越 strongest auto-k；更成熟的 role-aware 方法（如 K/V 非对称 + layer-wise 联合优化）留作下一步。
+### 1.4 核心假设与研究问题
 
-### 6.4 更系统的 quality-cost Pareto allocator —— Future Work（由 L2 Phase B 指向）
+- 明确提出核心假设与 `RQ1–RQ3`
+- 本节承担立题职责，不承担结果汇报职责
 
-Pareto 层的发现（7B uniform_int4 崩坏 / auto-k top tier 分布）提示 allocator 可以直接以 Pareto front 为目标函数，而不是只优化 quality。
+### 1.5 研究内容、技术路线与主要贡献
+
+- 将贡献收束为三条：
+  - 统一原则
+  - 方法实例
+  - 跨模型策略适用区间图谱
+- 不在此处堆叠具体实验数字
+- 绪论中的总图应是一张高度抽象的技术路线图，不与第三章框架图重复
+
+### 1.6 论文结构安排
+
+- 逐章一句话交代功能
+- 不重复贡献细节
+
+## 第二章 相关工作与理论基础
+
+### 2.1 Transformer 架构与自注意力机制
+
+- 只保留后文必需的技术前置：自注意力、MHA、MQA、GQA
+- 不写成教材式长篇讲解
+
+### 2.2 KV Cache 机制与显存分析
+
+- 说明 `KV Cache` 的作用、Prefill/Decode 差异、显存公式以及部署瓶颈
+- 可保留一个数值示例，不额外扩张复杂图
+
+### 2.3 模型量化技术基础
+
+- 介绍对称量化、非对称量化与校准方法
+- 不在本节提前证明 KL 一定更优
+
+### 2.4 KV Cache 量化与高效推理相关工作
+
+- 整合 `KV Cache` 量化工作与高效推理工作
+- 先讲 `KIVI`、KVQuant、ZipCache、QServe 等
+- 再讲 FlashAttention、PagedAttention、`Triton` 等系统相关工作
+- 原相关工作主对比表保留在本节
+
+### 2.5 研究空白与本文定位
+
+- 将当前 research gap 提升为本节主体
+- 这一节必须直接召唤第三章的方法设计
+
+### 2.6 本章小结
+
+- 收束“现有工作缺什么、本文从哪里切入”
+- 不在此处继续展开新文献
+
+## 第三章 基于注意力行为保持的 KV Cache 量化方法
+
+第三章的内部流向必须固定为：
+
+> **理论推导 → 动机诊断 → 方法框架 → 路径实例 → 分配策略 → 系统落地**
+
+### 3.1 注意力近似误差的代数分解与问题形式化
+
+- 完整放置 telescoping 分解、误差传播路径以及注意力分布与输出之间的耦合关系
+- 原理论示意图应保留在本节
+
+### 3.2 动机诊断：K/V 敏感性不对称及其设计启示
+
+- 只放压缩版动机诊断
+- 目标是回答：为什么后面需要 `RoleAlign`，而不是继续均匀对称 `INT4`
+- 使用一张机制摘要图与一段核心结论
+- 完整表格和完整实验数据留在第四章
+
+### 3.3 行为引导量化框架总览
+
+- 强调 calibration 与 allocation 共享同一个 behavior sensitivity profile
+- 第三章框架图应突出“两层共享同一画像”，弱化工程细节
+
+### 3.4 行为引导校准目标与参数搜索策略
+
+本节只回答两个问题：
+
+- 为什么使用 KL
+- KL 在实现上如何被搜索
+
+#### 3.4.1 注意力分布 KL 散度目标
+
+- 给出 KL 目标函数、前向 KL 的理由，以及它作为 operational proxy 的角色
+
+#### 3.4.2 参数搜索空间与稳健选择准则
+
+- 给出 scale、percentile、group size 搜索空间
+- 说明裁剪率约束与稳健选择逻辑
+
+**冻结说明**：`A.19.3` 不放在本节。它回答的是“何时更必要”，不是“为什么可用”。
+
+### 3.5 跨位宽量化路径的实例化设计
+
+#### 3.5.1 INT8 规范路径：静态 Scale 与自适应保护
+
+- 固定 `INT8 canonical path` 的验证实例地位
+
+#### 3.5.2 对称 INT4 的局限与格式升级动因
+
+- 从“为何直接降到对称 `INT4` 会出问题”自然过渡到格式升级
+
+#### 3.5.3 INT4-RoleAlign：角色感知非对称量化
+
+- 这是 `INT4` 主方法定义节
+
+#### 3.5.4 INT4-RoleAlign 与 KIVI-style 的设计差异
+
+- 原设计差异表放在这里
+- 标题统一写成与 `KIVI-style` 的设计差异
+
+### 3.6 行为敏感度驱动的层间预算分配与 AutoK
+
+#### 3.6.1 逐层敏感度构建与分配策略
+
+- 统一使用“逐层预算分配”这一中文表述
+
+#### 3.6.2 K/V 角色感知的预算扩展
+
+- 统一使用“角色感知扩展”
+
+#### 3.6.3 敏感度聚合、鲁棒性与覆盖度准则
+
+- 将 sensitivity 聚合与覆盖度逻辑收紧为一个连贯小节
+
+#### 3.6.4 AutoK 的预算自动建议机制
+
+- `AutoK` 在本节中被定义为 budget proposer，而不是第三个主方法
+
+### 3.7 系统级部署实现与开销分析
+
+本节用于解决原稿中“算法理论”和“底层工程”混杂的问题，但不单独拆章。
+
+#### 3.7.1 离线校准产物与在线推理管线
+
+- 说明离线 / 在线流程以及校准产物在部署中的作用
+
+#### 3.7.2 Triton 融合解码核函数设计
+
+- 原 `3.4.5` 的正式归宿
+
+#### 3.7.3 复杂度、访存与存储开销分析
+
+- 原复杂度与资源分析统一并入此处
+
+### 3.8 本章小结
+
+- 总结第三章真正交付的内容：
+  理论起点、方法框架、路径实例、预算分配机制与系统落地
+
+## 第四章 实验评估与策略适用区间分析
+
+第四章必须严格按以下顺序组织：
+
+> **RQ1 → RQ2 → RQ3 → 部署效率 → 讨论**
+
+### 4.1 实验设置与可信性声明
+
+本节只放设置，不放结果。
+
+#### 4.1.1 模型、硬件与实现环境
+
+#### 4.1.2 评测任务、数据与指标
+
+- 统一使用 **LongBench 风格合成基准任务**
+
+#### 4.1.3 比较方法与配置
+
+#### 4.1.4 统计检验、显著性与数据溯源
+
+### 4.2 RQ1：行为引导校准的保真度验证
+
+#### 4.2.1 INT8 规范路径保真度
+
+- 原 `4.1.5` 的正式归宿
+
+#### 4.2.2 评测协议一致性检验：官方 LongBench 真实数据对照
+
+- `A.18` 前移到此处
+- 作用是对合成协议做 **真实数据 sanity check / credibility supplement**
+- 必须明确 scope：`1.5B` 单模型、`3` 个任务、单种子
+- 结论只能落到"方向一致、初步排除系统性偏差"，不得写成"全面真实场景泛化证明"
+- 节末必须埋前向引桥到 `4.6.1`
+
+### 4.3 RQ2：低比特路径从对称失效到 RoleAlign 恢复
+
+#### 4.3.1 对称 INT4 的架构依附性失效与阶跃崩塌
+
+- 集中展示对称 `INT4` 的主模式崩塌
+- 必须显式前置 `LLaMA-3.1-8B (Hkv=8)` 的架构例外，不能写成无条件、无例外的"系统性失效"
+- 本节必须由一张独立的小型汇总图或汇总表承重，不能只用导语文字带过
+
+#### 4.3.2 K/V 角色敏感性与 MixedKV 完整诊断
+
+- 本节承接第三章 `3.2` 的压缩版动机诊断
+- 在这里放置完整图表与完整证据
+
+#### 4.3.3 INT4-RoleAlign 与 KIVI-style 的跨模型对比
+
+- 本节负责跨模型主对比
+- 不在此处延伸大段机制讨论
+- 节末必须用一段短收束闭合 RQ2 的证据链，再转入 `4.4`
+
+### 4.4 RQ3：跨模型预算分配与策略适用区间图谱
+
+#### 4.4.1 同量级预算下的跨模型主表
+
+- 作为 allocator 主证据入口
+- 必须保留 **same-order INT4 budget band** 的诚实口径，不得改写成严格 matched-budget formal compare
+- 节末必须埋前向引桥到 `4.6.3`
+
+#### 4.4.2 Mistral-7B：AutoK 的最显著正向案例
+
+- Mistral 固定承担最显著正向案例
+
+#### 4.4.3 Qwen2.5-3B：早层保护回救区间
+
+- 3B 固定承担小模型早层瓶颈的结构性例子
+
+#### 4.4.4 LLaMA-3.1-8B：中等规模共识区间
+
+- LLaMA 固定承担 `BA-k11` 共识节点与中等规模 top-tier 共存的代表性案例
+- 强调其与 `Hkv=8` 架构相关的稳健性，但不写成普适赢家
+
+#### 4.4.5 Qwen2.5-14B：高性能簇共存而无稳定最优
+
+- 14B 固定承担"大模型高性能簇共存"的结构性例子
+
+### 4.5 部署效率评估
+
+本节只讨论系统性能结果，不再重复方法动机。
+
+#### 4.5.1 4K 序列下的 TPOT 对比
+
+#### 4.5.2 长序列 TPOT 扩展规律
+
+#### 4.5.3 性能交叉边界与 GQA 影响
+
+- “Phase Boundary” 统一中文化为“性能交叉边界”
+
+#### 4.5.4 KV Cache 显存压缩率与部署建议
+
+### 4.6 实验结果讨论与效度威胁
+
+本节承担升维解释职责，而不是结果复述职责。
+
+#### 4.6.1 KL 与 MSE 校准目标的规模依赖性机制辨析
+
+- `A.19.3` 的唯一正式归宿
+- 讨论小模型为何分歧更明显、较大模型为何趋同、`INT8` 为何几乎趋同
+
+#### 4.6.2 INT4 结果的分层机制辨析
+
+- 对原 "INT4 vs KIVI 的三层诚实分析" 做正式学术化改写
+- `inv_tau × GQA` 的诊断副产品（Finding 4）统一并入本节的架构依附性段内讨论，不单独抬成新小节
+
+#### 4.6.3 Heuristic 强基线的结构性含义
+
+- 单独讨论 heuristic 作为强基线的机制含义
+
+#### 4.6.4 威胁效度与外推边界
+
+- 统一承接外推边界与效度限制
+
+### 4.7 本章小结
+
+- 按 `RQ1–RQ3` 顺序收束第四章结论
+
+## 第五章 结论与展望
+
+### 5.1 面向 RQ1–RQ3 的研究结论
+
+- 按研究问题逐条作答
+- 不写成实验结果罗列
+
+### 5.2 创新点与学术价值
+
+- 将创新点提升到“理论组织 + 方法实例 + 实证图谱”三个层次
+
+### 5.3 研究局限性
+
+- 保留诚实风格，但统一使用正式学术语言
+
+### 5.4 未来工作展望
+
+- 重点保留：
+  per-prompt routing、更成熟的 role-aware allocator、matched-budget formal compare
+
+### 5.5 结语
+
+- 简洁收束，不再扩写
 
 ---
 
-## 7. 整篇论文的正向收束
+## 5. 关键迁移点冻结
 
-> 本文从 attention 误差传播分析出发，提出一个假设：在 KV Cache 量化中，更贴近模型真实损伤的分析对象是注意力行为。基于这一理论动机，本文首先在静态校准层面引入 behavior-guided 原则，并通过两个量化层次完成初步验证——INT8 证明这套原则能够支撑一条完整可落地的规范验证路径（与 FP16 近乎无损），INT4 进一步证明即便在更困难的低比特区间，该原则在合理的量化架构下仍具备竞争力。在第一层成立的基础上，本文把同一行为原则扩展到预算分配问题，探索 behavior-guided allocator。实验结果揭示出一个更深层的结构现象：allocator 的现实不是一个跨模型统一的最优配置，而是一张由 family、scale、task 共同决定的 operating regime 地图。在这一认识下，AutoK 被自然提出为 profile-guided 的预算建议机制——它是 framework 的扩展，不是 framework 本身。Mistral 给出了这条扩展路径上最清晰的正面案例；3B 揭示了小模型的早层结构瓶颈；14B 说明该思路在大模型上仍能稳定进入高质量区间；7B 则展示了 allocator 内部可见的 aggregation-split 结构分裂；Heuristic 则作为一个强基线，使得 behavior-guided 方法必须靠揭示结构而非打败弱对手来成立。综合来看，本文的贡献不是某个单点方法的普适胜出，而是：提出一个以 behavior 为中心的统一视角，并通过 calibration 与 allocation 两个层次的实证，展示这一视角在 KV Cache 量化问题中的组织力与延展性。
+以下六项迁移作为后续正文施工的硬规则，不再反复讨论：
+
+1. `4.1.5` 彻底移出"实验设置"，改为 `4.2.1`
+2. `A.18 官方 LongBench 对照验证` 前移到 `4.2.2`，并降格为"评测协议一致性检验：官方 LongBench 真实数据对照"
+3. `4.2.1 K/V role mechanism` 拆成两层：
+   - `3.2` 放压缩版动机诊断
+   - `4.3.2` 放完整版证据
+4. `4.4` 的 case roster 从 3 例升级为 4 例，新增 `LLaMA-3.1-8B` 的中等规模共识区间
+5. `3.4.5 Triton 核函数设计` 与 `3.6 复杂度与资源分析` 合并为 `3.7`
+6. `A.19.3 KL vs MSE` 固定放到 `4.6.1`
+
+---
+
+## 6. 章节职责边界
+
+### 6.1 第一章的职责
+
+- 负责立题
+- 不负责方法细节和完整公式推导
+
+### 6.2 第二章的职责
+
+- 负责铺地基与界定研究空白
+- 不负责提前证明本文方法优越
+
+### 6.3 第三章的职责
+
+- 负责回答“为什么这样设计、怎么实现”
+- 不承担完整实验读数与边界讨论
+
+### 6.4 第四章的职责
+
+- 负责回答“证据是否成立、边界在哪里”
+- 不负责重新定义方法或重新组织方法层级
+
+### 6.5 第五章的职责
+
+- 负责按研究问题收束全文
+- 不负责重复第四章的长版结果描述
+
+### 6.6 第三章与第四章的边界
+
+这是本次重构最重要的职责切分：
+
+- 第三章回答：
+  - 理论起点是什么
+  - 方法框架如何组织
+  - 实例化路径如何形成
+  - allocator / `AutoK` 如何定义
+  - 系统如何落地
+- 第四章回答：
+  - 这些设计是否成立
+  - 在哪些条件下成立
+  - 在哪里出现边界、趋同与结构分化
+
+---
+
+## 7. 模型角色冻结
+
+后续正文叙事中，各模型承担如下固定角色：
+
+- **Mistral-7B**
+  `AutoK` 的最显著正向案例
+
+- **Qwen2.5-3B**
+  早层保护回救区间的代表性案例
+
+- **LLaMA-3.1-8B**
+  中等规模共识区间的代表性案例（`BA-k11` 节点），并承担 `Hkv=8` 架构稳健性的对照角色
+
+- **Qwen2.5-14B**
+  高性能簇共存而无稳定最优的代表性案例
+
+- **Qwen2.5-1.5B**
+  `INT8 canonical path` 与官方 LongBench 真实数据对照的锚点模型
+
+- **Qwen2.5-7B**
+  same-family supporting case，仅在需要 supporting regime、quality cliff 或同族规模对照时使用
 
 ---
 
 ## 8. 写作纪律
 
-| 不要写 | 改写成 | 理由 |
-|---|---|---|
-| "我们发现 behavior 更重要" | "基于 attention 误差传播分析，我们提出假设并通过 ... 验证" | 前者是事后总结，后者是研究叙事 |
-| "我们赢了" / "我们的方法最强" | "在 ... 条件下，我们的方案落在 top tier" | 避免 universal claim |
-| "我们不是 universal winner" | "我们揭示出一张由 family/scale/task 决定的 regime 地图" | 用正向语言表达边界 |
-| "INT8 最强" | "INT8 canonical path 给出最干净的规范验证" | 改变 INT8 的叙事定位 |
-| "AutoK 是新方法" | "AutoK 是 framework 自然长出的扩展" | 避免喧宾夺主 |
-| "Prompt-adaptive 有效" | "当前 selector 本质仍是 task-bucket 级别，per-prompt routing 留作 future work" | 数据层诚实 |
-| "Heuristic 被我们击败" | "Heuristic 是强基线，这让 behavior-guided 的贡献只能靠揭示结构而非打败弱对手成立" | 正面承认 baseline |
+### 8.1 正向陈述
 
-### 引用数据的优先级
+避免写：
 
-1. **Level 5**（clean_rerun）→ 正文主表 / 主图
-2. **Level 4**（l2_pareto）→ 正文 Pareto 主图
-3. **Level 3**（phase1_official / l2_kv_asymmetric / l2_prompt_adaptive/8b）→ 第一层叙事起点 / 扩展小节 / Gate C weak/mixed 承接
-4. **Level 2**（phase2_c2b_local / off-protocol）→ 附录 / supporting regime / future work seed
-5. **Level 1**（artifacts / archive）→ Methods 可追溯性 / 防叙事回滑参考
+- “本文不是……”
+- “我们没有……”
+- “这并不意味着……”
 
-（Level 分级详见 `docs/data_asset_inventory_20260420.md` Part C）
+优先写成：
 
----
+- 本文聚焦什么
+- 当前证据支持什么范围
+- 哪些问题属于未来工作
 
-## 9. Research Questions 与 Contributions
+### 8.2 学术论文语气
 
-### 9.1 三个 RQ
+避免：
 
-| RQ | 问题 | 回答 | 证据章节 |
-|---|---|---|---|
-| RQ1 | 在 KV Cache 量化中，什么样的分析对象比单纯数值误差更贴近模型真实损伤？ | 注意力行为（attention behavior） | §1 理论分析 |
-| RQ2 | 以 behavior 为中心的校准原则能否落成一套完整可用的量化系统？ | 能。INT8 canonical + INT4 推进给出完整闭环 | §2 |
-| RQ3 | 同一行为原则能否延伸到更高层的预算分配决策？如果能，它揭示了什么结构？ | 能。揭示出 family/scale/task-dependent 的 operating regime 地图 | §3 + §4 + §5 |
+- internal planning 语言
+- hook、gate、phase 一类内部术语
+- tracker / workbench / memo 化表达
+- 口头汇报式小标题
 
-### 9.2 三个 Contributions
+优先：
 
-| # | Contribution | 支撑 RQ | 性质 |
-|---|---|---|---|
-| C1 | **Framework**：提出以 behavior 为中心的 KV 量化统一原则，贯通 calibration 与 allocation | RQ1, RQ3 | conceptual |
-| C2 | **Method instance**：INT8 canonical path（behavior calibration + Triton 融合核）+ INT4 RoleAlign（behavior + K per-channel / V per-token）+ AutoK（profile-guided budget proposer） | RQ2 | methodological |
-| C3 | **Empirical insight**：allocator 的真实现实是 family/scale/task-dependent 的 regime 地图；heuristic 是强 baseline 需正面承认 | RQ3 | empirical |
+- 连贯论证
+- 清晰章节角色
+- 术语克制
+- 中文学术表达统一
 
-### 9.3 Contribution 叙事纪律
+### 8.3 LongBench 相关统一表述
 
-- **C1 是论文的 conceptual spine**，应在 Ch1 intro + Ch5 conclusion（§5.1 核心发现 + §5.4 结语）显眼讲述
-- **C2 是论文的 engineering substrate**，用于 Ch3 method + Ch4 experiment section
-- **C3 是论文的 research honesty**，用于 Ch5 discussion，不压低 heuristic、不宣称 universal
-- 【条件激活】若 §13 Hook 达 L1：C2 增加一条 "systematic superiority to KIVI under matched budget"
+除非明确指向官方补充验证，否则正文统一使用：
 
----
+> **LongBench 风格合成基准任务**
 
-## 10. 章节映射（故事 §X → thesis/chapters/*.tex）
+只有在 `4.2.2` 这一节中，才明确写：
 
-这张表是 **thesis 改写的入口**。每次打开 thesis/chapters/ 的某个文件前，先查这张表确认对应故事章节。
+> **官方 LongBench 补充验证**
 
-| 故事章节 | Thesis Chapter | 写作任务 |
-|---|---|---|
-| §1 理论动机 | Ch1 §1.2 motivation + Ch3 §3.1 problem formulation | 理论分析段 + 公式 + hypothesis 明述 |
-| §2.1 INT8 canonical | Ch3 §3.2-3.3 calibration method + Ch4 §4.1 INT8 experiment | 方法细节 + Δ=+0.02 主表（表 1） |
-| §2.2 INT4 推进 | Ch3 §3.3 extension to low-bit + Ch4 §4.2 INT4 experiment | 架构选择论证 + INT4 跨模型表（表 2） |
-| §2.3 INT4 vs KIVI 三层诚实分析 | Ch4 §4.2 末尾 + Ch5 §5.1 discussion | L1 / L2 进 Ch4，L3 open question 进 Discussion |
-| §2.5 【Hook】Allocator vs KIVI | Ch4 §4.2.X（条件段） | 激活时写；未激活时删 |
-| §3.1 从 calibration 到 allocation | Ch3 §3.4 allocator method 引入段 | 一段过渡叙事 |
-| §3.2 regime 地图 | Ch4 §4.3 cross-model compare main table | clean_rerun Step 2 主表（表 3） |
-| §3.3 L2 Phase A role-aware | Ch4 §4.3.X role-aware 小节 | 方向可行但未熟的定位 |
-| §3.4 L2 Phase B Pareto ⭐ | Ch4 §4.3 Pareto main figure | Pareto front plot（图 3） |
-| §3.5 【Hook】Allocator vs KIVI allocator 维度 | Ch4 §4.3.X（条件段） | 激活时写；未激活时删 |
-| §4.1-4.2 AutoK 定位 | Ch3 §3.5 AutoK method + Ch4 §4.4 AutoK experiment | 定义 + 跨模型表现（表 4） |
-| §4.3 L2 Phase C Prompt-adaptive | Ch4 §4.4.X + Ch5 §5.X future work | weak/mixed 承接 + lcc 独立点 + future direction |
-| §5.1 Mistral | Ch4 §4.5 Mistral detail | strongest positive case（表 4 详细版） |
-| §5.2 3B | Ch4 §4.5 + Ch5 §5.2 model-specific observation | early-layer rescue（表 5） |
-| §5.3 1.5B | Ch4 §4.5 附带 + 不独立成节 | 与 3B 合讲 |
-| §5.4 14B | Ch4 §4.5 + Ch5 §5.2 | top-tier but no stable winner（表 6） |
-| §5.5 7B aggregation-split | Ch4 §4.6 supporting case + appendix | 引用 phase2_c2b_local（表 7） |
-| §6.1 heuristic 强基线 | Ch4 主表脚注 + Ch5 §5.1 discussion | 正面承认段 |
-| §6.2-6.4 Future work | Ch5 §5.3 未来工作展望 | 3 条未来方向 |
-| §7 正向收束 | Ch1 §1.3 contribution 段 + Ch5 §5.4 结语（Phase 8 一起写） | 收束段 |
-| §8 写作纪律 | **不进论文**，仅 writer 内部纪律 | 检查用 |
-| §9 RQ + Contribution | Ch1 §1.3（Phase 8） + Ch5 §5.1（Phase 8） | intro 明述 RQ/C + Ch5 核心发现 summary |
-| §12 Related Work 定位 | Ch2 Related Work | 写作蓝本 |
-| §13 Hook 说明 | **不进论文**，仅 writer 内部控制 | 决定 §2.5 / §3.5 是否激活 |
-| §14 旧论文处理 | **不进论文**，仅改写纪律 | 保留 / 改写 / 删除决策表 |
-| §15 术语冻结表 | **不进论文**，但正文用词必须严格遵守 | 贯穿全论文 |
+### 8.4 防过度声明与前向引桥
+
+以下六条作为第四章正文的硬性答辩防守纪律，与章节内容同等严肃：
+
+- `4.2.2` 只能写成真实数据对照 / 一致性检验 / sanity check，不得写成全面泛化证明
+- `4.3.1` 必须显式承认 `LLaMA-3.1-8B` 的架构例外，不得把对称 `INT4` 写成无条件、无例外的系统性失效
+- `4.4` 全节必须保留 same-order INT4 budget band 的诚实口径，不得改写成严格 matched-budget formal compare
+- `4.2` 末尾必须用一句话前向引到 `4.6.1`
+- `4.4.1` 或 `4.4` 节末必须用一句话前向引到 `4.6.3`
+- `4.6` 只做升维机制辨析，不做第二轮长版结果复述
 
 ---
 
-## 11. 图表与主表清单（最终方案：8 图 + 9 表 = 17 正文项）
+## 9. 与 frozen mainline 的一致性检查表
 
-经过 2026-04-20 多轮承重测试，论文最终保留 **8 张正文图 + 9 张正文表 + 4 张附录 + 1 条件项**。每一项都承担"去掉后故事链某节断裂"的独立承重角色。
+后续任何目录或段落修改，都应满足以下检查：
 
-### 支撑 C1（Framework）
+**主轴一致性（原 7 条）**：
 
-- **图 ①**：Attention error decomposition 示意图（TikZ）—— 对应 §1 理论起点；K 误差→分布扭曲 / V 误差→聚合偏移
-- **图 ②**：Framework overview（TikZ）—— 对应 §7 收束；calibration + allocation 两层 + behavior 原则贯通
-- **图 ③**：Calibration pipeline（TikZ）—— 对应 §2 方法流程；INT8 KL search + INT4 RoleAlign 两路（去 inv_tau）
-- **图 ④**：Behavior sensitivity heatmap (6 models) ⭐—— 对应 §3.2 + §5 签名视觉；跨模型 sensitivity 形状异质
+- 是否仍以 `behavior-guided framework` 为唯一主轴
+- 是否仍把 `INT8 canonical path` 写作最干净验证实例
+- 是否仍把 allocator / `AutoK` 写作扩展层
+- 是否仍把 allocator 结果收束为策略适用区间，而不是 universal policy
+- 是否仍正面承认 heuristic 是强基线
+- 是否仍把 Prompt-adaptive 放在 exploratory / future work 位置
+- 是否仍保持 allocator-vs-`KIVI-style` formal hook 关闭
 
-### 支撑 C2（Method instance）
+**第四章答辩防守（新增 6 条）**：
 
-- **图 ⑤**：K/V role mechanism（RULER）—— 对应 §2.2；K-only INT4 vs V-only INT4 的损伤不对称 → 图 ① 理论路径的 empirical 对照
-- **表 T1**：INT8 Canonical vs FP16 —— 对应 §2.1；int8↔fp16 Δ=+0.02 硬证据
-- **表 T2**：INT4-RoleAlign vs KIVI Cross-Model —— 对应 §2.2-§2.3；quality / PPL / Needle 跨 4 模型
-- **表 S3**：RoleAlign vs KIVI 设计差异 —— 对应 §2.2-§2.3；KIVI 对比 hub，三层关系快速索引
+- 是否仍把 `4.2.2` 写成评测协议一致性检验，而非全面真实场景泛化证明
+- 是否在 `4.3.1` 的标题与首段中显式容纳 `LLaMA-3.1-8B` 的架构例外
+- 是否在 `4.4` 的典型模型剖面中保留 `LLaMA-3.1-8B` 作为独立 regime node
+- 是否仍保持 same-order INT4 budget band 的诚实口径
+- 是否已在 `4.2` 与 `4.4` 埋入指向 `4.6.1` / `4.6.3` 的 forward pointers
+- 是否仍把 `4.6` 写成讨论节，而不是第二个结果节
 
-### 支撑 C3（Empirical insight，regime map）
-
-- **图 ⑦**：Pareto front plot ⭐⭐—— 对应 §3.4 + §4 + §5.1；quality × kv_cache_mem_mb，3 subplot（7B/8B/Mistral-7B），7B uniform_int4 崩坏 + Mistral auto-k dominant
-- **图 ⑧**：Cross-Model Regime Map heatmap —— 对应 §3.2 + §5；5 model × 4 policy types 颜色矩阵，"2 秒看到 5 个不同赢家"
-- **图 ⑨**：Quality/PPL vs Scale —— 对应 §5；scale 维度连续趋势图（1.5B → 14B）
-- **表 T3**：Cross-Model Compare Main Table ⭐⭐—— 对应 §3.2；4 model × 4 policy × 3 task（clean_rerun Step 2 主表）
-- **表 T4**：Mistral AutoK 5-task Detail —— 对应 §5.1；strongest positive case，cov80=14.76
-- **表 T5**：3B Early-Layer Rescue —— 对应 §5.2；bakv_k1 vs heuristic_k1 catastrophic gap
-- **表 T6**：14B Top-Tier Distribution —— 对应 §5.4；top-3 within ~2% 定量化
-
-### 标准章节元素
-
-- **表 T0**：KV Cache 量化相关工作对比 —— Ch2 Related Work 标准表
-- **表 S1**：实验用模型与 GQA 配置 —— Ch4 §4.1 setup 标准表
-
-### 附录（minimal，4 项）
-
-- **附录 P1**：FP16 基线 + 评测协议汇总（reproducibility 标准）
-- **附录 P2**：实验软硬件环境（reproducibility 标准）
-- **附录 A**：Prompt-adaptive 8B 5-task matrix —— 对应 §4.3 完整数据（正文只给 mean + verdict）
-- **附录 B**：Off-protocol 1.5B/7B Prompt-adaptive —— Future-work seed 数据源，**OFF-PROTOCOL 明确标注**
-
-### 【预留条件图表】（受 §13 Hook 控制）
-
-- 若 L1/L2 激活：**表 T9** Allocator vs KIVI matched-budget comparison（§2.5 / §3.5）
-- 若 L3 激活：**图 ⑩** Allocator vs KIVI Pareto overlay（基于图 ⑦ 叠加 KIVI 基线）
-- 若 L4 激活：**附录表 C** Allocator contribution ablation（static vs fixed-eqmem vs auto-eqmem）
-
-### 已明确废弃项（不进论文）
-
-为防叙事回滑，以下元素**不进新故事论文**（原论文或早期方案中出现过，但与新故事承重测试不符）：
-- 原 `ch3_invtau_heatmap.pdf`（inv_tau 降级）
-- 原 Ch4 K/V 消融 3 表独立版（由图 ⑤ 承担）
-- 原 Ch4 INT4 三方对比、MixedKV 跨模型、14B K/V mixed、inv_tau 温度校正 4 表（已被新故事取代或降级）
-- 原 efficiency TPOT 4 表（整体废弃或仅少数降 appendix）
-- 早期方案里的图 ⑥ INT4 vs KIVI summary（和 T2 重复）、表 T7 7B aggregation-split（Level 2 数据，与 §5.5 supporting 定位冲突）、表 T8 Best-Policy Summary（和 T3 重复）、表 T_mech（图 ⑤ 重复）、表 S2（正文替代）
-
-### 数量对照
-
-| 轮次 | 正文图 | 正文表 | 附录 | 总计 |
-|---|---|---|---|---|
-| 原论文 (thesis-v5-POSITIVE) | ~12 | ~24 | ~9 | ~45 |
-| **本方案（M+ 2026-04-20）** | **8** | **9** | **4** | **21 + 1 条件** |
-
-相对原论文精简约 53%，每一项都通过承重测试。
+只要其中任意一条被破坏，就说明叙事发生了回滑。
 
 ---
 
-## 12. Related Work 定位
+## 10. 后续施工顺序
 
-本节是 **Ch2 Related Work** 的写作蓝本。
+在当前 story 冻结后，后续正文改写顺序固定为：
 
-### 12.1 直接对比基线
+1. 第三章
+2. 第四章
+3. 第五章
+4. 第二章
+5. 第一章
+6. 中英文摘要
 
-| 工作 | 关系 | Cache format | 论文处理 |
-|---|---|---|---|
-| **KIVI** | **最直接基线** | K per-channel + V per-token（与 RoleAlign 同构） | Ch4 §4.2 直接对比；若 §13 Hook 激活，加 matched-budget 正式 compare |
-| **KVQuant** | 相关但 format 不同 | 不同压缩路径 | Ch2 描述关系；不直接数值对比 |
-| **Fixed-bit uniform baselines** | 朴素 baseline | 同 format | 进 Pareto 图作为下界 |
+### 10.1 本轮之后的下一项工作
 
-### 12.2 概念相关但路径不同
-
-| 工作 | 关系 | 我们的定位 |
-|---|---|---|
-| **TurboQuant / NVFP4** | 新兴低比特路径 | Discussion 提及；不直接对比（format/hardware 差异大） |
-| **KVTuner** | allocator 方向相关 | 我们从 behavior 出发，非从 sensitivity surface fitting |
-| **Attention sink / streaming-LLM** | KV cache reduction 不同路径（剪枝 vs 量化） | Related work 区分两条线 |
-
-### 12.3 我们不做的对比
-
-- 不对比 activation 量化（不同问题）
-- 不对比 weight-only 量化（不同层次）
-- 不对比 attention 近似（不同路径）
-
-### 12.4 KIVI 作为核心对比物的三层关系
-
-1. **Format 同构**：K per-channel + V per-token（INT4 非对称）
-2. **校准方式不同**：KIVI 运行时 absmax/min；我们离线 behavior-guided KL search
-3. **Allocator 层面**：KIVI 无 layer-wise budget；我们有 RoleAlign-allocator 扩展（§13 Hook 激活时成为正式对比主张）
-
----
-
-## 13. 【Hook】Allocator vs KIVI Formal Compare Package 接口说明
-
-### 13.1 Hook 状态（2026-04-20，最终关闭）
-
-| 状态字段 | 值 |
-|---|---|
-| **最终状态** | **L4_CLOSED — Hook 不激活，整体并入 Future Work §6** |
-| **决定日期** | 2026-04-20 |
-| **决定依据** | 5-model × 5-task main matrix EXIT=0 完整收口后 G2 Claim Strength 判定：allocator win rate 28% / tie 56% / lose 16%；mean Δ=+0.192（quality 量级 5-20，相当 ≤3% 相对提升）；budget ratio 1.5×–1.8×。Per-model 高度极化：14b win 60% / mistral7b lose 60%。"花 50-80% 额外内存换 ≤3% 平均 quality + 16% 反向输" 不构成 Pareto 优势，符合 §13.2 L4 "mechanism-only" 定义。 |
-| **决定人** | 用户（陈梓浪）—— "我们用了更多的成本还不一定能保证稳赢的话，那我们为什么还要再做这个呢？" |
-| **数据沉没成本保留** | 已产出的 5-model main CSV（360 files, 远端 `results/system_vs_kivi/raw/main/`）+ smoke CSV（90 files）保留为 audit trail，不进正文；若将来扩展 bit dictionary（加 2-bit）或 policy 重搜后数据可能有 re-read 价值 |
-| **执行 ExecPlan** | `.agents/execplans/2026-04-20_allocator-vs-kivi-claim-package.md` —— 视作 "completed with L4 decision" 归档，不再执行新 phase |
-| **Framing 历史** | Framing I (±3% matched-budget) → Framing II (Pareto extension) → **L4 closed** 三步迁移完整记录在 iteration.md 03:22 / 04:42 / 05:04 / 14:XX 条目 |
-| **Allocator 作为机制保留** | allocator 作为本文 §3 方法贡献 (behavior-guided per-layer bit allocation) 保留；它是 C1/C2/C3 框架内 regime-map 的实证探针，不 claim 系统性超越 KIVI |
-| **Hook 完成后插入点 (取消)** | ~~§2.5 / §3.5 / §11 条件表 9 / 图 4 Pareto overlay~~（全部不激活；已在 thesis chapters 里的 "conditional Future Work" / "Hook position" 注释按 L4 规则简化：见 ch4_experiments.tex §4.X.X + ch5_conclusion.tex 条件 limitation） |
-
-### 13.2 Hook 四档激活规则
-
-**L1 systematic win**：
-1. §2.5 写成 "matched-budget 系统对比" 主论点段
-2. §3.5 写成 "allocator 独立贡献" 主论点段
-3. §9.2 C2 升级加一条 "systematic superiority to KIVI under matched budget"
-4. §10 章节映射表激活 Ch4 §4.2.X / §4.3.X
-5. §11 图表清单激活表 9
-
-**L2 quality win + non-inferior systems**：
-1. §2.5 写成 "quality 层面 systematic 优势 + systems 非劣" 段
-2. §3.5 保留但写法弱化为 "allocator 有 quality 增益，systems 非劣"
-3. §9.2 C2 不升级
-4. §10 激活 Ch4 相关段，但不进 Ch1 contribution
-
-**L3 Pareto advantage only**：
-1. §2.5 / §3.5 弱化为 "在 Pareto 前沿占据更好位置"
-2. 只加入 §11 图表中的 Pareto overlay（图 4）
-3. 不改 §9 Contribution / §10 主章节
-
-**L4 mechanism-only / 实验未完成**：
-1. **不做任何章节改动**
-2. §2.5 / §3.5 作为 stub 删除
-3. §13 Hook 本身作为 "future work" 条目并入 §6
-4. Related work §12.1 KIVI 只写已有三层关系（§12.4）
-
-### 13.3 Hook 的"宁缺毋滥"原则
-
-- 只要实验没到 L2 及以上，**不要**把任何 systematic 主张写进主线叙事
-- §2.3 的三层诚实分析（L1 事实 / L2 suggests / L3 open question）**必须始终保留**——它是第一层的底线写法
-- 若实验最终被决定不做，§2.5 / §3.5 / §13 整体作为 "Future Work" 段落并入 §6.2
-
-### 13.4 激活判定清单（最终 L4 关闭）
-
-所有 gate 已走完并产生 L4 判定：
-
-- [x] **G0 Fairness Gate PASS**（2026-04-20 smoke EXIT=0，same format + budget disclosed + strongest-fair KIVI frozen）
-- [x] **G1 Main Matrix Validity Gate PASS**（2026-04-20 main EXIT=0，360 CSV，0 sample failure，Pareto gate `ok=true` 5 个 info_budget_drift 行）
-- [x] **G2 Claim Strength Gate → L4_mechanism_only**（aggregate: `results/system_vs_kivi/aggregate/main/g2_judgment.md`）：25 cells → win 7 / tie 14 / lose 4；per-model 极化（14b win 60%，mistral7b lose 60%）；mean Δ +0.192 量级不足以在 1.5-1.8× budget 下成立 "Pareto advantage" 主张
-- [x] **§13.1 Hook 状态** 标记为 `L4_CLOSED`
-- [ ] thesis chapters 里的 "conditional Future Work" / "Hook position" 注释待下一个写作 session 按 L4 规则简化（核心：把 "如 Hook 激活到 L1/L2 则..." 的 conditional 条款去掉；保留 "matched-budget formal compare 作为 Future Work" 这一条）
-
----
-
-## 14. 旧论文版本（thesis-v5-POSITIVE）的处理原则
-
-### 14.1 旧版快照
-
-- Git tag: `thesis-v5-POSITIVE`
-- 页数: 104 页
-- 主叙事: 5-Contribution 体系（C1-C3 behavior / C4 boundary / C5 inv_tau × GQA）
-- 状态: 已冻结，仍在 git 上可追溯
-
-### 14.2 新故事线相对旧版的章节级调整
-
-| Thesis 章节 | 旧版状态 | 新版处理 |
-|---|---|---|
-| Ch1 Introduction | 5-Contribution | **部分重写**（改为 §9.1 RQ1-3 + §9.2 C1-3） |
-| Ch2 Related Work | KIVI / KVQuant / KVTuner 等 | **保留大部分**，更新 §12.1 直接对比段 + §12.4 三层关系 |
-| Ch3 Method | INT8 / INT4 / Allocator 方法 | **保留方法细节**（INT8 kernel / RoleAlign / MixedKV），调整 §3.1 motivation 叙事对齐故事 §1 |
-| Ch4 Experiments | 多阶段实验 + Finding 1-4 | **重写 §4.3 / §4.5**（改用 clean_rerun 数据 + 新 regime 地图叙事） |
-| Ch5 Discussion | Finding 4（inv_tau × GQA） | **降级**为 discussion 补充；主讨论改为 regime 地图 + heuristic 正面承认 |
-| **[保留 5 章制，Ch5 整合 Conclusion+Discussion+Future]** Ch5 Conclusion（四节：§1 核心发现 / §2 局限 / §3 Future Work / §4 结语） | 旧版 4 Finding + 5-Contribution + inv_tau × GQA 叙事 | **整章重写 Phase 8**（§1 改新 C1-3 summary + heuristic/regime/INT4 open q 等 discussion 观点；§2 去 inv_tau；§3 改新故事 3 条；§4 改正向收束） |
-| Abstract（中/英） | 旧版 5-contribution | **最后重写**（新 C1-3 + 不再宣称 universal） |
-
-### 14.3 必须重画的图
-
-- Ch4 主图（cross-model compare）—— 用 clean_rerun Step 2 重画
-- Pareto 图（图 3）—— 新增，基于 L2 Phase B
-- 原 Finding 4 inv_tau × GQA 图 —— 降级到 appendix（如保留）
-
-### 14.4 必须保留的资产
-
-- `thesis/references.bib`
-- `thesis/figures/` 下非 Ch4 主图的其他图（Ch3 method schematic 等）
-- INT8 / INT4 方法段描述（§3.2-3.3）
-- attention error decomposition 公式（原版若已有，直接复用）
-
-### 14.5 改写顺序
-
-按依赖顺序推进，不跳级：
-
-1. **先改研究背景 + 方法 + 实验**（Ch1 §1.1/§1.2/§1.4 + Ch2 + Ch3 + Ch4）；**Ch1 §1.3 + Ch5 整章 + Abstract 放 Phase 8 最后写**（contribution 与 conclusion 互为镜像，需其它章节稳定后一起写）
-2. **再改 §2-§3 对应章节**（Ch3 method + Ch4 §4.1-§4.3）—— 主线内容
-3. **再改 §5-§6 对应章节**（Ch4 §4.5 + Ch5）—— 模型角色 + discussion
-4. **最后改摘要**（abstract_{en,zh}.tex）—— 锁 final messaging
-
-### 14.6 明确不重写
-
-- 所有已有实验框架代码（`src/` / `scripts/`）
-- Ch3 方法细节（scale / zero-point / calibration objective 公式）
-
----
-
-## 15. 术语冻结表
-
-论文中的关键术语一经定义，**不得在不同章节出现不同表述**。本表即术语契约。
-
-| 中文 | 英文 | 定义 | 不要写成 |
-|---|---|---|---|
-| 行为 | behavior | attention distribution + attention output 的 joint 保持度 | ~~activation~~ / ~~feature map~~ / ~~representation~~ |
-| behavior-guided calibration | behavior-guided static calibration | 以 attention behavior 偏移为目标函数的离线校准 | ~~behavior-based~~ / ~~attention-aware~~（不够精确） |
-| behavior-guided allocator | behavior-guided budget allocator | 基于 behavior sensitivity profile 指导 layer-wise 预算分配 | ~~attention-based allocator~~ |
-| Regime | operating regime | 某 (model family, scale, task) 下的 operating structure（best-k / best-policy 落点） | ~~case~~ / ~~pattern~~（不够准确） |
-| Regime 地图 | regime map | 跨模型的 regime 集合 | ~~landscape~~（过于 landscape-fitting 隐喻） |
-| AutoK | profile-guided budget proposer | 基于 behavior profile 提出合理预算区间的扩展机制 | ~~adaptive allocator~~ / ~~learned allocator~~（暗示在线学习） |
-| 规范验证路径 | canonical validation path | INT8 上用来证明整套 framework 可闭环的干净实例 | ~~best setting~~ / ~~main result~~ |
-| 静态 | static (calibration) | 离线 calibration 产物，推理时不更新 | ~~offline~~（有歧义） |
-| 动态 | dynamic (calibration) | 运行时 absmax/min（KIVI 风格） | ~~online~~（暗示学习） |
-| Final-ready support | final-ready support | 由 clean_rerun pin=ddada19 md5-locked canonical 数据支撑的 claim 等级 | ~~confirmed~~ / ~~validated~~（过强） |
-
-### 15.1 关键动词契约
-
-- **提出**（propose）—— 用于 C1 framework 与 C2 method
-- **揭示**（reveal）—— 用于 C3 empirical insight
-- **落成**（instantiate）—— 用于 INT8 / INT4 实例化 framework
-- **扩展**（extend）—— 用于 allocator / AutoK 顺着原则长出
-- **呈现**（exhibit）—— 用于 regime 地图的描述
-- **不要写**：~~证明~~（prove）/ ~~建立~~（establish）/ ~~保证~~（guarantee）—— 与论文的实证级别不符
-
-### 15.2 中英对应一致性
-
-中文草稿和英文终稿必须一一对应本表，避免混用。例如：
-- 中文"AutoK"始终对应英文"profile-guided budget proposer"
-- 中文"行为"始终对应英文"attention behavior"（不是"activation behavior"）
-
----
-
-## 16. 图表生成细化（每个图/表的完整 spec）
-
-本节给出 §11 图表清单里每个图表的**精确生成 spec**。每个条目包含：Thesis position / Source data / Generation / Elements / Caption template / Note。写 thesis 时按此直接落。
-
-**最终方案 M+ (2026-04-20)**：8 图 + 9 表 + 4 附录 + 1 条件项。废弃项见 §11 末"已明确废弃项"段。
-
----
-
-### 16.1 图 ①：Attention Error Decomposition（C1 理论起点）
-
-- **Position**：Ch3 §3.1 末尾（问题形式化段落的说明图）
-- **Source**：N/A（概念示意图）
-- **Generation**：`thesis/figures/fig1_error_decomposition.tex`（TikZ 手绘，**新写**）
-- **Elements**：
-  - 左栏：attention 流程 block（`q`, `k_i` → `z_i` → `softmax` → `a_i` → `∑a_i v_i` → `o`）
-  - 中栏：量化路径（`k_i → \hat k_i` 红色箭头；`v_i → \hat v_i` 红色箭头）
-  - 右栏：两条传播分支（K 误差 → Δa 分布扭曲；V 误差 → Δo 聚合偏移）
-  - 底部：误差分解公式 `\hat o - o = Σ(\hat a_i - a_i) v_i + Σ\hat a_i (\hat v_i - v_i)`
-- **Caption**：
-  > Figure 1: Two error propagation paths of KV cache quantization through attention. Key (K) errors distort the attention distribution via softmax; Value (V) errors distort content aggregation. This decomposition motivates preserving attention **behavior** rather than raw tensor values.
-- **Note**：单 head 即可，不画 multi-head；不加时间步下标避免混淆
-
-### 16.2 图 ②：Framework Overview（C1 readability spine）
-
-- **Position**：Ch1 §1.4 roadmap 图
-- **Source**：N/A
-- **Generation**：`thesis/figures/fig2_framework.tex`（TikZ，**新写**）
-- **Elements**：
-  - 顶部：principle box → "behavior-guided"（attention distribution + output 保持度）
-  - 中层两个分支：
-    - 左：第一层 calibration（INT8 canonical → INT4 RoleAlign）
-    - 右：第二层 allocation（layer-wise → role-aware → AutoK）
-  - 底部：empirical validation row（clean_rerun canonical + L2 Pareto + regime map）
-  - 虚线箭头：calibration 输出的 sensitivity profile 喂给 allocation
-- **Caption**：
-  > Figure 2: Framework overview. A single behavior principle vertically connects (i) static calibration that preserves attention output, and (ii) layer-wise budget allocation driven by behavior sensitivity profiles. AutoK operates on this shared profile as a natural extension.
-- **Note**：强调"一条原则贯通两层"；不把 AutoK 画成独立分支（避免喧宾夺主）
-
-### 16.3 图 ③：Calibration Pipeline（Ch3 §3.2 方法锚点）
-
-- **Position**：Ch3 §3.2（离线校准流程）
-- **Source**：N/A（流程示意图，**改自原论文 ch3-calib-pipeline TikZ**）
-- **Generation**：`thesis/figures/fig3_calib_pipeline.tex`（TikZ，**改写自原图**）
-- **Elements**：
-  - 输入：校准数据（WikiText-2）→ FP16 前向传播（提取 Q/K/V）
-  - 两路搜索（并行）：
-    - **INT8 path**：`(p_c, g) → min D_KL` 网格搜索，per-group 对称量化
-    - **INT4-RoleAlign path**：`(p_K, p_V) → min D_KL` per-channel K + per-token V 非对称格式
-  - 输出：校准产物 JSON（scales + percentiles）
-  - **相对原论文图的变化**：移除 inv_tau 搜索分支（inv_tau 降级为诊断启发式）
-- **Caption**：
-  > Figure 3: Offline calibration pipeline. Both paths share the same KL divergence objective over attention behavior, differing only in search space (per-group symmetric for INT8 vs per-channel/token asymmetric for INT4-RoleAlign).
-- **Note**：明确标注"两条 path 共享 KL 目标"，这是 framework 贯通性的方法层证据；**不画 inv_tau 路径**
-
-### 16.4 图 ④：Behavior Sensitivity Profile Heatmap ⭐（C1 + C3 签名视觉）
-
-- **Position**：Ch3 §3.3 allocator 方法引入段 **或** Ch4 §4.3 regime 地图视觉入口（推荐 Ch4 §4.3）
-- **Source**：6 个 calibration JSON：
-  - `artifacts/clean_rerun_20260419T09/kv_calib_kl_qwen25_1p5b_int8.json`
-  - `artifacts/clean_rerun_20260419T09/kv_calib_kl_qwen25_3b_int8.json`
-  - `artifacts/kv_calib_kl_qwen25_7b_int8.json`
-  - `artifacts/kv_calib_kl_llama31_8b_int8.json`
-  - `artifacts/clean_rerun_20260419T09/kv_calib_kl_qwen25_14b_int8.json`
-  - `artifacts/clean_rerun_20260419T09/kv_calib_kl_mistral7b_int8.json`
-- **Generation**：`scripts/thesis/plot_sensitivity_heatmap.py`（**新写**）
-- **Elements**：
-  - x 轴：6 个 model（按 scale 升序：1.5B / 3B / 7B / 8B / 14B / Mistral-7B）
-  - y 轴：layer index 归一化到 [0, 1]（关键——不同 depth 跨模型对齐）
-  - 色彩：per-layer behavior sensitivity（KL 偏移度）
-  - 每列顶部标注：该模型 top-3 protected layer 位置（小图标）
-  - 可选：每列旁边 bar chart，显示 sensitivity 集中度（top-3 占比）
-- **Caption**：
-  > Figure 4: Behavior sensitivity profile across 6 models, normalized by layer depth. The heterogeneity of profile shape (early-concentrated in small models, dispersed in large models, middle-peaked in Mistral) directly visualizes the **regime map is a property of sensitivity structure, not just outcome**.
-- **Note**：**这是 behavior framework 的签名视觉**；必须做到 color-blind safe + 高 DPI；y 轴 normalization 是关键（否则不同 depth 无法对齐）
-
-### 16.5 图 ⑤：K/V Role Mechanism（§2.2 架构选择的 empirical 桥梁）
-
-- **Position**：Ch4 §4.2（支撑 K per-channel + V per-token 架构选择）
-- **Source**：`thesis/figures/kv_ablation_summary_ruler.pdf`（**保留原论文图**，数据可用 clean_rerun 重跑更新）
-- **Generation**：**沿用原论文**；若需数据更新，脚本未定
-- **Elements**（对应原论文已有结构）：
-  - 3 条曲线或 bar：K-only INT4 / V-only INT4 / 全 INT4 的 RULER 通过率
-  - 跨 2-3 context length
-  - 关键 callout：**K-only INT4 的退化显著大于 V-only INT4**（图 ① 理论路径的实证对照）
-- **Caption**：
-  > Figure 5: Empirical validation of the asymmetric K/V role predicted by Figure 1. K-only INT4 quantization causes substantially larger quality degradation than V-only INT4, supporting the architectural choice of K per-channel + V per-token asymmetric format (§3.2).
-- **Note**：Caption 必须**显式 bridge 到图 ①**（"Empirical validation of ... predicted by Figure 1"），让读者看到理论→实证的连接
-
-### 16.6 图 ⑦：Pareto Front Plot ⭐⭐（C2 + C3 + §5.1 多线交汇）
-
-- **Position**：Ch4 §4.3 主图（紧跟 Table T3 之后）
-- **Source**：`results/l2_pareto/pareto_front_v4.csv` + `pareto_plot_v4.csv`（335+ rows）
-- **Generation**：`scripts/plot_l2_pareto.py`（**沿用**；核实生成 thesis-grade PDF）
-- **Elements**：
-  - 3 subplot（7b / 8b / mistral7b 各一），共享 y 轴
-  - x 轴：`kv_cache_mem_mb`（对数刻度）
-  - y 轴：normalized quality（task mean 归一化）
-  - Marker：形状区分 policy family（`o` uniform / `△` bakv_fixed / `▽` heuristic / `★` bakv_auto）
-  - 每 subplot 画 Pareto front 连线
-  - 重点标注：**7B uniform_int4 崩坏点**（红色 × + "quality cliff"）；**Mistral bakv_auto_cov80_max**（红色圈 + "Pareto dominant"）
-- **Caption**：
-  > Figure 6 (in-text Figure 7 of thesis): Quality-cost Pareto front across 3 models. Each marker is a (policy, configuration) pair. **7B uniform_int4** shows a clear quality cliff, demonstrating that naive budget allocation is a real failure mode. **Mistral's auto-k** occupies the Pareto-dominant region, providing the clearest positive evidence for profile-guided budget proposal.
-- **Note**：PDF 必须向量；字体嵌入；color-blind safe palette；saves `thesis/figures/fig7_pareto.pdf`；thesis 内编号为 Figure 7（因为图 ⑦ 对应 story 第 7 个视觉）
-
-### 16.7 图 ⑧：Cross-Model Regime Map Heatmap（C3 skim 路径）
-
-- **Position**：Ch4 §4.3 末尾（跟 Table T3 之后；Table T3 是精读 grid，图 ⑧ 是 skim 视觉）
-- **Source**：`results/clean_rerun_20260419T09/summary_final.csv`（step=step2_compare，derived per-model-task best policy family）
-- **Generation**：`scripts/thesis/plot_regime_map.py`（**新写**）
-- **Elements**：
-  - 形式 A（推荐）：5 model (行) × 4 policy types (列) 的 heatmap
-    - 色彩 = 该 policy 在该 model 上的 **relative quality**（归一化到 [0, 1]）
-    - 加粗框 = per-model global best
-  - 可选标注：row-wise "best policy" 标签（不同行不同名）
-- **Caption**：
-  > Figure 7 (in-text Figure 8): Cross-model regime map. Each row is a model, each column is a policy family. **Bold** outlines per-model best policy. The fact that no two rows share the same best policy visualizes the family/scale/task-dependent regime map in 2 seconds.
-- **Note**：这是 T3 的 skim 路径，不是 T3 的替代；色彩选 viridis 或 color-blind safe；确保加粗框清晰可见
-
-### 16.8 图 ⑨：Quality/PPL vs Scale（§5 scale 维度独立可视化）
-
-- **Position**：Ch4 §4.5（per-model case 段落前或末尾）
-- **Source**：`results/clean_rerun_20260419T09/summary_final.csv`（按 model scale aggregate per-metric）
-- **Generation**：`scripts/thesis/plot_scale_trend.py`（**新写**，**扩展自原 ppl_degradation_vs_scale.pdf**）
-- **Elements**：
-  - 2 subplot（共享 x 轴）：
-    - 上：quality vs scale（5 点：1.5B/3B/8B/14B 的 LongBench mean + Mistral-7B）
-    - 下：PPL vs scale（同 5 点）
-  - 多条线：不同 policy（uniform_int4 / bakv_auto_cov80 / heuristic）
-  - x 轴用 log scale
-- **Caption**：
-  > Figure 8 (in-text Figure 9): Quality and PPL trends across model scale under 4 allocator policies. The lines diverge at different scales, reflecting scale-dependent regime behavior rather than a monotonic scaling law.
-- **Note**：保留原论文 ppl_degradation_vs_scale 的 data 结构，扩展为双指标 + 多 policy
-
----
-
-### 16.9 表 T0：KV Cache 量化相关工作对比（Ch2 标准表）
-
-- **Position**：Ch2 §2.4 末尾 relative positioning 段
-- **Source**：手工编撰（参考各 work 的原 paper）
-- **Generation**：`thesis/tables/table_t0_related_work.tex`（手工编写）
-- **Elements**（列）：Method / Cache format / Calibration / Allocator / Our relation
-  - 行：KIVI / KVQuant / KVTuner / TurboQuant / NVFP4 / **Ours (RoleAlign + AutoK)**
-- **Caption**：
-  > Table 0: Comparison of representative KV cache compression methods. Our contribution stands out in the allocator dimension: we treat calibration and allocation as two layers sharing a single behavior principle.
-- **Note**：**不贬低 baseline**；保留原论文 Ch2 L260 的对比结构
-
-### 16.10 表 S1：实验用模型与 GQA 配置（Ch4 §4.1 setup）
-
-- **Position**：Ch4 §4.1 首个 setup 表
-- **Source**：手工列出（HF model card）
-- **Generation**：`thesis/tables/table_s1_models.tex`（手工编写，**扩自原论文 Ch4 L34**）
-- **Elements**：
-  - 行：6 model（Qwen2.5-1.5B/3B/7B/14B + Llama-3.1-8B + Mistral-7B-v0.3）
-  - 列：num_layers / num_heads / num_kv_heads / H_kv ratio / head_dim / revision pin
-- **Caption**：
-  > Table S1: Models and GQA configurations used throughout Chapter 4. Head dimension is fixed at 128; KV heads vary from 2 (Qwen2.5-1.5B) to 8 (Mistral-7B).
-- **Note**：revision 必须 pin；每模型 1 行即可
-
-### 16.11 表 S3：RoleAlign vs KIVI 设计差异（KIVI 对比 hub）
-
-- **Position**：Ch3 §3.2 末尾 **或** Ch4 §4.2 开头（推荐 Ch4 §4.2）
-- **Source**：手工编撰（基于原论文 Ch3 L564）
-- **Generation**：`thesis/tables/table_s3_rolealign_vs_kivi.tex`（手工编写，**沿用原论文结构**）
-- **Elements**：
-  - 行：3 维度（Cache format / Calibration / Allocator）
-  - 列：KIVI-style / **RoleAlign (ours)** / 差异描述
-- **Caption**：
-  > Table S3: Design contrast between RoleAlign and KIVI-style. Same format, different calibration philosophy (offline behavior-guided vs runtime absmax/min), and we add allocator as framework extension.
-- **Note**：KIVI 是论文 core baseline；此表是所有提到 KIVI 的地方的**引用中心**
-
-### 16.12 表 T1：INT8 Canonical vs FP16（C2 第一层硬证据）
-
-- **Position**：Ch4 §4.1 首个数据表
-- **Source**：`results/clean_rerun_20260419T09/summary_phase1.csv`（12 rows：1.5B × 4 kv_mode × 3 task）
-- **Generation**：`scripts/thesis/make_table_int8_canonical.py`（**新写**）
-- **Elements**（pivot 表）：
-  - 行：3 task（narrativeqa / hotpotqa / gov_report）
-  - 列：4 kv_mode × {quality, Δ vs fp16}
-  - 表末：mean across tasks 行
-  - 加粗：int8_ours Δ=+0.02 单元格
-- **Caption**：
-  > Table 1: INT8 canonical path fidelity on Qwen2.5-1.5B-Instruct (clean-provenance pin `ddada19`). INT8-ours is essentially FP16-equivalent (mean Δ=+0.02), establishing the behavior-guided calibration pipeline as a closed loop.
-- **Note**：标明 pin；单模型即可；7B echo 放 appendix 而非主表
-
-### 16.13 表 T2：INT4-RoleAlign vs KIVI Cross-Model（§2.3 三层诚实分析）
-
-- **Position**：Ch4 §4.2
-- **Source**：
-  - 主：`results/clean_rerun_20260419T09/raw/step2_compare/*/` 下 `*int4_ours_asym*.csv` + `*kivi_style*.csv`
-  - 辅：`results/phase1_official/`（supporting only，作 Appendix 历史证据）
-- **Generation**：`scripts/thesis/make_table_int4_kivi.py`（**新写**）
-- **Elements**：
-  - 行：4 models × 3 task = 12 rows（每 model 内 group 3 task + 1 model-mean 行）
-  - 列：quality (int4_ours_asym / kivi_style / Δ) + PPL (…/Δ) + Needle (…/Δ)
-  - 颜色 / 符号标注：Δ > 0 绿色 / `↑`，Δ < 0 红色 / `↓`（不加粗）
-- **Caption**：
-  > Table 2: INT4-RoleAlign vs KIVI-style across 4 models on 3 LongBench tasks. Quality is comparable or slightly favors RoleAlign; PPL slightly favors KIVI; Needle is on par. The difference aligns with the static vs dynamic calibration philosophies rather than a winner-take-all gap.
-- **Note**：**必须保持三层诚实分析**（§2.3 L1/L2/L3）；如果 §13 Hook 激活则在此表**之下**加表 T9 matched-budget formal compare
-
-### 16.14 表 T3：Cross-Model Compare Main Table ⭐⭐（C3 regime map 主证据）
-
-- **Position**：Ch4 §4.3 主表（regime 地图的核心视图，紧跟图 ④ 之后）
-- **Source**：`results/clean_rerun_20260419T09/summary_final.csv` + `raw/step2_compare/`（48 runs = 4 models × 4 policy × 3 task）
-- **Generation**：`scripts/thesis/make_table_cross_model_compare.py`（**新写**）
-- **Elements**：
-  - 4 个 block（每个 model 一个）
-  - 每 block：3 task × 4 policy 宽表
-    - Policies: `uniform_int4_k4v4` / `bakv_k<best>` / `heuristic_k<best>` / `bakv_auto_cov80_max`
-    - Per-model best-k：1.5B→k1 / 3B→k1 / 8B→k11 / 14B→TBD / Mistral→k3
-  - 每行加粗 per-(model, task) best policy
-  - 每 block 末：model mean 行
-- **Caption**：
-  > Table 3: Cross-model policy comparison under matched INT4 budget (clean-provenance pin `ddada19`). **Bold** denotes per-(model, task) best. The heterogeneity of best-policy choice across models and tasks exhibits the **family/scale/task-dependent regime map**—no single policy is uniformly optimal.
-- **Note**：**C3 的核心图表**，必须正文不可移附录；加 footnote 说明 matched-budget 定义；紧跟图 ④ 和图 ⑦
-
-### 16.15 表 T4：Mistral AutoK 5-Task Detail（§5.1 strongest positive case）
-
-- **Position**：Ch4 §4.5.1 Mistral case 段
-- **Source**：`results/clean_rerun_20260419T09/raw/step2_compare/mistral7b/` + `step3_extend/mistral7b/`
-- **Generation**：`scripts/thesis/make_table_mistral_autok.py`（**新写**）
-- **Elements**：
-  - 行：5 task（narrativeqa / hotpotqa / gov_report / dureader / lcc）
-  - 列：5 policy（uniform_int4 / bakv_k3 / heuristic_k3 / **bakv_auto_cov80_max** / kivi_style）
-  - `bakv_auto_cov80` 列加粗；每行加粗 task-best
-  - 表末：mean 行 + cov80=14.76 注解
-- **Caption**：
-  > Table 4: Mistral-7B-Instruct-v0.3 5-task detail under matched INT4 KV memory. The profile-guided auto-k budget proposer wins on 4/5 tasks (mean cov80=14.76 across core+extend), forming the strongest single-family positive case for AutoK.
-- **Note**：cov80 的定义必须在 §3.4 提前给出；不要夸大成 "universal win"
-
-### 16.16 表 T5：3B Early-Layer Rescue（§5.2 focused gap）
-
-- **Position**：Ch4 §4.5.2 3B case 段
-- **Source**：`results/clean_rerun_20260419T09/raw/step2_compare/3b/`
-- **Generation**：`scripts/thesis/make_table_3b_early_layer.py`（**新写**）
-- **Elements**：
-  - 行：3 task
-  - 列：4 policy：`bakv_k1`（protect layer 0）/ `heuristic_k1`（protect middle layer）/ `bakv_k3` / `uniform_int4`
-  - 加粗：bakv_k1 相对 heuristic_k1 的 Δ
-  - Footnote：强调 heuristic_k1 在某 task 上 catastrophic（Δ << 0）
-- **Caption**：
-  > Table 5: Qwen2.5-3B-Instruct shows an **early-layer rescue regime**. `bakv_k1` (protects layer 0) substantially outperforms `heuristic_k1` (protects middle layer), indicating that the critical layer for small-scale models is structurally model-specific and not well-served by symmetric heuristics.
-- **Note**：此表讨论之后 bridge 到 1.5B（§5.3），讲小模型趋势
-
-### 16.17 表 T6：14B Top-Tier Distribution（§5.4 定量化）
-
-- **Position**：Ch4 §4.5.3 14B case 段
-- **Source**：`results/clean_rerun_20260419T09/raw/step2_compare/14b/`
-- **Generation**：`scripts/thesis/make_table_14b_toptier.py`（**新写**）
-- **Elements**：
-  - 行：3 task
-  - 列：~8 policies（uniform / bakv_k1/k3/k5/k11 / heuristic_k1/k3/k11 / bakv_auto）
-  - 加粗 top-3 per task；表末加 "top-3 within X% of top-1" 统计
-- **Caption**：
-  > Table 6: Qwen2.5-14B-Instruct exhibits a tight top-tier (top-3 policies within ~2% relative on each task) with no stable universal winner. This quantifies §5.4's "no stable winner" claim.
-- **Note**：若某 policy gap < 0.5 绝对分数，Caption 里说明 "statistical distinguishability 需 bootstrap CI"
-
----
-
-### 16.18 附录 Tables（4 项）
-
-**附录 P1：FP16 Baseline + Evaluation Protocol**
-- Position：Appendix；Source：手工汇总 + `results/clean_rerun_20260419T09/summary_phase1.csv`
-- Content：FP16 基线跨 model × task 的 quality 参考值 + 评测协议（seed / greedy / n=5 等）
-
-**附录 P2：Experimental Environment**
-- Position：Appendix；Source：手工（SSH 机器配置）
-- Content：GPU 型号、CUDA/PyTorch 版本、Python 版本、关键 lib 版本
-
-**附录 A：Prompt-Adaptive 8B 5-Task Matrix**
-- Position：Appendix A；Source：`docs/clean_rerun_20260419T09/completion_report_20260419.md` Part B
-- Generation：手工转录 或 `scripts/thesis/make_appendix_prompt_adaptive.py`
-- Content：8B × 5 task × {fixed_k / auto_k / prompt_adaptive} + mean + task_best 标注
-- Caption：> Appendix Table A: Prompt-adaptive selector on Llama-3.1-8B × 5 LongBench tasks. The selector wins only on lcc (+0.40 over auto-k); the 5-task mean favors fixed-k. Treat this as exploratory toward future per-prompt routing, **not** as a current claim.
-
-**附录 B：Off-Protocol 1.5B/7B Prompt-Adaptive**
-- Position：Appendix B；Source：`results/l2_prompt_adaptive/{1p5b,7b}/`
-- Generation：`scripts/thesis/make_appendix_prompt_adaptive_offprotocol.py`（**新写**）
-- Content：2 model × 5 task × 3 variant，**OFF-PROTOCOL 标注**
-- Caption：> Appendix Table B (**Off-protocol exploratory, NOT for Gate C**): Prompt-adaptive on Qwen2.5-1.5B / Qwen2.5-7B × 5 tasks. Behavior on these scales differs from 8B, but current selector is still task-bucket level. Reported for future-work seed only.
-
----
-
-### 16.19【Hook 条件】表 T9 / 图 ⑩ / 附录表 C
-
-仅在 §13 Hook 激活后生成：
-
-- **表 T9**（L1/L2 激活）：Allocator vs KIVI matched-budget comparison，4 systems × 5 models × 5 tasks
-- **图 ⑩**（L3 激活）：Allocator vs KIVI Pareto overlay（在图 ⑦ 之上添加 KIVI 对比线）
-- **附录表 C**（L4 激活）：Allocator contribution ablation（static vs fixed-eqmem vs auto-eqmem 增量拆分）
-
-激活时按 §13.2 的规则写入对应位置，不激活则整体废弃。
-
----
-
-### 16.20 图表 Cross-Reference 矩阵
-
-| 图/表 | 主支撑 | 故事章节 | Thesis 章节 | 数据 Level |
-|---|---|---|---|---|
-| 图 ① | C1 | §1 | Ch3 §3.1 | N/A |
-| 图 ② | C1 readability | §7 | Ch1 §1.4 | N/A |
-| 图 ③ | C2 方法锚点 | §2 | Ch3 §3.2 | N/A |
-| 图 ④ ⭐ | C1 + C3 | §3.2 + §5 | Ch3 §3.3 / Ch4 §4.3 | artifacts JSON |
-| 图 ⑤ | C2 机制桥梁 | §2.2 | Ch4 §4.2 | 原论文沿用 |
-| 图 ⑦ ⭐⭐ | C2 + C3 + §5.1 | §3.4 | Ch4 §4.3 | L4 |
-| 图 ⑧ | C3 skim | §3.2 + §5 | Ch4 §4.3 末 | L5 derived |
-| 图 ⑨ | §5 scale 维度 | §5 | Ch4 §4.5 | L5 derived |
-| 表 T0 | Ch2 标准 | §12 | Ch2 §2.4 | 手工 |
-| 表 S1 | setup | §4.1 | Ch4 §4.1 | 手工 |
-| 表 S3 | KIVI hub | §2.2 | Ch4 §4.2 | 手工 |
-| 表 T1 | C2 第一层 | §2.1 | Ch4 §4.1 | L5 |
-| 表 T2 | §2.3 诚实分析 | §2.2 | Ch4 §4.2 | L5 + L3 |
-| 表 T3 ⭐⭐ | C3 regime map | §3.2 | Ch4 §4.3 | L5 |
-| 表 T4 | §5.1 strongest | §5.1 | Ch4 §4.5.1 | L5 |
-| 表 T5 | §5.2 focused | §5.2 | Ch4 §4.5.2 | L5 |
-| 表 T6 | §5.4 定量化 | §5.4 | Ch4 §4.5.3 | L5 |
-| 附 A | §4.3 | §4.3 | Appx A | L3 |
-| 附 B | future-work seed | §4.3 末 | Appx B | L2 |
-
----
-
-### 16.21 `scripts/thesis/` 目录建议
-
-以下 11 个脚本统一放在新建目录 `scripts/thesis/`：
-
-```
-scripts/thesis/
-├── make_table_int8_canonical.py         (T1)
-├── make_table_int4_kivi.py              (T2)
-├── make_table_cross_model_compare.py    (T3 ⭐⭐)
-├── make_table_mistral_autok.py          (T4)
-├── make_table_3b_early_layer.py         (T5)
-├── make_table_14b_toptier.py            (T6)
-├── make_appendix_prompt_adaptive.py     (Appx A)
-├── make_appendix_prompt_adaptive_offprotocol.py  (Appx B)
-├── plot_sensitivity_heatmap.py          (图 ④ ⭐)
-├── plot_regime_map.py                   (图 ⑧)
-└── plot_scale_trend.py                  (图 ⑨)
-```
-
-**不需要新脚本的产出**：
-- 图 ① ② ③：TikZ 手绘，直接写 `thesis/figures/*.tex`
-- 图 ⑤：沿用原论文 `kv_ablation_summary_ruler.pdf`
-- 图 ⑦：沿用 `scripts/plot_l2_pareto.py`
-- 表 T0 / S1 / S3：手工 LaTeX 编写
-- 附录 P1 / P2：手工 LaTeX 编写
-
-**每个 `make_table_*.py` 脚本的 contract**：
-- 输入：单一 CSV 路径（或 glob 模式）
-- 输出：`thesis/tables/<table_id>.tex`（LaTeX 源）+ `thesis/tables/<table_id>.md`（Markdown 调试版）
-- 复用已有的 `scripts/export_tables_latex.py` 工具层
-
-**每个 `plot_*.py` 脚本的 contract**：
-- 输入：JSON artifact 路径 / CSV 路径
-- 输出：`thesis/figures/<fig_id>.pdf`（向量 PDF，字体嵌入，color-blind safe）
-- 使用 matplotlib + 统一 style preset
-
----
-
-## 附 A. 数据引用指引（本故事 → 数据资产）
-
-本故事线每一段对应的数据证据位置：
-
-| 故事章节 | 数据证据源 | Level | 位置 |
-|---|---|---|---|
-| §2.1 INT8 canonical | `results/clean_rerun_20260419T09/raw/step1_canonical/` | 5 | Part C.1 |
-| §2.2 INT4 推进 | `results/phase1_official/` + `results/clean_rerun/raw/step2_compare/*/int4_*` | 3+5 | Part C.2 + C.1 |
-| §2.3 INT4 vs KIVI | `results/clean_rerun/` 中 `int4_ours_asym` vs `kivi_style` 列 | 5 | Part C.1 |
-| §3.2 regime 地图 | `results/clean_rerun_20260419T09/raw/step2_compare/` (4 model × 4 policy) | 5 | Part C.1 |
-| §3.3 L2 Phase A | `results/l2_kv_asymmetric/` (108 CSV) | 3 | Part C.4 |
-| §3.4 L2 Phase B ⭐ | `results/l2_pareto/` (335 CSV + pareto_*_v4.csv) | 4 | Part C.3 |
-| §4.2 AutoK | Pareto top tier + `results/clean_rerun/raw/step2_compare/mistral7b/bakv_auto_cov80_max/` | 4+5 | Part C.1 + C.3 |
-| §4.3 L2 Phase C 官方 | `results/l2_prompt_adaptive/8b/` (15 runs) | 3 | Part C.5 |
-| §5.1 Mistral | `results/clean_rerun/raw/step2_compare/mistral7b/` + step3 | 5 | Part C.1 |
-| §5.2 3B | `results/clean_rerun/raw/step2_compare/3b/` | 5 | Part C.1 |
-| §5.3 1.5B | `results/clean_rerun/raw/step1_canonical/1p5b/` + l2 exploratory | 5+2 | Part C.1 + C.6 |
-| §5.4 14B | `results/clean_rerun/raw/step2_compare/14b/` | 5 | Part C.1 |
-| §5.5 7B aggregation-split | `results/phase2_c2b_local/` (87 files) + `phase2_diag_local/` | 2 | Part C.7 |
-| §6.2 Per-prompt FW | `results/l2_prompt_adaptive/{1p5b,7b}/` (off-protocol seed) + `/8b/lcc` | 2+3 | Part C.5 + C.6 |
-| §6.3 Role-aware FW | `results/l2_kv_asymmetric/` | 3 | Part C.4 |
-| §6.4 Pareto FW | `results/l2_pareto/` | 4 | Part C.3 |
-
----
-
-## 附 B. 5 条 final-ready claim（数据支撑索引）
-
-这 5 条来自 `docs/clean_rerun_20260419T09/completion_report_20260419.md`，均由 clean_rerun pin=`ddada19` 的 md5-locked canonical 数据支撑：
-
-| # | Claim | 对应故事章节 | 主数据源 |
-|---|---|---|---|
-| 1 | INT8 canonical path fidelity（int8↔fp16 Δ=+0.02） | §2.1 | clean_rerun Step 1 |
-| 2 | Mistral-specific auto-k win（cov80=14.76 跨 core+extend task） | §5.1 + §4 | clean_rerun Step 2+3 |
-| 3 | 3B early-layer rescue regime | §5.2 | clean_rerun Step 2 |
-| 4 | 14B top-tier but no stable winner | §5.4 | clean_rerun Step 2 |
-| 5 | Heuristic is a strong baseline | §6.1 | clean_rerun Step 2+3 综合 |
-
----
-
-## 附 C. 修订记录
-
-_本节只 append，不改 §1-§8 既定叙事。_
-
-**2026-04-20 初版**：
-- 从 `docs/data_asset_inventory_20260420.md` Part A 抽出独立成文
-- 内部章节编号从 A.1-A.8 改为 1-8
-- 补充附 A（数据引用指引）+ 附 B（5 claim 数据支撑索引）+ 附 C（修订记录）
-
-**2026-04-20 v2（同日晚间，用户要求"可直接指导论文修改"）**：
-- 新增 §2.5 【Hook】INT4 层面 Allocator vs KIVI 正式对比（预留接口，状态 BLOCKED）
-- 新增 §3.5 【Hook】Allocator 维度的 vs KIVI 正式主张（预留接口，状态 BLOCKED）
-- 新增 §9 Research Questions 与 Contributions（RQ1-3 + C1-3）
-- 新增 §10 章节映射（故事 §X → thesis/chapters/*.tex 的完整映射表）
-- 新增 §11 图表与主表清单（按 C1/C2/C3 分组 + 条件图表）
-- 新增 §12 Related Work 定位（KIVI 作为核心对比物的三层关系）
-- 新增 §13 Hook 说明（四档激活规则 + 宁缺毋滥原则 + 激活判定清单）
-- 新增 §14 旧论文版本（thesis-v5-POSITIVE）处理原则（章节级调整表 + 改写顺序）
-- 新增 §15 术语冻结表（中英对应 + 动词契约）
-
-### Hook 激活日志（本小节在 Hook 状态变化时 append）
-
-- _（暂无条目。若 §13 Hook 激活，此处追加 "YYYY-MM-DD：Hook 从 BLOCKED 转为 L{1,2,3,4}" 条目 + 激活后对 §2.5 / §3.5 / §9.2 的实际修改指针）_
-
----
-
-**文档结束。**
+本轮 story 文档只冻结目录、命名和迁移规则。  
+**图表落位总表**在下一轮单独制作，不再回写到本文件主干。
