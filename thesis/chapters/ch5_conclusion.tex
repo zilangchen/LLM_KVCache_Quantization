@@ -11,222 +11,76 @@
 \setcounter{section}{0}
 \label{chap:conclusion}
 
-本章回扣第一章的核心假设与三个研究问题（RQ1--RQ3），
-以\textbf{主要发现}、\textbf{局限性}、\textbf{未来工作展望}与\textbf{结语}四节
-组织论文的收束。与 drafts §6+§7 镜像对应，
-每一条 contribution（C1--C3）都在对应发现段获得再次提及。
+本章回扣第一章提出的三个研究问题（RQ1--RQ3），
+在前文已经完成理论组织、方法实例化与实证验证的基础上，
+依次从研究结论、创新点与学术价值、研究局限性、未来工作展望与结语五个层面
+对全文作最后收束。
 
 % ============================================================
-\section{主要发现}
-\label{sec:conclusion-findings}
+\section{面向 RQ1--RQ3 的研究结论}
 \label{sec:conclusion-answers}% backward-compat with earlier \ref
 % ============================================================
 
-本文以 behavior-guided 原则组织 KV Cache 量化的 calibration 与 allocation 两层，
-跨 Qwen / LLaMA / Mistral 三个模型家族、1.5B--14B 五个规模与 5 个 LongBench 任务
-给出 5 条\textbf{经验规律}（数据溯源完整，对应提交号 \code{ddada19}）。
+前四章已经完成问题界定、理论组织、方法实例化与实证验证。本节不再回放图表或模型个案，而是回到第一章提出的 RQ1--RQ3，从全文收束的角度概括本文的最终研究结论。
 
-\paragraph{发现一：Heuristic 是强基线——结构观察而非方法失败。}
-\label{sec:discussion-heuristic}
-我们的跨模型实验反复呈现同一结果：
-等距位置保护启发式（heuristic-$k$）在多个模型的多个 task 上与 behavior-guided allocator 接近，
-在 Qwen2.5-14B 上甚至反超 BA-$k$（第~\ref{subsec:exp-per-model-14b}~节）。
-我们认为这不是需要 explain away 的现象，而是 框架 自身意义的体现：
-如果 behavior-guided allocator 只靠"击败弱 基线"成立，它的贡献会非常脆弱；
-而 heuristic 作为强 基线 的事实，把论文贡献从"方法数字更高"\textbf{抬升为"揭示结构分区"}
-（见发现二）。在多个模型上 heuristic 与 BA-$k$ 接近，
-本身就构成 适用区间 map 的证据——在某些 (model, task) 区间里，
-"保护哪些 $k$ 个位置"的选择空间很窄，无论 behavior profile 还是位置启发式
-都会落到相似集合。
+对于 RQ1，本文的回答是：以 attention behavior 为中心的行为引导校准已经不只是一个理论设想，而是在 \texttt{INT8 canonical path} 上落实为一条稳定、可复现且可审计的基础保真路径。第四章的规范路径验证表明，在最保守的位宽和受控协议下，这一原则能够在不依赖额外在线自适应的前提下保持与全精度高度一致的任务行为；官方 LongBench 真实数据对照则只承担评测协议一致性的 sanity check，进一步说明主文的合成评测并未系统性误判这一方向，但这并不构成对真实场景全面泛化的证明。换句话说，RQ1 真正回答的不是“INT8 本身容易做好”，而是 behavior-guided 原则已经在最干净的验证实例上落成了一条可信的基础保真路径。
 
-\paragraph{发现二：(Family, Scale, Task)-dependent Regime 地图。}
-\label{sec:discussion-regime-map}
-第~\ref{sec:exp-cross-model}~节的 Table~\ref{tab:t3-cross-model-main}
-与 适用区间 heatmap（图~\ref{fig:regime-map}）
-在 4 模型 $\times$ 4 policy 空间上给出 per-model winner 分布，
-4 行的最佳列落点各不相同：
-\begin{itemize}[leftmargin=2em, itemsep=1pt, topsep=2pt]
-  \item \textbf{Small-scale early-layer rescue}（Qwen2.5-3B）——
-    BA-$k_1$ 保护 layer 0 相对 heuristic-$k_1$（保护中层）在 NarrativeQA 上回救 $\Delta \approx +4$ 分
-    （§\ref{subsec:exp-per-model-3b}，Table~\ref{tab:t5-3b-early-layer}）；
-  \item \textbf{Mid-scale top-$k$ 共识}（LLaMA-3.1-8B）——
-    BA-$k_{11}$ 与 heuristic-$k_{11}$ 在 NarrativeQA / HotpotQA 上 top-tier 共存；
-  \item \textbf{Large-scale wide-spread}（Qwen2.5-14B）——
-    AutoK 标记 42/48 层 protected，top-3 policy 挤在 $3.5\%$ relative gap 内
-    （§\ref{subsec:exp-per-model-14b}，Table~\ref{tab:t6-14b-toptier}）；
-  \item \textbf{Mistral-specific AutoK win}——
-    cov$80\%$ 覆盖度 阈值下 AutoK 在 5-task 中赢 3 个，单模型最强正面案例
-    （§\ref{subsec:exp-per-model-mistral}，Table~\ref{tab:t4-mistral-autok}）。
-\end{itemize}
-这一异质性\textbf{不否定} behavior 框架 的价值，而是揭示其\emph{作用方式}：
-框架 提供的是一个\emph{读数工具}让不同 适用区间 可被识别与命名，
-而不是一个"永远最优"的 point 估计。
+对于 RQ2，本文的回答是：behavior-guided 原则不能机械地下推到对称 \texttt{INT4}，但它能够在角色感知的非对称路径中恢复为一条可用且可审计的低比特实例。第四章已经表明，对称 \texttt{INT4} 面对的并不是温和退化，而是具有明显架构依附性的阶跃失稳，其中 Key 精度下降是更主要的触发侧；相应地，\texttt{INT4-RoleAlign} 的意义也不在于宣称低比特问题已经普遍解决，而在于在当前已验证的同格式条件和 role-aware 设定下，给出了一条从对称失效走向可用恢复的清晰路径。因此，RQ2 的答案不是“INT4 必然成功”，而是只有在承认 K/V 角色差异、并据此组织格式与离线校准纪律时，低比特路径才可能稳定建立起来。
 
-\paragraph{发现三：INT4 vs KIVI 的 Open Question（format vs calibration 耦合）。}
-\label{sec:discussion-int4-openq}
-第~\ref{sec:exp-int4-kivi}~节的 跨模型 对比显示
-INT4-RoleAlign 与 KIVI 在同 format 下 PPL $\Delta \leq 0.15$、Needle 均 $100\%$。
-由于两者共享 per-channel K + per-token V 格式，本文的对比
-\textbf{只揭示}"同 format 下 calibration philosophy 差异有限"，
-不能\emph{完全解耦} format 与 calibration 各自的独立贡献。
-要完整回答"低比特 KV 量化的主要决定因素究竟是量化架构还是校准策略"，
-未来需要 pure-format 消融（同 calibration、不同 format）
-与 pure-calibration 消融（同 format、不同 calibration）的正交实验
-——这构成 RoleAlign 的\textbf{第一个 open question}。
+对于 RQ3，本文的回答是：由校准链路产出的 behavior sensitivity profile 不仅能够服务参数选择，也可以上升为跨模型预算分配的组织依据，并在当前已验证的预算范围内揭示一张由 family、scale 与 task 共同决定的跨模型策略适用区间图谱。allocator 与 \texttt{AutoK} 的实证结果并未导向一个脱离条件的 universal winner，更稳定的事实是，不同模型会落入不同的高性能区间：有的更依赖早层保护，有的呈现中等规模的共识解，也有的表现为多个高性能簇并存而没有稳定最优。与此同时，heuristic 作为强基线并不是与本文主线相冲突的例外；它恰恰说明，在某些区间里，可行层集本身就很窄。behavior-guided 方法的价值，正在于识别这些区间何时出现、如何区分，并把原本分散的跨模型现象整理成可命名、可解释的结构读数，而不是把单一策略写成普适法则。
 
-\paragraph{发现四：INT8 canonical path 的 $\Delta{=}{+}0.02$ 闭环证据（C2 of RQ1）。}
-\label{sec:discussion-int8}
-在 Qwen2.5-1.5B 上，INT8-ours 相对 FP16 在 3 个 LongBench task 上的
-mean $\Delta = +0.02$（Table~\ref{tab:t1-int8-canonical}），
-在实证上不可区分。这不是"INT8 量化很容易"的废话——
-它证明本文 框架 的 calibration 层在 canonical 规模下\textbf{可闭环}，
-即 behavior-guided 原则存在一个\emph{干净的落地实例}，
-剩下的工作是把同一原则推广到更激进的 bit-width 与更复杂的 allocator 层。
-
-\paragraph{发现五：5 条核心结论。}
-\label{sec:discussion-final-ready}
-本章总结的 5 条 claim 均由 数据溯源完整（提交号 \code{ddada19}） 的
-md5-locked canonical 数据支撑（附录 B）：
-\begin{enumerate}[leftmargin=2em, itemsep=1pt, topsep=2pt]
-  \item INT8 canonical path fidelity（int8$\leftrightarrow$fp16 $\Delta{=}+0.02$）；
-  \item Mistral-specific AutoK win（cov$80\%$ 跨 core+extend task）；
-  \item Qwen2.5-3B early-layer rescue 适用区间；
-  \item Qwen2.5-14B top-tier but no stable winner；
-  \item Heuristic is a strong 基线（结构观察，非方法失败）。
-\end{enumerate}
-
-\paragraph{贡献总结（C1 / C2 / C3 镜像 §\ref{sec:ch1-contribution}）。}
-本文从 attention 误差传播分析出发，
-把\textbf{behavior 保持度}作为 KV Cache 量化的统一组织原则，
-并通过两层实例化与跨模型实证验证其可用性：
-\begin{itemize}[leftmargin=2em, itemsep=1pt, topsep=2pt]
-  \item \textbf{C1}（框架）：behavior 原则同时贯通 calibration 与 allocation 两层，
-    使两者不再是独立优化问题，而是共享同一 behavior sensitivity profile 的两层决策；
-  \item \textbf{C2}（method 实例）：INT8 canonical path 与 FP16 实证不可区分，
-    INT4 RoleAlign 在低比特非对称 format 下与 KIVI 可比，
-    AutoK 作为 profile-guided 预算 proposer 是 框架 自然长出的扩展；
-  \item \textbf{C3}（empirical 洞察）：跨 5 模型、5 任务的 溯源完整 实验
-    揭示一张 (family, scale, task)-dependent 的 适用区间 地图，
-    并在此基础上正面承认 heuristic 作为强基线——
-    behavior-guided allocator 的真实价值从"击败弱对手"升级为"揭示结构分区"。
-\end{itemize}
+综上，对 RQ1--RQ3 的回答共同指向一个更高层的判断：attention behavior 可以作为贯通 calibration 与 allocation 的统一组织原则。它先在 \texttt{INT8 canonical path} 上建立了最干净的基础保真路径，随后在低比特场景下具体化为一条承认 K/V 角色差异的恢复路径，并进一步扩展成能够读出跨模型策略适用区间的结构化工具。因而，第五章后续已经无须再重复第四章的证据，而应转向说明这些研究结论的创新点、学术价值与适用边界。
 
 % ============================================================
-\section{局限性}
+\section{创新点与学术价值}
+\label{sec:ch5-innovation-value}
+% ============================================================
+
+上一节已经概括了本文的最终结论。本节进一步要回答的是，这些结论为何不能只被理解为若干分散的实验现象，而应被看作一项具有统一组织原则、分层实例链和跨模型解释能力的研究。
+
+在理论层面，本文并没有把 KV Cache 量化继续拆成几个彼此独立的局部优化问题，而是把 attention behavior 提升为同时组织 calibration 与 allocation 的统一对象。第三章从注意力近似误差传播分析出发，说明量化损伤真正被下游感知的，并不是孤立的张量数值偏差，而是由注意力分布偏移与聚合输出偏移共同构成的行为失真。由此，校准层与分配层不再只是两个并列的工程步骤，而被收束到同一条 behavior-guided 主线之下。本文在理论层面的推进，也因此不在于为既有量化流程再补一个局部校准目标，而在于为 KV Cache 量化提供了一种能够同时容纳规范验证、低比特实例和预算扩展的解释框架。
+
+在方法层面，本文的价值也不在几项零散技巧的叠加，而在于同一原则下形成了一条层次分明的实例链。作为最保守也最干净的验证实例，\texttt{INT8 canonical path} 说明 behavior-guided 校准能够首先在规范位宽上建立稳定、可复现的基础保真路径；在与 \texttt{KIVI-style} 共享非对称格式的前提下，\texttt{INT4-RoleAlign} 的意义也不在经验上的一边倒优势，而在于它把低比特路径组织成了一条可固化、可审计、并能继续向后扩展的实例化路径。allocator 与 \texttt{AutoK} 同样不应被理解为脱离校准层另起炉灶的第二套方法，而应被视为由同一 behavior sensitivity profile 延伸出的预算决策扩展。与其说本文提出了若干彼此并置的技巧，不如说它把规范验证、低比特恢复与预算扩展组织成了一条前后衔接的分层实例链。
+
+在经验层面，本文的创新同样不在于把某一种策略写成跨模型、跨任务、跨预算条件下的单一最优，而在于识别并命名了一张跨模型策略适用区间图谱。第四章的跨模型结果并没有把比较收束成一个脱离条件的普适赢家，更稳定的事实是，模型家族、参数规模与任务会共同塑造不同策略的高性能区间。本文真正提供的，也不是某个 allocator 在若干读数上赢了多少，而是一种用来辨认这些区间何时出现、如何分化以及为何分化的结构化视角。heuristic 在多个区间中表现为强基线，也并不削弱本文主线；相反，它提醒我们，在某些模型条件下，可行层集本来就很窄，而 behavior-guided 方法的学术价值，正在于把“强基线何时成立、何时失效”这类现象从经验杂讯提升为可解释的结构读数。
+
+因此，本文的创新点与学术价值，并不在于孤立地提出某一个新的量化技巧，而在于以 attention behavior 为统一组织原则，把规范路径、低比特实例与跨模型策略适用区间图谱组织成一条具有解释力、可审计性与可扩展性的研究路径。也正是在这一意义上，本文不仅回答了 KV Cache 量化“如何压缩”的问题，也把这一问题从局部技巧比较推进到了组织原则与结构解释的层面。
+
+% ============================================================
+\section{研究局限性}
 \label{sec:conclusion-limitations}
 % ============================================================
 
-诚实地列出本文研究的 5 条 limitations：
+上一节讨论的是本文在理论组织、方法实例与实证图谱层面的学术价值。本节转而说明这些价值成立在怎样的范围之内。它们并不能脱离评测协议、比较口径、系统环境和时间外推条件而无条件成立；讨论局限性，也不是撤回前面的结论，而是把这些结论的适用域交代清楚。
 
-\begin{enumerate}[leftmargin=2em, itemsep=3pt, topsep=2pt]
-  \item \textbf{实证范围有界 + PPL 作为长上下文指标的局限}。
-  本文在 5 模型 $\times$ 5 LongBench task $\times$ 单一 GPU（NVIDIA H20）
-  的实验空间内展开；不覆盖所有 long-context 场景
-  （如 complex reasoning、code completion long-form、multimodal KV cache）
-  与所有硬件平台（A100 / TPU / 消费级 GPU）。
-  跨硬件的浮点非结合律可能引入 $\leq 9\%$ 的准确率漂移
-  \cite{song2025nondeterminism}，
-  所有 PPL 与 quality 数据仅在本文硬件栈上保持位级确定。
-  近期工作\cite{fang2025longppl}进一步指出，PPL 作为长上下文评测度量
-  存在系统性缺陷（本质上是 per-token log-likelihood 均值，对\emph{关键检索片段}的失真不敏感），
-  这是本文并列报告 Needle / RULER / LongBench 等\textbf{多维度检索与综合质量指标}的原因之一。
+从评测协议上看，本文的主要实证证据建立在统一协议下的 LongBench 风格合成基准任务上，官方 LongBench 真实数据对照仅在 \texttt{INT8 canonical path} 上承担评测协议一致性的补充检验。这说明本文已经能够在协议内给出稳定证据，也通过一块受控的真实数据对照排除了主文评测方向被系统性读错的可能，但这还不足以把相关结论外推为对更广泛真实应用场景的充分证明。尤其当输入分布、任务结构、提示风格与真实部署流程发生变化时，不同量化路径的相对表现及其适用边界仍可能随之改变。与此同时，本文虽然并列使用了 PPL、Needle 与任务级指标以降低单一度量带来的偏差，但这并不意味着已经穷尽了长上下文质量的全部观察维度。
 
-  \item \textbf{INT4 vs KIVI 的 format--calibration 耦合未完全解耦}。
-  如 §\ref{sec:discussion-int4-openq} 所述，
-  RoleAlign 与 KIVI 共享 per-channel K + per-token V 格式，
-  不能 isolate 出"同 format 下离线 calibration 相对运行时 absmax/min 的独立增益"。
-  需要 pure-format 消融 与 pure-calibration 消融 的正交实验
-  才能完整回答——这是\textbf{本文 Open Question 1}。
+在比较口径上，本文关于逐层预算分配与跨模型策略适用区间图谱的主要结论，建立在同量级 \texttt{INT4} 预算带内的经验可比性上，而不是严格的同预算比较。现有证据足以支持不同模型存在不同结构足迹、模型族/规模/任务共同塑造高性能区间，以及 heuristic 作为强基线所具有的结构性含义；但这些证据还不足以形式化证明某一单一策略在严格同预算条件下具有普适更优性，也不足以完成 allocator 相对 \texttt{KIVI-style} 的正式胜负裁决。因此，本文在 allocator 线上的主要贡献，应被理解为对跨模型策略适用区间的识别与组织，而不是对严格预算可比性问题的最终完成。
 
-  \item \textbf{AutoK 仅在静态层面验证}。
-  第~\ref{sec:exp-per-model}~节的 AutoK 是 \emph{model-level} 的 profile-guided
-  proposer（给定模型 calibration，cov$80\%$ 输出固定 预算）；
-  prompt-adaptive 路径（附录~\ref{sec:app-prompt-adaptive-8b}）
-  在 Llama-3.1-8B 上 5-task mean 输 fixed-k（仅 lcc 独立赢 $+0.40$），
-  prompt-adaptive 呈现弱改善或混合特征；
-  selector 仍是 task-bucket fallback 实现，未来见第~\ref{sec:conclusion-future}~节。
+此外，本文不少结论本来就是条件性的，其解释力更多体现为在特定模型族、参数规模与任务类型下识别稳定结构，而不是给出脱离条件的普适规律。尤其在低比特部分，\texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 的比较虽然已被限制在同格式条件下，从而能够较干净地呈现校准理念的差异，但格式贡献、校准贡献与架构因素之间的作用仍未被完全正交解耦。因此，当前证据更支持将 \texttt{INT4-RoleAlign} 理解为一条在既定格式与已验证设定下成立的低比特恢复路径，而不是一条已经对所有模型族、规模与任务条件给出统一因果归因的普适方案。类似地，跨模型策略适用区间图谱揭示的也是条件性结构，而不是一个脱离模型与任务语境的普适规律。
 
-  \item \textbf{Clean-provenance pin 固定的时效性}。
-  所有正文数字基于 pin=\code{ddada19} 的 canonical 数据
-  与 md5-locked manifest；
-  该 pin 保证\emph{审计可追溯}但不保证\emph{泛化到未来 transformer 架构}。
-  当新的长上下文注意力变体（如 sparse attention、hybrid-state）大量出现时，
-  本文的 适用区间 地图需要在新架构上重新产出。
+系统层与动态决策层同样有明确的适用域限制。部署效率、性能交叉边界与显存收益的读数严格绑定于当前的 \texttt{NVIDIA H20}、固定软件栈、当前 backend 组合以及统一解码设定，因此不能被直接推广为跨硬件、跨 runtime 的一般定律。与此同时，\texttt{AutoK} 当前主要仍是模型级的静态 proposer，prompt 级自适应路由只呈现出弱改善或混合信号，尚不足以被写成正式结论；而结果溯源链保证的是结果的可追溯与可审计，而不是对未来 Transformer 变体或新长上下文注意力架构的自动泛化。换句话说，本文给出的，是一个在当前架构、协议和系统环境下可信、可审计的工作版本，而不是可以不经复核就直接迁移到未来环境的答案。
 
-  \item \textbf{Allocator-vs-KIVI 的 matched-预算 formal compare 作为 Future Work}。
-  本文的 跨模型 适用区间 地图在\emph{每 policy 独立最优配置}上对比；
-  严格 matched memory 预算 下对 Allocator（含 RoleAlign）与 KIVI 的 formal comparison
-  作为第~\ref{sec:conclusion-future}~节列出的 Future Work 之一。
-  本文中 allocator 的定位是\emph{per-layer bit allocation 机制}（第~\ref{sec:ch3-allocator}~节的方法贡献），
-  其与 KIVI 的 systematic 对比结论由未来扩展实验给出。
-  一次 5-model × 5-task 的探索性对比
-  （matched memory 预算 下以 \code{rolealign\_allocator\_auto\_eqmem} 对标 \code{kivi\_style}）
-  显示 allocator 需要约 1.5--1.8$\times$ 的 KV 内存开销才能换取平均约 1--3\% 的 quality 提升，
-  其中约 16\% 的 (model, task) 组合反而劣于 KIVI（尤其 Mistral-7B 上呈 Pareto-dominated），
-  cost/benefit 不支持 systematic claim；该对比作为 Future Work 见 §\ref{sec:conclusion-future}。
-\end{enumerate}
+因此，本节讨论的局限性并不意味着前述结论失效，而是把它们成立的条件正式限定下来。当前关于规范路径保真、低比特恢复与跨模型策略适用区间图谱的结论，已经在评测协议、比较口径、条件适用域以及系统与时间外推边界上被清楚界定。下一节将在此基础上，只沿其中可直接转写为研究路线的三类方法性边界，进一步展开未来工作展望。
 
 % ============================================================
 \section{未来工作展望}
 \label{sec:conclusion-future}
 % ============================================================
 
-基于本文的 适用区间 地图与 open questions，我们识别出 3 条最有价值的方向：
+上一节已经说明，本文关于规范路径保真、低比特恢复和跨模型策略适用区间图谱的结论，仍受评测协议、比较口径和系统成熟度等边界约束。顺着这些已经识别出的边界往前走，后续最值得推进的，并不是另起新的问题域，而是继续沿 prompt 级策略选择、角色感知预算机制和严格预算可比性三个方向扩展 behavior-guided 框架的适用域。
 
-\paragraph{未来工作一：Per-Prompt Routing。}
-附录~\ref{sec:app-prompt-adaptive-8b} 的 8B 补充数据揭示
-\textbf{prompt\_adaptive 在 lcc 上独立赢 $+0.40$ 分}
-（vs auto\_k），尽管 5-task mean 不及 fixed\_k；
-附录~\ref{sec:app-prompt-adaptive-offprotocol} 的 1.5B/7B
-off-protocol seed 亦指向 task-domain 相关的 routing signal。
-当前 selector 实现是 \emph{task-bucket fallback}，未充分利用 prompt 级信号——
-一个真正的 per-prompt selector（input prompt embedding $\to$ 最优 policy）
-有可能把当前在 lcc 上的 positive gradient 扩展到更多 task。
-这是 AutoK 的自然延伸方向。
+一条值得优先检验的路线，是将当前以模型级为主的预算建议机制进一步推进到 prompt 级的条件化策略选择。现阶段的 \texttt{AutoK} 主要仍根据离线行为敏感度画像给出模型级建议，而 prompt 级自适应方案的探索只呈现出弱改善或混合信号，尚不足以被写成本文的正式结论。这意味着，现有跨模型策略适用区间图谱虽然已经能够为固定预算提供结构化读数，但它对输入层差异的响应仍然比较粗粒度。后续工作可以继续检验：如果把输入提示的结构表征与当前图谱中的高性能区间联系起来，是否能够形成稳定、可迁移的 prompt 级路由机制，使策略调用从“按模型给建议”进一步推进到“按输入做条件化选择”。
 
-\paragraph{未来工作二：更成熟的 Role-Aware Allocator。}
-第~\ref{sec:ch3-allocator}~节的 allocator 按 K / V 分层分配提供了结构接口，
-但当前的 K/V 非对称分配\emph{可行但未熟}——
-L2 Phase A 的 role-aware kv-asymmetric 实验
-（\code{results/l2\_kv\_asymmetric/}，108 CSV）显示一些局部改善，
-但没有达到\emph{跨模型一致优于 AutoK} 的信号水平。
-K 与 V 的 layer-wise 联合优化（例如 $(b_K^{(l)}, b_V^{(l)})$ 作为 pair 而非独立变量）
-值得作为专项工作。
+沿着同一主线往前走，另一个重要方向，是把当前只具接口形态的角色感知预算扩展推进为更成熟的 role-aware allocator。本文已经表明，K/V 两侧在低比特下并不对称，角色感知的预算语言也因此具备明确的结构基础；但从现有证据看，这种扩展更多体现为“可表达、可试验、局部可受益”，而不是已经形成稳定跨模型占优的成熟机制。也正因此，后续工作更重要的，并不是再提出新的分配名称，而是进一步把 Key 与 Value 两侧的预算描述、耦合关系和 profile 读数结合起来，使预算决策从当前较粗的逐层配置，推进为更细致、也更一致的联合分配机制。只有当这种角色差异真正进入 allocator 的核心决策中，behavior-guided 框架在分配层的解释力与可复用性才可能进一步加强。
 
-\paragraph{未来工作三：Allocator-vs-KIVI Matched-Budget Formal Compare。}
-本文在 matched-预算 下\emph{未}对 allocator-enabled RoleAlign 与 KIVI-style 做 formal compare。
-本轮探索性对比（详见 §\ref{sec:conclusion-limitations} 第 5 条 Limitation）
-在 bit dictionary $\{4, 8, 16\}$ 与固定 5-model × 5-task 矩阵下
-未能在严格 matched memory 预算 下取得 systematic 优势：
-allocator 平均需 1.5--1.8$\times$ KV 内存开销换取约 1--3\% quality 提升，
-且 16\% 的 cell 反向劣于 KIVI（Mistral-7B Pareto-dominated）。
-将来若扩展 bit dictionary（如 2-bit / 3-bit 粒度）或在更长 context / 新架构上重新搜索
-预算-matched policy，可再次评估是否存在让 behavior-guided allocator
-相对 KIVI 稳定占优的\emph{具体 适用区间 带}——
-这构成 allocator 线方法贡献（§\ref{sec:ch3-allocator}）
-与 KIVI-style 格式 基线 之间的自然延伸工作。
+在比较口径层面，allocator 线后续最需要补全的，也不是更多零散个案，而是更严格的同预算比较。第四章已经证明，在当前同量级 INT4 预算带下，不同模型确实会落入不同的策略适用区间，这一点支撑了图谱层面的结构判断；但这并不等于某一单一策略已经在严格同预算条件下完成了形式化胜负裁决。因此，未来工作的重点应放在设计更干净的严格预算可比性协议，以补全 allocator 相对现有基线在正式比较意义上的证据链。比较口径真正收紧之后，本文关于策略适用区间的解释力，才能继续向更可比较的结构主张推进，而不只是停留在经验上同量级预算的读数组织。
+
+总之，本文后续最值得推进的，并不是平行扩张更多方法分支，而是沿同一 behavior-guided 主线继续向三个层面深化：在策略调用层面优先检验 prompt 级路由，在预算机制层面推进更成熟的 role-aware allocator，在比较口径层面补全严格同预算比较。未来工作的重点因此也不在于寻找一个脱离条件的“全局最优”策略，而在于持续扩大这一框架的可解释性、可比较性与适用域。
 
 % ============================================================
 \section{结语}
 \label{sec:conclusion-closing}
 % ============================================================
 
-KV Cache 量化不是一个"找最佳 bit-width"的优化问题，
-而是一个需要\textbf{组织原则}的系统设计问题。
-本文把\emph{behavior 保持度}作为 KV Cache 量化的 first principle，
-完成了 calibration 与 allocation 两层的统一组织，
-并通过 溯源完整 跨 5 模型实证
-交付了一张\textbf{可读数的 operating 适用区间 地图}。
-
-Regime 地图的价值不在于给出"通用最优"，
-而在于使原本隐藏在"多方法跨模型平均数"背后的结构差异可\textbf{被命名、被复用}：
-3B 的 early-layer rescue、14B 的 top-tier wide-spread、Mistral 的 AutoK cov80 胜利、
-以及 heuristic 在多个 适用区间 区间里与 behavior-guided 重合的结构观察——
-这 4 条命名规律构成 behavior 框架 实证结果的\textbf{操作化入口}。
-
-对 KV Cache 社区，本文的贡献是一组\textbf{工具与方法论}：
-一个统一的 calibration-allocation 框架、
-一组可审计的实例化路径（INT8 canonical / INT4 RoleAlign / AutoK）、
-以及一张跨模型 适用区间 地图与三条诚实的 open question。
-我们希望这些工作能为未来的 KV Cache 研究提供\emph{读数尺度}，
-而不仅是一个 point 估计。
+面向长上下文高效推理，KV Cache 量化并不是单纯寻找更低 bit-width 的局部优化问题，而是一个需要统一组织原则的系统设计问题。本文以 attention behavior 为统一组织对象，将 calibration 与 allocation 两层决策纳入同一 behavior-guided 框架，并在规范实例、低比特路径与预算扩展之间建立了可相互印证的分层实例链。更重要的是，本文并未把跨模型实验压成一个脱离条件的“全局最优”策略，而是识别并命名了跨模型策略适用区间图谱，使不同 family、scale 与 task 条件下的结构差异能够被读出、被解释，也为后续研究留下了一种可以继续承接的结构读法。在此基础上，本文也对这些结论的协议边界、比较口径与系统适用域作出了克制而明确的限定，从而使全文结论既保持解释力，也保持可信度。因而，本文的最终价值不在于提出一个永远最优的局部量化技巧，而在于为面向长上下文高效推理的 KV Cache 量化提供了一条以 behavior 为中心、可审计、可扩展并具备结构解释力的研究路径。

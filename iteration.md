@@ -36,6 +36,37 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-23 09:51 | docs(thesis): finalize Chapter 4 prose and cross-chapter interfaces
+- Goal: 收掉 Chapter 4 最后一轮 prose / 接口层遗留问题，使章节主文、Chapter 5 结论接口和 Appendix 命名与已冻结的 Chapter 4 图表系统保持一致。
+- Scope:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `thesis/chapters/ch5_conclusion.tex`
+  - `thesis/chapters/appendix.tex`
+  - `docs/Chapter 4 Draft.md`
+  - `docs/Chapter 5 Draft.md`
+- Changed files:
+  - 清空 Chapter 4 正文中的 `\\S4.x` 引用，统一改为 `第 4.x 节` 或自然中文衔接
+  - 清掉 Chapter 4 主文中的 `same-format`、`matched-budget`、`calibration philosophy` 等 reviewer shorthand
+  - 将 Chapter 5 与 Chapter 4 直接相连的旧接口术语收成中文主导表述
+  - 统一 Appendix 中 `Llama-3.1-8B` 命名，并将残留 provenance / 接口说明改成正常中文
+  - 同步回写 Chapter 4 / 5 Draft adopted text，避免 `Draft ↔ tex` 漂移
+- Commands:
+  - `rg -n \"\\\\S4\\\\.|§4\\\\.|same-format|calibration philosophy|matched-budget|family/scale\" thesis/chapters/ch4_experiments.tex thesis/chapters/ch5_conclusion.tex thesis/chapters/appendix.tex`
+  - `cd thesis && rm -f main.aux main.bbl main.blg main.out main.toc`
+  - `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex && bibtex main && xelatex -interaction=nonstopmode -halt-on-error main.tex && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+  - `pdftotext thesis/main.pdf - | rg -n \"第 4\\\\.3\\\\.1 节|prompt 级自适应方案|结果溯源链|模型族/规模/任务\"`
+- Outputs:
+  - Chapter 4 正文、Chapter 5 接口段和 Appendix 命名已统一到第一轮粗修版本
+  - `docs/Chapter 4 Draft.md` 与 `docs/Chapter 5 Draft.md` adopted text 已同步
+- Validation:
+  - `ch4_experiments.tex` 中 `\\S4.x` 清零
+  - `main.pdf` 全量重建成功
+  - `main.log` 对 undefined citations / labels / rerun 目标 grep 为空
+  - 抽查 Chapter 4 / 5 / Appendix 对应页未出现新的版式异常
+- Risks / follow-ups:
+  - Appendix future-work 里仍可能保留少量面向未来工作的英文术语，这不属于本轮接口清洗 blocker
+  - 下一轮若进入全文终稿联审，应把 Chapter 1 / 5 / Appendix 再做一次跨章命名一致性检查
+
 ### 2026-04-23 09:51 | feat(thesis): polish Chapter 4 figure assets and plotting scripts
 - Goal: 锁定 Chapter 4 六张正式图的第一轮粗修版本，使图面语言、图例位置、标题口径与正文章节职责一致，并为整仓 checkpoint 提供可追溯的图资产提交单元。
 - Scope:
