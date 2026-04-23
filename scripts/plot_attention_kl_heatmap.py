@@ -228,8 +228,8 @@ def plot_paired_heatmap(data_a, data_b, out_dir: Path):
         *[v_matrix for _, _, v_matrix, _, _ in matrices],
     )
 
-    fig = plt.figure(figsize=(13.8, 9.2))
-    gs = fig.add_gridspec(2, 3, width_ratios=[1.08, 1.08, 0.82], hspace=0.24, wspace=0.22)
+    fig = plt.figure(figsize=(13.2, 8.8))
+    gs = fig.add_gridspec(2, 3, width_ratios=[1.12, 1.12, 0.74], hspace=0.26, wspace=0.20)
     image_axes = []
 
     for row, (data, k_matrix, v_matrix, k_layer_mean, v_layer_mean) in enumerate(matrices):
@@ -247,37 +247,50 @@ def plot_paired_heatmap(data_a, data_b, out_dir: Path):
         im_k = ax_k.imshow(k_matrix, aspect="auto", cmap=CMAP, interpolation="nearest", norm=norm)
         im_v = ax_v.imshow(v_matrix, aspect="auto", cmap=CMAP, interpolation="nearest", norm=norm)
 
-        for ax, title in ((ax_k, f"{short_name} — Key 误差"), (ax_v, f"{short_name} — Value 误差")):
+        for ax, title in ((ax_k, f"{short_name} · Key"), (ax_v, f"{short_name} · Value")):
             ax.set_title(title, loc="left", fontweight="bold", pad=8)
-            ax.set_xlabel("头编号")
-            ax.set_ylabel("层编号")
-            ax.axhspan(focus - 0.5, focus + 0.5, facecolor="none", edgecolor="white", lw=1.2, linestyle="--")
+            ax.set_xlabel("Head index")
+            ax.set_ylabel("Layer index")
+            ax.tick_params(axis="both", labelsize=8.6)
+            ax.axhspan(
+                focus - 0.5,
+                focus + 0.5,
+                facecolor="none",
+                edgecolor="white",
+                lw=1.1,
+                linestyle=(0, (4, 2)),
+                alpha=0.95,
+            )
 
         layers = np.arange(k_matrix.shape[0])
-        ax_summary.plot(k_layer_mean, layers, color="#e74c3c", linewidth=1.3, label="Key 均值")
-        ax_summary.plot(v_layer_mean, layers, color="#27ae60", linewidth=1.3, label="Value 均值")
+        ax_summary.plot(k_layer_mean, layers, color="#e74c3c", linewidth=1.6, label="Key")
+        ax_summary.plot(v_layer_mean, layers, color="#27ae60", linewidth=1.6, label="Value")
         ax_summary.axhline(focus, color="#666666", linestyle="--", linewidth=0.8, alpha=0.8)
         ax_summary.text(
-            0.02,
-            0.03,
-            f"峰值层：{focus}",
+            0.04,
+            0.05,
+            f"Peak layer: {focus}",
             transform=ax_summary.transAxes,
             fontsize=7.4,
             bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="#CBD5E1", lw=0.7),
         )
-        ax_summary.set_title(f"{short_name} — 逐层汇总", loc="left", fontweight="bold")
-        ax_summary.set_xlabel("平均 MSE")
-        ax_summary.set_ylabel("层编号")
-        ax_summary.grid(axis="x", alpha=0.25, color="#CBD5E1")
+        ax_summary.set_title(f"{short_name} · Layer mean", loc="left", fontweight="bold", pad=8)
+        ax_summary.set_xlabel("Mean MSE")
+        ax_summary.set_ylabel("Layer index")
+        ax_summary.set_ylim(k_matrix.shape[0] - 0.5, -0.5)
+        ax_summary.set_yticks(np.arange(0, k_matrix.shape[0], 5))
+        ax_summary.tick_params(axis="both", labelsize=8.6)
+        ax_summary.grid(axis="x", alpha=0.22, color="#CBD5E1", linewidth=0.8)
         if row == 0:
-            ax_summary.legend(loc="upper right", frameon=True)
+            ax_summary.legend(loc="upper left", frameon=False, handlelength=1.6, borderaxespad=0.2)
 
-    cbar = fig.colorbar(im_v, ax=image_axes, fraction=0.025, pad=0.02)
-    cbar.set_label("重建误差 MSE（稳健色标）", fontsize=9)
+    cbar = fig.colorbar(im_v, ax=image_axes, fraction=0.022, pad=0.018)
+    cbar.set_label("Reconstruction MSE", fontsize=9)
     fig.suptitle(
-        f"配对 K/V 重建误差对比 — {data_a['kv_mode']}（统一色标）",
+        "Paired K/V reconstruction error",
         fontsize=12.0,
-        y=0.99,
+        y=0.985,
+        fontweight="bold",
     )
 
     out_path = out_dir / f"kv_error_heatmap_pair_{data_a['kv_mode']}.pdf"

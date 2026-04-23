@@ -36,6 +36,49 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-23 09:51 | feat(thesis): polish Chapter 4 figure assets and plotting scripts
+- Goal: 锁定 Chapter 4 六张正式图的第一轮粗修版本，使图面语言、图例位置、标题口径与正文章节职责一致，并为整仓 checkpoint 提供可追溯的图资产提交单元。
+- Scope:
+  - `scripts/generate_thesis_figures.py`
+  - `scripts/plot_attention_kl_heatmap.py`
+  - `scripts/thesis/plot_l2_pareto.py`
+  - `scripts/thesis/plot_regime_map.py`
+  - `scripts/thesis/plot_scale_trend.py`
+  - `scripts/thesis/plot_sensitivity_heatmap.py`
+  - `thesis/figures/ch4/*.pdf`
+  - `thesis/figures/fig4_sensitivity_heatmap.pdf`
+  - `thesis/figures/fig7_pareto.pdf`
+  - `thesis/figures/fig8_regime_map.pdf`
+  - `thesis/figures/fig9_scale_trend.pdf`
+  - `thesis/figures/kv_ablation_summary_ruler.pdf`
+- Changed files:
+  - 图 4-1 改成折线图，补数据标注并将 legend 收到图内右下角
+  - 图 4-2 收口标题、去工程 mode 名、统一 paired K/V reconstruction 诊断图语言
+  - 图 4-3/4-4/4-5/4-6 全部收成“中文主导、术语保留英文”的论文图口径
+  - 图 4-6 额外完成图例挪到右下角、标题 `Family/Scale` 大写、删除底部两行辅助文字
+- Commands:
+  - `python3 scripts/generate_thesis_figures.py`
+  - `python3 scripts/plot_attention_kl_heatmap.py ...`
+  - `python3 scripts/thesis/plot_l2_pareto.py`
+  - `python3 scripts/thesis/plot_regime_map.py`
+  - `python3 scripts/thesis/plot_scale_trend.py`
+  - `python3 scripts/thesis/plot_sensitivity_heatmap.py`
+  - `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+- Outputs:
+  - `thesis/figures/ch4/fig_ch4_01_kv_ruler32.pdf`
+  - `thesis/figures/ch4/fig_ch4_02_kv_error_heatmap.pdf`
+  - `thesis/figures/ch4/fig_ch4_03_autok_protection_map.pdf`
+  - `thesis/figures/ch4/fig_ch4_04_pareto_budget_quality.pdf`
+  - `thesis/figures/ch4/fig_ch4_05_regime_heatmap.pdf`
+  - `thesis/figures/ch4/fig_ch4_06_family_scale_summary.pdf`
+- Validation:
+  - 6 张正式图均已进入 `main.pdf`
+  - 图内语言纪律与 Chapter 4 caption / prose 当前口径一致
+  - 图 4-6 的用户指定改动（legend、标题大小写、去底部说明）已真实落版
+- Risks / follow-ups:
+  - 后续若做全文终稿联审，仍需把图内语言与 Chapter 5 / Appendix 的最终口径一起再核一遍
+  - 当前记录对应“第一轮粗修 checkpoint”，不是最终投稿前的最后图面 polish
+
 ### 2026-04-21 21:56 | Story + Ch3 Writing 联合 patch: 第四章 case roster 3→4 + overclaim guardrails + Ch3 Writing 映射表同步
 - Goal: 吸收 ChatGPT 对 `thesis_story_20260420.md` 的 5 条 patch 建议（§4.2.2 降调 / §4.3.1 架构依附 / §4.4 加 LLaMA-8B / §8.4 overclaim guardrails / §9 checklist +6），并反向同步 Ch3 Writing §0.3 映射表使 §4.6 编号与 story 保持一致
 - Changed files:

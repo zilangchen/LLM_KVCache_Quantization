@@ -48,16 +48,16 @@ from _common import (  # noqa: E402
 FIG_ID = "fig4_sensitivity_heatmap"
 
 MODEL_TO_SWEEP = {
-    "3b":        ("sweep_3b",        "bakv_auto_cov80_max", "Qwen2.5-3B\n(cov80)"),
-    "8b":        ("sweep_8b",        "bakv_auto_cov80_max", "Llama-3.1-8B\n(cov80)"),
-    "14b":       ("sweep_14b",       "bakv_auto_cov90_max", "Qwen2.5-14B\n(cov90)"),
-    "mistral7b": ("sweep_mistral7b", "bakv_auto_cov80_max", "Mistral-7B\n(cov80)"),
+    "3b":        ("sweep_3b",        "bakv_auto_cov80_max", "Qwen2.5-3B", "AutoK cov80"),
+    "8b":        ("sweep_8b",        "bakv_auto_cov80_max", "LLaMA-3.1-8B", "AutoK cov80"),
+    "14b":       ("sweep_14b",       "bakv_auto_cov90_max", "Qwen2.5-14B", "AutoK cov90"),
+    "mistral7b": ("sweep_mistral7b", "bakv_auto_cov80_max", "Mistral-7B", "AutoK cov80"),
 }
 MODEL_ORDER = ["3b", "8b", "14b", "mistral7b"]
 
 
 def load_per_layer_bits(model_key: str):
-    sweep_dir, policy, _ = MODEL_TO_SWEEP[model_key]
+    sweep_dir, policy, _, _ = MODEL_TO_SWEEP[model_key]
     path = ARTIFACTS_DIR / "clean_rerun_20260419T09" / "allocator" / sweep_dir / f"{policy}.json"
     with open(path) as f:
         d = json.load(f)
@@ -79,16 +79,32 @@ def main():
     set_mpl_style()
     import matplotlib.pyplot as plt
     from matplotlib.colors import ListedColormap, BoundaryNorm
+    from matplotlib import font_manager
+    from matplotlib.font_manager import FontProperties
 
-    # 4 subplot 横排
-    fig, axes = plt.subplots(1, 4, figsize=(12, 5), sharey=False)
-    cmap = ListedColormap(["#E5F5F9", "#2CA25F"])  # light-gray (4bit) vs dark-green (8bit)
+    cjk_font = None
+    for family in ["Arial Unicode MS", "Hiragino Sans GB", "STHeiti", "Heiti TC", "PingFang HK"]:
+        try:
+            font_path = font_manager.findfont(
+                FontProperties(family=family),
+                fallback_to_default=False,
+            )
+            cjk_font = FontProperties(fname=font_path)
+            break
+        except Exception:
+            continue
+    if cjk_font is None:
+        raise RuntimeError("No CJK-capable font found for fig4_sensitivity_heatmap.")
+
+    # 4 subplot 横排：把 protection map 收成结构解释图，而不是调试可视化
+    fig, axes = plt.subplots(1, 4, figsize=(11.6, 4.8), sharey=False)
+    cmap = ListedColormap(["#F2F3EE", "#2F6B4F"])  # default INT4 vs protected INT8
     norm = BoundaryNorm([3, 6, 9], ncolors=2)  # 4→index 0, 8→index 1
 
     top3_info = {}
     for ax, mkey in zip(axes, MODEL_ORDER):
         per_layer, num_layers, avg_bits = load_per_layer_bits(mkey)
-        _, _, title = MODEL_TO_SWEEP[mkey]
+        _, _, title, subtitle = MODEL_TO_SWEEP[mkey]
 
         k_bits_arr = np.array([bits[0] for bits in per_layer], dtype=int)
         v_bits_arr = np.array([bits[1] for bits in per_layer], dtype=int)
@@ -101,48 +117,74 @@ def main():
             aspect="auto",
             cmap=cmap,
             norm=norm,
-            origin="lower",
-            extent=(-0.5, 1.5, 0, num_layers),
+            origin="upper",
             interpolation="nearest",
         )
-        ax.set_title(title, fontsize=10)
+        ax.set_title(title, fontsize=10, pad=18, fontweight="semibold")
         ax.set_xticks([0, 1])
         ax.set_xticklabels([r"$K$", r"$V$"], fontsize=10)
         ax.set_xlim(-0.5, 1.5)
-        ax.set_ylabel("Layer index" if mkey == MODEL_ORDER[0] else "")
-        ax.set_ylim(0, num_layers)
+        yticks = [0, max(0, num_layers // 2 - 1), num_layers - 1]
+        ylabels = ["1", str(max(1, num_layers // 2)), str(num_layers)]
+        ax.set_yticks(yticks)
+        ax.set_yticklabels(ylabels)
+        if mkey == MODEL_ORDER[0]:
+            ax.set_ylabel("层", fontproperties=cjk_font)
+        else:
+            ax.set_ylabel("")
+        ax.tick_params(axis="y", length=2.5)
         ax.grid(False)
+        for spine in ax.spines.values():
+            spine.set_linewidth(0.8)
+            spine.set_color("#666666")
 
-        # 标注 avg_bits
+        cov_label = subtitle.replace("AutoK ", "")
+        protected = np.where(k_bits_arr == 8)[0]
+        top3 = protected[:3].tolist()
+
+        # subtitle：保留 budget 信息，但压成更克制的结构提示
         ax.text(
-            0.5, num_layers + 0.5,
-            f"avg={avg_bits:.2f}bit" if avg_bits else "",
+            0.5, 1.01,
+            (
+                f"{cov_label} · avg {avg_bits:.2f}b"
+                + (f" · top {', '.join(str(i + 1) for i in top3)}" if top3 else "")
+            ) if avg_bits else cov_label,
+            transform=ax.transAxes,
             ha="center", va="bottom", fontsize=8, color="#555",
         )
-
-        # top-3 protected layer (K_bits=8) indices
-        protected = np.where(k_bits_arr == 8)[0]
-        top3_info[mkey] = (protected[:3].tolist(), protected.tolist(), num_layers)
+        top3_info[mkey] = (top3, protected.tolist(), num_layers)
 
     # Legend (shared)
     from matplotlib.patches import Patch
     legend_elements = [
-        Patch(facecolor="#E5F5F9", edgecolor="#666", label="INT4 (default)"),
-        Patch(facecolor="#2CA25F", edgecolor="#666", label="INT8 (protected)"),
+        Patch(facecolor="#F2F3EE", edgecolor="#666", label="INT4 默认"),
+        Patch(facecolor="#2F6B4F", edgecolor="#666", label="INT8 保护"),
     ]
     fig.legend(
         handles=legend_elements,
-        loc="lower center",
+        loc="upper center",
         ncol=2,
-        bbox_to_anchor=(0.5, -0.02),
+        bbox_to_anchor=(0.5, 0.98),
         frameon=False,
+        prop=cjk_font,
     )
 
     fig.suptitle(
-        r"Behavior-guided AutoK per-layer bit allocation (K/V columns)",
-        fontsize=11, y=1.02,
+        r"Behavior-guided AutoK 逐层保护图",
+        fontsize=11, y=1.06, fontweight="semibold",
+        fontproperties=cjk_font,
     )
-    plt.tight_layout()
+    fig.text(
+        0.02, 0.5, "浅层", rotation=90,
+        va="center", ha="center", fontsize=8.5, color="#666666",
+        fontproperties=cjk_font,
+    )
+    fig.text(
+        0.98, 0.5, "深层", rotation=270,
+        va="center", ha="center", fontsize=8.5, color="#666666",
+        fontproperties=cjk_font,
+    )
+    plt.tight_layout(rect=(0.03, 0.02, 0.97, 0.90))
 
     pdf_path = save_figure_pdf(fig, FIG_ID)
     print(f"\n[write] {pdf_path}")

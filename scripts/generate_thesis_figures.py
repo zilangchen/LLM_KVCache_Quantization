@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import json
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -794,7 +795,7 @@ def fig_appendix_memory_dashboard(tables_dir, out_dir):
 
 
 def fig_kv_ablation_summary_ruler(project_root, out_dir):
-    """Grouped bar chart summarizing K/V sensitivity with MixedKV."""
+    """Diagnostic line chart summarizing K/V sensitivity with MixedKV."""
     print("Fig: kv_ablation_summary_ruler")
     # Fall-back search order (newest canonical path first)
     ruler_candidates = [
@@ -818,8 +819,21 @@ def fig_kv_ablation_summary_ruler(project_root, out_dir):
         ("Qwen2.5-7B", "7b", paper_tables_dir / "table3_mixedkv_qwen25_7b.csv"),
         ("LLaMA-3.1-8B", "8b", paper_tables_dir / "table3_mixedkv_llama31_8b.csv"),
     ]
+    display_labels = ["Qwen2.5\n1.5B", "Qwen2.5\n7B", "LLaMA-3.1\n8B"]
     methods = ["K-only", "V-only", "K4V8", "MixedKV"]
     values = {m: [] for m in methods}
+    local_edges = {
+        "K-only": "#426CB0",
+        "V-only": "#8E5AA8",
+        "K4V8": "#BA564F",
+        "MixedKV": "#B0871E",
+    }
+    local_faces = {
+        "K-only": "#DEE7F7",
+        "V-only": "#EADFF2",
+        "K4V8": "#F6DFDB",
+        "MixedKV": "#F8EEC7",
+    }
 
     for model_label, model_key, mixedkv_csv in model_rows:
         sub = ruler[ruler["model_key"] == model_key]
@@ -830,49 +844,108 @@ def fig_kv_ablation_summary_ruler(project_root, out_dir):
         mixed_val = float(mixed_df[mixed_df["kv_mode"] == "int4_mixed_kv"]["ruler_mean"].iloc[0])
         values["MixedKV"].append(mixed_val)
 
-    fig, ax = plt.subplots(figsize=(8.8, 5.6))
-    x = np.arange(len(model_rows))
-    width = 0.18
-    for i, method in enumerate(methods):
-        offset = (i - 1.5) * width
-        hatch = "//" if method == "K4V8" else None
-        bars = ax.bar(
-            x + offset,
-            values[method],
-            width=width,
-            color=KV_ABLATION_COLORS[method],
-            edgecolor="white",
-            linewidth=0.5,
+    fig, ax = plt.subplots(figsize=(8.2, 4.7))
+    x = np.array([0.0, 1.0, 2.0])
+    label_offsets = {
+        "K-only": [(-18, 10), (-18, 10), (-20, -10)],
+        "V-only": [(16, -2), (16, -2), (-10, 12)],
+        "K4V8": [(0, 14), (0, 14), (18, -2)],
+        "MixedKV": [(0, 15), (0, 15), (18, 10)],
+    }
+    ax.set_axisbelow(True)
+    ax.axhspan(0, 2.0, color="#FDF0F0", zorder=0)
+    for method in methods:
+        vals = np.array(values[method], dtype=float)
+        ax.plot(
+            x,
+            vals,
+            color=local_edges[method],
+            linewidth=1.8,
+            marker="o",
+            markersize=7.0,
+            markerfacecolor=local_faces[method],
+            markeredgecolor=local_edges[method],
+            markeredgewidth=1.1,
             label=method,
-            hatch=hatch,
-            zorder=3,
+            zorder=4,
         )
-        for bar, val in zip(bars, values[method]):
-            if val < 1.0:
-                # Collapsed result — mark as FAIL
-                ax.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    0.8,
-                    "FAIL",
-                    ha="center", va="bottom",
-                    fontsize=6.5, fontweight="bold", color="#C0392B",
-                    rotation=90,
-                )
-            else:
-                ax.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    val + 0.55,
-                    f"{val:.1f}",
-                    ha="center", va="bottom",
-                    fontsize=7.2, color="#333333",
-                )
+        for idx, (xp, yp) in enumerate(zip(x, vals)):
+            dx, dy = label_offsets[method][idx]
+            label = "0" if yp < 1.0 else f"{yp:.1f}"
+            ax.annotate(
+                label,
+                xy=(xp, yp),
+                xytext=(dx, dy),
+                textcoords="offset points",
+                ha="center",
+                va="center",
+                fontsize=8.1,
+                fontweight="bold" if yp < 1.0 else "normal",
+                color=local_edges[method] if yp < 1.0 else "#111827",
+                bbox=dict(
+                    boxstyle="round,pad=0.18",
+                    fc="white",
+                    ec=local_edges[method],
+                    lw=0.6,
+                    alpha=0.97,
+                ),
+                zorder=6,
+                clip_on=False,
+            )
     ax.set_xticks(x)
-    ax.set_xticklabels(["Qwen\n1.5B", "Qwen\n7B", "LLaMA\n8B"])
-    style_axis(ax, ylabel="RULER 通过率 (%)")
-    place_panel_tag(ax, "", "32K 下 K/V 敏感性")
-    ax.legend(ncol=4, loc="upper center", bbox_to_anchor=(0.5, -0.12), frameon=True, fontsize=8)
-    fig.tight_layout(rect=(0, 0.11, 1, 1))
-    save_fig(fig, out_dir / "kv_ablation_summary_ruler.pdf")
+    ax.set_xticklabels(display_labels, fontsize=9.4, fontweight="bold")
+    ax.set_xlim(-0.22, 2.28)
+    ax.set_ylim(0, 39.5)
+    ax.set_yticks(np.arange(0, 41, 5))
+    style_axis(ax, ylabel="RULER pass rate (%)")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_color("#111827")
+    ax.spines["bottom"].set_color("#111827")
+    ax.spines["left"].set_linewidth(1.1)
+    ax.spines["bottom"].set_linewidth(1.1)
+    ax.tick_params(axis="x", length=0)
+    ax.tick_params(axis="y", labelsize=9.2)
+    ax.set_title("32K context · K/V sensitivity", fontsize=10.4, pad=8, fontweight="bold")
+    legend_handles = [
+        Line2D(
+            [0], [0],
+            color=local_edges[m],
+            linewidth=1.8,
+            marker="o",
+            markersize=6.8,
+            markerfacecolor=local_faces[m],
+            markeredgecolor=local_edges[m],
+            markeredgewidth=1.0,
+            label=m,
+        )
+        for m in methods
+    ]
+    ax.legend(
+        legend_handles,
+        methods,
+        loc="lower right",
+        bbox_to_anchor=(0.985, 0.12),
+        bbox_transform=ax.transAxes,
+        ncol=2,
+        frameon=True,
+        fontsize=7.8,
+        columnspacing=0.95,
+        handlelength=1.55,
+        handletextpad=0.55,
+        labelspacing=0.35,
+        borderpad=0.35,
+        facecolor="white",
+        edgecolor="#D0D5DD",
+        framealpha=0.95,
+    )
+    fig.tight_layout()
+    out_path = out_dir / "kv_ablation_summary_ruler.pdf"
+    save_fig(fig, out_path)
+    ch4_alias = out_dir / "ch4" / "fig_ch4_01_kv_ruler32.pdf"
+    if (out_dir / "ch4").exists():
+        shutil.copyfile(out_path, ch4_alias)
+        print(f"  -> {ch4_alias.relative_to(out_dir)} synced")
 
 
 # ═══════════════════════════════════════════════════════════════

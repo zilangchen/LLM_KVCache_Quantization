@@ -24,15 +24,18 @@ Run:
 
 from __future__ import annotations
 
+import csv
 import sys
 import pathlib
 import numpy as np
+from matplotlib import font_manager
+from matplotlib.font_manager import FontProperties
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from _common import (  # noqa: E402
-    load_summary_final,
+    CLEAN_RERUN_DIR,
     set_mpl_style,
     save_figure_pdf,
     print_contract,
@@ -43,7 +46,7 @@ FIG_ID = "fig8_regime_map"
 MODEL_ORDER = ["3b", "8b", "14b", "mistral7b"]
 MODEL_LABEL = {
     "3b":        r"Qwen2.5-3B",
-    "8b":        r"Llama-3.1-8B",
+    "8b":        r"LLaMA-3.1-8B",
     "14b":       r"Qwen2.5-14B",
     "mistral7b": r"Mistral-7B",
 }
@@ -69,18 +72,52 @@ PER_MODEL_AUTOK = {
 
 POLICY_COLS = ["uniform", "ba_fixed", "heuristic", "ba_auto"]
 POLICY_HEADER = {
-    "uniform":    "Uniform\nINT4",
-    "ba_fixed":   "BA-$k$\n(fixed)",
-    "heuristic":  "Heuristic-$k$",
+    "uniform":    "统一\nINT4",
+    "ba_fixed":   "BA-$k_*$",
+    "heuristic":  "Heuristic-$k_*$",
     "ba_auto":    "BA-AutoK",
 }
 
 TASK_ORDER = ["narrativeqa", "hotpotqa", "gov_report"]
 
 
-def build_mean_matrix(df):
+def find_cjk_font() -> FontProperties:
+    """为图内中文标签选择稳定的 CJK 字体。"""
+    candidates = [
+        "Arial Unicode MS",
+        "Hiragino Sans GB",
+        "STHeiti",
+        "Heiti TC",
+        "PingFang HK",
+    ]
+    for name in candidates:
+        try:
+            path = font_manager.findfont(name, fallback_to_default=False)
+        except ValueError:
+            continue
+        if path and pathlib.Path(path).exists():
+            return FontProperties(fname=path)
+    raise RuntimeError("No CJK-capable font found for fig8_regime_map.")
+
+
+def load_summary_rows(path: pathlib.Path):
+    rows = []
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            metric_value = row.get("metric_value", "")
+            try:
+                row["metric_value"] = (
+                    float(metric_value) if metric_value not in ("", None) else np.nan
+                )
+            except ValueError:
+                row["metric_value"] = np.nan
+            rows.append(row)
+    return rows
+
+
+def build_mean_matrix(rows):
     """返回 (model, policy) → task-mean 的矩阵 + per-model best column index."""
-    df = df[df["step"] == "2_compare"]
     mat = np.zeros((len(MODEL_ORDER), len(POLICY_COLS)))
     for i, m in enumerate(MODEL_ORDER):
         best_k_policy = PER_MODEL_BEST_K[m]
@@ -95,12 +132,19 @@ def build_mean_matrix(df):
                 target = heur_policy
             elif col == "ba_auto":
                 target = auto_policy
-            sub = df[(df["model"] == m) & (df["kvmode_or_policy"] == target)
-                     & (df["task"].isin(TASK_ORDER))]
-            if sub.empty:
+            sub = [
+                row["metric_value"]
+                for row in rows
+                if row["step"] == "2_compare"
+                and row["model"] == m
+                and row["kvmode_or_policy"] == target
+                and row["task"] in TASK_ORDER
+                and not np.isnan(row["metric_value"])
+            ]
+            if not sub:
                 mat[i, j] = np.nan
             else:
-                mat[i, j] = sub["metric_value"].mean()
+                mat[i, j] = float(np.mean(sub))
     return mat
 
 
@@ -127,11 +171,14 @@ def main():
     import matplotlib.pyplot as plt
     from matplotlib.patches import Rectangle
 
-    df = load_summary_final()
-    mat = build_mean_matrix(df)
+    cjk_font = find_cjk_font()
+    summary_path = CLEAN_RERUN_DIR / "summary_final.csv"
+
+    rows = load_summary_rows(summary_path)
+    mat = build_mean_matrix(rows)
     mat_norm = row_normalize(mat)
 
-    fig, ax = plt.subplots(figsize=(7.5, 4.5))
+    fig, ax = plt.subplots(figsize=(7.5, 4.8))
     im = ax.imshow(mat_norm, cmap="viridis", aspect="auto", vmin=0, vmax=1)
 
     # annotate absolute scores in each cell
@@ -150,32 +197,35 @@ def main():
         best_j = int(np.nanargmax(mat[i]))
         rect = Rectangle(
             (best_j - 0.48, i - 0.48), 0.96, 0.96,
-            fill=False, edgecolor="red", linewidth=2.0, zorder=5,
+            fill=False, edgecolor="#C8651A", linewidth=1.7, zorder=5,
         )
         ax.add_patch(rect)
 
     ax.set_xticks(np.arange(len(POLICY_COLS)))
-    ax.set_xticklabels([POLICY_HEADER[p] for p in POLICY_COLS], fontsize=10)
+    ax.set_xticklabels(
+        [POLICY_HEADER[p] for p in POLICY_COLS], fontsize=10, fontproperties=cjk_font
+    )
     ax.set_yticks(np.arange(len(MODEL_ORDER)))
     ax.set_yticklabels([MODEL_LABEL[m] for m in MODEL_ORDER], fontsize=10)
     ax.set_title(
-        r"Cross-model regime map (task-core mean quality, row-normalized)",
+        "跨模型策略适用区间热力图",
         fontsize=11,
+        fontproperties=cjk_font,
     )
 
     # colorbar
     cbar = plt.colorbar(im, ax=ax, fraction=0.04, pad=0.02)
-    cbar.set_label("row-normalized quality (0=row min, 1=row max)")
+    cbar.set_label("行内归一化质量", fontproperties=cjk_font)
 
     # footnote text
     ax.text(
         0.5, -0.25,
-        "Red outline = per-model best policy. "
-        "No two rows share the same best policy → regime map.",
+        r"边框标出每行最佳策略；$k_*$ 表示该模型对应的最佳固定或启发式设置。"
+        r"四行没有共享同一个最佳策略。",
         transform=ax.transAxes, ha="center", va="top",
-        fontsize=8, color="#555",
+        fontsize=8, color="#555", fontproperties=cjk_font,
     )
-    plt.tight_layout()
+    plt.tight_layout(rect=(0, 0.03, 1, 1))
 
     pdf_path = save_figure_pdf(fig, FIG_ID)
     print(f"\n[write] {pdf_path}")

@@ -1,13 +1,13 @@
 """
 scripts/thesis/plot_l2_pareto.py
 
-生成图 ⑦：Quality-cost Pareto Front（story §16.6 ⭐⭐）。
+生成图 ⑦：Quality-budget Pareto View（story §16.6 ⭐⭐）。
 
 数据源: results/l2_pareto/pareto_plot_v4.csv
     Schema: model_key, policy_id, avg_bits, quality_core, peak_mem_mb, ...
 
 图结构 (3 subplot：7b / 8b / mistral7b):
-- x: peak_mem_mb (作为 kv_cache_mem_mb proxy, log-scale)
+- x: avg_bits（平均 KV bit budget，更贴近 chapter §4.3 的 budget-band 口径）
 - y: quality_core (task-core mean quality)
 - marker 形状区分 policy family:
     o = uniform_int4 / △ = bakv_k* (fixed) / ▽ = heuristic_k* / ★ = bakv_auto_cov*
@@ -26,6 +26,7 @@ Run:
 
 from __future__ import annotations
 
+import csv
 import sys
 import pathlib
 import numpy as np
@@ -35,7 +36,6 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from _common import (  # noqa: E402
     RESULTS_DIR,
-    load_csv,
     set_mpl_style,
     save_figure_pdf,
     print_contract,
@@ -49,8 +49,14 @@ PARETO_CSV = RESULTS_DIR / "l2_pareto" / "pareto_plot_v4.csv"
 SUBPLOT_MODELS = ["7b", "8b", "mistral7b"]
 MODEL_TITLES = {
     "7b":         r"Qwen2.5-7B ($H_{kv}{=}4$)",
-    "8b":         r"Llama-3.1-8B ($H_{kv}{=}8$)",
-    "mistral7b":  r"Mistral-7B-v0.3 ($H_{kv}{=}8$)",
+    "8b":         r"LLaMA-3.1-8B ($H_{kv}{=}8$)",
+    "mistral7b":  r"Mistral-7B ($H_{kv}{=}8$)",
+}
+FAMILY_LABELS = {
+    "uniform_int4": "统一 INT4",
+    "bakv_fixed": r"BA-$k_*$",
+    "heuristic": r"Heuristic-$k_*$",
+    "bakv_auto_cov80": "BA-AutoK",
 }
 
 
@@ -70,7 +76,7 @@ def classify_policy(pid: str) -> str:
 
 
 def pareto_front(xs, ys):
-    """Compute Pareto front: minimize x (mem), maximize y (quality)."""
+    """Compute Pareto front: minimize x (budget), maximize y (quality)."""
     pts = sorted(zip(xs, ys), key=lambda p: (p[0], -p[1]))
     front = []
     best_y = -np.inf
@@ -79,6 +85,25 @@ def pareto_front(xs, ys):
             front.append((x, y))
             best_y = y
     return list(zip(*front)) if front else ([], [])
+
+
+def load_pareto_rows(path: pathlib.Path):
+    rows = []
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            avg_bits = row.get("avg_bits", "")
+            quality_core = row.get("quality_core", "")
+            try:
+                row["avg_bits"] = float(avg_bits) if avg_bits not in ("", None) else None
+            except ValueError:
+                row["avg_bits"] = None
+            try:
+                row["quality_core"] = float(quality_core) if quality_core not in ("", None) else None
+            except ValueError:
+                row["quality_core"] = None
+            rows.append(row)
+    return rows
 
 
 def main():
@@ -90,28 +115,51 @@ def main():
 
     set_mpl_style()
     import matplotlib.pyplot as plt
+    from matplotlib import font_manager
+    from matplotlib.font_manager import FontProperties
 
-    df = load_csv(PARETO_CSV)
-    print(f"\n[data] loaded {len(df)} rows from {PARETO_CSV.name}")
-    print(f"[data] models: {df['model_key'].unique().tolist()}")
+    cjk_font = None
+    for family in ["Arial Unicode MS", "Hiragino Sans GB", "Heiti TC", "PingFang HK"]:
+        try:
+            font_path = font_manager.findfont(
+                FontProperties(family=family),
+                fallback_to_default=False,
+            )
+            cjk_font = FontProperties(fname=font_path)
+            break
+        except Exception:
+            continue
+    if cjk_font is None:
+        raise RuntimeError("No CJK-capable font found for fig7_pareto.")
 
-    fig, axes = plt.subplots(1, 3, figsize=(14, 4.5), sharey=False)
+    rows = load_pareto_rows(PARETO_CSV)
+    print(f"\n[data] loaded {len(rows)} rows from {PARETO_CSV.name}")
+    print(f"[data] models: {sorted({row['model_key'] for row in rows})}")
+
+    fig, axes = plt.subplots(1, 3, figsize=(13.6, 4.6), sharey=False)
+    legend_handles = []
+    legend_labels = []
 
     for ax, mkey in zip(axes, SUBPLOT_MODELS):
-        sub = df[df["model_key"] == mkey].dropna(subset=["quality_core", "peak_mem_mb"])
+        sub = [
+            row for row in rows
+            if row["model_key"] == mkey
+            and row["quality_core"] is not None
+            and row["avg_bits"] is not None
+        ]
         print(f"  [{mkey}] {len(sub)} valid points")
 
         # group by policy family and plot
-        sub = sub.copy()
-        sub["family"] = sub["policy_id"].apply(classify_policy)
+        for row in sub:
+            row["family"] = classify_policy(row["policy_id"])
 
         for fam in ["uniform_int4", "bakv_fixed", "heuristic", "bakv_auto_cov80"]:
-            sub_fam = sub[sub["family"] == fam]
-            if sub_fam.empty:
+            sub_fam = [row for row in sub if row["family"] == fam]
+            if not sub_fam:
                 continue
-            ax.scatter(
-                sub_fam["peak_mem_mb"],
-                sub_fam["quality_core"],
+            sc = ax.scatter(
+                [row["avg_bits"] for row in sub_fam],
+                [row["quality_core"] for row in sub_fam],
                 c=POLICY_COLORS.get(fam, "#888"),
                 marker=POLICY_MARKERS.get(fam, "o"),
                 s=70,
@@ -121,62 +169,78 @@ def main():
                 alpha=0.85,
                 zorder=3,
             )
+            label = FAMILY_LABELS.get(fam, fam)
+            if label not in legend_labels:
+                legend_handles.append(sc)
+                legend_labels.append(label)
 
         # Pareto front line (across all points)
-        xs = sub["peak_mem_mb"].values
-        ys = sub["quality_core"].values
+        xs = np.array([row["avg_bits"] for row in sub], dtype=float)
+        ys = np.array([row["quality_core"] for row in sub], dtype=float)
         if len(xs) >= 2:
             fx, fy = pareto_front(xs, ys)
-            ax.plot(fx, fy, linestyle="--", color="#555", linewidth=1.2, alpha=0.7, zorder=2, label="Pareto front")
+            line, = ax.plot(
+                fx, fy,
+                linestyle="--", color="#555", linewidth=1.2, alpha=0.8, zorder=2,
+            )
+            if "Pareto 前沿" not in legend_labels:
+                legend_handles.append(line)
+                legend_labels.append("Pareto 前沿")
 
-        # 先设置 log scale，保证后续 annotate 的 xytext 按 log 位置 transform（data coords）
-        ax.set_xscale("log")
-
-        # Set x-axis limits explicitly based on valid data range (避免 log 刻度下 annotate
-        # 乘法产生超出 data range 的坐标 → 触发 xelatex Dimension too large)
         if len(sub) > 0:
-            xmin = sub["peak_mem_mb"].min() * 0.8
-            xmax = sub["peak_mem_mb"].max() * 1.3
+            xmin = min(row["avg_bits"] for row in sub) - 0.2
+            xmax = max(row["avg_bits"] for row in sub) + 0.25
+            ymin = min(row["quality_core"] for row in sub) - 0.25
+            ymax = max(row["quality_core"] for row in sub) + 0.25
             ax.set_xlim(xmin, xmax)
+            ax.set_ylim(ymin, ymax)
 
         # Callouts（使用 axes coords 避免 log 刻度下 xytext 乘法失真）
         if mkey == "7b":
-            uniform_pts = sub[sub["family"] == "uniform_int4"]
-            if not uniform_pts.empty:
-                worst = uniform_pts.loc[uniform_pts["quality_core"].idxmin()]
+            uniform_pts = [row for row in sub if row["family"] == "uniform_int4"]
+            if uniform_pts:
+                worst = min(uniform_pts, key=lambda row: row["quality_core"])
                 ax.annotate(
-                    "quality cliff",
-                    xy=(worst["peak_mem_mb"], worst["quality_core"]),
-                    xytext=(0.3, 0.2), textcoords="axes fraction",
-                    arrowprops=dict(arrowstyle="->", color="#D55E00", lw=1.2),
-                    fontsize=9, color="#D55E00",
+                    "明显质量断崖",
+                    xy=(worst["avg_bits"], worst["quality_core"]),
+                    xytext=(0.24, 0.2), textcoords="axes fraction",
+                    arrowprops=dict(arrowstyle="->", color="#D55E00", lw=1.1),
+                    fontsize=9, color="#D55E00", fontproperties=cjk_font,
                 )
         elif mkey == "mistral7b":
-            auto_pts = sub[sub["family"] == "bakv_auto_cov80"]
-            if not auto_pts.empty:
-                best = auto_pts.loc[auto_pts["quality_core"].idxmax()]
+            auto_pts = [row for row in sub if row["family"] == "bakv_auto_cov80"]
+            if auto_pts:
+                best = max(auto_pts, key=lambda row: row["quality_core"])
                 ax.annotate(
-                    "Pareto-dominant",
-                    xy=(best["peak_mem_mb"], best["quality_core"]),
-                    xytext=(0.15, 0.85), textcoords="axes fraction",
-                    arrowprops=dict(arrowstyle="->", color="#009E73", lw=1.2),
-                    fontsize=9, color="#009E73",
+                    "AutoK 最显著\n正向区间",
+                    xy=(best["avg_bits"], best["quality_core"]),
+                    xytext=(0.18, 0.8), textcoords="axes fraction",
+                    arrowprops=dict(arrowstyle="->", color="#009E73", lw=1.1),
+                    fontsize=9, color="#009E73", fontproperties=cjk_font,
                 )
 
-        ax.set_xlabel(r"KV cache peak memory (MB, log)")
+        ax.set_xlabel(r"平均 KV bit budget ($\bar{b}$)", fontproperties=cjk_font)
         if mkey == SUBPLOT_MODELS[0]:
-            ax.set_ylabel(r"Quality (task-core mean)")
+            ax.set_ylabel("任务核心平均质量", fontproperties=cjk_font)
         ax.set_title(MODEL_TITLES[mkey], fontsize=10)
         ax.grid(True, alpha=0.3)
 
-        if mkey == SUBPLOT_MODELS[-1]:
-            ax.legend(loc="lower right", fontsize=8, frameon=True, framealpha=0.9)
-
     fig.suptitle(
-        r"Quality--memory Pareto front across 3 models (L2 sweep)",
-        fontsize=11, y=1.02,
+        r"质量-预算 Pareto 视图",
+        fontsize=11, y=1.02, fontproperties=cjk_font,
     )
-    plt.tight_layout()
+    fig.legend(
+        legend_handles,
+        legend_labels,
+        loc="lower center",
+        ncol=5,
+        bbox_to_anchor=(0.5, -0.03),
+        frameon=True,
+        framealpha=0.92,
+        fontsize=8,
+        prop=cjk_font,
+    )
+    plt.tight_layout(rect=(0, 0.08, 1, 1))
     pdf_path = save_figure_pdf(fig, FIG_ID)
     print(f"\n[write] {pdf_path}")
 

@@ -1,18 +1,13 @@
 """
 scripts/thesis/plot_scale_trend.py
 
-生成图 ⑨：Quality vs Model Scale（story §5 scale 维度独立可视化）。
+生成图 ⑨：Policy ordering across family / scale regimes。
 
 图结构:
-- 1 subplot (已简化自 story §16.8 的 2 subplot 设计，因 PPL 数据源非 canonical
-  而 quality task-mean 直接来自 clean_rerun step2)
-- x: model scale (log)，4 模型: 3B (2.5B param) / 7B (7.5B) / 8B (8B) / 14B (14B) + Mistral-7B (7.2B)
+- 1 subplot
+- x: 按 family / scale 排序的离散模型类别（不是连续 scaling-law 坐标轴）
 - y: task-core mean quality
-- 多条线: 不同 policy family
-  * Uniform INT4
-  * BA-k (fixed, per-model best-k)
-  * Heuristic-k (fixed)
-  * BA-AutoK (cov80/cov90)
+- 多条线: 不同 policy family，连接离散类别以展示 ordering 的变化
 
 Contract:
 - Input:  summary_final.csv (step=2_compare)
@@ -21,15 +16,18 @@ Contract:
 
 from __future__ import annotations
 
+import csv
 import sys
 import pathlib
 import numpy as np
+from matplotlib import font_manager
+from matplotlib.font_manager import FontProperties
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from _common import (  # noqa: E402
-    load_summary_final,
+    CLEAN_RERUN_DIR,
     set_mpl_style,
     save_figure_pdf,
     print_contract,
@@ -38,18 +36,13 @@ from _common import (  # noqa: E402
 )
 
 FIG_ID = "fig9_scale_trend"
+SUMMARY_CSV = CLEAN_RERUN_DIR / "summary_final.csv"
 
-MODEL_X = {
-    "3b": 2.5,
-    "mistral7b": 7.2,
-    "8b": 8.0,
-    "14b": 14.0,
-}
 MODEL_ORDER = ["3b", "mistral7b", "8b", "14b"]
 MODEL_LABEL = {
     "3b": "Qwen2.5-3B",
     "mistral7b": "Mistral-7B",
-    "8b": "Llama-3.1-8B",
+    "8b": "LLaMA-3.1-8B",
     "14b": "Qwen2.5-14B",
 }
 
@@ -73,13 +66,47 @@ PER_MODEL_AUTO = {
 }
 
 LINE_DEFS = [
-    ("uniform_int4", "Uniform INT4", {m: "uniform_int4_k4v4" for m in MODEL_ORDER}),
-    ("bakv_fixed",   "BA-$k_*$ (best per model)", PER_MODEL_BEST_K),
+    ("uniform_int4", "统一 INT4", {m: "uniform_int4_k4v4" for m in MODEL_ORDER}),
+    ("bakv_fixed",   r"BA-$k_*$", PER_MODEL_BEST_K),
     ("heuristic",    "Heuristic-$k_*$", PER_MODEL_HEUR),
     ("bakv_auto_cov80", "BA-AutoK", PER_MODEL_AUTO),
 ]
 
 CORE_TASKS = ["narrativeqa", "hotpotqa", "gov_report"]
+
+
+def find_cjk_font() -> FontProperties:
+    candidates = [
+        "Arial Unicode MS",
+        "Hiragino Sans GB",
+        "STHeiti",
+        "Heiti TC",
+        "PingFang HK",
+    ]
+    for name in candidates:
+        try:
+            path = font_manager.findfont(name, fallback_to_default=False)
+        except ValueError:
+            continue
+        if path and pathlib.Path(path).exists():
+            return FontProperties(fname=path)
+    raise RuntimeError("No CJK-capable font found for fig9_scale_trend.")
+
+
+def load_summary_rows(path: pathlib.Path):
+    rows = []
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            metric_value = row.get("metric_value", "")
+            try:
+                row["metric_value"] = (
+                    float(metric_value) if metric_value not in ("", None) else np.nan
+                )
+            except ValueError:
+                row["metric_value"] = np.nan
+            rows.append(row)
+    return rows
 
 
 def main():
@@ -91,20 +118,32 @@ def main():
     set_mpl_style()
     import matplotlib.pyplot as plt
 
-    df = load_summary_final()
-    df = df[(df["step"] == "2_compare") & (df["task"].isin(CORE_TASKS))]
+    cjk_font = find_cjk_font()
+    legend_font = FontProperties(fname=cjk_font.get_file(), size=8.6)
+    rows = load_summary_rows(SUMMARY_CSV)
+    rows = [
+        row for row in rows
+        if row["step"] == "2_compare"
+        and row["task"] in CORE_TASKS
+        and not np.isnan(row["metric_value"])
+    ]
 
-    fig, ax = plt.subplots(figsize=(7.5, 5))
+    fig, ax = plt.subplots(figsize=(7.8, 5.1))
+    x_pos = list(range(len(MODEL_ORDER)))
 
     for fam_key, label, model2policy in LINE_DEFS:
         xs, ys = [], []
-        for m in MODEL_ORDER:
+        for idx, m in enumerate(MODEL_ORDER):
             policy = model2policy[m]
-            sub = df[(df["model"] == m) & (df["kvmode_or_policy"] == policy)]
-            if sub.empty:
+            sub = [
+                row["metric_value"]
+                for row in rows
+                if row["model"] == m and row["kvmode_or_policy"] == policy
+            ]
+            if not sub:
                 continue
-            xs.append(MODEL_X[m])
-            ys.append(sub["metric_value"].mean())
+            xs.append(idx)
+            ys.append(float(np.mean(sub)))
         ax.plot(
             xs, ys,
             marker=POLICY_MARKERS.get(fam_key, "o"),
@@ -116,21 +155,33 @@ def main():
             markeredgewidth=0.7,
         )
 
-    ax.set_xscale("log")
-    ax.set_xticks([MODEL_X[m] for m in MODEL_ORDER])
-    ax.set_xticklabels([f"{MODEL_LABEL[m]}\n{MODEL_X[m]:.1f}B" for m in MODEL_ORDER], fontsize=8)
-    ax.set_xlabel(r"Model scale (B params, log-scale)")
-    ax.set_ylabel(r"Task-core mean quality")
-    ax.set_title(r"Quality across model scale under 4 allocator policies")
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels([MODEL_LABEL[m] for m in MODEL_ORDER], fontsize=8)
+    ax.set_xlim(-0.15, len(MODEL_ORDER) - 0.85)
+    ax.set_ylabel("任务核心平均质量", fontproperties=cjk_font)
+    ax.set_title("Family/Scale 分类排序汇总图", fontproperties=cjk_font)
     ax.grid(True, alpha=0.3)
-    ax.legend(loc="upper left", fontsize=9, frameon=True, framealpha=0.9)
+    ax.legend(
+        loc="lower right",
+        bbox_to_anchor=(0.985, 0.18),
+        ncol=2,
+        frameon=True,
+        framealpha=0.93,
+        borderpad=0.35,
+        labelspacing=0.35,
+        columnspacing=1.0,
+        prop=legend_font,
+    )
 
-    # annotation for regime shift
+    for xpos in [0.5, 1.5, 2.5]:
+        ax.axvline(xpos, color="#BBBBBB", linewidth=0.8, alpha=0.5, zorder=0)
+
+    # highlight Mistral strongest positive case
     ax.annotate(
-        "AutoK 在 Mistral 上远超其他\npolicy（strongest positive）",
-        xy=(7.2, 13.5), xytext=(3.2, 13.0),
+        "Mistral：\nAutoK 最显著正向案例",
+        xy=(1, 14.7), xytext=(1.42, 14.25),
         arrowprops=dict(arrowstyle="->", color="#D55E00", lw=1.0),
-        fontsize=8, color="#555",
+        fontsize=8, color="#555", ha="left", fontproperties=cjk_font,
     )
 
     plt.tight_layout()
