@@ -1,0 +1,585 @@
+# Chapter 2 Draft
+
+## 文档身份与当前状态
+
+- 文档身份：Chapter 2 正文整合、审校与回写前中间层 source-of-truth。
+- 当前状态：
+  - Chapter 2 的施工层已冻结于 `docs/This is Chapter 2 Writing.md`。
+  - `2.1–2.6` 已完成首轮修正接入，并进入当前 Draft 基线。
+  - 已完成对 `thesis/chapters/ch2_related_work.tex` 的首轮正式回写。
+- 维护边界：
+  - 本文档服务于 Chapter 2 正文整合与审核。
+  - 本文档不是 `objective.md`。
+  - 本文档不是 `docs/thesis_upgrade_live_plan.md`。
+  - 本文档不是 `docs/mainline_execution_queue.md`。
+  - 本文档不是最终 `tex` 成稿。
+
+## 当前审校基线
+
+- 基线时间：`2026-04-23 03:50`
+- 当前线程角色：Chapter 2 正文整合与审核线程
+- 当前默认回写目标：`thesis/chapters/ch2_related_work.tex`
+- 当前 worktree 状态摘要：
+  - 共享写作/实验文件已存在未提交改动。
+  - 本线程创建本文件时，不覆盖现有 `story`、Chapter 2 施工文档、`tex`。
+- 当前只读输入基线：
+  - `AGENTS.md`
+  - `CLAUDE.md`
+  - `objective.md`
+  - `docs/thesis_story_20260420.md`
+  - `docs/This is Chapter 2 Writing.md`
+  - `docs/thesis_upgrade_live_plan.md`
+  - `docs/mainline_execution_queue.md`
+  - `thesis/chapters/ch2_related_work.tex`
+
+## Source-of-Truth 文件列表
+
+| 层级 | 文件 | 本文档使用方式 |
+|---|---|---|
+| 项目协作入口 | `AGENTS.md` | 约束多 Agent 分工、文件职责、主工作流 |
+| 项目级规范 | `CLAUDE.md` | 约束可写文件、Plan 纪律、论文工作方式 |
+| 高层目标 | `objective.md` | 冻结论文高层 mission、边界与主线 |
+| 冻结叙事 | `docs/thesis_story_20260420.md` | 冻结 Chapter 2 职责、章节主次与术语边界 |
+| Chapter 2 施工文档 | `docs/This is Chapter 2 Writing.md` | 冻结 `2.1–2.6` 小节职责、图表纪律与删改动作 |
+| 实时工作台 | `docs/thesis_upgrade_live_plan.md` | 只用于确认当前论文写作阶段，不在本文档中重写 |
+| 执行清单 | `docs/mainline_execution_queue.md` | 只用于确认当前无实验主任务，不在本文档中承接执行队列职责 |
+| 被审对象 | `thesis/chapters/ch2_related_work.tex` | 记录当前与冻结口径/施工结构的不一致项 |
+
+### 当前用于 Chapter 2 正文裁决的三件套
+
+- `docs/Chapter 2 Draft.md`
+- `docs/This is Chapter 2 Writing.md`
+- `docs/thesis_story_20260420.md`
+
+说明：
+- `docs/thesis_story_20260420.md` 负责冻结高层主线与章节职责。
+- `docs/This is Chapter 2 Writing.md` 负责冻结 `2.1–2.6` 的施工结构与边界。
+- `docs/Chapter 2 Draft.md` 负责承接 adopted text、审校记录与回写前正文候选块。
+
+## 文档分工与边界
+
+| 文件 | 负责什么 | 不负责什么 |
+|---|---|---|
+| `objective.md` | 高层 mission、边界、成功标准、方向分层 | 不负责 Chapter 2 小节施工 |
+| `docs/thesis_story_20260420.md` | 论文唯一主线、章节职责、迁移规则 | 不负责逐段正文审核 |
+| `docs/This is Chapter 2 Writing.md` | `2.1–2.6` 写作施工、图表纪律与删改动作 | 不负责正文整合与逐段接收 |
+| `docs/thesis_upgrade_live_plan.md` | 当前论文升级 live status | 不负责正文裁决 |
+| `docs/mainline_execution_queue.md` | 当前默认执行顺序 | 不负责正文整合 |
+| `docs/Chapter 2 Draft.md` | Chapter 2 正文整合、逐段审核、回写前中间层 source-of-truth | 不替代上述任一权威文件 |
+
+## Chapter 2 冻结结构总览（2.1–2.6）
+
+| 节次 | 冻结职责 | 必须避免 |
+|---|---|---|
+| `2.1` | Decoder-only、自注意力、`MHA/MQA/GQA` 与 `H_{kv}` 的最小技术前置 | 不进入第三章方法对象 |
+| `2.2` | `KV Cache` 机制、`Prefill/Decode`、显存公式与压缩需求 | 不滑成系统实现节 |
+| `2.3` | 对称/非对称量化、量化轴与离线校准基础 | 不提前证明 `KL` 更优 |
+| `2.4` | `KV Cache` 量化与高效推理的统一 related-work 坐标系 | 不提前裁决 research gap |
+| `2.5` | 研究空白与本文定位 | 不提前代写第三章 |
+| `2.6` | 全章收束与 Chapter 3 桥接 | 不再承载 gap 主负载 |
+
+## 高风险冻结口径
+
+### 1. `2.1` 的正确定位
+
+- 只写结构前置：decoder-only、自注意力、`MHA/MQA/GQA`、`H_{kv}`。
+- 不写行为误差分解、`KL` 代理、`RoleAlign`、allocator 或 `Triton`。
+
+### 2. `2.4` 的正确定位
+
+- 它是统一 related-work 入口。
+- 可以建立文献坐标系，但不能在这里最终裁决 gap。
+
+### 3. `2.5` 的正确定位
+
+- 它是 Chapter 2 唯一允许显式收束“现有工作缺什么、本文从哪里切入”的位置。
+- 只能停留在定位层，不提前展开方法定义。
+
+### 4. `2.6` 的正确定位
+
+- 只做收束与桥接。
+- 不再首次建立 research gap。
+
+## 历史不一致项与当前修正结果
+
+### [已修正] 显式 `2.5 研究空白与本文定位`
+
+- `ch2_related_work.tex` 已独立落位新的 `2.5`，并将 research gap 的主负载从旧 `2.6` 中上移。
+
+### [已修正] 旧 `2.4` 与旧 `2.5` 的分离
+
+- `KV Cache` 量化相关工作与高效注意力计算已统一并入新的 `2.4 KV Cache 量化与高效推理相关工作`。
+
+### [已修正] 旧 `2.6` 负担过重
+
+- 本章小结已减负为轻量两段式收束，只承担全章回收与 Chapter 3 引桥。
+
+### [已修正] `2.1` 的教材式展开
+
+- `2.1` 已压回最小技术前置，只保留 decoder-only、自注意力、`MHA/MQA/GQA` 与 `H_{kv}` 这条结构主线。
+
+## 外部线程草稿接入规则
+
+1. 先按 `2.1–2.6` 归档到对应区块。
+2. 再按 `docs/This is Chapter 2 Writing.md` 与 `docs/thesis_story_20260420.md` 做边界审查。
+3. 通过审校的正文块，再进入“最终可回写正文块”。
+4. 未经审校，不直接视为可回写正文。
+
+## 审核协议
+
+### 判定标签
+
+- `采用`
+- `采用（经修正后）`
+- `需改写`
+- `拒绝`
+
+### 审核纪律
+
+- 若正文与 `Writing` 冲突，必须显式指出，不静默吸收。
+- 若正文与 `story` 冲突，以 `story` 的高层职责为准。
+- 若正文越界到第三章或第四章内容，至少判为 `需改写`。
+
+## GPT / 外部线程正文整合区
+
+### 2.1 正文草稿（第 1 轮，已修正接入，`2026-04-23 02:34`）
+
+- 审核结论：`采用（经修正后）`
+- 修正动作：
+  - 将聊天体公式改为可回写的数学表达
+  - 将多头注意力段的教材口吻压短
+  - 将 `H_{kv}` 对缓存成本的解释收紧为“重要结构因素之一”
+  - 将手写 PDF 编号引用改回标准文献引用口径
+
+```tex
+\section{Transformer 架构与自注意力机制}
+
+当前主流大语言模型在架构上普遍采用 Transformer 的仅解码器（Decoder-only）变体，并在自注意力层引入因果掩码以适配自回归语言建模。与原始 Transformer 的编码器-解码器结构相比，本文后续讨论默认基于这一 decoder-only 设定展开。这样的限定并非一般性背景介绍，而是后文 KV Cache 生成、复用与压缩讨论的共同结构前提。
+
+给定输入序列的隐藏状态矩阵 $\bm{H}$，模型通过三个可学习的线性投影分别生成 Query、Key 和 Value：
+\begin{equation}
+  \bQ = \bm{H}\bm{W}_Q, \quad \bK = \bm{H}\bm{W}_K, \quad \bV = \bm{H}\bm{W}_V
+  \label{eq:qkv_proj}
+\end{equation}
+基于此，缩放点积自注意力可写为
+\begin{equation}
+  \mathrm{Attention}(\bQ,\bK,\bV)
+    = \mathrm{softmax}\!\left(\frac{\bQ \bK^\top}{\sqrt{d_k}}\right)\bV
+  \label{eq:attention}
+\end{equation}
+其中 $d_k$ 为 Key 的头维度，缩放因子 $\sqrt{d_k}$ 用于缓解点积值随维度增大而带来的数值放大问题。在因果解码场景下，还需对未来位置施加下三角掩码，使当前位置只能访问历史 token。由此可见，当前步的注意力计算天然依赖全部历史 $\bK/\bV$，这也为下一节讨论 KV Cache 的缓存与复用机制提供了直接的记号前提。
+
+为了增强表示能力，Transformer 进一步采用多头注意力（Multi-Head Attention, MHA），将 $\bQ$、$\bK$ 和 $\bV$ 沿头维度拆分后并行计算，再在输出端拼接：
+\begin{equation}
+  \mathrm{MHA}(\bQ,\bK,\bV)
+    = \mathrm{Concat}(\mathrm{head}_1,\ldots,\mathrm{head}_h)\bm{W}_O,
+  \qquad
+  \mathrm{head}_i = \mathrm{Attention}(\bQ_i,\bK_i,\bV_i)
+  \label{eq:mha}
+\end{equation}
+其中 $\bm{W}_O$ 为输出投影矩阵。多头机制将注意力计算分散到多个表示子空间，并由此引出后文对 KV 头数差异的讨论。
+
+在标准 MHA 中，可将查询头数与 KV 头数统一记为 $H_q = H_{kv}$。多查询注意力（Multi-Query Attention, MQA）\cite{shazeer2019fast} 令多个 Query 头共享单一 KV 头，可显著降低缓存开销；分组查询注意力（Grouped Query Attention, GQA）\cite{ainslie2023gqa} 则位于 MHA 与 MQA 之间，将 $H_q$ 个查询头划分为若干组，每 $H_q/H_{kv}$ 个 Query 头共享一组 $\bK/\bV$ 头。由此，当 $H_{kv} < H_q$ 时，推理阶段真正需要缓存的并不是全部 Query 头对应的 $\bK/\bV$，而是更少的共享 KV 头。这一差异是解释不同模型在长上下文下缓存成本差异的重要结构因素之一，也为后文围绕 $H_{kv}$ 展开的显存分析、低比特路径讨论与跨模型比较提供了统一的结构记号。下一节将在此基础上进一步说明 KV Cache 的生成机制、阶段划分及其显存瓶颈。
+```
+
+### 2.2 正文草稿（第 1 轮，已修正接入，`2026-04-23 02:46`）
+
+- 审核结论：`采用（经修正后）`
+- 修正动作：
+  - 保留 `2.2.1 / 2.2.2` 的正文结构，不改写成连贯长节
+  - 将 `H_{kv}` 对长上下文部署成本差异的解释收紧为“重要结构原因之一”
+  - 统一数值例子的二进制单位为 `GiB`，并补显存公式的默认前提 `d_v = d_k`
+  - 保留显存公式、数值例子与“仅对应 KV Cache 本身存储”的边界说明
+  - 维持本节为机制与瓶颈分析节，不前移第三章 `3.7` 或第四章 `4.5` 的系统层结论
+
+```tex
+\section{KV Cache 机制与显存分析}
+
+\subsection{KV Cache 的作用与工作原理}
+
+在仅解码器 Transformer 的自回归推理过程中，模型在每一步只为当前新生成词元计算 Query 向量，但该 Query 需要与全部历史词元的 Key 向量计算注意力分数，并对相应的 Value 向量进行加权聚合。因而，若在每个解码步都重新对历史序列执行 Key/Value 投影，不仅会引入大量重复计算，还会使推理开销随历史长度增长而迅速累积。为避免这一冗余，实际推理系统通常将各层历史词元对应的 Key 和 Value 张量缓存在显存中，并在后续解码步直接复用，这一机制即为 KV Cache。
+
+从执行流程上看，KV Cache 的使用可分为预填充（Prefill）与解码（Decode）两个阶段。预填充阶段一次性处理完整提示词序列，计算所有层的历史 Key/Value 并写入缓存，此时并行度较高、计算相对集中，因此更接近计算密集型（compute-bound）过程。解码阶段则在每一步仅处理一个新词元：系统先生成该词元对应的 $k_t$ 和 $v_t$，再将其追加到既有缓存中，并读取完整历史 $K/V$ 参与当前步的注意力计算。由于单步新增计算量很小，但需要持续访问不断增长的历史缓存，因此 Decode 更接近访存密集型（memory-bound）过程。也正因为如此，KV Cache 不仅是自回归推理得以高效运行的必要机制，也自然演化为长上下文部署中的核心资源瓶颈。
+
+\subsection{KV Cache 显存占用分析}
+
+对于包含 $L$ 层的 Transformer 解码器，若每层保存 $H_{kv}$ 个 Key/Value 头，每个头的维度为 $d_k$，序列长度为 $S$，单个缓存元素占用 $b$ 字节，则 KV Cache 的总显存占用可写为
+\begin{equation}
+M_{KV} = 2 \times L \times H_{kv} \times d_k \times S \times b .
+\end{equation}
+其中，系数 2 对应 Key 与 Value 各占一份缓存；这里默认每头满足 $d_v=d_k$。$L$ 表示层数，$H_{kv}$ 表示每层实际参与缓存的 KV 头数，$d_k$ 表示头维度，$S$ 表示序列长度，$b$ 表示单元素字节数，例如 FP16、INT8 与 INT4 分别对应 2、1 和 0.5。结合上一节的 MHA、MQA 与 GQA 结构可知，真正决定缓存规模的并不是查询头数 $H_q$，而是共享后的 $H_{kv}$：当模型从标准 MHA 过渡到 MQA 或 GQA 时，$H_{kv}$ 的降低会直接减少缓存存储需求，这也是不同模型在长上下文部署成本上出现显著差异的重要结构原因之一。
+
+以 Qwen2.5-7B-Instruct 为例，其可取 $L=28$、$H_{kv}=4$、$d_k=128$。当序列长度 $S=32768$，并采用 FP16 存储（即 $b=2$）时，单个请求的 KV Cache 显存占用为
+\begin{equation}
+M_{KV}
+= 2 \times 28 \times 4 \times 128 \times 32768 \times 2
+\approx 1.75\,\mathrm{GiB}.
+\end{equation}
+这一数值仅对应 KV Cache 本身的存储，不包含模型权重、激活峰值与其他运行时开销；但即便如此，在 32K 乃至更长上下文场景下，单请求缓存占用已经不可忽视。若进一步增大批大小或上下文窗口，KV Cache 的显存需求将随之线性放大，并迅速挤压系统可服务的最大并发数与最大序列长度。因此，长上下文推理的关键约束并不只是参数规模本身，更在于缓存存储的持续膨胀；这也把讨论自然推进到量化技术基础，即后文用于压缩 KV Cache 的基本工具。
+```
+
+### 2.3 正文草稿（第 1 轮，已修正接入，`2026-04-23 03:00`）
+
+- 审核结论：`采用（经修正后）`
+- 修正动作：
+  - 保留 `2.3.1 / 2.3.2 / 2.3.3` 的正文结构，不改写成无层级长节
+  - 保留对称量化、非对称量化与校准分类的主体材料
+  - 将 `KL` 相关表述收紧为“分布空间或行为相关代理的代表性例子”，避免提前形成第三章 `3.4` 的正式方法主张
+  - 维持本节为量化基础节，不前移 `RoleAlign`、allocator 或 `Triton` 细节
+
+```tex
+\section{模型量化技术基础}
+
+量化（Quantization）是一类将浮点张量映射为低比特整数表示的模型压缩技术，其直接目标是降低存储开销，并在合适的硬件与算子支持下减少推理成本。在本文语境中，后续真正关心的对象主要是与 KV Cache 压缩相关的推理期张量，而非训练阶段的量化感知优化。相较于权重量化，KV Cache 量化面对的是随序列长度动态增长的运行时表示，因此更符合训练后量化（post-training quantization, PTQ）与离线校准的部署语境。本节仅介绍后文会直接用到的基础概念，包括对称量化、非对称量化以及校准方法，并为下一节的 KV Cache 专属方法讨论提供最小理论背景。
+
+\subsection{对称量化}
+
+对称量化（Symmetric Quantization）将浮点数值映射到以零为中心的均匀整数网格上。给定浮点张量 $x$ 与目标比特宽度 $n$，其缩放因子可写为
+\begin{equation}
+s = \frac{\max(|x|)}{2^{n-1}-1}.
+\end{equation}
+在此基础上，量化映射与反量化过程分别为
+\begin{equation}
+x_q = \operatorname{clamp}\!\left(\operatorname{round}\!\left(\frac{x}{s}\right),\,-(2^{n-1}-1),\,2^{n-1}-1\right), \qquad
+\hat{x} = x_q \cdot s.
+\end{equation}
+由此引入的量化误差为 $\epsilon = x - \hat{x}$。对称量化的优点在于实现简单、整数网格规则，且零点天然与原点对齐，因而常被作为训练后量化中的基础形式。
+
+对于 INT8 对称量化，整数表示范围为 $[-127,127]$，共有 255 个离散等级，通常足以在较小精度损失下有效压缩张量；对于对称 INT4，整数范围缩小为 $[-7,7]$，仅剩 15 个离散等级，量化网格显著变粗，误差控制也随之变得更加困难。INT4 还可通过 bit-packing 将两个 4 位整数打包到一个字节中，使存储空间进一步压缩至 FP16 的 $1/4$。在实际系统中，逐张量（per-tensor）量化实现最为直接，但容易受异常值影响；分组量化（group-wise quantization）则将张量沿特定维度划分为固定大小的子组，并为每组独立确定缩放因子，通常能在量化精度与存储开销之间取得更好的平衡。对本文后续路径而言，INT8 更适合作为规范路径，而直接降到对称 INT4 则更容易暴露低比特场景下的结构性脆弱性。
+
+\subsection{非对称量化}
+
+非对称量化（Asymmetric Quantization）通过引入零点（zero-point）偏移来处理非零中心的数值分布。给定浮点张量 $x$ 与目标比特宽度 $n$，其缩放因子与零点可定义为
+\begin{equation}
+s = \frac{\max(x)-\min(x)}{2^n-1}, \qquad
+z = \operatorname{clamp}\!\left(\operatorname{round}\!\left(-\frac{\min(x)}{s}\right),\,0,\,2^n-1\right).
+\end{equation}
+相应的量化映射与反量化过程为
+\begin{equation}
+x_q = \operatorname{clamp}\!\left(\operatorname{round}\!\left(\frac{x}{s}\right)+z,\,0,\,2^n-1\right), \qquad
+\hat{x} = (x_q-z)\cdot s.
+\end{equation}
+与对称量化相比，非对称量化能够更充分地利用有限整数范围来覆盖偏斜分布，因此在张量均值明显偏离零点、或不同维度统计特征差异较大时，往往具有更好的表示能力。
+
+在更细粒度的实现层面，量化轴的选择同样会直接影响误差分布。例如，逐通道（per-channel）量化适合处理不同通道之间均值或尺度差异显著的张量；逐 token（per-token）量化则更适合处理沿时序方向动态范围变化明显的张量。对于后文的 KV Cache 场景，这类量化轴并非实现细节，而是构成方法空间的重要一维：当 Key 与 Value 在统计结构上呈现不同分布特征时，对它们采用相同的量化轴未必是最优选择，相关设计将在后续章节中进一步展开。
+
+\subsection{校准方法综述}
+
+量化校准（Calibration）是训练后量化中的关键步骤，其目标是在量化前利用少量校准样本确定缩放因子、裁剪阈值以及其他离线参数，从而使量化后的张量表示尽可能保持可用。对于部署场景而言，校准的价值并不在于重新训练模型，而在于用代价较小的离线过程换取更加稳定的在线推理表现。
+
+从优化目标上看，常见校准策略大致可以分为两类。第一类是数值空间校准，即直接以张量重建误差为目标，例如百分位裁剪（percentile clipping）通过抑制异常值影响来确定有效范围，均方误差（MSE）则以量化前后张量的逐元素差异为主要优化对象。第二类是分布空间或行为相关代理，即不再只关注张量本身的数值接近程度，而是转向保持输出分布的一致性；例如，以 KL 散度衡量原始分布与量化后分布差异的做法，可视为这类代理目标中的代表性例子。
+
+然而，在 KV Cache 量化场景下，量化后的 Key 和 Value 并不是被下游任务直接消费的对象，而是还要经过点积、softmax 与加权聚合等计算过程后，才间接影响模型输出。因此，数值空间上的最优重建并不自动等价于注意力行为层面的最优保持。换言之，“数值校准最优”与“行为保真最优”之间存在天然张力：前者主要约束张量本身的误差，后者更关注这些误差是否会在注意力计算中被放大或重排。这一张力正是下一节讨论 KV Cache 专属相关工作、并在本章后续收束研究空白时需要面对的核心问题之一。
+```
+
+### 2.4 正文草稿（第 1 轮，已修正接入，`2026-04-23 03:12`）
+
+- 审核结论：`采用（经修正后）`
+- 修正动作：
+  - 保留旧 `2.4 + 2.4.1 + 2.5` 合并后的新单节 `2.4` 结构
+  - 保留主比较表，但只让其服务 prior work，不将系统协同工作强行塞进同一张表
+  - 将“量化对注意力行为的扰动”保留为本节内部桥梁段，不恢复成旧 `2.4.1` 的独立编号小节
+  - 将正文中的 PDF 编号式引用改回 `\cite{}`
+  - 补回 `sec:ch2-quant-softmax` 与旧主表 label 的兼容锚点
+  - 将末段收束语气收紧为“为下一节集中归纳做准备”，不在本节正式裁决 `2.5` 的 research gap
+
+```tex
+\section{KV Cache 量化与高效推理相关工作}
+
+随着大语言模型的上下文窗口不断扩大，KV Cache 的显存开销已成为制约长序列推理效率的关键瓶颈。围绕这一瓶颈，近年来的相关工作大致可沿三条线索梳理：其一是面向 KV Cache 本身的量化压缩与校准方法，其二是围绕低比特失真展开的异常值处理、混合精度与恢复策略，其三是与缓存管理和高效注意力计算相关的系统优化工作。更一般的量化理论综述可参见 Nagel 等人~\cite{nagel2021whitepaper} 与 Hubara 等人~\cite{hubara2018quantized}；但对本文而言，更关键的是这些工作如何分别回答“压缩什么”“如何恢复”以及“如何落地”这三个问题。
+
+\textbf{量化压缩与校准方法。}
+在直接面向 KV Cache 的量化路径中，KIVI~\cite{liu2024kivi} 是最具代表性的早期工作之一，其核心观察是 Key 与 Value 在统计结构上并不对称，因此采用逐通道（per-channel）Key 与逐词元（per-token）Value 的非对称量化格式，以在无需微调的条件下推进低比特缓存压缩。KVQuant~\cite{hooper2024kvquant} 进一步通过非均匀码本与 Pre-RoPE Key 量化，将 KV Cache 压缩推进到 sub-4-bit 区间，并尽量减轻 RoPE 对量化网格的扭曲。沿着相近思路，AsymKV~\cite{tao2024asymkv} 从层深度维度强调 K/V 敏感性的不对称，AQUA-KV~\cite{shutova2025aquakv} 则利用 K/V 的时序相关性构造自适应量化机制。这一类工作共同表明，KV Cache 量化并非简单沿用统一格式即可完成，而往往需要围绕量化轴、统计范围和校准方式做针对性设计。虽然 SmoothQuant~\cite{xiao2023smoothquant}、GPTQ~\cite{frantar2023gptq}、AWQ~\cite{lin2024awq} 与 LLM.int8()~\cite{dettmers2022gpt3int8} 主要面向权重或激活，但它们在平滑异常值、误差补偿和激活感知保护方面提供的方法学经验，也为 KV Cache 的低比特设计提供了重要启示。
+
+\textbf{低比特恢复与异常值处理。}
+除了直接决定量化轴与码本的工作之外，另一条重要思路是通过异常值处理、混合精度与误差补偿来延缓低比特失效。QuaRot~\cite{ashkboos2024quarot} 利用 Hadamard 旋转均匀化 Key 通道中的异常值分布，使标准对称量化在更低位宽下仍具可用性；ZipCache~\cite{he2024zipcache} 则依据 token 重要性实施混合精度缓存策略，在压缩与恢复之间寻找平衡。GEAR~\cite{kang2024gear} 通过残差低秩近似补偿量化误差，QServe~\cite{lin2024qserve} 进一步给出 W4A8KV4 的端到端联合量化系统，强调量化格式与运行时实现的协同。IntactKV~\cite{liu2024intactkv} 与 Outlier Tokens Tracing~\cite{su2025outliertoken} 则从“关键内容保护”的角度出发，以高精度保留枢纽 token 或异常 token；Atom~\cite{zhao2024atom} 探索了更动态的混合精度缓存压缩；QJL~\cite{zandieh2024qjl} 利用 Johnson--Lindenstrauss 随机投影将压缩推进到 1-bit 极限，SKVQ~\cite{duanmu2024skvq} 则引入滑动窗口下的差异化精度分配。总体来看，这一方向的共同特征是：它们不再把量化视为一次静态映射，而是把低比特恢复、异常值缓冲与内容重要性纳入统一考虑。
+
+\textbf{缓存管理与量化的正交路线。}
+与“降低 bit-width”不同，另一类工作主要从缓存管理本身入手压缩 KV Cache。H2O~\cite{zhang2024h2o}、StreamingLLM~\cite{xiao2024efficient}、SnapKV~\cite{li2024snapkv}、PyramidKV~\cite{cai2024pyramidkv}、DuoAttention~\cite{xiao2024duoattention}、HeadKV~\cite{fu2025headkv} 与 ChunkKV~\cite{liu2025chunkkv} 分别从注意力重要性、层级衰减、逐头贡献度或语义 chunk 结构出发，决定哪些 KV 对应被保留、驱逐或差异化处理；CacheGen~\cite{liu2024cachegen} 则从流式编解码角度压缩缓存，ThinK~\cite{xu2024think} 进一步探索查询驱动的 Key 剪枝。这一路线与量化并非替代关系，而是正交互补：前者主要决定“保留哪些缓存”，后者主要决定“每个缓存以多少比特存储”，二者可以组合使用以进一步降低部署成本。系统性的 KV Cache 压缩 benchmark 可参见~\cite{yuan2024kvcompressionbench}。
+
+\begin{table}[t]
+  \centering
+  \caption{KV Cache 压缩相关代表工作比较}
+  \label{tab:ch2-kv-comparison}
+  \label{tab:kv_quant_compare}
+  \label{tab:t0-related-work}
+  {\footnotesize
+  \setlength{\tabcolsep}{4pt}
+  \renewcommand{\arraystretch}{1.12}
+  \begin{tabular}{@{}p{2.3cm}p{2.0cm}p{4.8cm}p{4.6cm}@{}}
+    \toprule
+    方法 & 对象/位宽 & 核心策略 & 备注 \\
+    \midrule
+    KIVI~\cite{liu2024kivi} & KV Cache / 2-bit & per-channel Key + per-token Value 非对称量化 & 典型的 K/V 角色差异化格式 \\
+    KVQuant~\cite{hooper2024kvquant} & KV Cache / sub-4-bit & 非均匀码本 + Pre-RoPE Key 量化 & 推进极低比特缓存压缩 \\
+    AsymKV~\cite{tao2024asymkv} & KV Cache / --- & 分层 K$>$V 异质处理 & 强调深度相关的敏感性差异 \\
+    AQUA-KV~\cite{shutova2025aquakv} & KV Cache / --- & 利用时序相关性的自适应量化 & 面向动态分布的缓存压缩 \\
+    ZipCache~\cite{he2024zipcache} & KV Cache / mixed & token 显著性驱动的混合精度策略 & 压缩与恢复并重 \\
+    GEAR~\cite{kang2024gear} & KV Cache / 2-bit & 残差低秩补偿 & 低比特修复的代表路径 \\
+    QServe~\cite{lin2024qserve} & W4A8KV4 & 端到端联合量化 & 突出系统协同 \\
+    IntactKV~\cite{liu2024intactkv} & KV Cache / 4-bit & 枢纽 token 高精度保留 & 保护关键内容 \\
+    QJL~\cite{zandieh2024qjl} & KV Cache / 1-bit & JL 随机投影压缩 & 极限压缩探索 \\
+    SnapKV~\cite{li2024snapkv} & KV Cache / --- & 注意力预测驱动的缓存驱逐 & 与量化正交 \\
+    DuoAttention~\cite{xiao2024duoattention} & KV Cache / mixed & 头级差异化缓存策略 & 与量化正交 \\
+    ThinK~\cite{xu2024think} & KV Cache / --- & 查询驱动的 Key 剪枝 & 与量化正交 \\
+    \bottomrule
+  \end{tabular}}
+\end{table}
+
+表~\ref{tab:ch2-kv-comparison} 对上述代表性工作给出了压缩后的比较。可以看到，现有路线已经覆盖了从角色差异化格式、非均匀码本、误差补偿到缓存驱逐与剪枝等多个方向，但这些工作对“校准目标”“低比特恢复”和“系统落地”的强调并不相同，因此很难用单一维度概括其贡献。
+
+\phantomsection
+\label{sec:ch2-quant-softmax}
+\textbf{量化对注意力行为的扰动。}
+除压缩率本身之外，近期文献还开始从概率与排序层面对量化扰动进行更细的观察。QeRL~\cite{agarwal2025qerl} 指出量化会增加输出分布熵并使概率分布趋于平坦化，尽管其分析对象主要是输出 logits 而非注意力内部；KVTuner~\cite{xu2025kvtuner} 则从数学上分析了 Key 量化误差在注意力得分中的放大效应，并观察到高 KV Cache 量化误差的注意力头往往呈现非稀疏模式；Softmax Bias Correction~\cite{bondarenko2023softmax} 进一步指出 softmax 在量化后可能出现显著的 SQNR 劣化与大量近零概率值。与此相关，Softmax-Not-Enough~\cite{velickovic2024softmax} 和 AhaKV~\cite{gu2025ahakv} 虽然不直接服务于本文的量化设定，但都表明 softmax 温度、概率质量分布与缓存重要性之间存在可被利用的结构关系。这些工作共同提示，量化误差并不只停留在张量重建层，而会通过 softmax 和排序关系影响注意力行为本身。
+
+\textbf{高效注意力与系统协同。}
+然而，仅解决“量化什么”并不足以自动换来实际部署收益。FlashAttention~\cite{dao2022flashattention} 及 FlashAttention-2~\cite{dao2024flashattention2} 通过分块计算、在线 softmax 与更高效的并行组织降低注意力计算的 IO 开销，在不引入近似的前提下提升长序列推理效率；vLLM~\cite{kwon2023vllm} 的 PagedAttention 则将分页思想引入 KV Cache 管理，以减少显存碎片并提升缓存利用率；Triton~\cite{tillet2019triton} 作为面向 GPU kernel 的领域特定语言，为量化 cache 场景下的反量化与注意力计算融合提供了重要实现载体。就部署而言，量化减少的是每个 token 的缓存字节数，而高效注意力与缓存管理优化处理的是布局、访存和 kernel 执行，两者共同决定长上下文推理的实际落地成本。
+
+总体来看，现有工作已经在量化格式、低比特恢复、缓存管理和高效推理上形成了较清晰的谱系，但这些路线对校准目标、恢复机制与部署接口的强调并不相同。下一节将在这一文献坐标基础上集中归纳本文关注的研究空白与切入位置。
+```
+
+### 2.5 正文草稿（第 1 轮，已修正接入，`2026-04-23 03:29`）
+
+- 审核结论：`采用（经修正后）`
+- 修正动作：
+  - 保留“短过渡 + 4 个 research gap + 1 段本文定位与桥接”的主结构
+  - 保留四条 research gap 的主体内容，不再把 gap 负担留给 `2.6`
+  - 将最后一段桥接语气收紧为“从注意力行为保持角度进入方法设计”，不提前写成第三章方法摘要
+  - 继续保持本节不引入公式、实验结果或系统实现细节
+
+```tex
+\section{研究空白与本文定位}
+
+综合前文技术基础与相关工作可以看到，围绕 KV Cache 压缩，现有研究已经在量化格式、低比特恢复、缓存管理与高效推理等方向上形成了较为丰富的方法谱系。因而，本文真正需要回答的问题已不再是“KV Cache 能否被压缩”这一初级问题，而是：当量化压缩逐步走向长上下文、低比特与真实部署场景时，这些已有路线之间是否仍缺少一个能够统一组织校准目标、退化机理解释、预算决策与系统落地的更高层原则。
+
+一个核心缺口在于，现有工作在校准目标上仍然主要围绕数值重建展开，缺少对注意力行为保持的显式组织。无论是均方误差、百分位裁剪，还是依赖运行时统计量确定量化范围的策略，其主要约束对象通常仍是张量本身的数值误差或数值分布，而不是量化后注意力分布与聚合输出是否仍被稳定保持。对于 KV Cache 而言，量化后的 Key 和 Value 并不会被下游任务直接消费，而是必须经过点积、softmax 与加权聚合之后才间接影响模型功能。因此，数值空间中的“最优重建”并不自动等价于推理行为层面的“最优保持”，这也意味着现有校准目标与真实功能保真之间仍存在结构性缝隙。
+
+另一个尚待澄清的问题是，现有工作对低比特长上下文退化机制的解释仍不充分，尤其缺少跨架构、跨规模的统一诊断视角。已有研究已经分别从 K/V 非对称性、异常值分布、注意力平坦化、显著 token 保护或误差补偿等角度观察到低比特失效的若干现象，但这些观察大多停留在局部机制层面，尚未系统回答：在长上下文与极低位宽条件下，究竟是哪一侧误差首先触发了行为失稳，这种失稳如何受到模型家族、参数规模与 GQA/$H_{kv}$ 结构差异的共同调制。缺少这类统一解释，会使低比特路径设计仍然容易停留在经验调参，而难以形成可迁移的结构性判断。
+
+与此同时，现有研究往往将校准与预算分配分离推进，尚未建立贯通两者的统一组织原则。一方面，校准工作主要回答“如何确定量化参数”，而分层混合精度、显著性驱动分配或 tuner 类方法则更多回答“哪里应被优先保护”；另一方面，这两类决策通常又依赖不同的代理信号和不同的优化目标。这样一来，从参数选择到预算决策之间缺少共享的组织对象与接口语言，使得“如何量化”与“哪里优先保护”难以被写成同一条连续的方法链。对于本文关注的长上下文 KV Cache 场景，这种割裂会直接限制量化路径向更高层预算设计的自然延伸。
+
+在系统层面，现有工作在量化设计与高效推理协同方面也仍然存在明显断层。量化工作主要关注的是格式设计、位宽推进与低比特恢复，高效推理与系统优化工作则主要关注注意力计算的 IO 组织、缓存布局、内存管理与 kernel 融合。二者虽然在部署层面天然相关，但在已有文献中往往作为平行路线分别推进，缺少从“量化对象—缓存结构—解码访存特性—运行时接口”这一整链视角出发的统一表述。尤其在 Decode 阶段呈现显著访存主导特征的前提下，量化能否真正转化为可感知的部署收益，不仅取决于比特宽度本身，还取决于其与缓存管理、注意力实现和后端执行路径之间的协同程度。
+
+基于上述空白，本文并不将 KV Cache 量化理解为一个孤立的数值压缩问题，而是尝试从注意力行为保持这一角度重新组织校准、低比特路径、预算分配与系统接口之间的关系。本文的切入点不在于再增加一条彼此割裂的局部技巧，而在于寻找能够统一这些决策层的组织原则。下一章将据此转入方法设计，并从注意力行为保持的视角展开分析。
+```
+
+### 2.6 正文草稿（第 1 轮，已修正接入，`2026-04-23 03:31`）
+
+- 审核结论：`采用（经修正后）`
+- 修正动作：
+  - 保留 `2.6` 的两段式轻节结构
+  - 保留第一段对全章技术前置与文献坐标的压缩回收
+  - 将最后一句桥接收紧为“从注意力行为保持角度进入方法设计”，不提前展开第三章的形式化对象
+  - 继续保持本节不首次承载 research gap 主负载，也不重度前向引用第四章
+
+```tex
+\section{本章小结}
+
+本章围绕本文后续方法设计所需的技术前置与文献坐标，对相关工作与理论基础进行了分层梳理。首先，本文从仅解码器 Transformer 的自注意力机制出发，说明了多头注意力以及 MQA、GQA 等结构变体在查询头数与 KV 头数上的差异，并为后文的缓存结构分析建立了统一记号；随后讨论了 KV Cache 在自回归推理中的作用、Prefill 与 Decode 两阶段的计算特征，以及其随序列长度线性增长的显存占用规律，从而明确了长上下文部署中的核心资源瓶颈；在此基础上，本章进一步补充了对称量化、非对称量化与训练后校准的基本概念，并将 KV Cache 量化、低比特恢复、缓存管理与高效推理相关工作纳入同一文献坐标系中加以整理。
+
+结合前文对相关工作的梳理与研究空白的归纳可以看到，现有方法虽然已经在量化格式、低比特修复、缓存管理与系统优化等方向取得了重要进展，但仍缺少一个能够统一组织校准目标、低比特退化解释与后续预算决策的原则。下一章将据此从注意力行为保持的角度转入方法设计。
+```
+
+## 最终可回写正文块
+
+### 2.1
+
+```tex
+\section{Transformer 架构与自注意力机制}
+
+当前主流大语言模型在架构上普遍采用 Transformer 的仅解码器（Decoder-only）变体，并在自注意力层引入因果掩码以适配自回归语言建模。与原始 Transformer 的编码器-解码器结构相比，本文后续讨论默认基于这一 decoder-only 设定展开。这样的限定并非一般性背景介绍，而是后文 KV Cache 生成、复用与压缩讨论的共同结构前提。
+
+给定输入序列的隐藏状态矩阵 $\bm{H}$，模型通过三个可学习的线性投影分别生成 Query、Key 和 Value：
+\begin{equation}
+  \bQ = \bm{H}\bm{W}_Q, \quad \bK = \bm{H}\bm{W}_K, \quad \bV = \bm{H}\bm{W}_V
+  \label{eq:qkv_proj}
+\end{equation}
+基于此，缩放点积自注意力可写为
+\begin{equation}
+  \mathrm{Attention}(\bQ,\bK,\bV)
+    = \mathrm{softmax}\!\left(\frac{\bQ \bK^\top}{\sqrt{d_k}}\right)\bV
+  \label{eq:attention}
+\end{equation}
+其中 $d_k$ 为 Key 的头维度，缩放因子 $\sqrt{d_k}$ 用于缓解点积值随维度增大而带来的数值放大问题。在因果解码场景下，还需对未来位置施加下三角掩码，使当前位置只能访问历史 token。由此可见，当前步的注意力计算天然依赖全部历史 $\bK/\bV$；下一节将据此转向 KV Cache 的缓存与复用机制。
+
+为了增强表示能力，Transformer 进一步采用多头注意力（Multi-Head Attention, MHA），将 $\bQ$、$\bK$ 和 $\bV$ 沿头维度拆分后并行计算，再在输出端拼接：
+\begin{equation}
+  \mathrm{MHA}(\bQ,\bK,\bV)
+    = \mathrm{Concat}(\mathrm{head}_1,\ldots,\mathrm{head}_h)\bm{W}_O,
+  \qquad
+  \mathrm{head}_i = \mathrm{Attention}(\bQ_i,\bK_i,\bV_i)
+  \label{eq:mha}
+\end{equation}
+其中 $\bm{W}_O$ 为输出投影矩阵。多头机制将注意力计算分散到多个表示子空间，并由此引出后文对 KV 头数差异的讨论。
+
+在标准 MHA 中，可将查询头数与 KV 头数统一记为 $H_q = H_{kv}$。多查询注意力（Multi-Query Attention, MQA）\cite{shazeer2019fast} 令多个 Query 头共享单一 KV 头，可显著降低缓存开销；分组查询注意力（Grouped Query Attention, GQA）\cite{ainslie2023gqa} 则位于 MHA 与 MQA 之间，将 $H_q$ 个查询头划分为若干组，每 $H_q/H_{kv}$ 个 Query 头共享一组 $\bK/\bV$ 头。由此，当 $H_{kv} < H_q$ 时，推理阶段真正需要缓存的并不是全部 Query 头对应的 $\bK/\bV$，而是更少的共享 KV 头。这一差异是解释不同模型在长上下文下缓存成本差异的重要结构因素之一，也为后文围绕 $H_{kv}$ 展开的显存分析、低比特路径讨论与跨模型比较提供了统一的结构记号。下一节将在此基础上进一步说明 KV Cache 的生成机制、阶段划分及其显存瓶颈。
+```
+
+### 2.2
+
+```tex
+\section{KV Cache 机制与显存分析}
+
+\subsection{KV Cache 的作用与工作原理}
+
+在仅解码器 Transformer 的自回归推理过程中，模型在每一步只为当前新生成词元计算 Query 向量，但该 Query 需要与全部历史词元的 Key 向量计算注意力分数，并对相应的 Value 向量进行加权聚合。因而，若在每个解码步都重新对历史序列执行 Key/Value 投影，不仅会引入大量重复计算，还会使推理开销随历史长度增长而迅速累积。为避免这一冗余，实际推理系统通常将各层历史词元对应的 Key 和 Value 张量缓存在显存中，并在后续解码步直接复用，这一机制即为 KV Cache。
+
+从执行流程上看，KV Cache 的使用可分为预填充（Prefill）与解码（Decode）两个阶段。预填充阶段一次性处理完整提示词序列，计算所有层的历史 Key/Value 并写入缓存，此时并行度较高、计算相对集中，因此更接近计算密集型（compute-bound）过程。解码阶段则在每一步仅处理一个新词元：系统先生成该词元对应的 $k_t$ 和 $v_t$，再将其追加到既有缓存中，并读取完整历史 $K/V$ 参与当前步的注意力计算。由于单步新增计算量很小，但需要持续访问不断增长的历史缓存，因此 Decode 更接近访存密集型（memory-bound）过程。也正因为如此，KV Cache 不仅是自回归推理得以高效运行的必要机制，也自然演化为长上下文部署中的核心资源瓶颈。
+
+\subsection{KV Cache 显存占用分析}
+
+对于包含 $L$ 层的 Transformer 解码器，若每层保存 $H_{kv}$ 个 Key/Value 头，每个头的维度为 $d_k$，序列长度为 $S$，单个缓存元素占用 $b$ 字节，则 KV Cache 的总显存占用可写为
+\begin{equation}
+M_{KV} = 2 \times L \times H_{kv} \times d_k \times S \times b .
+\end{equation}
+其中，系数 2 对应 Key 与 Value 各占一份缓存；这里默认每头满足 $d_v=d_k$。$L$ 表示层数，$H_{kv}$ 表示每层实际参与缓存的 KV 头数，$d_k$ 表示头维度，$S$ 表示序列长度，$b$ 表示单元素字节数，例如 FP16、INT8 与 INT4 分别对应 2、1 和 0.5。结合上一节的 MHA、MQA 与 GQA 结构可知，真正决定缓存规模的并不是查询头数 $H_q$，而是共享后的 $H_{kv}$：当模型从标准 MHA 过渡到 MQA 或 GQA 时，$H_{kv}$ 的降低会直接减少缓存存储需求，这也是不同模型在长上下文部署成本上出现显著差异的重要结构原因之一。
+
+以 Qwen2.5-7B-Instruct 为例，其可取 $L=28$、$H_{kv}=4$、$d_k=128$。当序列长度 $S=32768$，并采用 FP16 存储（即 $b=2$）时，单个请求的 KV Cache 显存占用为
+\begin{equation}
+M_{KV}
+= 2 \times 28 \times 4 \times 128 \times 32768 \times 2
+\approx 1.75\,\mathrm{GiB}.
+\end{equation}
+这一数值仅对应 KV Cache 本身的存储，不包含模型权重、激活峰值与其他运行时开销；但即便如此，在 32K 乃至更长上下文场景下，单请求缓存占用已经不可忽视。若进一步增大批大小或上下文窗口，KV Cache 的显存需求将随之线性放大，并迅速挤压系统可服务的最大并发数与最大序列长度。因此，长上下文推理的关键约束并不只是参数规模本身，更在于缓存存储的持续膨胀；这也把讨论自然推进到量化技术基础，即后文用于压缩 KV Cache 的基本工具。
+```
+
+### 2.3
+
+```tex
+\section{模型量化技术基础}
+
+量化（Quantization）是一类将浮点张量映射为低比特整数表示的模型压缩技术，其直接目标是降低存储开销，并在合适的硬件与算子支持下减少推理成本。在本文语境中，后续真正关心的对象主要是与 KV Cache 压缩相关的推理期张量，而非训练阶段的量化感知优化。相较于权重量化，KV Cache 量化面对的是随序列长度动态增长的运行时表示，因此更符合训练后量化（post-training quantization, PTQ）与离线校准的部署语境。本节仅介绍后文会直接用到的基础概念，包括对称量化、非对称量化以及校准方法，并为下一节的 KV Cache 专属方法讨论提供最小理论背景。
+
+\subsection{对称量化}
+
+对称量化（Symmetric Quantization）将浮点数值映射到以零为中心的均匀整数网格上。给定浮点张量 $x$ 与目标比特宽度 $n$，其缩放因子可写为
+\begin{equation}
+s = \frac{\max(|x|)}{2^{n-1}-1}.
+\end{equation}
+在此基础上，量化映射与反量化过程分别为
+\begin{equation}
+x_q = \operatorname{clamp}\!\left(\operatorname{round}\!\left(\frac{x}{s}\right),\,-(2^{n-1}-1),\,2^{n-1}-1\right), \qquad
+\hat{x} = x_q \cdot s.
+\end{equation}
+由此引入的量化误差为 $\epsilon = x - \hat{x}$。对称量化的优点在于实现简单、整数网格规则，且零点天然与原点对齐，因而常被作为训练后量化中的基础形式。
+
+对于 INT8 对称量化，整数表示范围为 $[-127,127]$，共有 255 个离散等级，通常足以在较小精度损失下有效压缩张量；对于对称 INT4，整数范围缩小为 $[-7,7]$，仅剩 15 个离散等级，量化网格显著变粗，误差控制也随之变得更加困难。INT4 还可通过 bit-packing 将两个 4 位整数打包到一个字节中，使存储空间进一步压缩至 FP16 的 $1/4$。在实际系统中，逐张量（per-tensor）量化实现最为直接，但容易受异常值影响；分组量化（group-wise quantization）则将张量沿特定维度划分为固定大小的子组，并为每组独立确定缩放因子，通常能在量化精度与存储开销之间取得更好的平衡。对本文后续路径而言，INT8 更适合作为规范路径，而直接降到对称 INT4 则更容易暴露低比特场景下的结构性脆弱性。
+
+\subsection{非对称量化}
+
+非对称量化（Asymmetric Quantization）通过引入零点（zero-point）偏移来处理非零中心的数值分布。给定浮点张量 $x$ 与目标比特宽度 $n$，其缩放因子与零点可定义为
+\begin{equation}
+s = \frac{\max(x)-\min(x)}{2^n-1}, \qquad
+z = \operatorname{clamp}\!\left(\operatorname{round}\!\left(-\frac{\min(x)}{s}\right),\,0,\,2^n-1\right).
+\end{equation}
+相应的量化映射与反量化过程为
+\begin{equation}
+x_q = \operatorname{clamp}\!\left(\operatorname{round}\!\left(\frac{x}{s}\right)+z,\,0,\,2^n-1\right), \qquad
+\hat{x} = (x_q-z)\cdot s.
+\end{equation}
+与对称量化相比，非对称量化能够更充分地利用有限整数范围来覆盖偏斜分布，因此在张量均值明显偏离零点、或不同维度统计特征差异较大时，往往具有更好的表示能力。
+
+在更细粒度的实现层面，量化轴的选择同样会直接影响误差分布。例如，逐通道（per-channel）量化适合处理不同通道之间均值或尺度差异显著的张量；逐 token（per-token）量化则更适合处理沿时序方向动态范围变化明显的张量。对于后文的 KV Cache 场景，这类量化轴并非实现细节，而是构成方法空间的重要一维：当 Key 与 Value 在统计结构上呈现不同分布特征时，对它们采用相同的量化轴未必是最优选择，相关设计将在后续章节中进一步展开。
+
+\subsection{校准方法综述}
+
+量化校准（Calibration）是训练后量化中的关键步骤，其目标是在量化前利用少量校准样本确定缩放因子、裁剪阈值以及其他离线参数，从而使量化后的张量表示尽可能保持可用。对于部署场景而言，校准的价值并不在于重新训练模型，而在于用代价较小的离线过程换取更加稳定的在线推理表现。
+
+从优化目标上看，常见校准策略大致可以分为两类。第一类是数值空间校准，即直接以张量重建误差为目标，例如百分位裁剪（percentile clipping）通过抑制异常值影响来确定有效范围，均方误差（MSE）则以量化前后张量的逐元素差异为主要优化对象。第二类是分布空间或行为相关代理，即不再只关注张量本身的数值接近程度，而是转向保持输出分布的一致性；例如，以 KL 散度衡量原始分布与量化后分布差异的做法，可视为这类代理目标中的代表性例子。
+
+然而，在 KV Cache 量化场景下，量化后的 Key 和 Value 并不是被下游任务直接消费的对象，而是还要经过点积、softmax 与加权聚合等计算过程后，才间接影响模型输出。因此，数值空间上的最优重建并不自动等价于注意力行为层面的最优保持。换言之，“数值校准最优”与“行为保真最优”之间存在天然张力：前者主要约束张量本身的误差，后者更关注这些误差是否会在注意力计算中被放大或重排。下一节会把这组张力放回 KV Cache 专属相关工作的具体方法谱系中考察。
+```
+
+### 2.4
+
+```tex
+\section{KV Cache 量化与高效推理相关工作}
+
+随着大语言模型的上下文窗口不断扩大，KV Cache 的显存开销已成为制约长序列推理效率的关键瓶颈。围绕这一瓶颈，近年来的相关工作大致可沿三条线索梳理：其一是面向 KV Cache 本身的量化压缩与校准方法，其二是围绕低比特失真展开的异常值处理、混合精度与恢复策略，其三是与缓存管理和高效注意力计算相关的系统优化工作。更一般的量化理论综述可参见 Nagel 等人~\cite{nagel2021whitepaper} 与 Hubara 等人~\cite{hubara2018quantized}；但对本文而言，更关键的是这些工作如何分别回答“压缩什么”“如何恢复”以及“如何落地”这三个问题。
+
+\textbf{量化压缩与校准方法。}
+在直接面向 KV Cache 的量化路径中，KIVI~\cite{liu2024kivi} 是最具代表性的早期工作之一，其核心观察是 Key 与 Value 在统计结构上并不对称，因此采用逐通道（per-channel）Key 与逐词元（per-token）Value 的非对称量化格式，以在无需微调的条件下推进低比特缓存压缩。KVQuant~\cite{hooper2024kvquant} 进一步通过非均匀码本与 Pre-RoPE Key 量化，将 KV Cache 压缩推进到 sub-4-bit 区间，并尽量减轻 RoPE 对量化网格的扭曲。沿着相近思路，AsymKV~\cite{tao2024asymkv} 从层深度维度强调 K/V 敏感性的不对称，AQUA-KV~\cite{shutova2025aquakv} 则利用 K/V 的时序相关性构造自适应量化机制。这一类工作共同表明，KV Cache 量化并非简单沿用统一格式即可完成，而往往需要围绕量化轴、统计范围和校准方式做针对性设计。虽然 SmoothQuant~\cite{xiao2023smoothquant}、GPTQ~\cite{frantar2023gptq}、AWQ~\cite{lin2024awq} 与 LLM.int8()~\cite{dettmers2022gpt3int8} 主要面向权重或激活，但它们在平滑异常值、误差补偿和激活感知保护方面提供的方法学经验，也为 KV Cache 的低比特设计提供了重要启示。
+
+\textbf{低比特恢复与异常值处理。}
+除了直接决定量化轴与码本的工作之外，另一条重要思路是通过异常值处理、混合精度与误差补偿来延缓低比特失效。QuaRot~\cite{ashkboos2024quarot} 利用 Hadamard 旋转均匀化 Key 通道中的异常值分布，使标准对称量化在更低位宽下仍具可用性；ZipCache~\cite{he2024zipcache} 则依据 token 重要性实施混合精度缓存策略，在压缩与恢复之间寻找平衡。GEAR~\cite{kang2024gear} 通过残差低秩近似补偿量化误差，QServe~\cite{lin2024qserve} 进一步给出 W4A8KV4 的端到端联合量化系统，强调量化格式与运行时实现的协同。IntactKV~\cite{liu2024intactkv} 与 Outlier Tokens Tracing~\cite{su2025outliertoken} 则从“关键内容保护”的角度出发，以高精度保留枢纽 token 或异常 token；Atom~\cite{zhao2024atom} 探索了更动态的混合精度缓存压缩；QJL~\cite{zandieh2024qjl} 利用 Johnson--Lindenstrauss 随机投影将压缩推进到 1-bit 极限，SKVQ~\cite{duanmu2024skvq} 则引入滑动窗口下的差异化精度分配。总体来看，这一方向的共同特征是：它们不再把量化视为一次静态映射，而是把低比特恢复、异常值缓冲与内容重要性纳入统一考虑。
+
+\textbf{缓存管理与量化的正交路线。}
+与“降低 bit-width”不同，另一类工作主要从缓存管理本身入手压缩 KV Cache。H2O~\cite{zhang2024h2o}、StreamingLLM~\cite{xiao2024efficient}、SnapKV~\cite{li2024snapkv}、PyramidKV~\cite{cai2024pyramidkv}、DuoAttention~\cite{xiao2024duoattention}、HeadKV~\cite{fu2025headkv} 与 ChunkKV~\cite{liu2025chunkkv} 分别从注意力重要性、层级衰减、逐头贡献度或语义 chunk 结构出发，决定哪些 KV 对应被保留、驱逐或差异化处理；CacheGen~\cite{liu2024cachegen} 则从流式编解码角度压缩缓存，ThinK~\cite{xu2024think} 进一步探索查询驱动的 Key 剪枝。这一路线与量化并非替代关系，而是正交互补：前者主要决定“保留哪些缓存”，后者主要决定“每个缓存以多少比特存储”，二者可以组合使用以进一步降低部署成本。系统性的 KV Cache 压缩 benchmark 可参见~\cite{yuan2024kvcompressionbench}。
+
+\begin{table}[t]
+  \centering
+  \caption{KV Cache 压缩相关代表工作比较}
+  \label{tab:ch2-kv-comparison}
+  \label{tab:kv_quant_compare}
+  \label{tab:t0-related-work}
+  {\footnotesize
+  \setlength{\tabcolsep}{4pt}
+  \renewcommand{\arraystretch}{1.12}
+  \begin{tabular}{@{}p{2.3cm}p{2.0cm}p{4.8cm}p{4.6cm}@{}}
+    \toprule
+    方法 & 对象/位宽 & 核心策略 & 备注 \\
+    \midrule
+    KIVI~\cite{liu2024kivi} & KV Cache / 2-bit & per-channel Key + per-token Value 非对称量化 & 典型的 K/V 角色差异化格式 \\
+    KVQuant~\cite{hooper2024kvquant} & KV Cache / sub-4-bit & 非均匀码本 + Pre-RoPE Key 量化 & 推进极低比特缓存压缩 \\
+    AsymKV~\cite{tao2024asymkv} & KV Cache / --- & 分层 K$>$V 异质处理 & 强调深度相关的敏感性差异 \\
+    AQUA-KV~\cite{shutova2025aquakv} & KV Cache / --- & 利用时序相关性的自适应量化 & 面向动态分布的缓存压缩 \\
+    ZipCache~\cite{he2024zipcache} & KV Cache / mixed & token 显著性驱动的混合精度策略 & 压缩与恢复并重 \\
+    GEAR~\cite{kang2024gear} & KV Cache / 2-bit & 残差低秩补偿 & 低比特修复的代表路径 \\
+    QServe~\cite{lin2024qserve} & W4A8KV4 & 端到端联合量化 & 突出系统协同 \\
+    IntactKV~\cite{liu2024intactkv} & KV Cache / 4-bit & 枢纽 token 高精度保留 & 保护关键内容 \\
+    QJL~\cite{zandieh2024qjl} & KV Cache / 1-bit & JL 随机投影压缩 & 极限压缩探索 \\
+    SnapKV~\cite{li2024snapkv} & KV Cache / --- & 注意力预测驱动的缓存驱逐 & 与量化正交 \\
+    DuoAttention~\cite{xiao2024duoattention} & KV Cache / mixed & 头级差异化缓存策略 & 与量化正交 \\
+    ThinK~\cite{xu2024think} & KV Cache / --- & 查询驱动的 Key 剪枝 & 与量化正交 \\
+    \bottomrule
+  \end{tabular}}
+\end{table}
+
+表~\ref{tab:ch2-kv-comparison} 对上述代表性工作给出了压缩后的比较。可以看到，现有路线已经覆盖了从角色差异化格式、非均匀码本、误差补偿到缓存驱逐与剪枝等多个方向，但这些工作对“校准目标”“低比特恢复”和“系统落地”的强调并不相同，因此很难用单一维度概括其贡献。
+
+\phantomsection
+\label{sec:ch2-quant-softmax}
+\textbf{量化对注意力行为的扰动。}
+除压缩率本身之外，近期文献还开始从概率与排序层面对量化扰动进行更细的观察。QeRL~\cite{agarwal2025qerl} 指出量化会增加输出分布熵并使概率分布趋于平坦化，尽管其分析对象主要是输出 logits 而非注意力内部；KVTuner~\cite{xu2025kvtuner} 则从数学上分析了 Key 量化误差在注意力得分中的放大效应，并观察到高 KV Cache 量化误差的注意力头往往呈现非稀疏模式；Softmax Bias Correction~\cite{bondarenko2023softmax} 进一步指出 softmax 在量化后可能出现显著的 SQNR 劣化与大量近零概率值。与此相关，Softmax-Not-Enough~\cite{velickovic2024softmax} 和 AhaKV~\cite{gu2025ahakv} 虽然不直接服务于本文的量化设定，但都表明 softmax 温度、概率质量分布与缓存重要性之间存在可被利用的结构关系。这些工作共同提示，量化误差并不只停留在张量重建层，而会通过 softmax 和排序关系影响注意力行为本身。
+
+\textbf{高效注意力与系统协同。}
+然而，仅解决“量化什么”并不足以自动换来实际部署收益。FlashAttention~\cite{dao2022flashattention} 及 FlashAttention-2~\cite{dao2024flashattention2} 通过分块计算、在线 softmax 与更高效的并行组织降低注意力计算的 IO 开销，在不引入近似的前提下提升长序列推理效率；vLLM~\cite{kwon2023vllm} 的 PagedAttention 则将分页思想引入 KV Cache 管理，以减少显存碎片并提升缓存利用率；Triton~\cite{tillet2019triton} 作为面向 GPU kernel 的领域特定语言，为量化 cache 场景下的反量化与注意力计算融合提供了重要实现载体。就部署而言，量化减少的是每个 token 的缓存字节数，而高效注意力与缓存管理优化处理的是布局、访存和 kernel 执行，两者共同决定长上下文推理的实际落地成本。
+
+总体来看，现有工作已经在量化格式、低比特恢复、缓存管理和高效推理上形成了较清晰的谱系，但这些路线对校准目标、恢复机制与部署接口的强调并不相同。下一节将在这一文献坐标基础上集中归纳本文关注的研究空白与切入位置。
+```
+
+### 2.5
+
+```tex
+\section{研究空白与本文定位}
+
+综合前文技术基础与相关工作可以看到，围绕 KV Cache 压缩，现有研究已经在量化格式、低比特恢复、缓存管理与高效推理等方向上形成了较为丰富的方法谱系。因而，本文真正需要回答的问题已不再是“KV Cache 能否被压缩”这一初级问题，而是：当量化压缩逐步走向长上下文、低比特与真实部署场景时，这些已有路线之间是否仍缺少一个能够统一组织校准目标、退化机理解释、预算决策与系统落地的更高层原则。
+
+一个核心缺口在于，现有工作在校准目标上仍然主要围绕数值重建展开，缺少对注意力行为保持的显式组织。无论是均方误差、百分位裁剪，还是依赖运行时统计量确定量化范围的策略，其主要约束对象通常仍是张量本身的数值误差或数值分布，而不是量化后注意力分布与聚合输出是否仍被稳定保持。对于 KV Cache 而言，量化后的 Key 和 Value 并不会被下游任务直接消费，而是必须经过点积、softmax 与加权聚合之后才间接影响模型功能。因此，数值空间中的“最优重建”并不自动等价于推理行为层面的“最优保持”，这也意味着现有校准目标与真实功能保真之间仍存在结构性缝隙。
+
+另一个尚待澄清的问题是，现有工作对低比特长上下文退化机制的解释仍不充分，尤其缺少跨架构、跨规模的统一诊断视角。已有研究已经分别从 K/V 非对称性、异常值分布、注意力平坦化、显著 token 保护或误差补偿等角度观察到低比特失效的若干现象，但这些观察大多停留在局部机制层面，尚未系统回答：在长上下文与极低位宽条件下，究竟是哪一侧误差首先触发了行为失稳，这种失稳如何受到模型家族、参数规模与 GQA/$H_{kv}$ 结构差异的共同调制。缺少这类统一解释，会使低比特路径设计仍然容易停留在经验调参，而难以形成可迁移的结构性判断。
+
+与此同时，现有研究往往将校准与预算分配分离推进，尚未建立贯通两者的统一组织原则。一方面，校准工作主要回答“如何确定量化参数”，而分层混合精度、显著性驱动分配或 tuner 类方法则更多回答“哪里应被优先保护”；另一方面，这两类决策通常又依赖不同的代理信号和不同的优化目标。这样一来，从参数选择到预算决策之间缺少共享的组织对象与接口语言，使得“如何量化”与“哪里优先保护”难以被写成同一条连续的方法链。对于本文关注的长上下文 KV Cache 场景，这种割裂会直接限制量化路径向更高层预算设计的自然延伸。
+
+在系统层面，现有工作在量化设计与高效推理协同方面也仍然存在明显断层。量化工作主要关注的是格式设计、位宽推进与低比特恢复，高效推理与系统优化工作则主要关注注意力计算的 IO 组织、缓存布局、内存管理与 kernel 融合。二者虽然在部署层面天然相关，但在已有文献中往往作为平行路线分别推进，缺少从“量化对象—缓存结构—解码访存特性—运行时接口”这一整链视角出发的统一表述。尤其在 Decode 阶段呈现显著访存主导特征的前提下，量化能否真正转化为可感知的部署收益，不仅取决于比特宽度本身，还取决于其与缓存管理、注意力实现和后端执行路径之间的协同程度。
+
+基于上述空白，本文并不将 KV Cache 量化理解为一个孤立的数值压缩问题，而是尝试从注意力行为保持这一角度重新组织校准、低比特路径、预算分配与系统接口之间的关系。本文的切入点不在于再增加一条彼此割裂的局部技巧，而在于寻找能够统一这些决策层的组织原则。下一章将据此转入方法设计，并从注意力行为保持的视角展开分析。
+```
+
+### 2.6
+
+```tex
+\section{本章小结}
+
+本章围绕本文后续方法设计所需的技术前置与文献坐标，对相关工作与理论基础进行了分层梳理。首先，本文从仅解码器 Transformer 的自注意力机制出发，说明了多头注意力以及 MQA、GQA 等结构变体在查询头数与 KV 头数上的差异，并为后文的缓存结构分析建立了统一记号；随后讨论了 KV Cache 在自回归推理中的作用、Prefill 与 Decode 两阶段的计算特征，以及其随序列长度线性增长的显存占用规律，从而明确了长上下文部署中的核心资源瓶颈；在此基础上，本章进一步补充了对称量化、非对称量化与训练后校准的基本概念，并将 KV Cache 量化、低比特恢复、缓存管理与高效推理相关工作纳入同一文献坐标系中加以整理。
+
+结合前文对相关工作的梳理与研究空白的归纳可以看到，现有方法虽然已经在量化格式、低比特修复、缓存管理与系统优化等方向取得了重要进展，但仍缺少一个能够统一组织校准目标、低比特退化解释与后续预算决策的原则。下一章将据此从注意力行为保持的角度转入方法设计。
+```
+
+## 下一轮增量维护规则
+
+- 后续如需增量修订，按 `2.1–2.6` 顺序逐节维护，不跨节混写。
+- 每次接入都必须先按 `Writing` 与 `story` 做边界审查。
+- 通过审校的正文块，再追加到“最终可回写正文块”。
+- 在未明确批准前，不直接同步到 `thesis/chapters/ch2_related_work.tex`。
