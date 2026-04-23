@@ -3,17 +3,18 @@
   \caption{统一离线校准工作流下的路径参数化接口}
   \label{tab:ch3-calibration-interfaces}
   \small
-  \setlength{\tabcolsep}{4pt}
-  \begin{tabular}{p{2.2cm}p{2.0cm}p{1.8cm}p{2.8cm}p{1.8cm}p{2.3cm}p{1.2cm}}
+  \setlength{\tabcolsep}{4.2pt}
+  \renewcommand{\arraystretch}{1.12}
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{1.95cm}>{\raggedright\arraybackslash}p{1.35cm}>{\raggedright\arraybackslash}p{1.55cm}>{\raggedright\arraybackslash}p{4.20cm}>{\raggedright\arraybackslash}p{2.25cm}>{\centering\arraybackslash}p{0.72cm}@{}}
     \toprule
-    路径 & 校准接口 & 量化粒度 & 主代理 / 主要选择统计 & 辅助约束 & 输出产物 & 后续展开 \\
+    路径 & \makecell[l]{校准\\接口} & \makecell[l]{量化\\粒度} & \makecell[l]{主代理 / 约束} & \makecell[l]{输出\\产物} & \makecell[c]{后\\续} \\
     \midrule
-    INT8 规范路径 & $(p_c,g,m)$ & 对称 per-group & attention-distribution KL；robust P95 & 裁剪率约束 & 静态 scale + 保护元数据 & 3.5.1 \\
-    对称 \texttt{INT4} 试探路径 & $(p_c,g)$ & 对称 per-group & attention-distribution KL；robust P95 & 裁剪率约束 & 静态 scale & 3.5.2 \\
-    \texttt{INT4-RoleAlign} & K-path: $p_K$；V-path: $p_V$ & K: per-channel；V: per-token & K: attention KL / P95；V: 输出扰动代理 & 路径相关稳健约束 & role-aware artifact（K/V 参数与轴元数据） & 3.5.3 \\
+    \makecell[l]{INT8 规范\\路径} & $(p_c,g,m)$ & \makecell[l]{对称\\per-group} & \makecell[l]{注意力分布 KL；\\P95；裁剪率约束} & \makecell[l]{静态 scale +\\保护元数据} & 3.5.1 \\
+    \makecell[l]{对称 INT4\\试探路径} & $(p_c,g)$ & \makecell[l]{对称\\per-group} & \makecell[l]{注意力分布 KL；\\P95；裁剪率约束} & 静态 scale & 3.5.2 \\
+    \makecell[l]{INT4-\\RoleAlign} & \makecell[l]{K: $p_K$\\V: $p_V$} & \makecell[l]{K: per-channel\\V: per-token} & \makecell[l]{K: 注意力分布 KL / P95\\V: 输出扰动代理\\路径相关稳健约束} & \makecell[l]{角色感知产物\\K/V 参数与轴元数据} & 3.5.3 \\
     \bottomrule
   \end{tabular}
 
   \vspace{4pt}
-  \parbox{0.96\textwidth}{\footnotesize 注：统一的是 offline calibration workflow 与稳健选择纪律，不同路径的差异体现在参数接口与行为代理上；在 \texttt{INT4-RoleAlign} 中，Key 路径由 attention-distribution KL 主导，Value 路径由独立的输出扰动代理主导。}
+  \parbox{0.96\textwidth}{\footnotesize 注：统一的是离线校准 workflow 与稳健选择纪律，不同路径的差异体现在参数接口与行为代理上；在 \texttt{INT4-RoleAlign} 中，Key 路径由 attention-distribution KL 主导，Value 路径由独立的输出扰动代理主导。}
 \end{table}

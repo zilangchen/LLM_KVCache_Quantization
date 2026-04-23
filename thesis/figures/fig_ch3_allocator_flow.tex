@@ -1,34 +1,143 @@
 \begin{figure}[!htbp]
   \centering
   \begin{tikzpicture}[
-    every node/.style={font=\small, align=center},
-    box/.style={rectangle, rounded corners=3pt, draw=blue!55!black, thick,
-                fill=blue!8, minimum width=2.6cm, minimum height=1.0cm},
-    box2/.style={rectangle, rounded corners=3pt, draw=green!45!black, thick,
-                 fill=green!10, minimum width=2.6cm, minimum height=1.0cm},
-    arr/.style={-stealth, thick}
+    x=1cm, y=1cm,
+    >=Stealth,
+    every node/.style={font=\rmfamily\small, align=center, text=black},
+    arr/.style={-stealth, line width=1.05pt, draw=black!78},
+    leftpanel/.style={
+      rectangle, rounded corners=7pt,
+      draw=black!70!cyan, line width=1.0pt,
+      fill=cyan!4,
+      minimum width=5.95cm, minimum height=7.65cm
+    },
+    rightpanel/.style={
+      rectangle, rounded corners=7pt,
+      draw=brown!70!black, line width=1.0pt,
+      fill=red!2,
+      minimum width=5.95cm, minimum height=7.65cm
+    },
+    titleL/.style={font=\bfseries\small, text=black!80!cyan},
+    titleR/.style={font=\bfseries\small, text=brown!78!black},
+    subtitleL/.style={font=\rmfamily\scriptsize, text=black!65!cyan},
+    subtitleR/.style={font=\rmfamily\scriptsize, text=brown!70!black},
+    tealcard/.style={
+      rectangle, rounded corners=5pt,
+      draw=black!70!cyan, line width=0.95pt,
+      fill=white, text width=3.75cm,
+      minimum height=1.02cm, inner sep=5pt
+    },
+    profilecard/.style={
+      rectangle, rounded corners=5pt,
+      draw=black!70!cyan, line width=0.95pt,
+      fill=white, text width=3.75cm,
+      minimum height=1.32cm, inner sep=5pt
+    },
+    tealslim/.style={
+      rectangle, rounded corners=5pt,
+      draw=black!70!cyan, line width=0.95pt,
+      fill=white, text width=3.15cm,
+      minimum height=0.88cm, inner sep=5pt
+    },
+    redcard/.style={
+      rectangle, rounded corners=5pt,
+      draw=red!58!black, line width=0.95pt,
+      fill=white, text width=3.55cm,
+      minimum height=0.94cm, inner sep=5pt
+    },
+    sandcard/.style={
+      rectangle, rounded corners=5pt,
+      draw=brown!70!black, line width=0.95pt,
+      fill=white, text width=3.55cm,
+      minimum height=1.02cm, inner sep=5pt
+    },
+    branchL/.style={
+      rectangle, rounded corners=5pt,
+      draw=black!70!cyan, line width=0.95pt,
+      fill=white, text width=2.25cm,
+      minimum height=1.16cm, inner sep=5pt
+    },
+    branchR/.style={
+      rectangle, rounded corners=5pt,
+      draw=brown!70!black, line width=0.95pt,
+      fill=white, text width=2.25cm,
+      minimum height=1.16cm, inner sep=5pt
+    },
+    tiny/.style={font=\rmfamily\scriptsize}
   ]
-    \node[font=\bfseries] at (-3.6,3.0) {逐层分配};
-    \node[box] (sig) at (-5.9,1.6) {$\sigma_K^{(l)},\sigma_V^{(l)}$};
-    \node[box] (agg) at (-3.8,1.6) {$\operatorname{Agg}_{\alpha}$};
-    \node[box] (prof) at (-1.6,1.6) {$S=\{s^{(l)}\}$};
-    \node[box2] (topk) at (-3.8,-0.1) {$\operatorname{TopK}(S,k)$};
-    \node[box2] (bits) at (-1.6,-0.1) {$[b^{(1)},\dots,b^{(L)}]$};
-    \draw[arr] (sig.east) -- (agg.west);
-    \draw[arr] (agg.east) -- (prof.west);
-    \draw[arr] (prof.south) |- (topk.east);
-    \draw[arr] (topk.east) -- (bits.west);
 
-    \node[font=\bfseries] at (3.8,3.0) {角色扩展};
-    \node[box] (sk) at (1.8,1.6) {$S_K$};
-    \node[box] (sv) at (3.8,1.6) {$S_V$};
-    \node[box2] (pk) at (1.8,-0.1) {$\mathcal P_K$};
-    \node[box2] (pv) at (3.8,-0.1) {$\mathcal P_V$};
-    \node[box2] (pair) at (5.9,0.75) {pair-wise\\bit budget};
+    \node[font=\bfseries\large] at (0,5.02)
+      {行为敏感度画像到预算决策};
+    \node[font=\rmfamily\small, text=black!62] at (0,4.52)
+      {逐层分配与 K/V 角色扩展};
+    \draw[brown!55!black, line width=0.8pt] (-5.95,4.10) -- (5.95,4.10);
+
+    \node[leftpanel] (lp) at (-3.45,0.25) {};
+    \node[rightpanel] (rp) at (3.45,0.25) {};
+
+    % Left title
+    \node[titleL] at (-3.45,3.24) {逐层分配};
+    \node[subtitleL] at (-3.45,2.82) {从 readout 走到 layer-wise budget};
+
+    % Left vertical chain
+    \node[tealcard] (readout) at (-3.45,1.80)
+      {artifact-based readout\\[2pt]$\sigma_K^{(l)},\ \sigma_V^{(l)}$};
+
+    \node[tealslim] (agg) at (-3.45,0.68)
+      {$\operatorname{Agg}_{\alpha}$，\ $\alpha\in\{\max,\mathrm{mean}\}$};
+
+    \node[profilecard] (profile) at (-3.45,-0.63)
+      {layer sensitivity profile\\[2pt]$S=\{s^{(l)}\}$};
+
+    % simple bars inside profile card
+    \foreach \x/\h in {-4.52/0.22,-4.31/0.62,-4.10/0.40,-3.89/0.82,-3.68/0.48,-3.47/0.30,-3.26/0.76,-3.05/0.45,-2.84/0.58} {
+      \fill[cyan!18] (\x,-1.48) rectangle ++(0.10,\h);
+      \draw[black!45!cyan, line width=0.32pt] (\x,-1.48) rectangle ++(0.10,\h);
+    }
+
+    \node[tealslim] (topk) at (-3.45,-2.22)
+      {Top-$k$ 保护集合\\[1pt]$\mathcal P_k=\operatorname{TopK}(S,k)$};
+
+    \node[redcard] (bits) at (-3.45,-3.48)
+      {layer-wise bit vector\\[2pt]$[b^{(1)},\dots,b^{(L)}]$};
+
+    \draw[arr] (readout.south) -- (agg.north);
+    \draw[arr] (agg.south) -- (profile.north);
+    \draw[arr] (profile.south) -- (topk.north);
+    \draw[arr] (topk.south) -- (bits.north);
+
+    % Right title
+    \node[titleR] at (3.45,3.24) {角色扩展};
+    \node[subtitleR] at (3.45,2.82) {从 layer-wise budget 延伸到 pair-wise budget};
+
+    \node[sandcard] (shared) at (3.45,1.82)
+      {角色条件化 readout\\[2pt]$(s_K^{(l)},\ s_V^{(l)})$};
+
+    \node[branchL] (sk) at (2.08,-0.22)
+      {$S_K$\\[2pt]role-aware\\Key readout};
+    \node[branchR] (sv) at (4.82,-0.22)
+      {$S_V$\\[2pt]role-aware\\Value readout};
+
+    \node[branchL] (pk) at (2.08,-2.00)
+      {$\mathcal P_K$\\[2pt]Key protection\\mask};
+    \node[branchR] (pv) at (4.82,-2.00)
+      {$\mathcal P_V$\\[2pt]Value protection\\mask};
+
+    \node[redcard] (pair) at (3.45,-3.58)
+      {pair-wise bit budget\\[2pt]$\mathbf b^{(l)}=(b_K^{(l)},\,b_V^{(l)})$};
+
+    \coordinate (split) at (3.45,0.72);
+    \coordinate (merge) at (3.45,-2.86);
+
+    \draw[arr] (shared.south) -- (split);
+    \draw[arr] (split) -- (sk.north);
+    \draw[arr] (split) -- (sv.north);
     \draw[arr] (sk.south) -- (pk.north);
     \draw[arr] (sv.south) -- (pv.north);
-    \draw[arr] (pk.east) -- (pair.west);
-    \draw[arr] (pv.east) -- (pair.west);
+    \draw[arr] (pk.south) -- (merge);
+    \draw[arr] (pv.south) -- (merge);
+    \draw[arr] (merge) -- (pair.north);
+
   \end{tikzpicture}
   \caption{行为敏感度画像到预算分配的两级流程：逐层分配与角色扩展。左半部分给出从 artifact-based readout 到排序、再到 top-$k$ 保护集合与 layer-wise bit vector 的生成链；右半部分说明相同框架如何自然扩展到 K/V 角色感知预算接口。}
   \label{fig:ch3-allocation-flow}

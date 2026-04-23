@@ -1,4 +1,9 @@
-$pdf_mode = 5;           # use xelatex -> pdf
-$xelatex = 'xelatex -synctex=1 -interaction=nonstopmode -file-line-error %O %S';
+# NOTE:
+# The project is routinely built with `latexmk -pdf main.tex`. In latexmk, the
+# `-pdf` flag selects the `pdflatex` rule, which would otherwise bypass the
+# XeLaTeX-specific toolchain required by ctex/fontspec/xeCJK. To keep the
+# common entrypoint stable, route the `pdflatex` rule to xelatex explicitly.
+$pdf_mode = 1;
+$pdflatex = 'xelatex -synctex=1 -interaction=nonstopmode -file-line-error %O %S';
 $bibtex_use = 2;
 $clean_ext = 'synctex.gz synctex.gz(busy) run.xml aux bbl bcf blg fdb_latexmk fls log out toc lof lot xdv';

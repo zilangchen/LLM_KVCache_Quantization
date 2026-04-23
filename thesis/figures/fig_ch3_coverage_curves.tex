@@ -1,36 +1,83 @@
 \begin{figure}[!htbp]
   \centering
-  \begin{tikzpicture}[x=1.05cm,y=5.0cm]
+  \begin{tikzpicture}[x=1.18cm,y=4.85cm,>=Stealth]
     % axes
-    \draw[->, thick] (0,0) -- (6.2,0) node[below, font=\small] {$k$};
-    \draw[->, thick] (0,0) -- (0,1.08) node[left, font=\small] {$\Gamma(k)$};
+    \draw[->, line width=1.0pt, draw=black!80] (0,0) -- (6.35,0)
+      node[below, font=\small] {$k$};
+    \draw[->, line width=1.0pt, draw=black!80] (0,0) -- (0,1.06)
+      node[left, font=\small] {$\Gamma(k)$};
+
+    % ticks
     \foreach \y/\lab in {0.0/0,0.4/0.4,0.8/0.8,1.0/1.0} {
-      \draw (-0.05,\y) -- (0.05,\y);
-      \node[left, font=\scriptsize] at (-0.08,\y) {\lab};
+      \draw[black!75] (-0.04,\y) -- (0.04,\y);
+      \node[left, font=\scriptsize, text=black!72] at (-0.08,\y) {\lab};
     }
     \foreach \x in {1,2,3,4,5,6} {
-      \draw (\x,0.0) -- (\x,-0.02);
-      \node[below, font=\scriptsize] at (\x,-0.02) {\x};
+      \draw[black!75] (\x,0.0) -- (\x,-0.018);
+      \node[below, font=\scriptsize, text=black!72] at (\x,-0.02) {\x};
     }
 
-    % thresholds
-    \foreach \y/\txt in {0.80/cov80,0.85/cov85,0.90/cov90} {
-      \draw[densely dashed, gray!60] (0,\y) -- (6.0,\y);
-      \node[right, font=\scriptsize, gray!70!black] at (6.02,\y) {\txt};
-    }
+    % threshold lines
+    \draw[densely dashed, gray!35] (0,0.80) -- (6.0,0.80);
+    \draw[densely dashed, gray!55] (0,0.85) -- (6.0,0.85);
+    \draw[densely dashed, gray!35] (0,0.90) -- (6.0,0.90);
+    \node[right, font=\scriptsize, text=gray!70!black] at (6.03,0.80) {$\rho=0.80$};
+    \node[right, font=\scriptsize, text=gray!78!black] at (6.03,0.85) {$\rho=0.85$};
+    \node[right, font=\scriptsize, text=gray!70!black] at (6.03,0.90) {$\rho=0.90$};
+
+    % filled areas
+    \fill[cyan!10]
+      (0.55,0.00) --
+      plot[smooth] coordinates {
+        (0.55,0.24) (1.00,0.50) (1.55,0.76) (2.05,0.86)
+        (2.85,0.93) (3.90,0.97) (5.60,1.00)
+      } --
+      (5.60,0.00) -- cycle;
+
+    \fill[orange!10]
+      (0.55,0.00) --
+      plot[smooth] coordinates {
+        (0.55,0.10) (1.05,0.22) (1.75,0.37) (2.55,0.52)
+        (3.35,0.67) (4.15,0.79) (4.85,0.86) (5.55,0.92)
+      } --
+      (5.55,0.00) -- cycle;
 
     % curves
-    \draw[blue!70!black, very thick]
-      plot[smooth] coordinates {(0.6,0.46) (1.2,0.72) (2.0,0.86) (3.0,0.93) (4.2,0.97) (5.6,1.0)};
-    \draw[orange!85!black, very thick]
-      plot[smooth] coordinates {(0.6,0.18) (1.2,0.34) (2.0,0.50) (3.0,0.66) (4.2,0.80) (5.6,0.92)};
+    \draw[cyan!65!black, line width=1.7pt]
+      plot[smooth] coordinates {
+        (0.55,0.24) (1.00,0.50) (1.55,0.76) (2.05,0.86)
+        (2.85,0.93) (3.90,0.97) (5.60,1.00)
+      };
 
-    % k* markers
-    \draw[densely dotted, blue!70!black] (2.0,0) -- (2.0,0.86);
-    \draw[densely dotted, orange!85!black] (4.2,0) -- (4.2,0.80);
-    \node[font=\scriptsize, blue!70!black] at (1.55,0.96) {集中型 profile};
-    \node[font=\scriptsize, orange!85!black] at (4.9,0.62) {弥散型 profile};
+    \draw[orange!82!black, line width=1.7pt]
+      plot[smooth] coordinates {
+        (0.55,0.10) (1.05,0.22) (1.75,0.37) (2.55,0.52)
+        (3.35,0.67) (4.15,0.79) (4.85,0.86) (5.55,0.92)
+      };
+
+    % highlighted target and k* markers
+    \fill[cyan!70!black] (2.05,0.85) circle (1.6pt);
+    \fill[orange!82!black] (4.85,0.85) circle (1.6pt);
+    \draw[densely dotted, cyan!65!black, line width=0.9pt] (2.05,0.00) -- (2.05,0.85);
+    \draw[densely dotted, orange!82!black, line width=0.9pt] (4.85,0.00) -- (4.85,0.85);
+    \fill[cyan!65!black] (2.05,0.00) circle (1.35pt);
+    \fill[orange!82!black] (4.85,0.00) circle (1.35pt);
+
+    % labels
+    \node[font=\scriptsize, text=cyan!70!black,
+          fill=white, inner sep=2pt, rounded corners=3pt]
+      at (1.95,0.97) {集中型画像};
+    \node[font=\scriptsize, text=orange!82!black,
+          fill=white, inner sep=2pt, rounded corners=3pt]
+      at (5.02,0.60) {弥散型画像};
+
+    \node[font=\scriptsize, text=gray!75!black,
+          fill=white, inner sep=2pt]
+      at (5.08,0.875) {相同 coverage 目标};
+
+    \node[font=\scriptsize, text=cyan!70!black] at (2.05,-0.08) {$k^\star_{\text{集中}}$};
+    \node[font=\scriptsize, text=orange!82!black] at (4.85,-0.08) {$k^\star_{\text{弥散}}$};
   \end{tikzpicture}
-  \caption{敏感度覆盖度曲线示意：集中型画像与弥散型画像的预算含义。相同覆盖阈值下，集中型 profile 会在更小的 $k$ 上达到目标覆盖度，而弥散型 profile 需要更大的保护层数；这正是 \texttt{AutoK} 将 profile 形状转写为预算建议的核心直觉。}
+  \caption{敏感度覆盖度曲线示意：集中型画像与弥散型画像的预算含义。相同覆盖阈值下，集中型画像会在更小的 $k$ 上达到目标覆盖度，而弥散型画像需要更大的保护层数；这正是 AutoK 将 profile 形状转写为预算建议的核心直觉。}
   \label{fig:ch3-coverage-curve}
 \end{figure}

@@ -8,7 +8,8 @@
     arr/.style={-stealth, thick}
   ]
     % K side
-    \node[font=\bfseries] at (-4.2,3.2) {Key side: ranking};
+    \node[font=\bfseries] at (-4.2,3.2) {Key 侧：优先保持排序结构};
+    \node[font=\scriptsize] at (-4.2,2.65) {token 聚合 $\rightarrow$ channel 独立量化参数};
     \node[mat] (kmat) at (-4.2,1.2) {};
     \foreach \x in {-5.0,-4.5,-4.0,-3.5} {\draw[gray!55] (\x,0.0) -- (\x,2.4);}
     \foreach \y in {0.6,1.2,1.8} {\draw[gray!55] (-5.4,\y) -- (-3.0,\y);}
@@ -17,13 +18,14 @@
     \draw[arr, red!70!black] (-4.8,2.8) -- (-4.8,2.0);
     \draw[arr, red!70!black] (-4.3,2.8) -- (-4.3,2.0);
     \draw[arr, red!70!black] (-3.8,2.8) -- (-3.8,2.0);
-    \node[note] (kagg) at (-4.2,-1.6) {沿 token 方向聚合\\每个 channel 独立确定 $(s_K,z_K)$};
-    \node[note] (kpk) at (-4.2,-3.0) {$p_K$ percentile\\attention-distribution KL};
+    \node[note] (kagg) at (-4.2,-1.6) {沿 token 聚合\\按 channel 独立确定 $(s_K,z_K)$};
+    \node[note] (kpk) at (-4.2,-3.0) {$p_K$ percentile\\attention KL};
     \draw[arr] (kmat.south) -- (kagg.north);
     \draw[arr] (kagg.south) -- (kpk.north);
 
     % V side
-    \node[font=\bfseries] at (4.2,3.2) {Value side: content};
+    \node[font=\bfseries] at (4.2,3.2) {Value 侧：优先保持内容聚合};
+    \node[font=\scriptsize] at (4.2,2.65) {channel 聚合 $\rightarrow$ token 独立量化参数};
     \node[mat] (vmat) at (4.2,1.2) {};
     \foreach \x in {3.4,3.9,4.4,4.9} {\draw[gray!55] (\x,0.0) -- (\x,2.4);}
     \foreach \y in {0.6,1.2,1.8} {\draw[gray!55] (3.0,\y) -- (5.4,\y);}
@@ -32,11 +34,11 @@
     \draw[arr, orange!80!black] (3.2,1.8) -- (4.0,1.8);
     \draw[arr, orange!80!black] (3.2,1.2) -- (4.0,1.2);
     \draw[arr, orange!80!black] (3.2,0.6) -- (4.0,0.6);
-    \node[note] (vagg) at (4.2,-1.6) {沿 channel 方向聚合\\每个 token 独立确定 $(s_V,z_V)$};
+    \node[note] (vagg) at (4.2,-1.6) {沿 channel 聚合\\按 token 独立确定 $(s_V,z_V)$};
     \node[note] (vpv) at (4.2,-3.0) {$p_V$ percentile\\输出扰动代理};
     \draw[arr] (vmat.south) -- (vagg.north);
     \draw[arr] (vagg.south) -- (vpv.north);
   \end{tikzpicture}
-  \caption{\texttt{INT4-RoleAlign} 的角色感知非对称量化轴。Key 侧沿 token 方向聚合、对每个 channel 单独确定非对称量化参数，以优先保持 attention ranking；Value 侧沿 channel 方向聚合、对每个 token 单独确定非对称量化参数，以适应内容侧的动态范围变化。}
+  \caption{INT4-RoleAlign 的角色感知非对称量化轴。Key 侧沿 token 方向聚合、对每个 channel 单独确定非对称量化参数，以优先保持 attention ranking；Value 侧沿 channel 方向聚合、对每个 token 单独确定非对称量化参数，以适应内容侧的动态范围变化。}
   \label{fig:ch3-rolealign-axis}
 \end{figure}

@@ -352,18 +352,18 @@ q_{\min},\,q_{\max}
   \label{tab:ch3-rolealign-vs-kivi}
   \label{tab:s3-rolealign-vs-kivi}
   \footnotesize
-  \setlength{\tabcolsep}{3.8pt}
-  \renewcommand{\arraystretch}{1.12}
-  \begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{1.45cm}>{\raggedright\arraybackslash}p{2.0cm}>{\raggedright\arraybackslash}p{2.35cm}X}
+  \setlength{\tabcolsep}{4.0pt}
+  \renewcommand{\arraystretch}{1.10}
+  \begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{1.45cm}>{\raggedright\arraybackslash}p{2.15cm}>{\raggedright\arraybackslash}p{2.55cm}X}
     \toprule
     维度 & \texttt{KIVI-style} & \texttt{INT4-RoleAlign} & 含义 \\
     \midrule
     量化格式 & \makecell[l]{per-channel K +\\per-token V} & 相同 & 比较建立在同一角色感知格式族下 \\
-    校准来源 & 运行时统计 & 离线角色感知校准 & 比较的是校准哲学 \\
+    校准来源 & 运行时统计 & \makecell[l]{离线角色感知\\校准} & 比较的是校准哲学 \\
     参数确定 & 即时统计量 & \makecell[l]{K-path: $p_K$\\V-path: $p_V$} & 两侧均被纳入可审计的离线接口 \\
     行为代理 & 无显式行为代理 & \makecell[l]{K: 注意力分布 KL\\V: 输出扰动代理} & 显式区分排序与内容两侧 \\
     推理接口 & 无离线产物 & 有固定校准产物 & 便于审计、冻结和部署一致性 \\
-    向 \ref{sec:ch3-allocator} 扩展 & 无共享画像接口 & \makecell[l]{可共享行为\\敏感度画像} & 可自然延伸到 allocator/\texttt{AutoK} \\
+    \makecell[l]{向 \ref{sec:ch3-allocator}\\扩展} & 无共享画像接口 & \makecell[l]{可共享行为\\敏感度画像} & 可自然延伸到 allocator/\texttt{AutoK} \\
     \bottomrule
   \end{tabularx}
 \end{table}

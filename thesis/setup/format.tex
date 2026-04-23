@@ -10,6 +10,9 @@
 % --- 段落首行缩进 2 字符 ---
 \setlength{\parindent}{2em}
 
+% --- 段落断行弹性：降低中英文混排下的 overfull hbox ---
+\setlength{\emergencystretch}{2em}
+
 % --- 章标题：小二号黑体，居中，单倍行距，段前段后各 0.5 行 ---
 % "第X章" 格式由 ctexbook 的 chapter/name 控制
 \ctexset{

@@ -1,0 +1,20 @@
+\begin{table}[!htbp]
+  \centering
+  \caption{跨位宽路径的实例化关系与统一校准工作流}
+  \label{tab:ch3-path-instantiation}
+  \small
+  \setlength{\tabcolsep}{4.2pt}
+  \renewcommand{\arraystretch}{1.12}
+  \begin{tabular}{@{}>{\raggedright\arraybackslash}p{1.85cm}>{\raggedright\arraybackslash}p{2.05cm}>{\raggedright\arraybackslash}p{1.50cm}>{\raggedright\arraybackslash}p{4.05cm}>{\raggedright\arraybackslash}p{3.00cm}@{}}
+    \toprule
+    路径 & \makecell[l]{位宽 /\\量化格式} & \makecell[l]{主要\\接口} & \makecell[l]{暴露问题 / 目标} & \makecell[l]{统一 workflow\\中的定位} \\
+    \midrule
+    \makecell[l]{INT8 规范\\路径} & \makecell[l]{8-bit\\对称 per-group} & $(p_c,g,m)$ & 形成最干净、最可审计的规范验证实例 & \makecell[l]{规范验证路径；\\验证校准闭环} \\
+    \makecell[l]{对称 INT4\\试探路径} & \makecell[l]{4-bit\\对称 per-group} & $(p_c,g)$ & \makecell[l]{暴露 Key 排序脆弱性，以及\\量化级别骤降带来的结构困难} & \makecell[l]{说明对称 INT4\\不能机械继承 INT8 路径} \\
+    \makecell[l]{INT4-\\RoleAlign} & \makecell[l]{4-bit\\K: per-channel\\V: per-token} & \makecell[l]{K-path: $p_K$\\V-path: $p_V$} & \makecell[l]{在低比特下恢复 behavior 保持，\\并将 K/V 两侧纳入可审计接口} & \makecell[l]{角色感知低比特路径；\\统一 workflow 下的实例} \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{4pt}
+  \parbox{0.96\textwidth}{\footnotesize 注：统一的是离线校准 workflow 与稳健选择纪律；不同路径的差异体现在参数接口、量化格式与行为代理上。对 \texttt{INT4-RoleAlign} 而言，Key 路径由 attention-distribution KL 主导，Value 路径由独立的输出扰动代理主导。}
+\end{table}

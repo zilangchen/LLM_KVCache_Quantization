@@ -2,15 +2,16 @@
   \centering
   \caption{不同量化路径的离线产物、运行时缓存载荷与默认执行后端}
   \label{tab:ch3-runtime-paths}
-  \small
-  \setlength{\tabcolsep}{4pt}
-  \begin{tabular}{p{2.4cm}p{2.6cm}p{2.2cm}p{2.5cm}p{2.0cm}p{1.8cm}}
+  \scriptsize
+  \setlength{\tabcolsep}{1.5pt}
+  \renewcommand{\arraystretch}{1.12}
+  \begin{tabular}{>{\raggedright\arraybackslash}p{1.55cm}>{\raggedright\arraybackslash}p{1.78cm}>{\raggedright\arraybackslash}p{1.55cm}>{\raggedright\arraybackslash}p{1.65cm}>{\raggedright\arraybackslash}p{1.28cm}>{\raggedright\arraybackslash}p{1.18cm}}
     \toprule
-    路径 & 离线产物 & append 时确定的量 & 缓存中的主要载荷 & 默认执行后端 & 备注 \\
+    路径 & 离线产物 & append 时量 & 缓存载荷 & 执行后端 & 备注 \\
     \midrule
-    INT8 规范路径 & per-layer per-group static scale、保护裕度、group metadata & 当前 token 的量化值与可能的 scale snapshot & INT8 载荷 + scale snapshot & Triton fused & 系统主部署路径 \\
-    对称 \texttt{INT4} 试探路径 & 对称 scale、group metadata & packed INT4 值与对应 metadata & packed INT4 + metadata & Triton fused / \texttt{torch\_ref} & 作为低比特试探接口 \\
-    \texttt{INT4-RoleAlign} & $(p_K,p_V)$、K/V 量化轴元数据、角色感知规则 & 当前 token 的 K/V 角色相关量化参数 & 角色感知低比特 K/V 载荷 & \texttt{torch\_ref}（默认） & Triton 非对称核仅作可行性验证 \\
+    INT8 规范路径 & static scale、保护裕度、轴元数据 & 当前 token 量化值与 scale & INT8 载荷 + 快照 & Triton fused & 主部署路径 \\
+    对称 INT4 试探路径 & 对称 scale、轴元数据 & packed INT4 + 元数据 & packed INT4 + 元数据 & Triton / torch ref & 低比特试探 \\
+    INT4-RoleAlign & $(p_K,p_V)$、K/V 轴元数据、角色规则 & 当前 token 的 K/V 参数 & 角色感知低比特 K/V & torch ref & 非对称核验证 \\
     \bottomrule
   \end{tabular}
 \end{table}

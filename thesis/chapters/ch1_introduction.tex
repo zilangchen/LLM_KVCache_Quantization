@@ -5,267 +5,82 @@
 
 \section{研究背景}
 
-随着大语言模型（Large Language Model, LLM）的参数规模从数十亿增长至数千亿、
-上下文窗口从 4K 扩展至 128K tokens，
-GPT-4、LLaMA~3~\cite{grattafiori2024llama3}、Qwen2.5~\cite{qwen2025qwen25} 等模型
-在文本生成、阅读理解和逻辑推理等任务上展现出卓越能力，
-但推理阶段的显存与延迟开销也随之急剧增长，成为制约大规模部署的核心瓶颈。
+随着大语言模型（Large Language Model, LLM）的参数规模从数十亿增长至数千亿、上下文窗口从 4K 扩展至 128K tokens，GPT-4、LLaMA~3~\cite{grattafiori2024llama3}、Qwen2.5~\cite{qwen2025qwen25} 等模型在文本生成、阅读理解和逻辑推理等任务上展现出卓越能力。长上下文处理能力的持续提升，使大语言模型逐步从短文本问答走向长文档理解、复杂推理与多轮生成等更具实际价值的应用场景。然而，随着上下文长度和服务并发需求同步上升，推理阶段的显存占用与延迟开销也快速放大，并逐渐成为制约大模型规模化部署的核心瓶颈。
 
-现代大语言模型普遍采用 Transformer~\cite{vaswani2017attention} 架构，
-其自回归解码（autoregressive decoding）过程中，每生成一个新的 token 都需要与所有历史 token 的键值对（Key-Value pair）进行注意力计算。
-为避免重复计算，推理系统会将已计算的键值对缓存起来，形成键值缓存（KV Cache）。
-KV Cache 机制是自回归解码的核心加速手段，能够将单步解码的时间复杂度从 $O(n^2)$ 降低至 $O(n)$，
-但其代价是显存占用随序列长度线性增长。
+现代大语言模型普遍采用 Transformer~\cite{vaswani2017attention} 架构。在自回归解码（autoregressive decoding）过程中，模型每生成一个新的 token，都需要与全部历史 token 的键值对（Key-Value pair）进行注意力计算。为避免对历史上下文重复执行 K/V 投影与注意力累积，推理系统通常将已计算得到的键值对缓存起来，形成键值缓存（KV Cache）。这一机制是自回归解码得以高效执行的关键基础，能够将单步解码中的重复计算复杂度从 $O(n^2)$ 降低到 $O(n)$；但与此同时，缓存本身的存储开销也会随序列长度持续增长。
 
-具体而言，KV Cache 的显存占用与模型层数、每层 KV 头数、头维度以及序列长度均成正比，
-可表示为：
+从存储结构上看，KV Cache 的显存占用与模型层数、每层 KV 头数、头维度、序列长度以及存储精度近似成正比，可写为
 \begin{equation}
   M_{\mathrm{KV}} = 2 \times L \times H_{kv} \times d_k \times S \times b
   \label{eq:kv_memory}
 \end{equation}
-式中 $L$ 为层数、$H_{kv}$ 为每层 KV 头数、$d_k$ 为头维度、$S$ 为序列长度，
-$b$ 为每个元素占用的字节数（FP16 下为 2），因子 2 对应 Key 和 Value 两个矩阵。
+其中 $L$ 表示层数，$H_{kv}$ 表示每层 KV 头数，$d_k$ 表示头维度，$S$ 表示序列长度，$b$ 表示每个元素占用的字节数，前面的系数 2 对应 Key 和 Value 两部分存储。在长上下文和批量推理场景下，这一开销会随上下文长度与并发批次同步放大，甚至可能超过模型参数本身。vLLM~\cite{kwon2023vllm} 等推理框架通过 PagedAttention 改善了显存碎片和缓存管理效率，但这类方法并不直接减少 KV Cache 的绝对存储量，因此无法从根本上消除长上下文部署中的容量压力。
 
-在长上下文、批量推理场景下，
-KV Cache 的总显存消耗可轻易超过模型参数本身（具体推导与数值示例见第~\ref{sec:ch2-kv-memory}~节）。
-vLLM~\cite{kwon2023vllm} 等推理框架通过 PagedAttention 技术改善了显存碎片问题，
-但并未从根本上减少 KV Cache 的绝对存储量。
-
-量化（quantization）技术是降低 KV Cache 显存占用的重要手段。
-通过将 FP16 精度的键值对压缩为 INT8 甚至 INT4 表示，可以将 KV Cache 的显存分别降至原始的 $1/2$ 和 $1/4$，
-从而在有限的 GPU 显存中支持更长的上下文或更大的并发批次。
+在这一背景下，对 KV Cache 进行低成本压缩就具有了明确的工程价值。若将 FP16 精度的缓存进一步压缩为 INT8 或 INT4 表示，其显存占用理论上可分别降至原始的 $1/2$ 与 $1/4$，从而在相同硬件预算下支持更长的上下文窗口或更高的并发批次。也正因如此，KV Cache 量化已成为长上下文推理优化中的关键方向之一。然而，压缩率的提升并不自动等于模型功能稳定性的保持，尤其是在更具吸引力的低比特区间内，如何在显存收益与模型可用性之间取得平衡，构成了本文进一步需要回答的问题。
 
 \section{问题定义与研究动机}
 
-在上述背景下，低比特（INT4）量化是最具吸引力的压缩目标，
-理论上可将 KV Cache 压缩至 FP16 的 $1/4$，
-在相同硬件预算下支持 4 倍的上下文长度或并发批次。
-然而，现有以数值重建误差为校准目标的 INT4 量化方法在长上下文场景下表现急剧恶化：
-Needle 检索通过率可从 100\% 降至 0\%，困惑度退化超过 15\%。
-对称 INT4 量化的模型在长上下文下
-不仅无法完成精确检索任务，其语言建模能力也发生灾难性崩溃。
-传统校准目标（MSE、percentile）未能充分揭示这种失效，
-数值重建误差看似合理，注意力行为却可能完全崩溃。
+在上述背景下，低比特量化，尤其是 INT4 量化，具有最强的压缩吸引力。与更高精度表示相比，INT4 能够在相同硬件预算下显著降低 KV Cache 的存储开销，从而为更长上下文和更高并发提供直接空间。然而，现有面向 KV Cache 的低比特路径并不总能稳定保持模型可用性；在长上下文场景下，这类方法往往会同时表现出精确检索能力下降与语言建模质量退化等问题。这表明，对于 KV Cache 而言，“压得更低”并不自动等于“仍然可用”，低比特压缩本身已经构成一个需要被单独回答的研究问题。
 
-现有 KV Cache 量化方法主要采用均方误差（MSE）或百分位裁剪（percentile clipping）等数值重建目标。
-两者的共同盲点在于：softmax 的非线性使得数值误差大小与注意力分布偏移不存在单调关系，
-微小的 Key 扰动可能剧烈改变注意力分布，较大的误差反而可能被归一化效应吸收；
-静态阈值亦无法自适应不同层、不同头的分布差异
-（详细机制分析见第~\ref{sec:ch2-quant-softmax}~节）。
+现有 KV Cache 量化方法大多仍以数值重建误差作为校准目标，例如均方误差（MSE）或基于分位数的裁剪策略。这类目标隐含地假设：张量误差越小，模型功能损伤也越小。然而，在注意力计算中，这一假设并不稳固。由于 softmax 的非线性作用，微小的 Key 扰动也可能引起注意力分布的明显重排；相反，某些较大的数值误差则可能在归一化过程中被部分吸收。因此，数值误差的大小与下游功能偏移之间并不存在稳定的一一对应关系。与此同时，静态阈值也难以充分适应不同层、不同头以及不同上下文位置上的分布差异。
 
-这一矛盾并非工程调参问题，
-而是指向注意力结构本身的误差传播特性。
-设标准注意力为
-\begin{equation*}
-  z_i = \frac{q^\top k_i}{\sqrt{d}}, \qquad
-  a_i = \mathrm{softmax}(z)_i, \qquad
-  o = \sum_i a_i v_i;
-\end{equation*}
-量化后 $k_i, v_i$ 变为 $\hat k_i, \hat v_i$，
-输出误差可严格分解为以下 telescoping 形式（详见第三章方法部分）：
-\begin{equation}
-  \hat{o} - o
-  = \underbrace{\sum_i (\hat a_i - a_i)\, v_i}_{\text{分布侧贡献项}}
-  + \underbrace{\sum_i \hat a_i\, (\hat v_i - v_i)}_{\text{聚合侧贡献项}}
-  \label{eq:error_decomposition}
-\end{equation}
-该分解是精确的代数 telescoping 展开（非 K/V 因果分离）：
-第一项源自 K 扰动经 softmax 非线性传播引起的 attention 分布偏移 $(\hat a_i - a_i)$，
-在 FP16 的 V 下加权求和；
-第二项源自 V 扰动 $(\hat v_i - v_i)$，
-在量化后 attention $\hat a_i$（已受 K 扰动影响）下的直接聚合贡献。
-两项共同刻画量化对注意力行为（分布 $\bm{a}$ 与输出 $\bm{o}$ 两个面）的完整损伤；
-真正被下游感知的不是 $\|\hat k - k\|$ 或 $\|\hat v - v\|$ 这样的数值距离，
-而是由其诱导的行为扭曲。
+这意味着，KV Cache 量化中的困难并不只是一个继续调节超参数或进一步缩小重建误差的工程问题，而是与注意力结构本身的误差传播方式有关。模型真正感知到的，并不是孤立的张量数值距离，而是这些误差经过注意力计算后所诱导出的功能偏移。特别是在长上下文和低比特场景下，同一量级的数值扰动在不同层、不同头乃至不同角色上，可能对应完全不同的实际后果。也正因如此，单纯追求全局数值误差最小，并不能保证模型在推理时仍然保持稳定和可用。
 
-基于上述结构性观察，本文提出以下核心假设：
-\begin{quote}
-  \textbf{核心假设（注意力行为的联合保持度）：}
-  在 KV Cache 量化中，把\textbf{注意力行为}定义为 \emph{分布侧} $\bm{a}$ 与
-  \emph{聚合侧} $\bm{o}$ 的\emph{联合保持度}，比以张量数值范数作为优化对象更贴近模型真实的功能损伤。
-  误差分解式~\eqref{eq:error_decomposition}
-  表明两侧误差通过 $\hat a_i$ 与 $\hat v_i - v_i$ 相乘的聚合侧项\emph{耦合}，
-  因此保持分布 $\bm{a}$ 的同时也约束了聚合侧项的第一因子——
-  这是工程上 behavior 保持度可以用\textbf{分布侧 KL 散度作为直接可优化代理}的结构性理由
-  （第三章 §\ref{sec:ch3-problem} 给出形式化推导）。
-  聚合侧 $\bm{o}$ 的保真度在本文实证中由端到端任务指标
-  （PPL、Needle、LongBench 等）作\emph{补充验证}，而非游离于 框架 之外。
-\end{quote}
-在具体实现上，本文以 Kullback--Leibler 散度刻画分布侧偏移：
-若 $\bm{p}$ 记 FP16 注意力权重分布、$\bm{q}$ 记量化后分布，则
-\begin{equation}
-  D_{\KL}(\bm{p} \| \bm{q}) = \sum_{i} p_i \log \frac{p_i}{q_i}
-  \label{eq:kl_divergence}
-\end{equation}
-$D_{\KL}$ 是 attention 分布侧偏移的 operational proxy。
-之所以选 KL 作为代理，是因为分布 $\bm{a}$ 直接出现在方程~\eqref{eq:error_decomposition}~两项的系数中，
-小 KL 对应小的分布偏移 $(\hat a_i - a_i)$，
-进而约束分布侧贡献项的量级；
-聚合侧贡献项的保真性则由校准后的模型
-在端到端任务指标上的经验表现被间接验证。
-本文第三章将 $D_{\KL}$ 具体实例化为校准层目标函数
-（第~\ref{sec:ch3-calibration}~节）；
-该校准产物是否能进一步作为跨层敏感度度量、
-指导分配层的预算决策，
-作为延伸方向由第四章实验部分呈现。
+由此，本文进一步提出一个更基础的问题：在 KV Cache 量化中，真正需要被保持的，是否并不是单纯的张量重建精度，而是某种更贴近模型实际功能稳定性的组织对象。换言之，问题的关键不再只是如何继续减小 MSE 或调整裁剪阈值，而是是否应当围绕一个更能反映下游推理变化的对象来重新组织校准过程。只有先把这一层问题立住，后续关于量化路径、位宽选择以及预算决策的讨论，才具有一致的分析基础。
 
-本文后续将在方法章（第三章）落地基于该假设的校准实例，
-在实验章（第四章）以跨模型长上下文任务验证其与输出侧保真的相关性。
+围绕这一问题意识，下一节将对模型量化、KV Cache 量化与高效推理三条相关研究脉络作高层概述，并在此基础上于后文进一步收束为本文的核心假设与研究问题。更系统的技术基础与相关工作比较将放在第二章展开，而正式的误差传播分析与方法定义则留待第三章完成。
 
+\section{国内外研究现状概述}
 
-\section{国内外研究现状}
+围绕长上下文推理与 KV Cache 压缩，现有研究大体可以从模型量化、KV Cache 专属量化和高效推理三条脉络来理解。前者为低比特表示、校准与误差控制提供了方法学基础，后两者则分别从缓存压缩与系统优化角度缓解长上下文部署压力。需要说明的是，本节只对这一研究背景作绪论层面的高层概述，不展开系统的文献比较；更详细的理论基础、代表性工作对比及本文定位将在第二章进一步展开。
 
-KV Cache 量化建立在模型量化、KV 专属压缩与高效注意力计算三大方向之上。
+在模型量化方向，已有研究围绕权重与激活的低比特表示、训练后量化以及校准策略形成了较为成熟的方法体系。以 SmoothQuant~\cite{xiao2023smoothquant}、GPTQ~\cite{frantar2023gptq} 和 AWQ~\cite{lin2024awq} 为代表的工作，分别从量化难度转移、近似误差补偿和激活感知保护等角度推进了大模型的压缩与部署。这些方法主要面向模型参数与激活，但其中关于量化表示、误差控制和校准流程的基本思想，也为后续 KV Cache 压缩提供了重要的方法学参考。
 
-\subsection{模型量化}
+在 KV Cache 专属量化方向，随着长上下文推理对缓存显存的压力持续上升，研究开始直接面向缓存本身设计压缩路径。以 KIVI~\cite{liu2024kivi}、KVQuant~\cite{hooper2024kvquant} 和 ZipCache~\cite{he2024zipcache} 为代表的工作，分别从 K/V 异构量化轴、极低比特量化和重要性驱动压缩等角度探索了不同的 KV Cache 压缩方案。这些研究表明，缓存压缩并不是对一般模型量化方法的简单复用，而需要结合注意力计算特征、缓存访问模式与部署约束进行专门设计。
 
-模型量化通过降低数值精度压缩模型体积、加速推理，
-代表工作包括权重-激活联合量化 SmoothQuant~\cite{xiao2023smoothquant}、
-训练后权重量化 GPTQ~\cite{frantar2023gptq} 与激活感知权重量化 AWQ~\cite{lin2024awq}。
-这些方法主要面向权重，但其量化理论和误差分析为 KV Cache 量化提供了方法学参考。
+除量化压缩外，高效推理方向也在同步推进。以 FlashAttention~\cite{dao2022flashattention,dao2024flashattention2} 和 PagedAttention~\cite{kwon2023vllm} 为代表的工作，分别从注意力计算访存优化和缓存管理改进入手，提高了长上下文推理的系统效率。前者主要降低注意力计算中的中间访存开销，后者则改善缓存分页与显存碎片问题。这类工作与 KV Cache 量化并非替代关系，而是从不同层面共同服务于长上下文推理的可部署性。
 
-\subsection{KV Cache 量化}
+总体来看，现有研究已经从模型量化、KV Cache 专属压缩与高效推理等角度为长上下文部署提供了丰富的方法基础，也说明该问题处在一个活跃且持续演进的研究交叉点上。绪论在这里不再重复展开系统的相关工作综述或研究空白裁决；相关理论基础、详细工作比较及本文定位将在第二章进一步展开。基于上述研究版图，下一节将进一步收束为本文的核心假设与研究问题。
 
-KIVI~\cite{liu2024kivi} 观察到 Key 与 Value 在量化敏感性上的不对称特征，
-提出逐通道 Key + 逐 token Value 的非对称量化策略；
-KVQuant~\cite{hooper2024kvquant} 探索了极低比特非均匀量化方案；
-ZipCache~\cite{he2024zipcache} 基于 token 重要性实现混合精度 KV Cache 压缩。
-然而上述工作的校准目标仍以数值重建为导向，
-未系统地将量化产物与下游推理行为（attention 分布与聚合输出）的保持度直接对齐，
-亦未将行为敏感度度量进一步作为跨层预算分配的输入。
+\section{核心假设与研究问题}
 
-\subsection{高效注意力计算}
+在前述研究背景、问题动机与研究现状概述的基础上，可以看到，KV Cache 量化的核心难点并不只是继续提高压缩率，而是如何用一个更贴近模型真实功能变化的视角来重新组织这一问题。真正需要回答的，不是一般意义上的“还能不能继续压缩”，而是：在长上下文和低比特约束下，是否存在一个能够同时服务校准与预算决策、并与模型实际可用性更直接相关的分析起点。
 
-FlashAttention~\cite{dao2022flashattention,dao2024flashattention2} 通过分块计算与内核融合
-降低了注意力计算的访存开销，但主要面向 FP16 精度；
-vLLM~\cite{kwon2023vllm} 的 PagedAttention 改善了 KV Cache 显存碎片。
-本文在 INT8 canonical path 上基于 Triton~\cite{tillet2019triton}
-实现融合量化解码核函数，作为 behavior-guided 校准的系统落地实例之一（详见第三章）。
+\noindent\textbf{核心假设：} 在 KV Cache 量化中，相比直接以张量数值重建误差组织校准与预算决策，以注意力行为（attention behavior）作为统一组织对象，更贴近模型真实功能损伤，也更有可能为不同位宽下的校准路径与预算分配提供一致的判断基础。这里所说的注意力行为，在引言层面主要指注意力分布及其输出行为的整体稳定性，而不是某个单一张量距离指标。
 
-更详细的工作对比与技术分析见第~\ref{chap:related-work}~章。
+\noindent\textbf{研究问题一（RQ1）：} 行为引导校准是否能够形成稳定、可复现的基础保真路径？这一问题关注的是，在最保守、最易审计的位宽设置下，若以注意力行为为导向组织校准过程，能否先建立一条可靠的规范路径，作为后续更激进的低比特探索的出发点。
 
-\section{本文研究内容与主要贡献}
+\noindent\textbf{研究问题二（RQ2）：} 在低比特场景下，行为引导路径能否把由对称低比特压缩触发的显著失稳，恢复为一条可用、可审计的低比特路径？这里关心的不是某个具体实现是否在个别设置下占优，而是当压缩进入更有吸引力也更有风险的低比特区间后，这种组织方式能否把失效路径重新变成可分析、可部署的低比特实例。
+
+\noindent\textbf{研究问题三（RQ3）：} 行为敏感度画像能否支撑跨模型预算分配，并揭示稳定的策略适用区间结构？这一问题将视角从校准进一步推到预算决策层，关注同一组织原则能否在不同模型家族、不同规模和不同任务条件下形成具有解释性的策略分化，而不是只给出一种单点式配置。
+
+围绕上述核心假设与三个研究问题，下一节将进一步概述本文的研究内容、技术路线与主要贡献。
+
+\section{研究内容、技术路线与主要贡献}
 \label{sec:ch1-contribution}
 
-基于上述背景与核心假设，本文提出三个递进的研究问题：
+围绕前述核心假设与三个研究问题，本文将 KV Cache 量化组织为一条以注意力行为为主线的研究路径，并从统一原则、方法实例和跨模型策略适用区间图谱三个层次展开。相比把这一问题理解为若干彼此分离的局部优化，本文更关心的是，如何在同一视角下把校准、低比特路径设计和预算分配放回一条连贯的分析主线。
 
-\textbf{研究问题一（RQ1）：在 KV Cache 量化中，什么样的分析对象比单纯数值误差更贴近模型真实的功能损伤？}
-现有方法以数值重建误差（MSE、absmax percentile 等）为校准目标，
-但数值层面的最优未必对应推理行为的保真
-（详见第~\ref{sec:ch2-quant-softmax}~节的 softmax 非线性机制分析）。
-从注意力计算的误差传播结构出发（方程~\eqref{eq:error_decomposition}），
-是否存在一个更贴近下游推理行为的统一分析对象，
-可以在不同 bit-width 与模型规模下为校准与诊断提供共同基础？
+从研究内容上看，本文首先尝试从注意力行为视角重新组织 KV Cache 量化问题，用一个更贴近模型实际功能稳定性的切入点连接不同层级的量化决策；在此基础上，再围绕不同位宽形成可执行的方法实例，并通过跨模型比较提炼策略适用区间图谱。因此，本文关注的并不只是某个局部设置中的压缩收益，而是一条从问题界定、方法落地到结构读数逐步收束的论证链条。
 
-\textbf{研究问题二（RQ2）：以注意力行为为中心的校准原则能否落成一套完整可用的量化系统？}
-若上述假设成立，
-能否将其在不同量化位宽上实例化为完整可落地的量化路径？
-具体地：INT8 上 behavior-guided 校准能否在 FP16 基础上几乎无损地保持推理质量？
-在更困难的 INT4 低比特场景下，
-该原则与前沿动态校准方法（如 KIVI~\cite{liu2024kivi}）相比是否仍具竞争力？
+从技术路线看，本文先在相关工作和理论基础上明确问题边界，再在方法章节中给出统一原则、路径实例和扩展机制，最后在实验章节中检验其保真度、低比特恢复能力与跨模型结构读数。这样的组织方式强调的是“问题 - 方法 - 证据”的递进关系，而不是把若干彼此独立的技巧并列陈列。
 
-\textbf{研究问题三（RQ3）：同一行为原则能否延伸到更高层的预算分配决策？如果能，它揭示了什么跨模型结构？}
-校准过程的副产品——每层对注意力行为的敏感度画像——
-是否可以作为跨层预算分配（layer-wise bit allocation）的输入？
-若将同一原则延伸至 behavior-guided allocator 与
-进一步的 profile-guided 预算建议机制（AutoK），
-跨模型家族（Qwen / LLaMA / Mistral）、跨规模（1.5B 至 14B）、
-跨任务（LongBench 多任务）的实验会揭示什么样的 operating 适用区间 结构？
+\noindent\textbf{贡献一：统一原则。} 本文将注意力行为作为贯通校准与预算分配的统一组织对象，从而把 KV Cache 量化从分散的局部优化，提升为共享同一分析起点的两层决策问题。基于这一视角，后文不再把校准与分配视作互不相关的两个步骤，而是将它们放在同一主线下理解和分析。
 
-围绕以上三个问题，本文给出三个主要贡献（C1 / C2 / C3），
-分别回应 RQ1 / RQ2 / RQ3。
+\noindent\textbf{贡献二：方法实例。}
+围绕这一统一原则，本文形成了跨位宽的方法实例。
+其中，基础保真路径、低比特恢复路径和预算分配扩展机制分别对应
+INT8 规范路径、INT4-RoleAlign 以及 AutoK 等实现。
+需要说明的是，Triton~\cite{tillet2019triton}、
+离线校准产物和在线推理管线属于系统支撑层，
+其作用是保证方法可部署、可复现与可审计，
+而不与三条顶层贡献并列。
 
-\textbf{贡献一（C1）：Behavior-guided 统一框架。}
-我们提出以 attention 行为（分布 $a$ 的保持度）为核心的统一原则，
-把 KV Cache 量化中\emph{两个}此前常被独立处理的层——
-\emph{静态校准}与\emph{预算分配}——
-统一到同一 behavior sensitivity profile 作为共享输入的框架下。
-第三章 §\ref{sec:ch3-problem} 给出误差分解
-\begin{equation*}
-  \hat{o} - o
-  = \underbrace{\textstyle\sum_i (\hat a_i - a_i)\, v_i}_{\text{分布侧项}}
-  + \underbrace{\textstyle\sum_i \hat a_i\, (\hat v_i - v_i)}_{\text{聚合侧项}},
-\end{equation*}
-作为 框架 的\textbf{理论起点}；§\ref{sec:ch3-allocator} / §\ref{sec:ch3-autok}
-把同一 profile 延伸到 layer-wise allocator 与 AutoK。
-此 框架 的独立贡献不在"击败弱 基线"，
-而在\textbf{组织了 calibration 与 allocation 的共享基础}——
-这是相对 KIVI 等 calibration-only 方法与 KVTuner 等 allocator-only 方法的\emph{结构性}区别。
+\noindent\textbf{贡献三：跨模型策略适用区间图谱。} 本文并不试图把跨模型实验压缩成某一种策略在所有模型家族、模型规模和任务条件下都普适最优的结论，而是进一步识别不同条件共同作用下的策略适用区间结构。由此，行为引导统一框架的价值不只体现在单点比较中的优劣判断，更体现在它能够作为一种结构读数工具，帮助解释不同策略为何会在不同条件下呈现出差异化表现。
 
-\textbf{贡献二（C2）：两层实例化——INT8 canonical path 与 INT4 RoleAlign/AutoK。}
-C1 的 框架 在两层、两个 bit-width 上实现闭环验证：
-\begin{itemize}[leftmargin=2em, itemsep=1pt, topsep=2pt]
-  \item \textbf{INT8 canonical path}（第~\ref{subsec:exp-int8-canonical}~节 + 表~\ref{tab:t1-int8-canonical}）：
-    Qwen2.5-1.5B 上 INT8-ours 相对 FP16 mean $\Delta{=}{+}0.02$，
-    在 3 个 LongBench task 上\textbf{在实证上不可区分}，
-    证明 框架 的 calibration 层在 canonical 规模下可闭环；
-  \item \textbf{INT4-RoleAlign}（第~\ref{sec:exp-int4-kivi}~节 + 表~\ref{tab:t2-int4-kivi}/\ref{tab:ch3-rolealign-vs-kivi}）：
-    在 KIVI-style 的 per-channel K + per-token V 非对称格式上以\textbf{离线 KL 搜索}
-    取代运行时 absmax/min，生成可审计的校准产物 JSON；
-    跨 4 模型 vs KIVI 同 format 下 PPL $\Delta$ 控制在 $0.15$ PPL 内、Needle 均 $100\%$；
-  \item \textbf{AutoK}（第~\ref{sec:ch3-autok}~节 + 表~\ref{tab:t4-mistral-autok}）：
-    框架 的自然扩展，基于 profile 的 cov$80\%$ 覆盖度 阈值
-    自动提出 预算；Mistral-7B 上作为 strongest single-family 正面案例
-    在 5-task 中赢 3 个。
-\end{itemize}
-Triton 融合量化解码核被定位为 INT8 canonical path 的\textbf{系统落地手段}
-（C2 的工程子项，第~\ref{sec:ch3-triton}~节），
-不作为独立贡献——性能收益详见第~\ref{sec:exp-deployment}~节部署附录。
+上述研究内容与技术路线共同构成了全文的论证主线，各章节的具体功能分工将在下一节进一步说明。
 
-\textbf{贡献三（C3）：跨模型 适用区间 地图作为 empirical 洞察。}
-通过在 Qwen2.5-\{3B, 7B, 14B\}、LLaMA-3.1-8B、Mistral-7B 上
-在\emph{同量级 INT4 预算 band} 内对比 4 policy（uniform / BA-$k$ / heuristic-$k$ / AutoK），
-我们揭示一张由 \textbf{(family, scale, task)} 共同决定的 operating 适用区间 地图
-（第~\ref{sec:exp-cross-model}~节，表~\ref{tab:t3-cross-model-main}，图~\ref{fig:sensitivity-heatmap} / \ref{fig:t7-pareto} / \ref{fig:regime-map}）：
-\begin{itemize}[leftmargin=2em, itemsep=1pt, topsep=2pt]
-  \item \textbf{Small-scale early-layer rescue}（Qwen2.5-3B，§\ref{subsec:exp-per-model-3b}）——
-    BA-$k_1$ 保护 layer 0 把 NarrativeQA 从 heuristic 的 $3.08$ 分回救到 $7.17$，
-    是 behavior-guided 相对位置启发式\textbf{最强的结构性差异化证据}；
-  \item \textbf{Large-scale top-tier without stable winner}（Qwen2.5-14B，§\ref{subsec:exp-per-model-14b}）——
-    4 policy 挤在 top-1 的 $3.5\%$ relative 距离内，没有单一跨任务赢家；
-  \item \textbf{Mistral-specific AutoK win}（§\ref{subsec:exp-per-model-mistral}）——
-    cov$80$ 预算下单模型最清晰的 AutoK 正面案例；
-  \item \textbf{Heuristic as strong 基线}——
-    在多个 适用区间 区间里，等距位置保护与 behavior-guided 选中集合重合，
-    不是方法失败而是 适用区间 的\emph{结构性观察}。
-\end{itemize}
-这一 适用区间 map 把本文的贡献从"方法跑分更高"\textbf{抬升为"揭示结构分区"}——
-即 behavior-guided allocator 的真实价值不在数字胜利，
-而在提供了一个\emph{读数工具}让不同 适用区间 可被识别与命名。
-
-综合三条贡献，本文给出 KV Cache 量化的第一个
-\textbf{以 attention 行为为统一组织原则}的 框架 + 实例化 + 跨模型实证工作。
-图~\ref{fig:framework-overview} 给出完整的论证脉络（§\ref{sec:ch1-structure} Roadmap）。
-
-
-\section{论文组织结构}
+\section{论文结构安排}
 \label{sec:ch1-structure}
 
-图~\ref{fig:framework-overview} 以单一 behavior-guided 原则作为脊柱，
-连接第三章的两层实例化（calibration + allocation）与第四章的实证验证，
-可作为后续章节的 readability spine。
-
-\input{figures/fig2_framework}
-
-本文共分五章。
-第一章阐述研究背景与动机，提出核心假设与三个递进的研究问题，
-综述国内外研究现状并给出本文组织结构。
-第二章介绍 Transformer 注意力机制、量化理论基础，
-并定位本文与 KIVI、KVQuant、KVTuner 等相关工作在
-cache format、校准方式、预算分配三层关系上的异同。
-第三章形式化行为引导的统一视角，详述两层实例化：
-校准层以注意力行为偏移为离线 KL 搜索目标，
-分别在 INT8（配合 Triton 融合量化解码核作为 canonical path 的系统落地）
-与 INT4（配合 K per-channel + V per-token 非对称格式）上落成；
-分配层将校准产物的 per-layer sensitivity profile 作为输入，
-引入 behavior-guided allocator 与 profile-guided 预算建议机制（AutoK）。
-第四章在六个主流 LLM
-（Qwen2.5-1.5B/3B/7B/14B、LLaMA-3.1-8B、Mistral-7B-Instruct-v0.3）
-与五个 LongBench 任务上组织实证：
-INT8 canonical 路径与 FP16 的保真度对比、
-INT4 RoleAlign 与 KIVI 的跨模型比较、
-跨模型 allocator 的 适用区间 地图（主结果）、
-以及 Mistral / 3B / 14B 的 per-model 深入案例分析。
-第五章回扣核心假设与三个研究问题，
-整合核心发现（含 heuristic 强基线、适用区间 map、INT4 open question 等讨论观点）、
-局限性、未来工作展望与正向收束。
+本文共分五章。第一章为绪论，主要阐述研究背景，提出问题定义、核心假设与研究问题，并概述本文的研究内容、技术路线与主要贡献，完成全文立题。第二章为相关工作与技术基础，介绍 Transformer、KV Cache 与模型量化的必要技术前置，综述相关研究并归纳本文的研究空白与切入位置。第三章为方法设计，围绕注意力行为保持展开本文的方法框架与实现路径。第四章为实验评估与结果分析，在统一实验协议下围绕 RQ1--RQ3 建立实证证据，并进一步讨论部署效率与结论边界。第五章为结论，总结全文的研究结论与学术价值，讨论研究局限与未来工作，并以结语完成全文收束。
