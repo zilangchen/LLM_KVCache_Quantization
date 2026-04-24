@@ -5167,3 +5167,95 @@
   - Ch4 §4.5 部署效率 + §4.6 综合讨论 保留未改（Phase 4/6 处理）
   - MixedKV 段降 appendix 未真正搬（只删除），需 Phase 7 从 git history 捞出放 appendix
 - Commit: `6540fc7`（11 files, +882/-1317 = 净 -435 行）
+
+### 2026-04-20 04:39 | fix(thesis): make_table helper emits valid LaTeX note syntax — Phase 3 预览修复
+- Goal: 修复 Phase 3 commit `6540fc7` 引入的 `write_latex_table()` helper bug，让 main.tex 能完整编译出 PDF 恢复预览
+- Root cause: helper 在 `\caption` 之后用 `"\\[2pt]\\footnotesize ..."` 想做 note，但 `\\` 在 `\table` 环境（非 tabular 内）里需要前面有文本行可以结束——`\caption` 之后直接上 `\\` 触发 `! LaTeX Error: There's no line here to end.`（halt-on-error 让 T1 编译在 `\input{tables/table_t1_int8_canonical.tex}` 处停住 → 后续所有 section / table label 注册中断 → main.pdf 无法产出 → 用户反馈"预览看不了")
+- Fix: note 语法改为 `\par\smallskip\noindent{\footnotesize ...}`（LaTeX canonical 的"开新段+小间距+小字"写法）
+- Changed files:
+  - scripts/thesis/_common.py（helper 改 note 包裹为 `\par\smallskip\noindent`，加说明 comment）
+  - thesis/tables/table_t1_int8_canonical.tex（重生成）
+  - thesis/tables/table_t2_int4_kivi.tex（重生成）
+  - S3 手工表未用 helper，不受影响
+- Commands:
+  - `python3 scripts/thesis/make_table_int8_canonical.py` + `python3 scripts/thesis/make_table_int4_kivi.py` 重生成
+  - `cd thesis && xelatex -interaction=nonstopmode main.tex` × 2 passes → 产出 main.pdf
+- Outputs:
+  - main.pdf: **90 pages / 1.48 MB**（从 halt-on-error 到 compile success）
+  - 旧 tag `thesis-v5-POSITIVE` 为 104 pages，当前 90 pages 符合 §4.2 砍 55% 预期
+- Validation:
+  - 首次编译：从 L17 `\\[2pt]...` 错误 halt → Output main.pdf (51 pages, incomplete)
+  - Fix 后 2nd pass：90 pages, 1.48 MB，可预览
+  - 剩余 Warning：orphaned reference（指向已删旧 label 或 Phase 4/5/7 待建 label），不阻塞预览
+- Risks / follow-ups:
+  - 约 15 个 orphaned reference（Ch1/Ch3/Ch5/Appendix 指向已删 Ch4 旧 label），Phase 9 全局 polish 统一清理
+  - 前向引用（`sec:exp-cross-model` / `sec:exp-per-model` / `sec:app-invtau-diagnostic`）会在对应 Phase 建立时消失
+- Commit: <pending 本批>
+
+### 2026-04-20 04:42 | system_vs_kivi smoke 完整跑完 — execution-chain 全绿但 G1 Fairness Gate 硬 fail（allocator policy 超 budget）
+- Goal: 在 `36bf21c` HEAD 上、用 watchdog 等结束、严格按 G 指令"smoke 收口后再决定是否进入 main"的 gate 逻辑判定 smoke 成败
+- 执行结果:
+  - 2 并行 session 完整 EXIT=0（1p5b 53 min, 8b 67 min）
+  - 产出 90 CSV，覆盖 2 model × 3 system × 7 aux job
+  - `results/system_vs_kivi/raw/smoke/{1p5b,8b}/{kivi_style,rolealign_static,rolealign_allocator_auto_eqmem}` 三目录齐全
+  - Log grep: 0 failed sample / 0 argparse invalid choice / 0 Traceback
+- 三重本轮修复在实跑中全部确认生效:
+  - parser/CLI `int4_ours_asym_alloc` choice + `--policy_json` 参数 + normalize helper — **零 argparse 错误跑穿 7 个 allocator aux job**
+  - CUDA_VISIBLE_DEVICES=0/1 单卡绑定 mitigation — 0 device mismatch
+  - `HF_HOME=/root/autodl-tmp/hf_cache + HF_HUB_OFFLINE=1` — 8B model 成功离线加载
+- 但 G1 Fairness Gate 硬失败:
+  - `check_system_vs_kivi_completeness.py --compared_systems rolealign_allocator_auto_eqmem,kivi_style --tolerance_pct 3.0` 返回 `ok=false`
+  - 1p5b: allocator kv_cache_mem=12.64 MB vs kivi 8.42 MB → **+50.12% over-budget**
+  - 8b: allocator kv_cache_mem=66.62 MB vs kivi 38.50 MB → **+73.04% over-budget**
+- 根因（policy 设计而非 code bug）:
+  - `artifacts/allocator/l2_kv_asymmetric/1p5b/bakv_auto_cov80_max.json` 的 28 层 per_layer_bits 分布 = 15 层 (8,8) + 13 层 (4,4)
+  - 加权 344 bits/token vs KIVI 纯 int4 224 bits/token → 1.536× = 实测 +50% 吻合
+  - 8b 的 policy 高 bit 层更多，超标更严重
+  - 这违反了 `docs/system_vs_kivi_preflight.md §49-55` "Matched-budget rule ±3%"
+- Decision Gate（交给用户）:
+  - 选项 A: 换 matched-budget allocator policy（找内存等于或 ≤ KIVI +3% 的 `bakv_*` 变体，或生成新 policy）
+  - 选项 B: 放宽 fairness tolerance（从 ±3% 改为 ±10% 或 ±50%），接受 "allocator 用更多内存换更高质量" 的 claim framing 变化
+  - 选项 C: 重新生成 `bakv_auto_cov80_max.json` 使其总 budget 匹配 KIVI（如目标 224 bits/token）
+  - **未得到用户指示前不进入 main phase**
+- Files changed this round (在 ab082e5 + 36bf21c + 30c548d 里): 无新的代码改动
+- Commands:
+  - `find results/system_vs_kivi -name "*.csv" | wc -l` → `90`
+  - `python3 scripts/check_system_vs_kivi_completeness.py --raw_dir results/system_vs_kivi/raw/smoke --models 1p5b,8b --systems kivi_style,rolealign_static,rolealign_allocator_auto_eqmem --tasks narrativeqa,dureader --compared_systems rolealign_allocator_auto_eqmem,kivi_style` → 2 issues out_of_band
+  - watchdog `b7v891sl4` 清晰记录 1p5b 在 04:23 退 / 8b 在 04:40 退
+- Validation: tmux session 序列化退出 + EXIT=0 两次 + smoke 从 run_system_vs_kivi → aux entrypoints → allocator cache 构造 → decode → profile → CSV 全链路无异常
+- Risks / follow-ups:
+  - **不能宣称 smoke PASS**：execution-chain 绿 ≠ G1 Fairness Gate 绿；project preflight doc 明确 smoke 需要同时满足 runtime 通过 + budget 满足
+  - 若选 B 放宽容差，preflight doc 需同步更新，否则 audit trail 与规则脱节
+  - 若选 A/C 换 policy，需要 re-run smoke 确认新 policy 过 gate 后才能进 main
+- Commit: <pending, 本条仅 iteration 记录变更>
+
+### 2026-04-20 04:57 | Thesis Rewrite Phase 4 — Ch4 §4.3 Cross-Model 主章完整落地（T3 + 图④/⑦/⑧）
+- Goal: 按 M+ 方案 Phase 4（story §3.2 + §11 C3 证据组），在 Ch4 §4.2 Hook 占位之后、§4.5 之前插入新 §4.3 Cross-Model Regime 章，对应论文 C3（regime map）主证据
+- Scope:
+  - 写 `scripts/thesis/make_table_cross_model_compare.py` → **T3**（4 模型 × 4 policy × 3 task，48 cells 主表 ⭐⭐）；per-model best-k 对应 3B k1 / 8B k11 / 14B k7 / Mistral k3
+  - 写 `scripts/thesis/plot_sensitivity_heatmap.py` → **图 ④**（4 模型 × per-layer K/V bit allocation heatmap，protected layer signature 可视化）
+  - 写 `scripts/thesis/plot_l2_pareto.py` → **图 ⑦**（quality × KV memory Pareto 前沿，3 subplot：7B/8B/Mistral；含 callouts "quality cliff" + "Pareto-dominant"）
+  - 写 `scripts/thesis/plot_regime_map.py` → **图 ⑧**（4 × 4 regime map heatmap，row-normalized quality + 红色加粗 best policy box）
+  - Ch4 §4.3 正文（~450 字）：含 matched-budget 定义公式 + 三类 regime readout（scale / family / task）+ 4 paragraph "T3 / 图④ / 图⑦ / 图⑧ readout"
+  - **严格遵守 feedback_math_display_style.md 新规则**：2 个 display math equation 块（matched-budget 公式 + winner 列表 equation\\*）
+- Changed files:
+  - thesis/chapters/ch4_experiments.tex（884 → 1021 行）
+  - scripts/thesis/make_table_cross_model_compare.py / plot_sensitivity_heatmap.py / plot_l2_pareto.py / plot_regime_map.py（新 4 个脚本）
+  - thesis/tables/table_t3_cross_model_main.{tex,md}（新）
+  - thesis/figures/fig4_sensitivity_heatmap.pdf / fig7_pareto.pdf / fig8_regime_map.pdf（新 3 个 PDF）
+- Commands:
+  - `python3 scripts/thesis/make_table_cross_model_compare.py` → T3 生成
+  - `python3 scripts/thesis/plot_sensitivity_heatmap.py` → 图 ④ PDF
+  - `python3 scripts/thesis/plot_l2_pareto.py` → 图 ⑦ PDF
+  - `python3 scripts/thesis/plot_regime_map.py` → 图 ⑧ PDF
+  - **xelatex smoke × 2 pass** → main.pdf **93 pages** (90 → 93)
+- Outputs:
+  - Ch4 新完整结构：§4.1 / §4.2 / §4.3 cross-model / §4.5 / §4.6
+  - 5 个 C3 regime map 证据（T3 + 图④ + 图⑦ + 图⑧ + §4.3 readout）全部闭环
+  - 关键 signature：Mistral-7B cov80=14.764 最强 AutoK 正面案例；14B 42/48 广覆盖
+- Validation:
+  - T3: 48/48 cells + per-model winner multi（3B ba_fixed / 8B ba_fixed / 14B uniform / Mistral ba_auto）
+  - xelatex smoke 93 pages produced
+- Risks / follow-ups:
+  - Phase 5 下一步：§4.5 per-model cases（T4/T5/T6 + 图 ⑨）
+- Commit: <pending 本批>
