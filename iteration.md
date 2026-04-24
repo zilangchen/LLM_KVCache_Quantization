@@ -36,6 +36,35 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-24 09:28 | docs(thesis): appendix M1 config and diagnostic cleanup
+- Goal: 执行已批准的附录清理 M1，先处理 A.5 量化模式 glossary、A.6 搜索空间口径、A.19 `inv_tau` 诊断与 7B KL/MSE 溯源，并同步正文自然语言引用。
+- Scope:
+  - `thesis/chapters/appendix.tex`
+  - `thesis/chapters/ch3_method.tex`
+  - `thesis/chapters/ch4_experiments.tex`
+- Changed files:
+  - A.5 改为正文名称到 `kv_mode` 的映射表，清理旧内部字符串作为论文方法名的问题。
+  - A.6 将温度因子改为历史诊断分支，不计入主线搜索规模，保持 `inv_tau=None` 口径。
+  - A.19 重构为两个 subsection：逐头温度校正诊断与 7B KL/MSE 校准目标趋同溯源。
+  - Ch3 / Ch4 同步 RoleAlign K/V 代理分工、`inv_tau` 降级口径和 A.19 自然语言编号引用。
+- Commands:
+  - `git diff --check -- thesis/chapters/appendix.tex thesis/chapters/ch3_method.tex thesis/chapters/ch4_experiments.tex`
+  - `awk '/^\\\\section/ {if(sec) print sec, NR-start-1; sec=$0; start=NR} END {print sec, NR-start}' thesis/chapters/appendix.tex`
+  - `cd thesis && xelatex -interaction=nonstopmode main.tex`
+  - `rg -n 'Undefined|undefined|There were undefined references|Rerun to get cross-references|Label\\(s\\) may have changed|LaTeX Warning: Reference|LaTeX Error' thesis/main.log`
+- Outputs:
+  - M1 三文件 diff 为 81 insertions / 114 deletions，净减少 33 行。
+  - A.5 为 41 行，A.6 为 39 行，A.19 为 46 行，均落在本轮约束带内。
+  - 多轮审查发现的 A.4 schema、A.5 backend、A.19 subsection anchor、A.6 温度因子主线漂移均已修正。
+- Validation:
+  - `git diff --check` 无输出。
+  - `xelatex` 生成 `main.pdf` 110 pages。
+  - `main.log` 中未发现 undefined reference、rerun cross-reference、LaTeX Error。
+- Risks / follow-ups:
+  - 工作树中存在其他 Agent / 外部进程造成的正文与草稿 dirty 文件，本轮不纳入提交。
+  - 下一步建议进入 M2：合并并降级 A.21 / A.22，同时修复 `\\section{附录 A/B：...}` 命名问题。
+- Intended commit: `docs: clean appendix config diagnostics`
+
 ### 2026-04-23 09:51 | docs(thesis): finalize Chapter 4 prose and cross-chapter interfaces
 - Goal: 收掉 Chapter 4 最后一轮 prose / 接口层遗留问题，使章节主文、Chapter 5 结论接口和 Appendix 命名与已冻结的 Chapter 4 图表系统保持一致。
 - Scope:
@@ -901,3 +930,41 @@ Canonical agent workflow directory is `.agents/`.
   - story 原 T6 caption 说 "within ~2%" 但实际 max 3.5%，caption 中用 "3.5%" 诚实报告不夸大
   - Phase 6 下一步：Ch2 Related Work 重写（+T0）+ Ch5 Discussion 重写 + 图 ② Framework overview
 - Commit: <pending 本批>
+
+### 2026-04-24 09:29 | Thesis Global Final Consistency Sweep
+- Goal:
+  - 全文层面收束 Chapter 1--5、abstract、appendix 与 Chapter 1/5 source-of-truth 的 story、术语、claim/evidence 边界和终稿风格。
+- Changed files:
+  - `thesis/chapters/abstract_zh.tex`
+  - `thesis/chapters/abstract_en.tex`
+  - `thesis/chapters/ch1_introduction.tex`
+  - `thesis/chapters/ch2_related_work.tex`
+  - `thesis/chapters/ch3_method.tex`
+  - `thesis/chapters/ch4_experiments.tex`
+  - `thesis/chapters/ch5_conclusion.tex`
+  - `thesis/chapters/appendix.tex`
+  - `docs/Chapter 1 Draft.md`
+  - `docs/This is Chapter 1 Writing.md`
+  - `docs/Chapter 5 Draft.md`
+  - `docs/This is Chapter 5 Writing.md`
+  - `iteration.md`
+- Commands:
+  - `rg` sweeps for legacy terms / overclaim patterns
+  - `rg -n -F '\caption' thesis/chapters/ch4_experiments.tex`
+  - `bibtex main`
+  - `xelatex -interaction=nonstopmode main.tex` x2
+  - `git diff --check`
+- Outputs:
+  - Abstracts rewritten away from old C1/C2/C3 and RoleAlign-as-joint-KL framing.
+  - Appendix reframed as supplementary audit material; official LongBench scoped to protocol sanity check; `inv_tau` kept diagnostic-only.
+  - Chapter 5 Draft status and final blocks synchronized with current `ch5_conclusion.tex`.
+  - Chapter 4 figure/table keep-set preserved: 21 captions = 15 tables + 6 figures.
+  - `main.pdf` generated successfully, 110 pages.
+- Validation:
+  - BibTeX passed.
+  - XeLaTeX passed twice; no LaTeX errors, undefined citation/reference warnings, or rerun-required warnings detected.
+  - `git diff --check` passed.
+- Risks / follow-ups:
+  - `docs/This is Chapter 1 Writing.md` and `docs/This is Chapter 5 Writing.md` still contain some old terms inside blacklist / historical-warning sections; thesis正文 and Chapter 1/5 Draft active blocks are clean.
+  - XeLaTeX still reports existing underfull/overfull layout warnings in several tables/paragraphs; not introduced as blocking errors in this sweep.
+- Commit: <pending>

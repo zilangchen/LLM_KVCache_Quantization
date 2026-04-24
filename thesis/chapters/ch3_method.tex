@@ -193,7 +193,7 @@ q_{0.95}(\theta).
 \end{equation}
 若所有候选均不满足裁剪率约束，则退化为优先最小化总裁剪负担 $c_K(\theta)+c_V(\theta)$，再以尾部统计与平均 KL 作为后续排序依据。该规则体现了本文一贯的校准纪律：不是简单选择“均值最小”的候选，而是优先压制长上下文场景中更具破坏性的尾部异常。
 
-对于 \texttt{INT4-RoleAlign}，离线搜索不再被写成“同一个 P95 KL 统一选出 $(p_K,p_V)$”，而是拆分为同一流程中的两条角色感知接口。其一，\textbf{K-path} 以 $p_K$ 为候选参数，在 per-channel Key 非对称量化格式上使用注意力分布 KL 作为主代理，并在同一套稳健搜索纪律下完成选择；其二，\textbf{V-path} 以 $p_V$ 为候选参数，在 per-token Value 非对称量化格式上采用独立的输出扰动代理。对当前主线实现而言，这一路径对应 \texttt{role\_aware\_axes} 启用后的独立 V-path 校准分支，而不是把更一般的 \texttt{shared} V 校准口径直接重命名为 \texttt{RoleAlign}。也就是说，对 \texttt{RoleAlign} 而言，变化的是各路径的参数家族与行为代理；不变的是离线校准流程、可行域约束、尾部稳健优先与产物输出接口。正因为如此，本文后续才能在同一框架下同时讨论对称路径与角色感知路径，而不必为了维持表面统一性而误把两条角色路径压成一个数学上并不存在的单一目标。
+对于 \texttt{INT4-RoleAlign}，离线搜索不再被写成“单一 attention-KL 分数统一选出 $(p_K,p_V)$”，而是拆分为同一流程中的两条角色感知接口。其一，\textbf{K-path} 以 $p_K$ 为候选参数，在 per-channel Key 非对称量化格式上使用注意力分布 KL 作为主代理，并在同一套稳健搜索纪律下完成选择；其二，\textbf{V-path} 以 $p_V$ 为候选参数，在 per-token Value 非对称量化格式上采用独立的输出扰动代理。对当前主线实现而言，这一路径对应 \texttt{role\_aware\_axes} 启用后的独立 V-path 校准分支，而不是把更一般的 \texttt{shared} V 校准口径直接重命名为 \texttt{RoleAlign}。也就是说，对 \texttt{RoleAlign} 而言，变化的是各路径的参数家族与行为代理；不变的是离线校准流程、可行域约束、尾部稳健优先与产物输出接口。正因为如此，本文后续才能在同一框架下同时讨论对称路径与角色感知路径，而不必为了维持表面统一性而误把两条角色路径压成一个数学上并不存在的单一目标。
 
 从输出形式上看，离线校准流程统一产生两类结果：一类是\emph{路径特定校准产物}，包括静态缩放参数、zero-point、分位数参数、分组元数据与保护参数等，用于在线推理时的直接读取与执行；不同路径对应的字段集合可以不同，但都服从同一只读产物接口。另一类是\emph{共享行为统计读数}，它们来自同一离线校准链路，并将在第 \ref{sec:ch3-allocator} 节中被进一步组织为逐层行为敏感度画像。换言之，校准层不仅回答“如何量化”，也为后续的预算分配提供同源读数。逐头温度校正等附加组件在本文主线中统一降格为诊断性探索项，仅在附录中保留说明；主线方法默认不依赖 \texttt{inv\_tau}。
 
@@ -335,7 +335,7 @@ q_{\min},\,q_{\max}
 % 图题：图 3-5 INT4-RoleAlign 的角色感知非对称量化轴
 \input{figures/fig_ch3_rolealign_axes}
 
-综上，\texttt{RoleAlign} 的核心不是简单地对 $K$ 和 $V$ 采用不同公式，而是把第 \ref{sec:ch3-motivation-kv} 节识别出的角色不对称，转写为量化轴不对称：Key 侧优先保持注意力排序，Value 侧在保持可聚合性的前提下承受更激进的压缩。本文最终主线配置因此固定为：$(p_K,p_V)$ 行为引导校准、per-channel Key + per-token Value 非对称量化、且 \texttt{inv\_tau=None}。逐头温度校正 \texttt{inv\_tau} 在非对称格式下未观察到稳定收益，已在第 \ref{sec:ch3-calibration} 节被降格为诊断性历史探索项，详细推导与补充实证保留在附录第~\ref{sec:app-invtau-diagnostic}~节，主线默认不启用。
+综上，\texttt{RoleAlign} 的核心不是简单地对 $K$ 和 $V$ 采用不同公式，而是把第 \ref{sec:ch3-motivation-kv} 节识别出的角色不对称，转写为量化轴不对称：Key 侧优先保持注意力排序，Value 侧在保持可聚合性的前提下承受更激进的压缩。本文最终主线配置因此固定为：K-path 由注意力 KL 主导、V-path 由独立输出扰动代理确定，运行时采用 per-channel Key + per-token Value 非对称量化，且 \texttt{inv\_tau=None}。逐头温度校正 \texttt{inv\_tau} 在非对称格式下未观察到稳定收益，已在第 \ref{sec:ch3-calibration} 节被降格为诊断性历史探索项，诊断推导与溯源说明保留在附录第~\ref{sec:app-invtau-diagnostic}~节，主线默认不启用。
 
 \subsection{INT4-RoleAlign 与 KIVI-style 的设计差异}
 \label{subsec:ch3-rolealign-vs-kivi}
