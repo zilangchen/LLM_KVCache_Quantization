@@ -388,19 +388,23 @@ PPL 与 Needle 行对应主配置；LongBench 与 RULER 行使用主配置及补
 \end{figure}
 
 % ============================================================
-\section{推理效率与扩展性补充图表}
+\section{部署效率与批处理扩展补充}
 \label{sec:app-efficiency-plots}
 % ============================================================
 
-本节只提供 Qwen2.5-1.5B-Instruct 上的系统补充图。
+本节汇总 Qwen2.5-1.5B-Instruct 上的系统补充读数，
+包括单序列 TPOT、吞吐/显存扩展图，以及 batch 维度的容量边界。
+这些材料只服务于第~\ref{sec:exp-deployment}~节的部署边界审计；
+硬件、backend、batch size 与 seq\_len 条件均不应外推为通用速度结论。
+
+\paragraph{单序列与资源扩展图。}
 图~\ref{fig:app-tpot-gain}、图~\ref{fig:app-throughput-dashboard}
-和图~\ref{fig:app-memory-dashboard} 分别对应 TPOT、吞吐和显存扩展读数；
-正文部署结论仍以第~\ref{sec:exp-deployment}~节的跨模型表格为准。
+和图~\ref{fig:app-memory-dashboard} 分别对应 TPOT、吞吐和显存扩展读数。
 
 \begin{figure}[!htbp]
   \centering
   \includegraphics[width=0.85\textwidth]{figures/latency_tpot_gain_vs_fp16.pdf}
-  \caption{各量化模式相对 FP16 基线的 TPOT 变化（Qwen2.5-1.5B-Instruct，batch=1）。
+  \caption{各量化模式相对 FP16 基线的 TPOT 变化（Qwen2.5-1.5B-Instruct，NVIDIA H20，batch=1）。
   正值表示加速（TPOT 降低），负值表示减速。
   本图只对应单模型、单序列的补充读数：
   在该设置中，量化操作的固定开销尚未被批处理或更长序列摊薄。
@@ -412,35 +416,32 @@ PPL 与 Needle 行对应主配置；LongBench 与 RULER 行使用主配置及补
 \begin{figure}[!htbp]
   \centering
   \includegraphics[width=0.9\textwidth]{figures/appendix_throughput_dashboard.pdf}
-  \caption{吞吐扩展性三联图（Qwen2.5-1.5B-Instruct）。
+  \caption{吞吐扩展性三联图（Qwen2.5-1.5B-Instruct，NVIDIA H20，seq\_len=8192，gen\_len=128）。
   面板（a）展示总吞吐量，面板（b）展示单序列吞吐量，
-  面板（c）展示 prefill 吞吐量。统一图例和坐标轴用于观察 batch 扩展中的并发收益与单序列代价。}
+  面板（c）展示 prefill 吞吐量。统一图例和坐标轴用于观察当前 backend 组合下 batch 扩展中的并发收益与单序列代价。}
   \label{fig:app-throughput-dashboard}
 \end{figure}
 
 \begin{figure}[!htbp]
   \centering
   \includegraphics[width=0.9\textwidth]{figures/appendix_memory_dashboard.pdf}
-  \caption{显存扩展性双联图（Qwen2.5-1.5B-Instruct）。
+  \caption{显存扩展性双联图（Qwen2.5-1.5B-Instruct，NVIDIA H20，seq\_len=8192）。
   面板（a）展示 KV Cache 显存随 batch size 的线性增长，
-  面板（b）展示总峰值显存；两者共同说明量化节省如何转化为更高的可容纳 batch。}
+  面板（b）展示总峰值显存；两者共同说明量化节省如何改变当前扫描范围内的可容纳 batch。}
   \label{fig:app-memory-dashboard}
 \end{figure}
 
-
-% ============================================================
-\section{批处理扩展：已测批量与 INT4-RoleAlign 扩展性}
+\phantomsection
+\paragraph{批处理容量与 INT4-RoleAlign 扩展轨迹。}
 \label{sec:app-batch-capacity}
-% ============================================================
 
 表~\ref{tab:app-batch} 合并呈现 batch 维度的容量边界与扩展轨迹：
 （a）各模式在 seq\_len=8192 条件下的已测最大可行 batch；
 （b）INT4-RoleAlign 在不同 batch 下的 TPOT 与 KV Cache 显存。
-本节只说明容量边界，不作为正文速度结论的主证据。
 
 \begin{table}[!htbp]
   \centering
-  \caption{批处理扩展综合数据（Qwen2.5-1.5B-Instruct，seq\_len=8192，独占 GPU）}
+  \caption{批处理扩展综合数据（Qwen2.5-1.5B-Instruct，NVIDIA H20，seq\_len=8192，独占 GPU）}
   \label{tab:app-batch}
   \small
   \resizebox{\textwidth}{!}{%
@@ -470,7 +471,7 @@ PPL 与 Needle 行对应主配置；LongBench 与 RULER 行使用主配置及补
   }
 
   \vspace{2pt}
-  {\footnotesize 注：（a）INT8-Canonical 与 INT4 融合模式均可支持 batch=32，INT8-Baseline 在 batch=32 时出现中间张量显存不足；融合实现将可服务 batch 从 24 提升到 32。（b）KV 压缩比约 3.76$\times$ 恒定；INT4-RoleAlign 的 TPOT 随 batch 增长，说明该实现仍有并发反量化摊销开销。batch=16 时其 KV Cache 为 968~MB（FP16 为 3640~MB），显示主要收益来自容量提升。}
+  {\footnotesize 注：（a）在 seq\_len=8192、NVIDIA H20 与当前 backend 组合下，INT8-Canonical 与 INT4 融合模式均可支持已测 batch=32；INT8-Baseline 在 batch=32 时出现中间张量显存不足，因此容量边界从 24 移至 32 只相对于该 baseline 解释。（b）KV 压缩比约 3.76$\times$ 恒定；INT4-RoleAlign 的 TPOT 随 batch 增长，说明该实现仍有并发反量化摊销开销。batch=16 时其 KV Cache 为 968~MB（FP16 为 3640~MB），主要收益体现在容量边界而非速度主结论。}
 \end{table}
 
 % [实验预期验证表和校准产物版本说明已移除——属于工程文档而非学术论文内容]

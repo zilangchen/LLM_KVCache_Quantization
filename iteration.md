@@ -1291,3 +1291,29 @@ Canonical agent workflow directory is `.agents/`.
   - 本轮只做引用同步，不修改正文 claim、实验数值或附录正文。
   - `thesis/figures/fig_ch3_kv_diag_needle.tex` 仍是图修改 dirty 项，本轮不 stage、不提交。
 - Commit: `49ae81c` (`docs(thesis): sync ch4 appendix references`)
+
+### 2026-04-26 20:55 | P3 Appendix Deployment and Batch Grouping
+- Goal:
+  - 将 Appendix 中部署效率补充图与批处理容量表收束为同一个部署补充节，避免两个平级附录项重复承担系统边界说明。
+- Changed files:
+  - `thesis/chapters/appendix.tex`
+  - `.agents/execplans/20260426_2048_appendix_p3_deployment_batch_grouping.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/appendix.tex .agents/execplans/20260426_2048_appendix_p3_deployment_batch_grouping.md`
+  - `awk '/^\\section/ {if(sec) print NR-start-1" lines  "sec; sec=$0; start=NR} END {print NR-start" lines  "sec}' thesis/chapters/appendix.tex`
+  - `rg -n '^\\section\{|sec:app-efficiency-plots|sec:app-batch-capacity' thesis/chapters/appendix.tex`
+  - `xelatex -interaction=nonstopmode -halt-on-error main.tex`
+  - `rg -n 'Undefined|undefined|There were undefined references|Rerun to get cross-references|Label\(s\) may have changed|LaTeX Error|Overfull|invalid character' thesis/main.log`
+- Outputs:
+  - 原 A.6 与 A.7 合并为 `部署效率与批处理扩展补充`，保留 `sec:app-efficiency-plots`。
+  - 原批处理扩展 section 降为同节内 paragraph，保留 `sec:app-batch-capacity` 作为跳转锚点。
+  - 图注和表注补充 H20、seq_len、batch/backend 条件，明确该节服务 Chapter 4 部署边界审计。
+- Validation:
+  - LaTeX 编译通过，`thesis/main.pdf` 为 105 页。
+  - `thesis/main.log` 未发现 undefined refs/citations、rerun 提示、LaTeX Error、Overfull 或 invalid character。
+  - 四个子 Agent 从正文一致性、系统 claim、LaTeX 引用、结构冗余角度审查；系统 claim 与结构冗余意见已回修。
+- Risks / follow-ups:
+  - 当前 A.6 因保留三张图与一张批处理表，仍是较长的系统补充节；是否继续瘦身留到后续全局 Appendix 复盘。
+  - 工作树存在 Ch4 图相关 dirty 项和外部 `iteration.md` 记录，本轮提交需精确 staging，不能混入。
+- Commit: pending
