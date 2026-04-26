@@ -894,46 +894,9 @@ Canonical agent workflow directory is `.agents/`.
   - Remote worktree 仍在 `36bf21c2`；需 fetch 本轮 commit 后再启动 main phase
 - Commit: <pending>
 
-### 2026-04-20 05:02 | Thesis Rewrite Phase 5 — Ch4 §4.5 Per-Model Cases（T4/T5/T6 + 图⑨）
-- Goal: M+ 方案 Phase 5，Ch4 §4.5 per-model 剖面分析 3 个代表性模型（Mistral AutoK strongest / 3B early-layer rescue / 14B top-tier no winner）
-- Scope:
-  - 写 4 个脚本：make_table_mistral_autok.py (T4) / make_table_3b_early_layer.py (T5) / make_table_14b_toptier.py (T6) / plot_scale_trend.py (图 ⑨)
-  - Ch4 新增 §4.5 Per-Model Cases，3 subsection + 1 common-scale 段：
-    - §4.5.1 Mistral AutoK strongest positive case（T4：AutoK 3/5 task-wins）
-    - §4.5.2 3B Early-Layer Rescue（T5：eq:ch4-rescue-delta display math + 含 "heuristic 在 NarrativeQA 分数 $3.08$ → BA-$k_1$ 回救到 $7.17$" catastrophic $\Delta$）
-    - §4.5.3 14B Top-Tier（T6：eq:ch4-14b-gap display math + max gap $3.5\%$、avg $3.0\%$）
-    - 末尾插入图 ⑨（Quality vs Scale 跨 4 模型 × 4 policy 趋势）
-  - 1.5B 合并进 §4.5.2 3B subsection 作为 supporting trend（不独立成节）
-  - **严格遵守 feedback_math_display_style.md**：本 Phase 新增 2 个 display math equation 块（`eq:ch4-rescue-delta`、`eq:ch4-14b-gap`）
-- Changed files:
-  - thesis/chapters/ch4_experiments.tex（1021 → 1138 行，+117）
-  - scripts/thesis/ 下 4 个新脚本
-  - thesis/tables/ 下 T4/T5/T6 的 .tex + .md
-  - thesis/figures/fig9_scale_trend.pdf（新）
-- Commands:
-  - `python3 scripts/thesis/make_table_mistral_autok.py` → T4 生成，AutoK task-wins 3/5
-  - `python3 scripts/thesis/make_table_3b_early_layer.py` → T5 生成，catastrophic Δ（Heur $3.08$ vs BA $7.17$）
-  - `python3 scripts/thesis/make_table_14b_toptier.py` → T6 生成，max gap $3.54\%$
-  - `python3 scripts/thesis/plot_scale_trend.py` → 图 ⑨ PDF
-  - `python3 /tmp/thesis_phase3/step_phase5_insert_45.py` → §4.5 插入 14/14 pass
-  - **xelatex smoke × 2 pass** → main.pdf 93 → **97 pages** (+4)
-- Outputs:
-  - Ch4 结构完整：§4.1 / §4.2 / §4.3 cross-model / **§4.5 per-model cases** / §4.5(旧GQA-Aware 保留) / §4.6 综合讨论
-  - 所有 C3 支撑证据（T3/T4/T5/T6 + 图 ④/⑦/⑧/⑨）全部到位
-  - Ch4 总行数 884 (Phase 3 结束) → 1138 (Phase 5 结束)，+254 行
-- Validation:
-  - T4 AutoK mean 14.764 > Heur 10.65 > BA-k 11.30 > Uniform 10.00，对齐 story §5.1
-  - T5 BA-$k_1$ mean 7.19 vs Heur-$k_1$ mean 3.47，catastrophic $\Delta{=}+3.72$
-  - T6 top-3 gap 3.54%/3.02% 对齐 story §5.4 "within ~2%" 量级
-  - xelatex smoke 97 pages, no halt
-- Risks / follow-ups:
-  - story 原 T6 caption 说 "within ~2%" 但实际 max 3.5%，caption 中用 "3.5%" 诚实报告不夸大
-  - Phase 6 下一步：Ch2 Related Work 重写（+T0）+ Ch5 Discussion 重写 + 图 ② Framework overview
-- Commit: <pending 本批>
-
-### 2026-04-24 09:29 | Thesis Global Final Consistency Sweep
+### 2026-04-26 10:42 | Thesis Language Cleanup Round 1
 - Goal:
-  - 全文层面收束 Chapter 1--5、abstract、appendix 与 Chapter 1/5 source-of-truth 的 story、术语、claim/evidence 边界和终稿风格。
+  - 按用户反馈先处理第一项语言清洗：降低 Chapter 1 的 AI 式绕弯表达，统一 `INT8 基准路径` 口径，删除 Chapter 4 可见 RQ 编号，并清理正文中高频模板连接词。
 - Changed files:
   - `thesis/chapters/abstract_zh.tex`
   - `thesis/chapters/abstract_en.tex`
@@ -942,29 +905,22 @@ Canonical agent workflow directory is `.agents/`.
   - `thesis/chapters/ch3_method.tex`
   - `thesis/chapters/ch4_experiments.tex`
   - `thesis/chapters/ch5_conclusion.tex`
-  - `thesis/chapters/appendix.tex`
-  - `docs/Chapter 1 Draft.md`
-  - `docs/This is Chapter 1 Writing.md`
-  - `docs/Chapter 5 Draft.md`
-  - `docs/This is Chapter 5 Writing.md`
-  - `iteration.md`
 - Commands:
-  - `rg` sweeps for legacy terms / overclaim patterns
-  - `rg -n -F '\caption' thesis/chapters/ch4_experiments.tex`
-  - `bibtex main`
-  - `xelatex -interaction=nonstopmode main.tex` x2
+  - `rg` sweeps for visible `RQ1/RQ2/RQ3`, `INT8 规范路径`, `canonical path`, `sanity check`, `换言之`, `前者/后者`
   - `git diff --check`
+  - `latexmk -pdf main.tex`
+  - `pdfinfo thesis/main.pdf | rg '^Pages:'`
 - Outputs:
-  - Abstracts rewritten away from old C1/C2/C3 and RoleAlign-as-joint-KL framing.
-  - Appendix reframed as supplementary audit material; official LongBench scoped to protocol sanity check; `inv_tau` kept diagnostic-only.
-  - Chapter 5 Draft status and final blocks synchronized with current `ch5_conclusion.tex`.
-  - Chapter 4 figure/table keep-set preserved: 21 captions = 15 tables + 6 figures.
-  - `main.pdf` generated successfully, 110 pages.
+  - 中文正文硬性触发项清零；英文摘要保留英文术语表述。
+  - Chapter 4 section headings no longer expose RQ1/RQ2/RQ3; internal labels retained for reference compatibility.
+  - `INT8 规范路径` and visible canonical-path phrasing replaced by `INT8 基准路径` / baseline-path phrasing.
+  - Chapter 1 contribution and problem paragraphs rewritten in direct Chinese prose.
+  - `main.pdf` generated successfully, 109 pages.
 - Validation:
-  - BibTeX passed.
-  - XeLaTeX passed twice; no LaTeX errors, undefined citation/reference warnings, or rerun-required warnings detected.
   - `git diff --check` passed.
+  - `latexmk -pdf main.tex` passed; no LaTeX errors, fatal errors, undefined references, or rerun-required warnings detected by log grep.
+  - Hard grep for the above Chinese正文触发项 returned no matches.
 - Risks / follow-ups:
-  - `docs/This is Chapter 1 Writing.md` and `docs/This is Chapter 5 Writing.md` still contain some old terms inside blacklist / historical-warning sections; thesis正文 and Chapter 1/5 Draft active blocks are clean.
-  - XeLaTeX still reports existing underfull/overfull layout warnings in several tables/paragraphs; not introduced as blocking errors in this sweep.
+  - This round intentionally did not address figure/table redesign, reference revalidation, or appendix restructuring.
+  - LaTeX still reports existing underfull/overfull layout warnings in several tables/paragraphs; not blocking this language cleanup round.
 - Commit: <pending>

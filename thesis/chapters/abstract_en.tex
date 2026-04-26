@@ -5,75 +5,48 @@
 
 \begin{abstracten}
 
-As the context windows of large language models scale from thousands
-to hundreds of thousands of tokens, KV-cache memory grows linearly
-with sequence length and has become the primary bottleneck for
-long-context inference. INT4 quantization can in principle reduce
-KV-cache memory by a factor of four, yet methods calibrated against
-\emph{numerical reconstruction error} (MSE / percentile clipping)
-are unstable in the long-context regime, and most existing work
-treats \emph{calibration} and \emph{budget allocation} as two
-independent optimization problems without a unifying organizing
-principle.
+Long-context inference makes KV-cache memory grow linearly with
+sequence length and has become a central deployment bottleneck for
+large language models. Low-bit KV-cache quantization directly reduces
+cache storage, but minimizing numerical reconstruction error alone
+does not guarantee stable attention behavior: Key errors can alter the
+softmax distribution, while Value errors propagate through weighted
+aggregation. KV-cache quantization therefore requires more than a
+lower-bit representation; it needs an organizing principle that links
+calibration, low-bit recovery, and layer-wise budget allocation.
 
-This thesis proposes a \textbf{behavior-guided} quantization
-framework in which attention \emph{behavior}---defined as the
-\emph{joint} preservation of the attention distribution $a$
-\emph{and} the attention output $o$---serves as the single
-organizing objective. A telescoping decomposition of the output
-error shows that $K$-errors distort $a$ through softmax while
-$V$-errors shift $o$ through weighted aggregation; the two paths
-are \emph{coupled}, not orthogonal. Consequently, preserving the
-distribution $a$ also constrains the $\hat{a}_i$ factor inside the
-aggregation-side term, which is why we use the \textbf{distribution-side
-KL divergence} as an optimizable engineering proxy that bounds
-both error paths. The framework then organizes calibration and
-layer-wise budget allocation as two decisions sharing the same
-behavior sensitivity profile. We validate the
-framework on six open-source LLMs---Qwen2.5-\{1.5B, 3B, 7B, 14B\},
-LLaMA-3.1-8B, and Mistral-7B-Instruct-v0.3---across five LongBench
-tasks under a clean-provenance protocol (pin=\code{ddada19}), and
-summarize three contributions.
+This thesis proposes a behavior-guided framework organized around
+attention behavior. At the calibration layer, the framework treats
+attention-distribution drift and output perturbation as the relevant
+objects of analysis. Symmetric paths use attention-distribution KL as
+an auditable calibration proxy, whereas the role-aware low-bit path
+separates the Key-side attention-KL proxy from an independent
+Value-side output-perturbation proxy. The resulting offline artifacts
+also induce behavior sensitivity profiles, which are reused by the
+allocator and by the AutoK extension. The framework is unified by its
+workflow, artifact interface, and robust selection discipline, not by
+forcing every path into a single KL objective.
 
-\textbf{First} (C1, framework): we present behavior preservation
-as a single principle that connects calibration and allocation as
-two decisions sharing the same sensitivity profile, grounded in an
-attention error decomposition that attributes output error to (i)
-$K$-error propagating through softmax to distort the attention
-distribution and (ii) $V$-error propagating through weighted
-aggregation to shift the output.
-
-\textbf{Second} (C2, method instances): the framework closes a loop
-at two bit-widths. The INT8 canonical path achieves empirical
-indistinguishability from FP16 on Qwen2.5-1.5B (mean $\Delta{=}{+}0.02$
-over three LongBench tasks). INT4-RoleAlign, built on the same
-per-channel-Key/per-token-Value asymmetric format as KIVI but with
-offline KL-based calibration replacing runtime absmax/min, attains
-100\% Needle retrieval and $|\Delta \text{PPL}| \leq 0.15$ across
-four models relative to KIVI. AutoK, a profile-guided coverage-based
-budget proposer (cov$80\%$), emerges as a natural extension of the
-framework and delivers the strongest single-family positive case on
-Mistral-7B (wins 3 of 5 tasks).
-
-\textbf{Third} (C3, empirical insight): a cross-model comparison
-within a same-order INT4 budget band reveals a
-\textbf{(family, scale, task)-dependent operating regime map}.
-Qwen2.5-3B exhibits a small-scale early-layer rescue regime
-(BA-$k_1$ outperforms heuristic-$k_1$ on NarrativeQA by roughly
-$+4$ points); Qwen2.5-14B exhibits a large-scale top-tier regime
-(top-3 policies lie within $3.5\%$ relative gap); Mistral-7B exhibits
-an AutoK-dominant regime; heuristic position-based allocation
-coincides with behavior-guided allocation in several regimes and
-thereby stands as a strong baseline---this is a structural
-observation rather than a methodological failure. The framework's
-value therefore shifts from "beating a weak baseline" to
-\textbf{"naming structural regimes"}: it provides a readout tool
-that lets heterogeneous behavior patterns across models, scales,
-and tasks be identified and reused, rather than a single globally
-optimal point estimate.
+The experiments answer three research questions. First, the INT8
+baseline path shows that behavior-guided calibration can form a
+stable, reproducible, and auditable fidelity path; the small official
+LongBench check is used only as a protocol-consistency sanity check,
+not as evidence of broad real-world generalization. Second, symmetric
+INT4 exposes a model-dependent low-bit cliff, with LLaMA-3.1-8B as an
+important architectural exception; INT4-RoleAlign then provides a
+role-aware low-bit instance under the same asymmetric format family as
+KIVI-style. Third, cross-model allocation within a same-order INT4
+budget band is best read as a regime map rather than a universal
+winner story: Mistral-7B is the clearest positive case for AutoK,
+Qwen2.5-3B reveals an early-layer rescue regime, LLaMA-3.1-8B shows a
+medium-scale consensus regime, and Qwen2.5-14B exhibits coexisting
+high-performing clusters without a stable best policy. The strong
+heuristic baseline is therefore not a failure of the framework; it
+indicates that some regimes have intrinsically narrow feasible layer
+sets.
 
 \keywordsen{large language models; KV-cache quantization;
 behavior-guided calibration; regime map; asymmetric quantization;
-AutoK; budget allocation}
+RoleAlign; AutoK; budget allocation}
 
 \end{abstracten}

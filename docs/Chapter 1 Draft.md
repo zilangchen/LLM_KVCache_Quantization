@@ -6,8 +6,8 @@
 - 当前状态：
   - Chapter 1 的 `Writing` / `Draft` 双层文档已初始化完成。
   - 外部正文草稿已开始按节接入；`1.1-1.6` 已全部完成首轮审核整合。
-  - 当前只允许在本文档中做归属判断、对齐审查与可用正文沉淀。
-  - 尚未回写 `thesis/chapters/ch1_introduction.tex`。
+  - `thesis/chapters/ch1_introduction.tex` 已完成首轮回写；当前阶段只做全文联动审查、术语校准与边界收束。
+  - 本文档保留为 Chapter 1 的 source-of-truth 审计层，不再保留旧施工阶段的状态判断。
 - 维护边界：
   - 本文档服务于 Chapter 1 正文整合与审核。
   - 本文档不是 `objective.md`。
@@ -52,7 +52,7 @@
 | Chapter 4 Draft | `docs/Chapter 4 Draft.md` | 用于对齐后文实证主线与高风险口径 |
 | 实时工作台 | `docs/thesis_upgrade_live_plan.md` | 只用于确认当前写作阶段与 final-ready 主线，不在本文档中重写 |
 | 执行清单 | `docs/mainline_execution_queue.md` | 只用于确认当前已转入论文写作阶段，不在本文档中承接执行队列职责 |
-| 被审对象 | `thesis/chapters/ch1_introduction.tex` | 记录当前与冻结口径不一致的位置，不在当前阶段直接修改 |
+| 被审对象 | `thesis/chapters/ch1_introduction.tex` | 记录当前与冻结口径不一致的位置，并服务后续增量联动清洗 |
 
 ### 当前 active source-of-truth 三件套
 
@@ -94,7 +94,7 @@
 | `1.2` | 问题定义与研究动机：用直觉方式说明数值误差与行为失真可能脱钩 | 不提前写第三章完整误差分解与 KL 目标 |
 | `1.3` | 国内外研究现状概述：高层综述三条研究脉络 | 不吞掉第二章的详细相关工作职责 |
 | `1.4` | 核心假设与 `RQ1-RQ3` | 不提前回答研究问题，不扩成 `RQ4` |
-| `1.5` | 研究内容、技术路线与主要贡献 | 不堆第四章具体结果数字，不写 universal winner |
+| `1.5` | 研究内容、技术路线与主要贡献 | 不堆第四章具体结果数字，不写单一赢家叙事 |
 | `1.6` | 论文结构安排 | 不把章节安排写成全文摘要 |
 
 ## 高风险冻结口径
