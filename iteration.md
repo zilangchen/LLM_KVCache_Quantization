@@ -1203,3 +1203,29 @@ Canonical agent workflow directory is `.agents/`.
   - Some appendix anchors remain without direct正文 `\ref`; active compile is clean, but explicit Ch4 natural-language reference synchronization can be handled in a separate正文-sync plan.
   - `thesis/figures/fig_ch3_kv_diag_needle.tex` is dirty from unrelated work and was intentionally not staged.
 - Commit: `4619675` (`docs(appendix): consolidate mechanism and system supplements`)
+
+### 2026-04-26 19:08 | M5 Chapter 4 Appendix Reference Synchronization
+- Goal:
+  - 同步 Chapter 4 到重构后附录结构的自然语言引用，避免“移至附录 / 结合附录”缺少稳定落点。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex`
+  - `rg -n '移至附录|结合附录|附录第|由附录|sec:app-kv-ablation-full|subsec:app-7b-kl-mse' thesis/chapters/ch4_experiments.tex`
+  - `xelatex -interaction=nonstopmode -halt-on-error main.tex`
+  - `rg -n 'Undefined|undefined|There were undefined references|Rerun to get cross-references|Label\(s\) may have changed|LaTeX Error|Citation.*undefined|Warning: Citation|Font Warning' thesis/main.log`
+  - `rg -c 'Overfull' thesis/main.log`
+  - `pdfinfo thesis/main.pdf | rg Pages`
+- Outputs:
+  - Ch4 K/V 消融表注中的 Mistral LongBench 附录归属改为指向 `sec:app-kv-ablation-full`。
+  - Ch4 KL/MSE 趋同讨论中的补充对照改为指向 `subsec:app-7b-kl-mse`。
+  - `main.pdf` generated successfully, 107 pages.
+- Validation:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex` passed.
+  - `thesis/main.log` has no undefined refs/cits, rerun warning, LaTeX Error, Font Warning, or Overfull entries.
+  - 引用扫描显示 Ch4 appendix references 均指向稳定 labels。
+- Risks / follow-ups:
+  - 本轮只做引用同步，不修改正文 claim、实验数值或附录正文。
+  - `thesis/figures/fig_ch3_kv_diag_needle.tex` 仍是图修改 dirty 项，本轮不 stage、不提交。
+- Commit: <pending; planned `docs(thesis): sync ch4 appendix references`>
