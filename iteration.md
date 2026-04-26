@@ -1026,3 +1026,31 @@ Canonical agent workflow directory is `.agents/`.
   - 未清理未挂载的历史图表文件；后续仍需单独做一次 figure/table inventory，避免旧 RoleAlign/KL 或 canonical-path 口径在遗留文件中反流。
   - Chapter 3 的图表视觉已经能进正文，但若后续统一整本论文图形风格，还应做一次全图色彩与线宽一致性 sweep。
 - Commit: <pending>
+
+### 2026-04-26 11:32 | M2 LongBench Appendix Merge
+- Goal:
+  - 将原 A.18 官方 LongBench 对照验证合并回 A.7，保留 LongBench-style 补充审计表，同时把官方数据对照降为协议一致性检查段落。
+- Changed files:
+  - `thesis/chapters/appendix.tex`
+  - `iteration.md`
+- Commands:
+  - `xelatex -interaction=nonstopmode main.tex`
+  - `rg -n 'Undefined|undefined|There were undefined references|Rerun to get cross-references|Label\(s\) may have changed|LaTeX Error|Citation.*undefined' thesis/main.log`
+  - `rg -n 'sec:app-longbench-full|sec:app-longbench-official|tab:app-longbench-full' thesis/main.aux thesis/chapters/appendix.tex`
+  - `awk '/^\\section/ {if(sec) print NR-start-1" lines  "sec; sec=$0; start=NR} END {print NR-start" lines  "sec}' thesis/chapters/appendix.tex`
+  - `git diff --check -- thesis/chapters/appendix.tex`
+  - `pdfinfo thesis/main.pdf | rg Pages`
+- Outputs:
+  - A.7 改为 `LongBench 补充结果与协议一致性检查`，保留 `tab:app-longbench-full` 的 LongBench-style 补充聚合表。
+  - 原 A.18 顶层 section 删除，官方 LongBench 对照压缩为 A.7 内 `官方数据一致性检查` 段落，并保留兼容 label `sec:app-longbench-official`。
+  - `sec:app-longbench-official` 的 anchor 已通过 `\phantomsection` 修正为独立 paragraph anchor。
+  - `main.pdf` generated successfully, 108 pages.
+- Validation:
+  - 两轮只读 Agent 审查均无 P1/P2；appendix 范围内 P3 已修复。
+  - `git diff --check -- thesis/chapters/appendix.tex` passed.
+  - `thesis/main.log` 无 undefined refs/cits、rerun warning 或 LaTeX Error。
+  - `thesis/main.aux` 中 `sec:app-longbench-official` 解析到独立 `section*.206` anchor。
+- Risks / follow-ups:
+  - 正文 Ch4/Ch5 仍有 3 个非本轮范围 P3：官方 LongBench 首次出现处补引用、内部校准文件名降级、结论处一致性措辞收紧。
+  - 根目录旧 `main.log` 可能误导后续检查；有效编译日志为 `thesis/main.log`。
+- Commit: <pending>
