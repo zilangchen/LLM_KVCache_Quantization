@@ -1,132 +1,105 @@
 \begin{figure}[!htbp]
   \centering
-  \begin{minipage}[t]{0.47\textwidth}
-    \centering
-    \begin{tikzpicture}[
-      x=1cm, y=1cm,
-      every node/.style={font=\small, align=center},
-      arr/.style={-stealth, line width=0.95pt, draw=black!80},
-      boxbase/.style={
-        rectangle, rounded corners=3.5pt,
-        draw=black!78, line width=0.9pt,
-        text width=6.10cm, minimum height=1.06cm, inner sep=5.0pt
-      },
-      bluebox/.style={boxbase, fill=blue!10},
-      redbox/.style={boxbase, fill=red!10, draw=black!90, line width=1.0pt},
-      orangebox/.style={boxbase, fill=orange!10, draw=orange!72!black},
-      cyanbox/.style={boxbase, fill=cyan!8, draw=cyan!58!black}
-    ]
-      \node[font=\bfseries\small, text=black] at (0,4.35) {启示链};
+  \resizebox{\linewidth}{!}{%
+  \begin{tikzpicture}[
+    x=1cm, y=1cm,
+    every node/.style={font=\scriptsize, align=center},
+    panel/.style={
+      rectangle, rounded corners=5pt,
+      draw=black!25, fill=black!1, line width=0.7pt
+    },
+    title/.style={font=\bfseries\small, anchor=west, text=black},
+    note/.style={font=\scriptsize, anchor=west, text=black!64},
+    statebox/.style={
+      rectangle, rounded corners=3pt,
+      minimum width=0.72cm, minimum height=0.43cm,
+      inner sep=2.1pt, line width=0.75pt
+    },
+    chainstep/.style={
+      rectangle, rounded corners=3pt,
+      text width=4.55cm, minimum height=0.48cm,
+      inner sep=3.6pt, draw=black!38, fill=white, line width=0.65pt
+    },
+    arr/.style={-stealth, draw=black!58, line width=0.75pt}
+  ]
+    \definecolor{kBlue}{RGB}{58,104,173}
+    \definecolor{kBlueFill}{RGB}{224,235,249}
+    \definecolor{vTeal}{RGB}{66,139,133}
+    \definecolor{vTealFill}{RGB}{224,242,239}
+    \definecolor{riskRed}{RGB}{184,84,78}
+    \definecolor{riskRedFill}{RGB}{249,228,225}
+    \definecolor{anchorGold}{RGB}{178,130,26}
+    \definecolor{anchorGoldFill}{RGB}{250,239,202}
+    \definecolor{safeGreen}{RGB}{73,135,96}
+    \definecolor{safeGreenFill}{RGB}{230,243,234}
 
-      \node[bluebox] (s1) at (0,3.15) {\textbf{问题不在“量化本身”}\\\texttt{FP16}、\texttt{K8V8} 与 \texttt{K8V4}\\都维持可用行为};
-      \node[orangebox] (s2) at (0,1.15) {\textbf{同预算角色对照}\\\texttt{K8V4} 与 \texttt{K4V8}\\锁定 4-bit 落点};
-      \node[redbox] (s3) at (0,-0.85) {\textbf{Qwen 系列：Key 侧触发 cliff}\\\texttt{K4V8} 与 \texttt{K4V4}\\在 Needle 上直接失稳};
-      \node[bluebox] (s4) at (0,-2.85) {\textbf{LLaMA-3.1-8B 是结构例外}\\不能把 cliff 写成\\所有模型同强度规律};
-      \node[cyanbox] (s5) at (0,-4.95) {\textbf{低比特设计约束}\\优先保护 Key，\\同时保留架构差异};
+    % panel backgrounds
+    \node[panel, minimum width=8.65cm, minimum height=5.65cm, anchor=south west] at (0.00,0.00) {};
+    \node[panel, minimum width=5.85cm, minimum height=5.65cm, anchor=south west] at (8.95,0.00) {};
 
-      \draw[arr] (s1.south) -- (s2.north);
-      \draw[arr] (s2.south) -- (s3.north);
-      \draw[arr] (s3.south) -- (s4.north);
-      \draw[arr] (s4.south) -- (s5.north);
-    \end{tikzpicture}
-  \end{minipage}\hfill
-  \begin{minipage}[t]{0.50\textwidth}
-    \centering
-    \begin{tikzpicture}[x=1cm,y=0.055cm]
-      \definecolor{cfgGray}{RGB}{120,120,120}
-      \definecolor{cfgGrayFill}{RGB}{239,239,239}
-      \definecolor{cfgBlue}{RGB}{66,108,176}
-      \definecolor{cfgBlueFill}{RGB}{222,231,247}
-      \definecolor{cfgRed}{RGB}{186,86,79}
-      \definecolor{cfgRedFill}{RGB}{246,223,219}
-      \definecolor{cfgGold}{RGB}{176,135,30}
-      \definecolor{cfgGoldFill}{RGB}{248,238,199}
+    % panel (a)
+    \node[title] at (0.30,5.30) {（a）位宽落点诊断};
+    \node[note] at (0.30,4.95) {同平均位宽预算下，4bit 应优先落在 K 还是 V？};
 
-      \node[font=\bfseries\small, text=black] at (3.90,145.0) {五配置角色诊断};
+    \node[font=\tiny\bfseries, text=black!70] at (1.85,4.42) {8 位基准};
+    \draw[black!28, line width=0.55pt] (1.28,4.26) -- (2.42,4.26);
+    \node[font=\tiny\bfseries, text=black!70] at (3.95,4.42) {同预算对照};
+    \draw[black!28, line width=0.55pt] (2.75,4.26) -- (5.15,4.26);
+    \node[font=\tiny\bfseries, text=black!70] at (6.25,4.42) {对称低比特锚点};
+    \draw[black!28, line width=0.55pt] (5.60,4.26) -- (6.90,4.26);
 
-      % legend
-      \draw[black, line width=1.55pt] (0.80,132.0) -- (1.35,132.0);
-      \filldraw[black] (1.075,132.0) circle (2.2pt);
-      \node[anchor=west, font=\scriptsize, text=black] at (1.48,132.0) {FP16};
+    \node[font=\scriptsize\bfseries] at (1.85,3.94) {\texttt{K8V8}};
+    \node[font=\scriptsize\bfseries] at (3.25,3.94) {\texttt{K8V4}};
+    \node[font=\scriptsize\bfseries] at (4.65,3.94) {\texttt{K4V8}};
+    \node[font=\scriptsize\bfseries] at (6.25,3.94) {\texttt{K4V4}};
 
-      \draw[cfgGray, line width=1.70pt] (2.12,132.0) -- (2.67,132.0);
-      \filldraw[cfgGrayFill, draw=cfgGray, line width=1.05pt] (2.395,132.0) circle (2.25pt);
-      \node[anchor=west, font=\scriptsize, text=black] at (2.80,132.0) {\texttt{K8V8}};
+    \node[anchor=east, font=\tiny\bfseries, align=right] at (1.05,3.22) {Qwen\\1.5B};
+    \node[anchor=east, font=\tiny\bfseries, align=right] at (1.05,2.42) {Qwen\\7B};
+    \node[anchor=east, font=\tiny\bfseries, align=right] at (1.05,1.62) {LLaMA\\8B};
 
-      \draw[cfgBlue, line width=1.70pt] (3.55,132.0) -- (4.10,132.0);
-      \filldraw[cfgBlueFill, draw=cfgBlue, line width=1.05pt] (3.825,132.0) circle (2.25pt);
-      \node[anchor=west, font=\scriptsize, text=black] at (4.23,132.0) {\texttt{K8V4}};
+    \foreach \y in {2.82,2.02,1.22} {
+      \draw[black!10] (1.28,\y) -- (7.10,\y);
+    }
 
-      \draw[cfgRed, line width=1.70pt] (4.98,132.0) -- (5.53,132.0);
-      \filldraw[cfgRedFill, draw=cfgRed, line width=1.05pt] (5.255,132.0) circle (2.25pt);
-      \node[anchor=west, font=\scriptsize, text=black] at (5.66,132.0) {\texttt{K4V8}};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (1.85,3.22) {可用};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (3.25,3.22) {可用};
+    \node[statebox, fill=riskRedFill, draw=riskRed, text=riskRed!80!black] at (4.65,3.22) {崩塌};
+    \node[statebox, fill=riskRedFill, draw=riskRed, text=riskRed!80!black] at (6.25,3.22) {崩塌};
 
-      \draw[cfgGold, line width=1.70pt] (0.80,124.0) -- (1.35,124.0);
-      \filldraw[cfgGoldFill, draw=cfgGold, line width=1.05pt] (1.075,124.0) circle (2.25pt);
-      \node[anchor=west, font=\scriptsize, text=black] at (1.48,124.0) {\texttt{K4V4}};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (1.85,2.42) {可用};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (3.25,2.42) {可用};
+    \node[statebox, fill=riskRedFill, draw=riskRed, text=riskRed!80!black] at (4.65,2.42) {崩塌};
+    \node[statebox, fill=riskRedFill, draw=riskRed, text=riskRed!80!black] at (6.25,2.42) {崩塌};
 
-      % axes
-      \draw[->, line width=1.10pt, draw=black!88] (0.82,18) -- (0.82,103);
-      \draw[line width=1.10pt, draw=black!88] (0.82,18) -- (6.90,18);
-      \node[rotate=90, font=\scriptsize, text=black] at (0.18,60.5) {Needle 通过率 (\%)};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (1.85,1.62) {可用};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (3.25,1.62) {可用};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (4.65,1.62) {保留};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (6.25,1.62) {保留};
 
-      \foreach \yv/\lab in {18/0,39.25/25,60.5/50,81.75/75,103/100} {
-        \draw[draw=black!82] (0.74,\yv) -- (0.90,\yv);
-        \node[left, font=\scriptsize, text=black] at (0.70,\yv) {\lab};
-        \draw[densely dashed, black!15] (0.82,\yv) -- (6.84,\yv);
-      }
+    \node[font=\tiny, text=black!62, align=left, anchor=west] at (0.65,0.48)
+      {代表性检索观察（Needle）：K8V8 与 K8V4 保持可用；\\Qwen 系列在 4bit K 下更易崩塌；LLaMA-3.1-8B 保留较高通过率，\\说明强度受架构调制。};
 
-      \foreach \x/\lab in {1.55/{Qwen\\1.5B},3.85/{Qwen\\7B},6.15/{LLaMA\\8B}} {
-        \draw[draw=black!82] (\x,18.0) -- (\x,15.8);
-        \node[below, font=\scriptsize\bfseries, align=center, text=black] at (\x,13.5) {\lab};
-      }
+    % panel (b)
+    \node[title] at (9.25,5.30) {（b）设计启示链};
+    \node[note] at (9.25,4.95) {从诊断观察收束为低比特路径约束};
 
-      % x positions (slightly offset within each model cluster to avoid overlap)
-      \coordinate (fp1) at (1.23,103);
-      \coordinate (fp2) at (3.53,103);
-      \coordinate (fp3) at (5.83,103);
+    \node[chainstep, fill=kBlueFill, draw=kBlue] (c1) at (11.88,4.28)
+      {高精度路径保持可用};
+    \node[chainstep, fill=vTealFill, draw=vTeal] (c2) at (11.88,3.34)
+      {同预算落点暴露失效侧};
+    \node[chainstep, fill=riskRedFill, draw=riskRed] (c3) at (11.88,2.40)
+      {4bit K 可能越过注意力排序临界点};
+    \node[chainstep, fill=anchorGoldFill, draw=anchorGold] (c4) at (11.88,1.42)
+      {优先保护 K，再区分 K/V 角色};
+    \node[chainstep, fill=black!4, draw=black!45] (c5) at (11.88,0.52)
+      {角色感知非对称格式};
 
-      \coordinate (u81) at (1.39,103);
-      \coordinate (u82) at (3.69,103);
-      \coordinate (u83) at (5.99,103);
-
-      \coordinate (m1) at (1.55,103);
-      \coordinate (m2) at (3.85,103);
-      \coordinate (m3) at (6.15,103);
-
-      \coordinate (k1) at (1.71,18);
-      \coordinate (k2) at (4.01,18);
-      \coordinate (k3) at (6.31,103);
-
-      \coordinate (u41) at (1.87,18);
-      \coordinate (u42) at (4.17,18);
-      \coordinate (u43) at (6.47,101.3);
-
-      \draw[black, line width=1.55pt] (fp1)--(fp2)--(fp3);
-      \filldraw[black] (fp1) circle (2.25pt) (fp2) circle (2.25pt) (fp3) circle (2.25pt);
-
-      \draw[cfgGray, line width=1.75pt] (u81)--(u82)--(u83);
-      \filldraw[cfgGrayFill, draw=cfgGray, line width=1.05pt] (u81) circle (2.3pt) (u82) circle (2.3pt) (u83) circle (2.3pt);
-
-      \draw[cfgBlue, line width=1.75pt] (m1)--(m2)--(m3);
-      \filldraw[cfgBlueFill, draw=cfgBlue, line width=1.05pt] (m1) circle (2.3pt) (m2) circle (2.3pt) (m3) circle (2.3pt);
-
-      \draw[cfgRed, line width=1.75pt] (k1)--(k2)--(k3);
-      \filldraw[cfgRedFill, draw=cfgRed, line width=1.05pt] (k1) circle (2.3pt) (k2) circle (2.3pt) (k3) circle (2.3pt);
-
-      \draw[cfgGold, line width=1.75pt] (u41)--(u42)--(u43);
-      \filldraw[cfgGoldFill, draw=cfgGold, line width=1.05pt] (u41) circle (2.3pt) (u42) circle (2.3pt) (u43) circle (2.3pt);
-
-      % numeric labels for the collapsed branches
-      \node[font=\tiny, text=cfgRed!92!black, fill=white, inner sep=1.0pt] at (1.72,23.5) {0};
-      \node[font=\tiny, text=cfgRed!92!black, fill=white, inner sep=1.0pt] at (4.02,23.5) {0};
-      \node[font=\tiny, text=cfgGold!92!black, fill=white, inner sep=1.0pt] at (1.88,23.5) {0};
-      \node[font=\tiny, text=cfgGold!92!black, fill=white, inner sep=1.0pt] at (4.18,23.5) {0};
-      \node[font=\tiny, text=cfgGold!92!black, fill=white, inner sep=1.0pt] at (6.53,97.0) {98};
-      \node[font=\tiny, align=center, text=black!66] at (6.15,112.0) {结构例外\\不作同强度外推};
-
-    \end{tikzpicture}
-  \end{minipage}
-  \caption{K/V 量化敏感性不对称的压缩版诊断与设计启示。左侧将 bit-layout 视角下的角色诊断收束为低比特设计约束；右侧只展示同口径 Needle 压缩视图：\texttt{FP16} 与 \texttt{K8V8} 构成参考，\texttt{K8V4} 与 \texttt{K4V8} 构成同平均 bit 预算下的角色对照，\texttt{K4V4} 提供对称低比特锚点。Qwen 系列上的坍塌支持 Key-first protection 的设计动机，LLaMA-3.1-8B 的剩余通过率则标明该现象存在架构例外；完整 RULER 与 LongBench-style 证据留在第四章展开。}
+    \draw[arr] (c1.south) -- (c2.north);
+    \draw[arr] (c2.south) -- (c3.north);
+    \draw[arr] (c3.south) -- (c4.north);
+    \draw[arr] (c4.south) -- (c5.north);
+  \end{tikzpicture}%
+  }
+  \caption{K/V 位宽落点诊断的压缩版方法动机。子图（a）将 \texttt{K8V8} 基准、同平均位宽预算下的 \texttt{K8V4}/\texttt{K4V8} 对照，以及 \texttt{K4V4} 对称低比特锚点合并为 $3\times4$ 诊断矩阵，只保留代表性 Needle 观察：\texttt{K8V8} 与 \texttt{K8V4} 保持可用，Qwen 系列在 \texttt{K4V8}/\texttt{K4V4} 下出现 K 侧崩塌，而 LLaMA-3.1-8B 不呈现同强度坍塌。子图（b）将该观察收束为设计启示链：高精度路径保持可用，同预算落点暴露失效侧，4bit K 可能越过注意力排序临界点，因此低比特路径应优先保护 K，并进一步区分 K/V 角色。本图不承担完整实验比较；完整 Needle、RULER 与 LongBench 风格证据见第~\ref{subsec:ch4-kv-diagnosis}~节。}
   \label{fig:ch3-kv-asymmetry}
 \end{figure}
