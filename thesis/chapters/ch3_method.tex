@@ -351,19 +351,18 @@ q_{\min},\,q_{\max}
   \caption{\texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 的设计边界比较}
   \label{tab:ch3-rolealign-vs-kivi}
   \label{tab:s3-rolealign-vs-kivi}
-  \footnotesize
-  \setlength{\tabcolsep}{4.0pt}
+  \scriptsize
+  \setlength{\tabcolsep}{3.2pt}
   \renewcommand{\arraystretch}{1.10}
-  \begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{1.45cm}>{\raggedright\arraybackslash}p{2.15cm}>{\raggedright\arraybackslash}p{2.55cm}X}
+  \begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{1.35cm}>{\raggedright\arraybackslash}p{2.10cm}>{\raggedright\arraybackslash}p{2.35cm}X}
     \toprule
-    维度 & \texttt{KIVI-style} & \texttt{INT4-RoleAlign} & 含义 \\
+    维度 & \texttt{KIVI-style} & \texttt{RoleAlign} & 边界读法 \\
     \midrule
-    量化格式 & \makecell[l]{per-channel K +\\per-token V} & 相同 & 比较建立在同一角色感知格式族下 \\
-    校准来源 & 运行时统计 & \makecell[l]{离线角色感知\\校准} & 比较的是校准哲学 \\
-    参数确定 & 即时统计量 & \makecell[l]{K-path: $p_K$\\V-path: $p_V$} & 两侧均被纳入可审计的离线接口 \\
-    行为代理 & 无显式行为代理 & \makecell[l]{K: 注意力分布 KL\\V: 输出扰动代理} & 显式区分排序与内容两侧 \\
-    推理接口 & 无离线产物 & 有固定校准产物 & 便于审计、冻结和部署一致性 \\
-    \makecell[l]{向 \ref{sec:ch3-allocator}\\扩展} & 无共享画像接口 & \makecell[l]{可共享行为\\敏感度画像} & 可自然延伸到 allocator/\texttt{AutoK} \\
+    量化轴 & \makecell[l]{per-channel K +\\per-token V} & 相同 & 二者处在同一低比特格式族下 \\
+    参数来源 & 运行时统计 & \makecell[l]{离线 K/V\\分路径校准} & 比较集中在参数来源，而非格式差异 \\
+    行为代理 & 无显式代理 & \makecell[l]{K: 注意力分布 KL\\V: 输出扰动代理} & 排序侧与内容侧分开解释 \\
+    产物接口 & 无冻结产物 & 固定校准产物 & RoleAlign 可审计、可冻结、可复现 \\
+    分配扩展 & 无共享画像 & 可输出共享读数 & 只说明可接入 allocator，不提前报告结果 \\
     \bottomrule
   \end{tabularx}
 \end{table}

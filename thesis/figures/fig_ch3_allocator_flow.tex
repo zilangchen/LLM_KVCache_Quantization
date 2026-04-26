@@ -9,18 +9,18 @@
       rectangle, rounded corners=7pt,
       draw=black!70!cyan, line width=1.0pt,
       fill=cyan!4,
-      minimum width=5.95cm, minimum height=7.65cm
+      minimum width=5.95cm, minimum height=8.30cm
     },
     rightpanel/.style={
       rectangle, rounded corners=7pt,
-      draw=brown!70!black, line width=1.0pt,
-      fill=red!2,
-      minimum width=5.95cm, minimum height=7.65cm
+      draw=black!55, dashed, line width=1.0pt,
+      fill=gray!3,
+      minimum width=5.95cm, minimum height=8.30cm
     },
     titleL/.style={font=\bfseries\small, text=black!80!cyan},
-    titleR/.style={font=\bfseries\small, text=brown!78!black},
+    titleR/.style={font=\bfseries\small, text=black!72},
     subtitleL/.style={font=\rmfamily\scriptsize, text=black!65!cyan},
-    subtitleR/.style={font=\rmfamily\scriptsize, text=brown!70!black},
+    subtitleR/.style={font=\rmfamily\scriptsize, text=black!58},
     tealcard/.style={
       rectangle, rounded corners=5pt,
       draw=black!70!cyan, line width=0.95pt,
@@ -47,7 +47,7 @@
     },
     sandcard/.style={
       rectangle, rounded corners=5pt,
-      draw=brown!70!black, line width=0.95pt,
+      draw=black!52, line width=0.9pt,
       fill=white, text width=3.55cm,
       minimum height=1.02cm, inner sep=5pt
     },
@@ -59,7 +59,7 @@
     },
     branchR/.style={
       rectangle, rounded corners=5pt,
-      draw=brown!70!black, line width=0.95pt,
+      draw=black!52, line width=0.9pt,
       fill=white, text width=2.25cm,
       minimum height=1.16cm, inner sep=5pt
     },
@@ -69,15 +69,15 @@
     \node[font=\bfseries\large] at (0,5.02)
       {行为敏感度画像到预算决策};
     \node[font=\rmfamily\small, text=black!62] at (0,4.52)
-      {逐层分配与 K/V 角色扩展};
+      {逐层主线与 K/V 角色预算接口};
     \draw[brown!55!black, line width=0.8pt] (-5.95,4.10) -- (5.95,4.10);
 
-    \node[leftpanel] (lp) at (-3.45,0.25) {};
-    \node[rightpanel] (rp) at (3.45,0.25) {};
+    \node[leftpanel] (lp) at (-3.45,0.12) {};
+    \node[rightpanel] (rp) at (3.45,0.12) {};
 
     % Left title
-    \node[titleL] at (-3.45,3.24) {逐层分配};
-    \node[subtitleL] at (-3.45,2.82) {从 readout 走到 layer-wise budget};
+    \node[titleL] at (-3.45,3.28) {逐层分配};
+    \node[subtitleL] at (-3.45,2.88) {从 readout 走到 layer-wise budget};
 
     % Left vertical chain
     \node[tealcard] (readout) at (-3.45,1.80)
@@ -107,27 +107,27 @@
     \draw[arr] (topk.south) -- (bits.north);
 
     % Right title
-    \node[titleR] at (3.45,3.24) {角色扩展};
-    \node[subtitleR] at (3.45,2.82) {从 layer-wise budget 延伸到 pair-wise budget};
+    \node[titleR] at (3.45,3.28) {接口扩展};
+    \node[subtitleR] at (3.45,2.88) {只定义 K/V 角色预算接口，不作为主实证策略};
 
-    \node[sandcard] (shared) at (3.45,1.82)
-      {角色条件化 readout\\[2pt]$(s_K^{(l)},\ s_V^{(l)})$};
+    \node[sandcard] (shared) at (3.45,1.86)
+      {可选角色条件化 readout\\[2pt]$(s_K^{(l)},\ s_V^{(l)})$};
 
-    \node[branchL] (sk) at (2.08,-0.22)
-      {$S_K$\\[2pt]role-aware\\Key readout};
-    \node[branchR] (sv) at (4.82,-0.22)
-      {$S_V$\\[2pt]role-aware\\Value readout};
+    \node[branchL] (sk) at (2.08,-0.08)
+      {$S_K$\\[2pt]Key budget\\interface};
+    \node[branchR] (sv) at (4.82,-0.08)
+      {$S_V$\\[2pt]Value budget\\interface};
 
-    \node[branchL] (pk) at (2.08,-2.00)
-      {$\mathcal P_K$\\[2pt]Key protection\\mask};
-    \node[branchR] (pv) at (4.82,-2.00)
-      {$\mathcal P_V$\\[2pt]Value protection\\mask};
+    \node[branchL] (pk) at (2.08,-1.92)
+      {$\mathcal P_K$\\[2pt]Key mask};
+    \node[branchR] (pv) at (4.82,-1.92)
+      {$\mathcal P_V$\\[2pt]Value mask};
 
     \node[redcard] (pair) at (3.45,-3.58)
-      {pair-wise bit budget\\[2pt]$\mathbf b^{(l)}=(b_K^{(l)},\,b_V^{(l)})$};
+      {pair-wise budget\\interface\\[2pt]$\mathbf b^{(l)}=(b_K^{(l)},\,b_V^{(l)})$};
 
-    \coordinate (split) at (3.45,0.72);
-    \coordinate (merge) at (3.45,-2.86);
+    \coordinate (split) at (3.45,0.82);
+    \coordinate (merge) at (3.45,-2.78);
 
     \draw[arr] (shared.south) -- (split);
     \draw[arr] (split) -- (sk.north);
@@ -139,6 +139,6 @@
     \draw[arr] (merge) -- (pair.north);
 
   \end{tikzpicture}
-  \caption{行为敏感度画像到预算分配的两级流程：逐层分配与角色扩展。左半部分给出从 artifact-based readout 到排序、再到 top-$k$ 保护集合与 layer-wise bit vector 的生成链；右半部分说明相同框架如何自然扩展到 K/V 角色感知预算接口。}
+  \caption{行为敏感度画像到预算分配的两级流程：逐层主线与角色预算接口。左半部分给出本文主线实证使用的逐层分配链路，从 artifact-based readout 到排序、top-$k$ 保护集合与 layer-wise bit vector；右半部分只说明相同框架可以扩展到 K/V 角色预算接口，不构成本文已经完整验证的独立 role-aware allocator。}
   \label{fig:ch3-allocation-flow}
 \end{figure}

@@ -968,3 +968,46 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - LaTeX 仍有既有 underfull/overfull 布局 warning；本轮未处理表格排版。
 - Commit: <pending>
+
+### 2026-04-26 11:12 | Thesis Figure and Table Boundary Sweep
+- Goal:
+  - 先处理用户反馈中的图表与术语边界问题：统一 `INT8 基准路径`，清除可见 RQ 编号残留，重构第三章关键流程图，修正第三章与第四章表格职责和版面问题。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `thesis/chapters/ch4_experiments.tex`
+  - `thesis/figures/fig_ch3_allocator_flow.tex`
+  - `thesis/figures/fig_ch3_calibration_workflow.tex`
+  - `thesis/figures/fig_ch3_framework_shared_profile.tex`
+  - `thesis/figures/fig_ch3_kv_diag_needle.tex`
+  - `thesis/tables/table_ch3_calibration_interfaces.tex`
+  - `thesis/tables/table_ch3_path_instantiation.tex`
+  - `thesis/tables/table_ch3_runtime_paths.tex`
+  - `iteration.md`
+- Commands:
+  - `latexmk -pdf main.tex`
+  - `pdftotext -layout thesis/main.pdf - | awk ...`
+  - `pdftoppm -png -r 150 -f 34 -l 34 thesis/main.pdf /tmp/thesis_figcheck/page`
+  - `pdftoppm -png -r 150 -f 35 -l 35 thesis/main.pdf /tmp/thesis_figcheck/page`
+  - `pdftoppm -png -r 150 -f 40 -l 40 thesis/main.pdf /tmp/thesis_figcheck/page`
+  - `pdftoppm -png -r 150 -f 42 -l 42 thesis/main.pdf /tmp/thesis_figcheck/page`
+  - `pdftoppm -png -r 150 -f 73 -l 73 thesis/main.pdf /tmp/thesis_figcheck/page`
+  - `git diff --check`
+  - `rg -n "INT8 规范路径|规范路径" thesis/chapters thesis/figures thesis/tables -g '*.tex'`
+  - `rg -n "\bRQ[123]\b|RQ1--RQ3|RQ1–RQ3" thesis/chapters thesis/figures thesis/tables -g '*.tex'`
+- Outputs:
+  - 图 3-2 改为压缩诊断图，明确 Qwen 系列支持 Key-first 动机，同时保留 LLaMA-3.1-8B 的架构例外；未把 RULER/LongBench 面板硬塞进第三章。
+  - 图 3-3 与图 3-4 重构为更干净的框架/校准流程图；图 3-4 明确 K-path 使用 attention-distribution KL，V-path 使用输出扰动代理。
+  - 图 3-6 改为“逐层主线 + K/V 角色预算接口”，不再把未完整验证的 role-aware allocator 画成主结果。
+  - 表 3-1 删除冗余“后续”列；表 3-2 与表 3-3 降低重复，表 3-3 改为设计边界表；表 4-13 收紧为可读的双面板部署边界表。
+  - `main.pdf` generated successfully, 108 pages.
+- Validation:
+  - `latexmk -pdf main.tex` passed; no LaTeX fatal error.
+  - Rendered and inspected pages containing 图 3-4 / 表 3-1, 表 3-2, 表 3-3, 图 3-6, 表 4-13; no visible text overlap remained in the touched figure/table pages.
+  - `git diff --check` passed.
+  - Hard grep for `INT8 规范路径` / `规范路径` returned no matches in active thesis chapters, figures, or tables.
+  - Hard grep for visible `RQ1/RQ2/RQ3` returned no matches in active thesis chapters, figures, or tables.
+- Risks / follow-ups:
+  - 本轮未做参考文献逐条重验。
+  - 未清理未挂载的历史图表文件；后续仍需单独做一次 figure/table inventory，避免旧 RoleAlign/KL 或 canonical-path 口径在遗留文件中反流。
+  - Chapter 3 的图表视觉已经能进正文，但若后续统一整本论文图形风格，还应做一次全图色彩与线宽一致性 sweep。
+- Commit: <pending>

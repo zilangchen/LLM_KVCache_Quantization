@@ -4,136 +4,62 @@
     x=1cm, y=1cm,
     >=Stealth,
     every node/.style={font=\rmfamily\small, align=center, text=black},
-    arr/.style={-stealth, line width=1.15pt, draw=black!82},
-    panelL/.style={
-      rectangle, rounded corners=6pt,
-      draw=blue!58!black, line width=1.05pt,
-      fill=blue!6,
-      minimum width=3.55cm, minimum height=7.25cm
+    arr/.style={-stealth, line width=0.95pt, draw=black!76},
+    stage/.style={
+      rectangle, rounded corners=3.5pt,
+      draw=black!62, line width=0.9pt,
+      fill=white,
+      text width=2.75cm, minimum height=1.12cm, inner sep=5pt
     },
-    panelM/.style={
-      rectangle, rounded corners=6pt,
-      draw=red!54!black, line width=1.05pt,
-      fill=red!4,
-      minimum width=4.95cm, minimum height=7.25cm
+    ref/.style={stage, draw=blue!58!black, fill=blue!5},
+    cand/.style={stage, draw=orange!72!black, fill=orange!8, text width=3.05cm},
+    select/.style={stage, draw=red!58!black, fill=red!5, text width=2.95cm},
+    outcard/.style={stage, draw=cyan!58!black, fill=cyan!7, text width=3.00cm},
+    role/.style={
+      rectangle, rounded corners=3pt,
+      draw=black!55, line width=0.75pt,
+      fill=gray!4,
+      text width=2.25cm, minimum height=0.72cm, inner sep=3pt,
+      font=\footnotesize
     },
-    panelR/.style={
-      rectangle, rounded corners=6pt,
-      draw=orange!72!black, line width=1.05pt,
-      fill=orange!6,
-      minimum width=3.85cm, minimum height=7.25cm
-    },
-    banner/.style={
-      rectangle, rounded corners=6pt,
-      draw=orange!48!black, line width=1.05pt,
-      fill=orange!12,
-      text width=13.05cm, minimum height=1.0cm, inner sep=6pt
-    },
-    refcard/.style={
-      rectangle, rounded corners=4.5pt,
-      draw=blue!58!black, line width=0.95pt,
-      fill=blue!11,
-      text width=2.8cm, minimum height=0.9cm, inner sep=4pt
-    },
-    pathcardA/.style={
-      rectangle, rounded corners=4.5pt,
-      draw=blue!55!black, line width=0.95pt,
-      fill=blue!10,
-      text width=4.05cm, minimum height=1.08cm, inner sep=5pt,
-      font=\rmfamily\footnotesize
-    },
-    pathcardB/.style={
-      rectangle, rounded corners=4.5pt,
-      draw=orange!68!black, line width=0.95pt,
-      fill=orange!12,
-      text width=4.05cm, minimum height=1.08cm, inner sep=5pt,
-      font=\rmfamily\footnotesize
-    },
-    rolebox/.style={
-      rectangle, rounded corners=5pt,
-      draw=red!48!black, line width=0.95pt,
-      fill=red!5,
-      text width=4.35cm, minimum height=2.65cm, inner sep=5pt
-    },
-    kcard/.style={
-      rectangle, rounded corners=4pt,
-      draw=cyan!58!black, line width=0.9pt,
-      fill=cyan!12,
-      text width=1.65cm, minimum height=1.0cm, inner sep=4pt,
-      font=\rmfamily\footnotesize
-    },
-    vcard/.style={
-      rectangle, rounded corners=4pt,
-      draw=orange!70!black, line width=0.9pt,
-      fill=orange!13,
-      text width=1.65cm, minimum height=1.0cm, inner sep=4pt,
-      font=\rmfamily\footnotesize
-    },
-    selectcard/.style={
-      rectangle, rounded corners=4.5pt,
-      draw=red!52!black, line width=1.0pt,
-      fill=red!8,
-      text width=2.95cm, minimum height=0.95cm, inner sep=5pt
-    },
-    outcardA/.style={
-      rectangle, rounded corners=4.5pt,
-      draw=orange!65!black, line width=0.95pt,
-      fill=orange!10,
-      text width=2.95cm, minimum height=0.95cm, inner sep=4pt,
-      font=\rmfamily\footnotesize
-    },
-    outcardB/.style={
-      rectangle, rounded corners=4.5pt,
-      draw=blue!48!black, line width=0.95pt,
-      fill=blue!10,
-      text width=2.95cm, minimum height=0.95cm, inner sep=4pt,
-      font=\rmfamily\footnotesize
-    },
-    footnote/.style={
-      rectangle, rounded corners=6pt,
-      draw=orange!45!black, line width=0.95pt,
-      fill=orange!7,
-      text width=13.05cm, minimum height=1.02cm, inner sep=6pt
+    note/.style={
+      rectangle, rounded corners=3.5pt,
+      draw=black!45, line width=0.8pt,
+      fill=gray!6,
+      text width=11.5cm, minimum height=0.78cm, inner sep=5pt,
+      font=\footnotesize
     }
   ]
 
-    \node[banner] (goal) at (0,4.95) {\textbf{统一目标：在量化前后维持 Attention Behavior 的表现}};
+    \node[font=\bfseries\large] at (0,3.25) {行为引导离线校准工作流};
 
-    \node[panelL] (leftpanel) at (-4.95,0.55) {};
-    \node[font=\bfseries\small] at (-4.95,3.10) {输入与参考行为};
+    \node[ref] (data) at (-4.95,1.65)
+      {\textbf{校准样本}\\FP16 前向记录\\attention distribution\\与输出响应};
 
-    \node[refcard] (data) at (-4.95,1.72) {校准样本集};
-    \node[refcard] (trace) at (-4.95,-0.48) {FP16 前向参考\\Attention\\distribution\\与输出响应};
+    \node[cand] (paths) at (-1.55,1.65)
+      {\textbf{路径候选}\\INT8 基准路径\\对称 INT4 试探路径\\INT4-RoleAlign};
 
-    \draw[arr] (data.south) -- (trace.north);
+    \node[select] (select) at (1.95,1.65)
+      {\textbf{稳健选择}\\可行域约束\\尾部坏例优先\\裁剪率检查};
 
-    \node[panelM] (midpanel) at (0.0,0.55) {};
-    \node[font=\bfseries\small] at (0.0,3.10) {路径化候选与行为代理};
+    \node[outcard] (artifact) at (5.25,1.65)
+      {\textbf{离线输出}\\路径特定产物\\共享行为读数\\在线只读接口};
 
-    \node[pathcardA] (int8) at (0.0,2.00) {\textbf{INT8 规范路径}\\参数：$p_c,\ g,\ m$\\代理：Attention KL};
-    \node[pathcardB] (int4sym) at (0.0,0.45) {\textbf{对称 INT4 试探路径}\\参数：$p_c,\ g$\\代理：Attention KL};
+    \draw[arr] (data.east) -- (paths.west);
+    \draw[arr] (paths.east) -- (select.west);
+    \draw[arr] (select.east) -- (artifact.west);
 
-    \node[rolebox] (rolealign) at (0.0,-1.74) {};
-    \node[font=\bfseries\small] at (0.0,-0.87) {INT4-RoleAlign};
-    \node[kcard] (kpath) at (-1.06,-2.32) {\textbf{K-path}\\$p_K$\\Attention KL};
-    \node[vcard] (vpath) at (1.06,-2.32) {\textbf{V-path}\\$p_V$\\输出扰动代理};
+    \node[role] (kpath) at (-2.78,-0.48)
+      {K-path\\attention-distribution KL};
+    \node[role] (vpath) at (-0.28,-0.48)
+      {V-path\\输出扰动代理};
+    \draw[arr, draw=orange!72!black] ([xshift=-0.70cm]paths.south) -- (kpath.north);
+    \draw[arr, draw=orange!72!black] ([xshift=0.70cm]paths.south) -- (vpath.north);
 
-    \node[panelR] (rightpanel) at (5.15,0.55) {};
-    \node[font=\bfseries\small] at (5.15,3.10) {稳健选择与离线产物};
-
-    \node[selectcard] (select) at (5.15,1.92) {\textbf{稳健选择纪律}\\可行域约束 + 尾部稳健优先};
-    \node[outcardA] (artifact) at (5.15,-0.10) {\textbf{路径特定校准产物}\\scale / zero-point / percentile / metadata};
-    \node[outcardB] (readout) at (5.15,-2.30) {\textbf{共享行为统计读数}\\供第 3.6 节分配层读取};
-
-    \coordinate (midin) at (-2.60,-0.48);
-    \coordinate (midout) at (2.65,1.92);
-
-    \draw[arr] (trace.east) -- (midpanel.west |- midin);
-    \draw[arr] (midpanel.east |- midout) -- (select.west);
-    \draw[arr] (int8.south) -- (int4sym.north);
-    \draw[arr] (int4sym.south) -- (rolealign.north);
+    \node[note] at (0,-1.83)
+      {统一的是离线流程、产物接口与稳健选择纪律；不同路径可以使用不同参数家族与行为代理，RoleAlign 不被写成单一 KL 分数统一选择 $(p_K,p_V)$。};
 
   \end{tikzpicture}
-  \caption{行为引导离线校准的统一工作流。统一的是离线校准 workflow、产物接口与稳健选择纪律；不同路径的差异体现在参数接口与行为代理上。对于 INT4-RoleAlign，Key 路径以 attention-distribution KL 为主代理，Value 路径以输出扰动代理为主代理。}
+  \caption{行为引导离线校准的统一工作流。输入侧提取 FP16 参考行为，候选侧按路径组织参数空间，选择侧执行可行域约束与尾部稳健优先，输出侧冻结为路径特定校准产物与共享行为读数。对于 INT4-RoleAlign，Key 路径以 attention-distribution KL 为主代理，Value 路径以输出扰动代理为主代理。}
   \label{fig:ch3-calibration-workflow}
 \end{figure}

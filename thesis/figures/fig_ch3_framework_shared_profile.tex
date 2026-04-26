@@ -1,98 +1,91 @@
 \begin{figure}[!htbp]
   \centering
   \begin{tikzpicture}[
+    x=1cm, y=1cm,
+    >=Stealth,
     every node/.style={font=\rmfamily\small, align=center, text=black},
-    arr/.style={-stealth, line width=1.1pt, draw=black!82},
-    principle/.style={
-      rectangle, rounded corners=5pt,
-      draw=orange!45!black, line width=1.0pt,
-      fill=orange!11,
-      text width=12.35cm, minimum height=1.1cm, inner sep=6pt
+    arr/.style={-stealth, line width=0.95pt, draw=black!76},
+    goal/.style={
+      rectangle, rounded corners=3.5pt,
+      draw=blue!58!black, line width=0.95pt,
+      fill=blue!5,
+      text width=11.9cm, minimum height=0.92cm, inner sep=5pt
     },
-    core/.style={
-      rectangle, rounded corners=5pt,
-      draw=blue!52!black, line width=1.0pt,
-      fill=blue!10,
-      text width=6.9cm, minimum height=1.9cm, inner sep=6pt
-    },
-    branch/.style={
+    profile/.style={
       rectangle, rounded corners=4pt,
-      draw=black!74, line width=0.95pt,
-      fill=black!3,
-      text width=4.95cm, minimum height=1.75cm, inner sep=6pt
+      draw=gray!62, line width=0.95pt,
+      fill=gray!5,
+      text width=8.1cm, minimum height=1.18cm, inner sep=6pt
     },
-    lchip/.style={
-      rectangle, rounded corners=5pt,
-      draw=blue!35!black, line width=0.8pt,
-      fill=blue!6,
-      minimum height=0.88cm, inner sep=4pt,
-      text width=2.2cm,
+    lane/.style={
+      rectangle, rounded corners=4pt,
+      draw=black!64, line width=0.9pt,
+      fill=white,
+      text width=5.45cm, minimum height=1.48cm, inner sep=6pt
+    },
+    chipA/.style={
+      rectangle, rounded corners=3pt,
+      draw=cyan!58!black, line width=0.8pt,
+      fill=cyan!8,
+      text width=1.80cm, minimum height=0.68cm, inner sep=3pt,
       font=\footnotesize
     },
-    rchip/.style={
-      rectangle, rounded corners=5pt,
-      draw=orange!38!black, line width=0.8pt,
-      fill=orange!7,
-      minimum height=0.88cm, inner sep=4pt,
-      text width=2.15cm,
+    chipB/.style={
+      rectangle, rounded corners=3pt,
+      draw=orange!72!black, line width=0.8pt,
+      fill=orange!10,
+      text width=1.90cm, minimum height=0.68cm, inner sep=3pt,
       font=\footnotesize
     },
-    footer/.style={
-      rectangle, rounded corners=5pt,
-      draw=black!68, line width=0.95pt,
+    deploy/.style={
+      rectangle, rounded corners=3.5pt,
+      draw=black!64, line width=0.9pt,
       fill=gray!7,
-      text width=10.7cm, minimum height=1.0cm, inner sep=5pt
+      text width=10.9cm, minimum height=0.92cm, inner sep=5pt
     }
   ]
-    \node[principle] (goal) at (0,4.95) {\textbf{统一目标：在量化前后维持 Attention Behavior 的表现}\\
-      \footnotesize 校准与分配共同服务于这一目标，后续路径实例与系统落地也都围绕这一目标组织};
 
-    \node[core] (profile) at (0,2.85) {\textbf{共享行为敏感度画像 $S$}\\
-      \footnotesize 由同一离线校准链路形成的逐层敏感度读数\\
-      \footnotesize 共享的是离线来源与行为组织原则，而不是单一评分函数};
+    \node[goal] (goal) at (0,3.75)
+      {\textbf{目标：保持量化前后的注意力行为}\\[-1pt]
+      \footnotesize 关注分布侧与聚合侧共同诱导的功能偏移，而不是孤立张量距离};
 
-    \node[branch] (calib) at (-4.25,0.55) {\textbf{校准层：决定如何量化}\\
-      \footnotesize 搜索路径相关参数\\
-      \footnotesize 固化为离线校准产物};
-    \node[branch] (alloc) at (4.25,0.55) {\textbf{分配层：决定哪里优先保护}\\
-      \footnotesize 读取同源敏感度读数\\
-      \footnotesize 输出预算决策与 AutoK 建议};
+    \node[profile] (profile) at (0,2.05)
+      {\textbf{行为敏感度画像 $\mathcal S$}\\[-1pt]
+      \footnotesize 来自同一离线校准链路的逐层读数；共享的是来源、接口与选择纪律，不是一个全路径通用的单值评分};
 
-    \node[lchip, text width=1.95cm] (int8) at (-6.35,-1.7) {INT8\\规范路径};
-    \node[lchip, text width=2.2cm] (int4sym) at (-3.95,-1.7) {对称 INT4\\试探路径};
-    \node[lchip, text width=2.55cm] (rolealign) at (-1.2,-1.7) {INT4-RoleAlign};
+    \node[lane, draw=cyan!58!black, fill=cyan!4] (calib) at (-3.25,0.05)
+      {\textbf{校准层：如何量化}\\[-1pt]
+      \footnotesize 搜索路径相关参数，生成冻结的离线校准产物};
 
-    \node[rchip, text width=2.55cm] (bak) at (2.55,-1.7) {BA-k /\\Heuristic-k};
-    \node[rchip, text width=1.75cm] (autok) at (5.25,-1.7) {AutoK};
+    \node[lane, draw=orange!72!black, fill=orange!6] (alloc) at (3.25,0.05)
+      {\textbf{分配层：哪里优先保护}\\[-1pt]
+      \footnotesize 读取同源画像，输出逐层预算与 AutoK 建议};
 
-    \node[footer] (deploy) at (0,-3.72) {\textbf{部署闭环：离线形成产物，在线读取执行}\\
-      \footnotesize 系统层负责把前两层决策固化为可部署、可复现、可审计的推理接口};
+    \node[chipA] (int8) at (-5.00,-1.48) {INT8\\基准路径};
+    \node[chipA] (sym4) at (-3.05,-1.48) {对称 INT4\\试探路径};
+    \node[chipA] (ra) at (-1.02,-1.48) {INT4\\RoleAlign};
 
-    \coordinate (splitL) at (-4.25,-0.55);
-    \coordinate (splitR) at (4.25,-0.55);
-    \coordinate (footerL) at (-2.1,-3.05);
-    \coordinate (footerR) at (2.1,-3.05);
-    \coordinate (bridgeL1) at (-1.9,1.55);
-    \coordinate (bridgeL2) at (-3.05,1.55);
-    \coordinate (bridgeR1) at (1.9,1.55);
-    \coordinate (bridgeR2) at (3.05,1.55);
+    \node[chipB] (bak) at (2.35,-1.48) {BA-$k$ /\\Heuristic-$k$};
+    \node[chipB] (autok) at (4.72,-1.48) {AutoK};
+
+    \node[deploy] (deploy) at (0,-3.05)
+      {\textbf{系统接口：离线产物，在线只读执行}\\[-1pt]
+      \footnotesize 第三章只定义接口与实现语义；速度、显存和交叉边界留到第四章验证};
 
     \draw[arr] (goal.south) -- (profile.north);
-    \draw[arr] ([xshift=-1.15cm]profile.south) -- (bridgeL1) -- (bridgeL2) -- (calib.north);
-    \draw[arr] ([xshift=1.15cm]profile.south) -- (bridgeR1) -- (bridgeR2) -- (alloc.north);
+    \draw[arr] ([xshift=-1.35cm]profile.south) |- (calib.north);
+    \draw[arr] ([xshift=1.35cm]profile.south) |- (alloc.north);
 
-    \draw[arr] (calib.south) -- (splitL);
-    \draw[arr] (splitL) -- (int8.north);
-    \draw[arr] (splitL) -- (int4sym.north);
-    \draw[arr] (splitL) -- (rolealign.north);
+    \draw[arr] (calib.south) -- ++(0,-0.38) -| (int8.north);
+    \draw[arr] (calib.south) -- ++(0,-0.38) -| (sym4.north);
+    \draw[arr] (calib.south) -- ++(0,-0.38) -| (ra.north);
 
-    \draw[arr] (alloc.south) -- (splitR);
-    \draw[arr] (splitR) -- (bak.north);
-    \draw[arr] (splitR) -- (autok.north);
+    \draw[arr] (alloc.south) -- ++(0,-0.38) -| (bak.north);
+    \draw[arr] (alloc.south) -- ++(0,-0.38) -| (autok.north);
 
-    \draw[arr] (rolealign.south) -- ++(0,-0.7) -| (footerL) -- (deploy.north west);
-    \draw[arr] (autok.south) -- ++(0,-0.7) -| (footerR) -- (deploy.north east);
+    \draw[arr] (ra.south) -- ++(0,-0.45) -| ([xshift=-2.0cm]deploy.north);
+    \draw[arr] (autok.south) -- ++(0,-0.45) -| ([xshift=2.0cm]deploy.north);
   \end{tikzpicture}
-  \caption{行为引导量化框架总览：校准与分配共享同一行为敏感度画像。图中强调共享的是离线来源与行为组织原则，校准层回答“如何量化”，分配层回答“哪里优先保护”；系统层则将前两者固化为离线产物与在线执行接口。}
+  \caption{行为引导量化框架总览：校准与分配共享同一行为敏感度画像。校准层回答“如何量化”，分配层回答“哪里优先保护”；两者共享离线来源、产物接口与稳健选择纪律，但不要求所有路径使用同一个数值评分函数。}
   \label{fig:ch3-framework-shared-profile}
 \end{figure}

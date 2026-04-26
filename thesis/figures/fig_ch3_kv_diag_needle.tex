@@ -13,16 +13,16 @@
       },
       bluebox/.style={boxbase, fill=blue!10},
       redbox/.style={boxbase, fill=red!10, draw=black!90, line width=1.0pt},
-      yellowbox/.style={boxbase, fill=yellow!16},
-      greenbox/.style={boxbase, fill=green!10}
+      orangebox/.style={boxbase, fill=orange!10, draw=orange!72!black},
+      cyanbox/.style={boxbase, fill=cyan!8, draw=cyan!58!black}
     ]
       \node[font=\bfseries\small, text=black] at (0,4.35) {启示链};
 
       \node[bluebox] (s1) at (0,3.15) {\textbf{问题不在“量化本身”}\\\texttt{FP16}、\texttt{K8V8} 与 \texttt{K8V4}\\都维持可用行为};
-      \node[yellowbox] (s2) at (0,1.15) {\textbf{同预算关键对照是}\\\texttt{K8V4} 与 \texttt{K4V8}\\而不是旧的单侧控制项};
-      \node[redbox] (s3) at (0,-0.85) {\textbf{4-bit 落在 Key 上先触发 cliff}\\\texttt{K4V8} 在 Qwen 系列直接失稳};
-      \node[bluebox] (s4) at (0,-2.85) {\textbf{\texttt{K4V4} 与 \texttt{K4V8} 同向坍塌}\\说明主导触发侧是 Key，\\而不是 Value};
-      \node[greenbox] (s5) at (0,-4.95) {\textbf{设计升级}\\从 bit-layout 诊断过渡到\\Key 优先保护的 \texttt{RoleAlign}};
+      \node[orangebox] (s2) at (0,1.15) {\textbf{同预算角色对照}\\\texttt{K8V4} 与 \texttt{K4V8}\\锁定 4-bit 落点};
+      \node[redbox] (s3) at (0,-0.85) {\textbf{Qwen 系列：Key 侧触发 cliff}\\\texttt{K4V8} 与 \texttt{K4V4}\\在 Needle 上直接失稳};
+      \node[bluebox] (s4) at (0,-2.85) {\textbf{LLaMA-3.1-8B 是结构例外}\\不能把 cliff 写成\\所有模型同强度规律};
+      \node[cyanbox] (s5) at (0,-4.95) {\textbf{低比特设计约束}\\优先保护 Key，\\同时保留架构差异};
 
       \draw[arr] (s1.south) -- (s2.north);
       \draw[arr] (s2.south) -- (s3.north);
@@ -100,7 +100,7 @@
 
       \coordinate (u41) at (1.87,18);
       \coordinate (u42) at (4.17,18);
-      \coordinate (u43) at (6.47,103);
+      \coordinate (u43) at (6.47,101.3);
 
       \draw[black, line width=1.55pt] (fp1)--(fp2)--(fp3);
       \filldraw[black] (fp1) circle (2.25pt) (fp2) circle (2.25pt) (fp3) circle (2.25pt);
@@ -122,9 +122,11 @@
       \node[font=\tiny, text=cfgRed!92!black, fill=white, inner sep=1.0pt] at (4.02,23.5) {0};
       \node[font=\tiny, text=cfgGold!92!black, fill=white, inner sep=1.0pt] at (1.88,23.5) {0};
       \node[font=\tiny, text=cfgGold!92!black, fill=white, inner sep=1.0pt] at (4.18,23.5) {0};
+      \node[font=\tiny, text=cfgGold!92!black, fill=white, inner sep=1.0pt] at (6.53,97.0) {98};
+      \node[font=\tiny, align=center, text=black!66] at (6.15,112.0) {结构例外\\不作同强度外推};
 
     \end{tikzpicture}
   \end{minipage}
-  \caption{K/V 量化敏感性不对称的压缩版诊断与设计启示。左侧将 bit-layout 视角下的角色诊断收束为设计启示链；右侧以同口径 Needle 通过率给出五配置对照：\texttt{FP16} 与 \texttt{K8V8} 构成未量化与高精度量化参考，\texttt{K8V4} 与 \texttt{K4V8} 构成同平均 bit 预算下的角色对照，而 \texttt{K4V4} 提供对称低比特坍塌锚点。}
+  \caption{K/V 量化敏感性不对称的压缩版诊断与设计启示。左侧将 bit-layout 视角下的角色诊断收束为低比特设计约束；右侧只展示同口径 Needle 压缩视图：\texttt{FP16} 与 \texttt{K8V8} 构成参考，\texttt{K8V4} 与 \texttt{K4V8} 构成同平均 bit 预算下的角色对照，\texttt{K4V4} 提供对称低比特锚点。Qwen 系列上的坍塌支持 Key-first protection 的设计动机，LLaMA-3.1-8B 的剩余通过率则标明该现象存在架构例外；完整 RULER 与 LongBench-style 证据留在第四章展开。}
   \label{fig:ch3-kv-asymmetry}
 \end{figure}
