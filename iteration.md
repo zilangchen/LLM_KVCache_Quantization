@@ -1107,3 +1107,34 @@ Canonical agent workflow directory is `.agents/`.
   - Appendix 仍保留部分可复现审计用内部命名与源码路径；下一轮应单独做 appendix 内部命名清理计划。
   - 根目录旧 `main.log` 仍未处理；有效编译日志为 `thesis/main.log`。
 - Commit: <pending>
+
+### 2026-04-26 18:32 | M3 Appendix Internal Identifier Cleanup
+- Goal:
+  - 清理附录中的工程文件名、后台程序命名、具体源码路径与内部结果标识，保留论文级审计语义和可复现映射，不改变正文主张。
+- Changed files:
+  - `thesis/chapters/appendix.tex`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/appendix.tex`
+  - `rg -n 'kv_calib|\.json|src/|scripts/|results/|artifacts/|artifact|Calib 文件|文件对应关系|文件落点|结果目录|命令行|配置文件|backend|pin=|ddada19|clean-provenance|REPRODUCE\.md|RoleAlign v3|内部字符串' thesis/chapters/appendix.tex`
+  - `xelatex -interaction=nonstopmode main.tex`
+  - `rg -n 'Undefined|undefined|There were undefined references|Rerun to get cross-references|Label\(s\) may have changed|LaTeX Error|Citation.*undefined|Warning: Citation|Font Warning' thesis/main.log`
+  - `pdfinfo thesis/main.pdf | rg Pages`
+  - `rg -n '(sec:app-kv-modes|sec:app-invtau-diagnostic|sec:app-triton-variants|tab:app-7b-kl-mse)' thesis/main.aux`
+- Outputs:
+  - A.3 将具体复现文件名改为论文级“冻结复现入口与编号化复现清单”表述。
+  - A.4 将校准产物描述改为“小型结构化校准记录”，并保留模型标识、样本数、seed、目标函数与量化格式等审计字段。
+  - A.5 明确正文叙事名优先，复现配置标识仅用于审计映射。
+  - A.18 去除具体校准文件名，改用稳定记录别名，同时保留 7B KL/MSE 数值与表格引用。
+  - A.19 去除具体源码路径和后端命名，改为论文级实现别名与功能说明。
+  - `main.pdf` generated successfully, 108 pages.
+- Validation:
+  - 两轮只读 Agent 审查完成；最终无 P1/P2/P3 阻断问题。
+  - `git diff --check -- thesis/chapters/appendix.tex` passed.
+  - 内部工程命名、文件路径、provenance leak 与后台命名扫描为 0 命中。
+  - `thesis/main.log` 无 undefined refs/cits、rerun warning、LaTeX Error 或 Font Warning。
+  - `sec:app-kv-modes`、`sec:app-invtau-diagnostic`、`sec:app-triton-variants` 与 `tab:app-7b-kl-mse` 均在 `main.aux` 中存在。
+- Risks / follow-ups:
+  - 本轮只做内部命名清理，不压缩 A.7/A.8/A.10-A.13/A.17 等历史/系统补充材料。
+  - 后续 M4 应进入机制与系统补充重排，优先处理体量压缩和 A.14/A.16 合并。
+- Commit: <pending; planned `docs(appendix): remove internal engineering identifiers`>
