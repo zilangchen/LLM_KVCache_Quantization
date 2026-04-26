@@ -924,3 +924,23 @@ Canonical agent workflow directory is `.agents/`.
   - This round intentionally did not address figure/table redesign, reference revalidation, or appendix restructuring.
   - LaTeX still reports existing underfull/overfull layout warnings in several tables/paragraphs; not blocking this language cleanup round.
 - Commit: <pending>
+
+### 2026-04-26 10:48 | Prompt-Adaptive Appendix Condensation
+- Goal:
+  - 将 prompt-adaptive selector 附录从完整逐任务数据堆叠压缩为 future-work 起点说明，避免附录承担正文主结果职责。
+- Changed files:
+  - `thesis/chapters/appendix.tex`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/appendix.tex`
+  - `latexmk -pdf main.tex`
+- Outputs:
+  - 附录 prompt-adaptive 部分改为探索性补充：保留 LLaMA-3.1-8B 的 LCC 局部正向信号，并用三模型 summary 表说明 selector 后续设计空间。
+  - 删除原先冗长的 8B / Qwen 1.5B / Qwen 7B 逐任务完整表，降低附录与正文主证据之间的职责冲突。
+  - `main.pdf` generated successfully, 108 pages.
+- Validation:
+  - `git diff --check -- thesis/chapters/appendix.tex` passed.
+  - `latexmk -pdf main.tex` passed; no LaTeX fatal error.
+- Risks / follow-ups:
+  - LaTeX 仍有既有 underfull/overfull 布局 warning；本轮未处理表格排版。
+- Commit: <pending>
