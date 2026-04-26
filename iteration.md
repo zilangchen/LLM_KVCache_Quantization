@@ -1202,4 +1202,4 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - Some appendix anchors remain without direct正文 `\ref`; active compile is clean, but explicit Ch4 natural-language reference synchronization can be handled in a separate正文-sync plan.
   - `thesis/figures/fig_ch3_kv_diag_needle.tex` is dirty from unrelated work and was intentionally not staged.
-- Commit: `9d6206b` (`docs(appendix): consolidate mechanism and system supplements`)
+- Commit: `4619675` (`docs(appendix): consolidate mechanism and system supplements`)
