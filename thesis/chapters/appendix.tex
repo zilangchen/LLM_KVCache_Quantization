@@ -373,34 +373,6 @@ LongBench-style 综合评分在不同上下文长度下的关键读数。
 \end{table}
 
 % ============================================================
-\section{Needle-in-a-Haystack 深度-位置热力图}
-\label{sec:app-needle-heatmaps}
-% ============================================================
-
-图~\ref{fig:app-needle-depth-grid} 补充展示 Needle 任务的深度位置热力图。
-该图服务于正文第~\ref{subsec:ch4-int4-cliff}~节的 cliff pattern：
-它说明在当前热力图覆盖设置下，对称 INT4 的退化主要在长上下文与深层 needle 位置上被放大，
-并为附录第~\ref{sec:app-int4-mechanism-boundary}~节中的噪声--长度推导提供可视化背景。
-
-\begin{figure}[!htbp]
-  \centering
-  \includegraphics[width=\textwidth]{figures/needle_depth_grid.pdf}
-  \caption{Needle-in-a-Haystack 深度-位置热力图总览。
-  四个面板分别对应 4K、8K、16K 和 32K，并共享同一色标。
-  该图用于定位 INT4 退化在上下文长度和 needle 深度上的放大位置，
-  不替代正文的主表结论。}
-  \label{fig:app-needle-depth-grid}
-\end{figure}
-
-精确匹配率（exact match）采用比通过率更严格的 Needle 判据，
-其趋势与图~\ref{fig:app-needle-depth-grid} 一致：
-FP16 在 4K--32K 均保持 100\%，INT8-Canonical 在 4K--16K 保持 100\%，
-并在 32K 端点给出约 70.3\% 的长上下文边界读数；
-对称 INT4 则在 4K 已显露边界，并在 8K 及以上区间构成长上下文边界对照。
-这些 exact-match 读数作为严格判据补充图~\ref{fig:app-needle-depth-grid}，
-不再作为独立视觉证据展开。
-
-% ============================================================
 \section{部署效率与批处理扩展补充}
 \label{sec:app-efficiency-plots}
 % ============================================================
@@ -488,10 +460,37 @@ FP16 在 4K--32K 均保持 100\%，INT8-Canonical 在 4K--16K 保持 100\%，
 \label{sec:app-int4-mechanism-boundary}
 % ============================================================
 
-本节按三层组织 INT4 相关补充材料：首先用 scale 精度敏感性读数排除
-“scale dtype 单点失误”解释；随后保留噪声--长度交互的近似推导，给出
+本节按四层组织 INT4 相关补充材料：首先用 Needle 深度--位置热力图给出
+long-context cliff 的可视化背景；随后用 scale 精度敏感性读数排除
+“scale dtype 单点失误”解释；第三部分保留噪声--长度交互的近似推导，给出
 32K 场景下 INT4 cliff 的机制直觉；最后用 chunk size 消融界定评估粒度和
-streaming-like 协议边界。第三部分只限定协议适用范围，不引入新的主机制结论。
+streaming-like 协议边界。最后一部分只限定协议适用范围，不引入新的主机制结论。
+
+\phantomsection
+\paragraph{Needle 深度--位置热力图补充。}
+\label{sec:app-needle-heatmaps}
+图~\ref{fig:app-needle-depth-grid} 补充展示 Needle 任务的深度位置热力图。
+该图服务于正文第~\ref{subsec:ch4-int4-cliff}~节的 cliff pattern：
+它说明在当前热力图覆盖设置下，对称 INT4 的退化主要在长上下文与深层 needle 位置上被放大，
+并为下文噪声--长度推导提供可视化背景。
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=\textwidth]{figures/needle_depth_grid.pdf}
+  \caption{Needle-in-a-Haystack 深度-位置热力图总览。
+  四个面板分别对应 4K、8K、16K 和 32K，并共享同一色标。
+  该图用于定位 INT4 退化在上下文长度和 needle 深度上的放大位置，
+  不替代正文的主表结论。}
+  \label{fig:app-needle-depth-grid}
+\end{figure}
+
+精确匹配率（exact match）采用比通过率更严格的 Needle 判据，
+其趋势与图~\ref{fig:app-needle-depth-grid} 一致：
+FP16 在 4K--32K 均保持 100\%，INT8-Canonical 在 4K--16K 保持 100\%，
+并在 32K 端点给出约 70.3\% 的长上下文边界读数；
+对称 INT4 则在 4K 已显露边界，并在 8K 及以上区间构成长上下文边界对照。
+这些 exact-match 读数作为严格判据补充图~\ref{fig:app-needle-depth-grid}，
+不再作为独立视觉证据展开。
 
 \paragraph{Scale 精度敏感性诊断。}
 \label{sec:app-eng066}

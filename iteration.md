@@ -36,6 +36,33 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-26 22:33 | docs(appendix): merge Needle supplement into INT4 mechanism appendix
+- Goal: 执行已批准的 Appendix P6，将 Needle 深度-位置热力图从独立附录降级并入 INT4 失稳机制附录，同时为部署效率补充材料增加正文反向引用。
+- Scope:
+  - `thesis/chapters/appendix.tex`
+  - `thesis/chapters/ch4_experiments.tex`
+- Changed files:
+  - A5 `Needle-in-a-Haystack 深度-位置热力图` 不再作为独立 `\section`，并入 A7/current A6 `INT4 失稳机制与评估粒度边界补充` 的开头机制背景块。
+  - 保留 `fig:app-needle-depth-grid` 与 exact-match 补充文字，并为 `sec:app-needle-heatmaps` 增加 paragraph anchor。
+  - 在 Ch4 部署效率节末尾增加对 `sec:app-efficiency-plots` 的轻量反向引用，限定为 Qwen2.5-1.5B 设置下的 batch 容量、吞吐与显存扩展补充审计。
+- Commands:
+  - `rg -n "\\section\\{Needle|fig:app-needle-depth-grid|sec:app-needle-heatmaps|sec:app-efficiency-plots" thesis/chapters/appendix.tex thesis/chapters/ch4_experiments.tex`
+  - `rg -n '附录 A\\.|附录 B\\.|Appendix A\\.|Appendix B\\.' thesis/chapters`
+  - `git diff --check -- thesis/chapters/appendix.tex thesis/chapters/ch4_experiments.tex`
+  - `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex && bibtex main && xelatex -interaction=nonstopmode -halt-on-error main.tex && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+  - `rg -i 'undefined|multiply defined|LaTeX Error|! ' thesis/main.log | head -20`
+  - `pdfinfo thesis/main.pdf | rg Pages`
+- Outputs:
+  - Appendix section count reduced from 11 to 10; A5 content now functions as the first mechanism-background block inside the INT4 mechanism appendix.
+  - Ch4 deployment section now points readers to A6/current A5 deployment supplement without changing deployment claims.
+  - `thesis/main.pdf` compiles to 105 pages.
+- Validation:
+  - Full LaTeX compile passed after regenerating auxiliary files; final `main.log` has no undefined refs/citations, multiply-defined labels, or LaTeX errors.
+  - 三路 Sub-agent 审查通过：结构与引用 PASS，正文一致性 PASS，附录功能 PASS；非阻断建议已采纳，包括 Qwen2.5-1.5B 限定与 paragraph anchor。
+- Risks / follow-ups:
+  - 当前工作树仍有外部 Ch4 图相关 dirty 项；本轮后续若提交，需要精确 staging，避免混入外部图改动。
+  - 本轮未提交；等待用户确认是否提交。
+
 ### 2026-04-26 22:12 | docs(appendix): replace low-value figures with compact text
 - Goal: 执行 Appendix P5，将三个低可视化必要性附录图改为紧凑表格或定稿文字说明，降低附录图密度并保留必要证据。
 - Scope:
