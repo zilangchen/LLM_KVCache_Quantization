@@ -1316,4 +1316,4 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - 当前 A.6 因保留三张图与一张批处理表，仍是较长的系统补充节；是否继续瘦身留到后续全局 Appendix 复盘。
   - 工作树存在 Ch4 图相关 dirty 项和外部 `iteration.md` 记录，本轮提交需精确 staging，不能混入。
-- Commit: pending
+- Commit: `8d89dc9` (`docs(appendix): group deployment and batch supplements`)
