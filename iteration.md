@@ -1081,3 +1081,29 @@ Canonical agent workflow directory is `.agents/`.
   - 当前工作树中 `thesis/chapters/ch4_experiments.tex`、`thesis/chapters/ch5_conclusion.tex` 已有外部/并行 dirty 改动，本轮提交不 stage 这些章节正文。
   - 若后续决定统一 citation key 命名，可单独把历史 key（如 `agarwal2025qerl`、`qwen2025qwen25`、`zhang2024h2o`）重命名；本轮只保证渲染出的参考文献内容准确。
 - Commit: <pending>
+
+### 2026-04-26 12:53 | Ch4/Ch5 LongBench Scope Patch
+- Goal:
+  - 处理 M2 审查后遗留的正文 P3：补正文 LongBench 引用、去除正文内部校准文件名、收紧 Ch5 官方 LongBench 对照外推口径。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `thesis/chapters/ch5_conclusion.tex`
+  - `iteration.md`
+- Commands:
+  - `xelatex -interaction=nonstopmode main.tex`
+  - `rg -n 'Undefined|undefined|There were undefined references|Rerun to get cross-references|Label\(s\) may have changed|LaTeX Error|Citation.*undefined|Warning: Citation' thesis/main.log`
+  - `rg -n 'kv_calib|ddada19|pin=|clean-provenance|排除了主文评测方向被系统性读错|系统性读错' thesis/chapters/ch4_experiments.tex thesis/chapters/ch5_conclusion.tex`
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex thesis/chapters/ch5_conclusion.tex`
+- Outputs:
+  - Ch4 官方 LongBench 数据集首次正文出现处补 `\cite{bai2024longbench}`。
+  - Ch4 7B KL/MSE 表注不再暴露内部校准 JSON 文件名，改为两组冻结的离线校准产物。
+  - Ch5 将官方 LongBench 对照表述收紧为“有限范围内的一致性证据”。
+  - `main.pdf` generated successfully, 108 pages.
+- Validation:
+  - `xelatex` rerun 后收敛；`thesis/main.log` 无 undefined refs/cits、rerun warning 或 LaTeX Error。
+  - Ch4/Ch5 内部校准 JSON 文件名和过强“系统性读错”措辞扫描为 0 命中。
+  - `git diff --check` passed.
+- Risks / follow-ups:
+  - Appendix 仍保留部分可复现审计用内部命名与源码路径；下一轮应单独做 appendix 内部命名清理计划。
+  - 根目录旧 `main.log` 仍未处理；有效编译日志为 `thesis/main.log`。
+- Commit: <pending>
