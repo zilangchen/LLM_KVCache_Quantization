@@ -1317,3 +1317,33 @@ Canonical agent workflow directory is `.agents/`.
   - 当前 A.6 因保留三张图与一张批处理表，仍是较长的系统补充节；是否继续瘦身留到后续全局 Appendix 复盘。
   - 工作树存在 Ch4 图相关 dirty 项和外部 `iteration.md` 记录，本轮提交需精确 staging，不能混入。
 - Commit: `8d89dc9` (`docs(appendix): group deployment and batch supplements`)
+
+### 2026-04-26 21:55 | P4 Appendix INT4 Mechanism and Robustness Grouping
+- Goal:
+  - 将 INT4 scale 敏感性、SQNR/长度推导与 chunk 粒度鲁棒性收束为同一个机制与协议边界附录节，同时保留 K/V 和 inv_tau 的独立正文引用落点。
+- Changed files:
+  - `thesis/chapters/appendix.tex`
+  - `.agents/execplans/20260426_2103_appendix_p4_int4_mechanism_robustness.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/appendix.tex .agents/execplans/20260426_2103_appendix_p4_int4_mechanism_robustness.md`
+  - `awk '/^\\section/ {if(sec) print start":"NR-1" "NR-start" lines  "sec; sec=$0; start=NR} END {print start":"NR" "NR-start+1" lines  "sec}' thesis/chapters/appendix.tex`
+  - `rg -n 'sec:app-sqnr-derivation|sec:app-int4-mechanism-boundary|附录第~\\ref\\{sec:app-sqnr-derivation\\}|附录第~\\ref\\{sec:app-int4-mechanism-boundary\\}' thesis/chapters/appendix.tex thesis/chapters/ch3_method.tex thesis/chapters/ch4_experiments.tex`
+  - `xelatex -interaction=nonstopmode -halt-on-error main.tex`
+  - `bibtex main`
+  - `xelatex -interaction=nonstopmode -halt-on-error main.tex`
+  - `xelatex -interaction=nonstopmode -halt-on-error main.tex`
+  - `rg -n 'Undefined|undefined|There were undefined references|Rerun to get cross-references|Label\(s\) may have changed|LaTeX Error|Overfull|invalid character|multiply defined' thesis/main.log`
+- Outputs:
+  - 原 A.7/A.9/A.10 收束为 `INT4 失稳机制与评估粒度边界补充`，附录 section 数从 13 个降到 11 个。
+  - `sec:app-eng066`、`sec:app-sqnr-derivation`、`sec:app-chunksize` 保留为 A.7 内部锚点。
+  - `sec:app-kv-ablation-full`、`sec:app-invtau-diagnostic` 与 `subsec:app-7b-kl-mse` 仍保持独立 section/subsection 落点。
+  - A.5 的 SQNR 交叉引用改为指向父级 A.7 section，避免 paragraph label 造成“第 X 节”语义不清。
+- Validation:
+  - LaTeX 完整编译通过，`thesis/main.pdf` 为 105 页。
+  - `thesis/main.log` 未发现 undefined refs/citations、rerun 提示、LaTeX Error、Overfull、invalid character 或 multiply defined。
+  - 多角度 Agent 审查完成：正文一致性 PASS、数据完整性 PASS、结构可读性 concern 已通过 roadmap/边界句回修、label/ref concern 已通过引用同步回修。
+- Risks / follow-ups:
+  - `sec:app-sqnr-derivation` 现在是 A.7 内部 paragraph 锚点；当前无正文直接 `\ref` 该锚点，后续若新增正文引用应优先指向 `sec:app-int4-mechanism-boundary`。
+  - 工作树仍存在 Ch4 图相关 dirty 项和外部 `iteration.md` 图修改记录，本轮提交需精确 staging，不能混入。
+- Commit: pending
