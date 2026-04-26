@@ -36,6 +36,37 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-26 20:07 | docs(appendix): group audit and configuration materials
+- Goal: 执行已批准的 Appendix P2，将 former A.1-A.6 从六个平级 section 收束为审计协议、代码标识映射、校准审计三个功能组。
+- Scope:
+  - `thesis/chapters/appendix.tex`
+  - `.agents/execplans/20260426_1959_appendix_p2_audit_config_grouping.md`
+- Changed files:
+  - former A.1-A.3 合并为 current A.1 `评测协议、环境与复现入口`，保留 PPL protocol、环境表、seed/greedy decoding、复现覆盖与校准样本数量说明。
+  - former A.5 改为 current A.2 `量化路径与代码标识映射`，明确只承担 `kv_mode` 复现审计映射职责。
+  - former A.4+A.6 合并为 current A.3 `校准产物与搜索空间审计`，保留 schema、search-space 表和 `inv_tau=None` 主线口径。
+  - 保留 former A.1-A.6 的全部 section/table label，并用 `\phantomsection` 维护降级 paragraph anchor。
+- Commands:
+  - `git diff --check -- thesis/chapters/appendix.tex`
+  - `rg -n 'sec:app-fp16-protocol|sec:app-ppl-baseline-matrix|sec:app-env|sec:app-reproduce|sec:app-calib-schema|sec:app-kv-modes|sec:app-calib-search-space|tab:app-ppl-baseline-matrix|tab:app-env|tab:ch3-kv-modes|tab:app-search-space' thesis/chapters/appendix.tex`
+  - `awk '/^\\section/ {if(sec) print NR-start-1" lines  "sec; sec=$0; start=NR} END {print NR-start" lines  "sec}' thesis/chapters/appendix.tex`
+  - `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+  - `rg -n 'Undefined|undefined|There were undefined references|Rerun to get cross-references|Label\(s\) may have changed|LaTeX Error|Citation.*undefined|Warning: Citation|Font Warning|Overfull|invalid character' thesis/main.log`
+  - `pdfinfo thesis/main.pdf | rg Pages`
+- Outputs:
+  - Appendix 前部从 6 个 section 收束为 3 个 section。
+  - `main.pdf` 生成成功，105 pages。
+  - P2 plan 文件因 `.gitignore` 默认忽略 `.agents/execplans/`，本轮使用显式路径 force-add 纳入审计。
+- Validation:
+  - 四个只读 Sub-agent review 完成：审计完整性 PASS，正文一致性 PASS，LaTeX label/ref PASS，结构读者体验 CONCERN 已在 Appendix 内修复。
+  - `git diff --check` 通过。
+  - `thesis/main.log` 未发现 undefined refs/cits、rerun warning、LaTeX Error、Font Warning、Overfull 或 invalid character。
+  - former A.1-A.6 的关键 labels 均可在 `thesis/main.aux` 中解析。
+- Risks / follow-ups:
+  - Ch4 当前存在图相关未提交 diff，本轮未 stage；因此没有把“正文额外指向 A.1 复现说明”的可选建议混入 P2。
+  - `docs/Chapter 4 Draft.md`、`thesis/chapters/ch4_experiments.tex`、`thesis/figures/ch4/fig_ch4_05_regime_heatmap.pdf` 与 `scripts/thesis/plot_ch4_regime_combined.py` 仍属图相关/外部 dirty，未纳入本轮提交。
+- Commit: pending
+
 ### 2026-04-26 19:55 | docs(appendix): merge LongBench and quality supplements
 - Goal: 执行已批准的 Appendix P1，合并 LongBench 补充、统计检验与质量趋势图材料，并同步正文对该补充组的定位。
 - Scope:
