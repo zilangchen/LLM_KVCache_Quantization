@@ -12,6 +12,21 @@
 - **Key modules**: `src/cache/`, `src/quant/`, `src/kernels/`, `src/engine/`, `scripts/`.
 - **Authoritative files**: `objective.md` (goals), `iteration.md` (progress), `review_tracker.md` (issues), `experiment_sop.md` (experiment protocol).
 
+### 1.1 Thesis Appendix Workflow
+
+When auditing, restructuring, merging, downgrading, deleting, or cross-reference-checking `thesis/chapters/appendix.tex`, use the project skill `.agents/skills/thesis-appendix-audit/SKILL.md`.
+
+Appendix work must follow these additional rules:
+
+- Start with a read-only appendix audit matrix before editing.
+- Classify each appendix item as audit, configuration, mechanism, provenance, historical, or exploratory material.
+- Check both explicit `\ref{}` references and natural-language appendix references in正文.
+- Preserve audit materials such as protocols, environments, reproduction entries, and schemas unless removal is explicitly approved.
+- Preserve mechanism anchors when正文 depends on them; do not downgrade theoretical or diagnostic material into mere historical notes.
+- Use positive, bounded academic phrasing for exploratory or boundary material.
+- Do not expose temporary paths, backend process names, pins, or internal provenance details in paper-facing text unless explicitly approved for reproducibility.
+- Keep appendix cleanup commits separate from figure-redrawing, chapter polishing, or unrelated dirty worktree changes.
+
 ---
 
 ## 2. Agent Roster

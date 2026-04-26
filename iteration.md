@@ -36,6 +36,30 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-26 22:52 | docs(workflow): preserve appendix audit preferences as project skill
+- Goal: 将本轮 Appendix 清理中形成的稳定偏好与专项流程沉淀到项目 skill、项目规范和全局个人规范中。
+- Scope:
+  - `.agents/skills/thesis-appendix-audit/SKILL.md`
+  - `AGENTS.md`
+  - `/Users/chenzilang/.codex/AGENTS.md`（全局文件，已备份，不随 git 提交）
+- Changed files:
+  - 新增 `thesis-appendix-audit` skill，固化 appendix 只读审查、审核矩阵、ExecPlan 门禁、小步执行、引用同步、工程命名泄露扫描与多角度审查流程。
+  - 在项目 `AGENTS.md` 增加 Appendix workflow 入口，要求 appendix 审查/清理/合并任务使用该 skill。
+  - 在全局 `~/.codex/AGENTS.md` 增加跨项目个人偏好：不确定项先讨论、小步推进、正向克制表达、不泄露内部工程命名、dirty worktree 精确提交、验证后再声称完成。
+- Commands:
+  - `find .agents/skills/thesis-appendix-audit -maxdepth 2 -type f -print`
+  - `sed -n '1,80p' .agents/skills/thesis-appendix-audit/SKILL.md`
+  - `rg -n "thesis-appendix-audit|Thesis Appendix Workflow" AGENTS.md`
+  - `rg -n "个人协作与研究写作偏好|不确定项先讨论|不泄露内部工程命名" ~/.codex/AGENTS.md`
+  - `git diff --check -- AGENTS.md .agents/skills/thesis-appendix-audit/SKILL.md iteration.md`
+- Outputs:
+  - Project-level appendix cleanup workflow is now reusable by skill trigger instead of remaining only in chat history.
+  - Global preference backup created at `/Users/chenzilang/.codex/AGENTS.md.bak-20260426_225248`.
+- Validation:
+  - Pending final diff and staging checks before commit.
+- Risks / follow-ups:
+  - Current worktree still has external Ch4 figure/draft dirty files; this workflow commit must stage only the project rule, skill, and this iteration entry.
+
 ### 2026-04-26 22:33 | docs(appendix): merge Needle supplement into INT4 mechanism appendix
 - Goal: 执行已批准的 Appendix P6，将 Needle 深度-位置热力图从独立附录降级并入 INT4 失稳机制附录，同时为部署效率补充材料增加正文反向引用。
 - Scope:
