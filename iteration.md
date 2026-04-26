@@ -36,6 +36,30 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-26 11:03 | docs(thesis): clean appendix terminology and prompt-adaptive prose tail
+- Goal: 收掉 ece32fa "规范路径 → 基准路径" 改名时漏改 appendix.tex 的 4 处中文叙事残留 + RQ1/RQ2/RQ3 标号残留，同时把 ac3c125 之后留下的 prompt-adaptive 段落 4 处 prose 微调一并落账。
+- Scope:
+  - `thesis/chapters/appendix.tex`
+- Changed files:
+  - L92-93: "RQ1 规范路径验证、RQ2 低比特恢复、RQ3 跨模型预算分配" → 去 RQ 编号 + "规范路径"→"基准路径"
+  - L140: 表格 cell "KL-guided 对称规范路径" → "KL-guided 对称基准路径"
+  - L197: "INT8 规范路径主线搜索为..." → "INT8 基准路径主线搜索为..."
+  - L208: "本表是正文 RQ1/RQ2 证据的补充审计材料" → "本表是正文基准保真与低比特恢复证据的补充审计材料"
+  - 另含 ac3c125 之后留下的 4 处 prose 微调：删除 3 处 inline `% 附录 P1 / P2 / orphan ref resolved` 工作语言注释 + prompt-adaptive 段落两段更精确化（明确 8B 为正式探索矩阵 / 1.5B/7B 为补充读数；结尾段说明三组 5-task mean 最高项分别落在 fixed-$k$ 或 auto-$k$ 上）。
+- Commands:
+  - `grep -rn "规范路径" thesis/chapters/`
+  - `grep -n "RQ1\|RQ2\|RQ3" thesis/chapters/appendix.tex`
+  - `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+- Outputs:
+  - "规范路径" 残留 = 0；appendix.tex RQ1/2/3 残留 = 0
+  - main.pdf 108 pages（与精简前 110 pages 相比少 2 页，匹配 ac3c125 prompt-adaptive 附录精简预期）
+- Validation:
+  - `xelatex` exit_code=0
+  - `main.log` 无 LaTeX Error / undefined references / Rerun warning
+- Risks / follow-ups:
+  - `thesis/figures/` + `thesis/tables/` 仍存在 7 个未提交 dirty 文件（ch3 tikz 图重绘 + table 术语统一），归属并行工作流，不在本轮 commit 范围内，待用户单独审定。
+- Intended commit: `docs: clean appendix terminology and prompt-adaptive prose tail`
+
 ### 2026-04-24 09:28 | docs(thesis): appendix M1 config and diagnostic cleanup
 - Goal: 执行已批准的附录清理 M1，先处理 A.5 量化模式 glossary、A.6 搜索空间口径、A.19 `inv_tau` 诊断与 7B KL/MSE 溯源，并同步正文自然语言引用。
 - Scope:
