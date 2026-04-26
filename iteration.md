@@ -65,7 +65,7 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - P1 只处理 LongBench/statistics/quality supplement group。下一步建议进入 P2，处理 A.1-A.6 的审计与配置分组。
   - `thesis/figures/ch4/fig_ch4_05_regime_heatmap.pdf` 与 `scripts/thesis/plot_ch4_regime_combined.py` 属于未纳入本次范围的图相关工作，未 stage。
-- Commit: pending
+- Commit: `ffc0109`
 
 ### 2026-04-26 11:20 | chore(iteration): correct attribution of 11:20 commit 1f9d575
 - Goal: 修正前一条 timeline entry 的归属错位 — 本 session 在 11:20 尝试 add 3 个 ch3 tables 时，外部并行 agent 已于 11:14:25 提交 `42ab6de docs: align thesis figures and table boundaries` 抢先把 3 tables + 4 figures + ch3/ch4 文本全部落账。导致 `1f9d575` 实际只含 iteration.md 22 行（即被覆盖前的旧 11:20 entry 文本），不含任何 tables 内容 diff。本 entry 修正归属。
