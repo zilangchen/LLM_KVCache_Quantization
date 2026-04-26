@@ -36,6 +36,37 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-26 22:12 | docs(appendix): replace low-value figures with compact text
+- Goal: 执行 Appendix P5，将三个低可视化必要性附录图改为紧凑表格或定稿文字说明，降低附录图密度并保留必要证据。
+- Scope:
+  - `thesis/chapters/appendix.tex`
+  - `.agents/execplans/20260426_2201_appendix_p5_low_value_figures.md`
+- Changed files:
+  - A.4 质量趋势双图替换为 `tab:app-quality-context-summary`，只保留 FP16 与 INT8-Canonical 的 RULER / LongBench-style 关键读数。
+  - A.5 删除单独 exact-match 曲线图，用文字保留严格 Needle 判据，并明确 INT8-Canonical 在 32K 的约 70.3\% 边界读数。
+  - A.6 删除单序列 TPOT gain 图，用部署边界文字说明替代，保留吞吐与显存扩展图。
+  - 旧低必要性 figure labels 从论文源中清零，图 PDF 资产不删除。
+- Commands:
+  - `git diff --check -- thesis/chapters/appendix.tex .agents/execplans/20260426_2201_appendix_p5_low_value_figures.md`
+  - `rg -n "fig:app-quality-vs-context|fig:app-ruler-vs-context|fig:app-longbench-vs-context|fig:app-needle-exact|fig:app-tpot-gain" thesis/chapters`
+  - `rg -n "tab:app-quality-context-summary|fig:app-throughput-dashboard|fig:app-memory-dashboard|fig:app-needle-depth-grid" thesis/chapters/appendix.tex`
+  - `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex && bibtex main && xelatex -interaction=nonstopmode -halt-on-error main.tex && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+  - `rg -n "Undefined|undefined|There were undefined references|Rerun to get cross-references|Label\\(s\\) may have changed|LaTeX Error|Overfull|invalid character|multiply defined" thesis/main.log`
+  - `pdfinfo thesis/main.pdf | rg "Pages|Page size"`
+  - `awk '/^\\section/ {if(sec) print NR-start-1" lines  "sec; sec=$0; start=NR} END {print NR-start" lines  "sec}' thesis/chapters/appendix.tex`
+- Outputs:
+  - Appendix remains 761 lines and `thesis/main.pdf` compiles to 105 pages.
+  - Removed active labels: `fig:app-quality-vs-context`, `fig:app-ruler-vs-context`, `fig:app-longbench-vs-context`, `fig:app-needle-exact`, `fig:app-tpot-gain`.
+  - Preserved labels: `fig:app-needle-depth-grid`, `fig:app-throughput-dashboard`, `fig:app-memory-dashboard`; added `tab:app-quality-context-summary`.
+- Validation:
+  - Full LaTeX compile passed; `thesis/main.log` has no undefined refs/citations, rerun warnings, LaTeX Error, Overfull, invalid character, or multiply-defined label warnings.
+  - 多角度 Sub-agent 审查完成：数据证据初审发现 exact-match claim 过强，已回修；LaTeX 引用 PASS；正文一致性 PASS；结构版面 PASS；最终复审 PASS。
+  - 表格数值已由 `ruler_summary.csv` 与 `longbench_summary.csv` 主线配置核对；exact-match 32K 约 70.3\% 与 `needle_summary.csv` 一致。
+- Risks / follow-ups:
+  - 本轮不删除旧图 PDF 资产，也不修改图生成脚本；后续如需清理未引用资产，应单独开图资产清理计划。
+  - 工作树仍存在外部 Ch4 图相关 dirty 项和外部 `iteration.md` 图修改记录，本轮 commit 已通过精确 staging 隔离。
+- Commit: `c54d1d3`
+
 ### 2026-04-26 20:07 | docs(appendix): group audit and configuration materials
 - Goal: 执行已批准的 Appendix P2，将 former A.1-A.6 从六个平级 section 收束为审计协议、代码标识映射、校准审计三个功能组。
 - Scope:
