@@ -65,7 +65,7 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - Ch4 当前存在图相关未提交 diff，本轮未 stage；因此没有把“正文额外指向 A.1 复现说明”的可选建议混入 P2。
   - `docs/Chapter 4 Draft.md`、`thesis/chapters/ch4_experiments.tex`、`thesis/figures/ch4/fig_ch4_05_regime_heatmap.pdf` 与 `scripts/thesis/plot_ch4_regime_combined.py` 仍属图相关/外部 dirty，未纳入本轮提交。
-- Commit: pending
+- Commit: `0b0ee99`
 
 ### 2026-04-26 19:55 | docs(appendix): merge LongBench and quality supplements
 - Goal: 执行已批准的 Appendix P1，合并 LongBench 补充、统计检验与质量趋势图材料，并同步正文对该补充组的定位。
