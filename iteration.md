@@ -1169,3 +1169,37 @@ Canonical agent workflow directory is `.agents/`.
   - 本轮不处理图 3-2/3-3/3-4 重绘、表格合并、Chapter 4 多模型数据覆盖或参考文献二次扩展。
   - `thesis/chapters/appendix.tex` 存在并行 dirty 改动，本轮不 stage、不提交。
 - Commit: <pending>
+
+### 2026-04-26 18:56 | M4 Appendix Mechanism and System Supplement Consolidation
+- Goal:
+  - 重排并压缩附录机制/系统补充材料，合并 K/V 与 MixedKV 补充说明，修正历史诊断口径与内部命名泄露。
+- Changed files:
+  - `thesis/chapters/appendix.tex`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/appendix.tex`
+  - `xelatex -interaction=nonstopmode main.tex`
+  - `bibtex main`
+  - `xelatex -interaction=nonstopmode main.tex`
+  - `xelatex -interaction=nonstopmode main.tex`
+  - `rg -n 'Undefined|undefined|There were undefined references|Rerun to get cross-references|Label\(s\) may have changed|LaTeX Error|Citation.*undefined|Warning: Citation|Font Warning' thesis/main.log`
+  - `rg -c 'Overfull' thesis/main.log`
+  - `pdfinfo thesis/main.pdf | rg Pages`
+  - `rg -n '(sec:app-kv-ablation-full|subsec:app-mixedkv-detail|sec:app-sqnr-derivation|sec:app-chunksize|sec:app-invtau-diagnostic|sec:app-triton-variants|tab:app-7b-kl-mse)' thesis/main.aux`
+- Outputs:
+  - A.10--A.12 scope tightened; A.12 now reports measured feasible batch rather than uncensored capacity maxima.
+  - A.13 restored as historical symmetric INT4 diagnostic and no longer conflicts with current INT4-RoleAlign.
+  - A.14 merged old MixedKV detail into the K/V supplement while preserving Mistral scope and key per-model numbers.
+  - A.15 reframed as approximate mechanism analysis and aligned the variance-ratio constant with symmetric qmax.
+  - A.16 chunk-size percentages and residual-buffer caveat corrected.
+  - A.17/A.18 internal record aliases and implementation aliases removed.
+  - `main.pdf` generated successfully, 107 pages.
+- Validation:
+  - Two rounds of read-only Agent review completed; P1/P2 findings were fixed or scoped as non-blocking follow-up.
+  - `git diff --check -- thesis/chapters/appendix.tex` passed.
+  - `thesis/main.log` has no undefined refs/cits, rerun warning, LaTeX Error, Font Warning, or Overfull entries.
+  - Key appendix labels resolve in `thesis/main.aux`; old `sec:app-ch4-supp` has no active references.
+- Risks / follow-ups:
+  - Some appendix anchors remain without direct正文 `\ref`; active compile is clean, but explicit Ch4 natural-language reference synchronization can be handled in a separate正文-sync plan.
+  - `thesis/figures/fig_ch3_kv_diag_needle.tex` is dirty from unrelated work and was intentionally not staged.
+- Commit: `9d6206b` (`docs(appendix): consolidate mechanism and system supplements`)
