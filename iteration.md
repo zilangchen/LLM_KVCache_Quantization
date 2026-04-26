@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-26 11:20 | docs(thesis): ch3 tables terminology and layout refresh
+- Goal: 续接 11:03 的 appendix 收口，把 ece32fa "规范路径→基准路径" 改名时漏到 ch3 tables 的术语残留收掉，并一并接受同 dirty 文件中已经存在的两项独立工作改动（layout 收紧 + 删列），用一次 commit 落账避免 git history 累 dirty。
+- Scope:
+  - `thesis/tables/table_ch3_path_instantiation.tex`
+  - `thesis/tables/table_ch3_runtime_paths.tex`
+  - `thesis/tables/table_ch3_calibration_interfaces.tex`
+- Changed files:
+  - `path_instantiation.tex`: "INT8 规范路径"→"基准路径"(3 处) / "workflow"→"流程"(2 处) / "behavior 保持"→"行为保持"(1 处) + layout 收紧（`\small`→`\scriptsize`, `tabcolsep 4.2pt`→`2.4pt`, `p{...}`→`lllll` 包裹于 `\resizebox{0.98\linewidth}{!}{}`）
+  - `runtime_paths.tex`: 仅一处 "INT8 规范路径"→"基准路径"
+  - `calibration_interfaces.tex`: "INT8 规范路径"→"基准路径"(1 处) / "workflow"→"流程"(1 处) + layout 收紧（`\small`→`\scriptsize`, `tabcolsep 4.2pt`→`2.6pt`, `tabular`→`tabularx`）+ **删除最右一列「后续」**（原含 3.5.1/3.5.2/3.5.3 章节引用，作为 forward pointer 被认为多余）
+- Commands:
+  - `git diff thesis/tables/table_ch3_*.tex`（逐文件审 diff）
+  - `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+- Outputs:
+  - `main.pdf` 仍可正常编译；删列后 column spec 与表头字段同步收紧到 5 列（旧 6 列）
+- Validation:
+  - `xelatex` exit_code=0
+  - `main.log` 无 LaTeX Error / undefined references / Rerun warning
+- Risks / follow-ups:
+  - working tree 仍有 5 个 dirty 文件待用户审定：`thesis/chapters/ch4_experiments.tex`（表 4-8 排版收紧，commit 期间冒出来）+ 4 个 `thesis/figures/fig_ch3_*.tex`（TikZ 图重绘，独立工作单元）。
+- Intended commit: `docs: ch3 tables terminology + layout refresh`
+
 ### 2026-04-26 11:03 | docs(thesis): clean appendix terminology and prompt-adaptive prose tail
 - Goal: 收掉 ece32fa "规范路径 → 基准路径" 改名时漏改 appendix.tex 的 4 处中文叙事残留 + RQ1/RQ2/RQ3 标号残留，同时把 ac3c125 之后留下的 prompt-adaptive 段落 4 处 prose 微调一并落账。
 - Scope:
