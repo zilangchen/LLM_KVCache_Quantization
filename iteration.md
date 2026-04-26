@@ -1228,4 +1228,4 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - 本轮只做引用同步，不修改正文 claim、实验数值或附录正文。
   - `thesis/figures/fig_ch3_kv_diag_needle.tex` 仍是图修改 dirty 项，本轮不 stage、不提交。
-- Commit: <pending; planned `docs(thesis): sync ch4 appendix references`>
+- Commit: `49ae81c` (`docs(thesis): sync ch4 appendix references`)
