@@ -1054,3 +1054,30 @@ Canonical agent workflow directory is `.agents/`.
   - 正文 Ch4/Ch5 仍有 3 个非本轮范围 P3：官方 LongBench 首次出现处补引用、内部校准文件名降级、结论处一致性措辞收紧。
   - 根目录旧 `main.log` 可能误导后续检查；有效编译日志为 `thesis/main.log`。
 - Commit: <pending>
+
+### 2026-04-26 11:46 | Reference Validation Sweep
+- Goal:
+  - 对 Chapter 1--5 当前正文承重引用做第一轮严格验证，先稳定 `references.bib` 元数据和可追溯来源，不触碰正在清理的 appendix 正文。
+- Changed files:
+  - `thesis/references.bib`
+  - `docs/reference_validation_20260426.md`
+  - `iteration.md`
+- Commands:
+  - `perl` / `python3` citation-key extraction for Chapter 1--5
+  - primary-source web checks against ACL Anthology, PMLR, OpenReview, NeurIPS, MLSys, ACM, JMLR, and arXiv
+  - `latexmk -pdf main.tex`
+  - `rg -n "undefined|Citation|Warning--|empty|duplicate|I didn't find|There were undefined" thesis/main.blg thesis/main.log`
+  - `git diff --check`
+- Outputs:
+  - Chapter 1--5 当前工作树共使用 44 个 citation keys，全部在 `references.bib` 中存在。
+  - 修正或补全了 GQA、LongBench、KIVI、KVQuant、ZipCache、SmoothQuant、Qwen2.5、GEAR、CacheGen、Hubara QNN、H2O、StreamingLLM、MQA、SnapKV、QJL、QuaRot、QeRL、Quantizable Transformers、AhaKV、AsymKV、HeadKV、Outlier Tokens Tracing、ChunkKV、IntactKV、KV compression benchmark 等条目的元数据。
+  - 新增 `docs/reference_validation_20260426.md`，记录本轮范围、修正项、正文引用 inventory 与 primary-source examples。
+- Validation:
+  - `latexmk -pdf main.tex` passed; BibTeX reran and produced `main.pdf` successfully.
+  - `thesis/main.blg` reports `warning$ -- 0`; no undefined citations or BibTeX warning entries were found.
+  - `git diff --check` passed.
+- Risks / follow-ups:
+  - 本轮未认证 appendix-only citation keys；待 appendix 清理稳定后需要第二轮全 bib inventory。
+  - 当前工作树中 `thesis/chapters/ch4_experiments.tex`、`thesis/chapters/ch5_conclusion.tex` 已有外部/并行 dirty 改动，本轮提交不 stage 这些章节正文。
+  - 若后续决定统一 citation key 命名，可单独把历史 key（如 `agarwal2025qerl`、`qwen2025qwen25`、`zhang2024h2o`）重命名；本轮只保证渲染出的参考文献内容准确。
+- Commit: <pending>
