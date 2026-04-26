@@ -1138,3 +1138,34 @@ Canonical agent workflow directory is `.agents/`.
   - 本轮只做内部命名清理，不压缩 A.7/A.8/A.10-A.13/A.17 等历史/系统补充材料。
   - 后续 M4 应进入机制与系统补充重排，优先处理体量压缩和 A.14/A.16 合并。
 - Commit: <pending; planned `docs(appendix): remove internal engineering identifiers`>
+
+### 2026-04-26 18:36 | Chapter 1--5 Body Language Consistency Sweep
+- Goal:
+  - 在不触碰 Appendix 的前提下，清理 Chapter 1--5 正文中的模板化表述、旧编号式研究问题痕迹和过强外推措辞。
+- Changed files:
+  - `thesis/chapters/ch1_introduction.tex`
+  - `thesis/chapters/ch2_related_work.tex`
+  - `thesis/chapters/ch3_method.tex`
+  - `thesis/chapters/ch4_experiments.tex`
+  - `thesis/chapters/ch5_conclusion.tex`
+  - `iteration.md`
+- Commands:
+  - `rg -n 'INT8 规范路径|\\bRQ[123]\\b|RQ1--RQ3|RQ1–RQ3|研究问题一|研究问题二|研究问题三|贡献一|贡献二|贡献三|本节只|本章只|没有系统性误判|充分证明|离线 KL 搜索' thesis/chapters/ch1_introduction.tex thesis/chapters/ch2_related_work.tex thesis/chapters/ch3_method.tex thesis/chapters/ch4_experiments.tex thesis/chapters/ch5_conclusion.tex`
+  - `git diff --check`
+  - `latexmk -pdf main.tex`
+  - `rg -n 'Undefined|undefined|There were undefined references|Rerun to get cross-references|LaTeX Error|Citation.*undefined|Warning: Citation|Package natbib Warning' thesis/main.log`
+- Outputs:
+  - Chapter 1 去除“贡献一/二/三”和“研究问题一/二/三”式可见编号，改为直接问题标题与贡献陈述。
+  - Chapter 2 压缩相关工作小结与章节小结的模板腔，保留文献定位职责。
+  - Chapter 3 收紧框架、校准与系统边界表述，不改变 RoleAlign 的 K-path / V-path 冻结口径。
+  - Chapter 4 只做边界与 discussion 语言清洗，保留既有证据章结构、same-order INT4 budget band 口径和 heuristic 强基线判断。
+  - Chapter 5 收紧 LongBench 外推边界，避免把小范围 protocol check 写成广泛真实应用证明。
+- Validation:
+  - 冻结口径扫描 0 命中：无旧 `INT8 规范路径`、可见 `RQ1/RQ2/RQ3`、编号式“研究问题一/二/三”、`贡献一/二/三`、`本节只/本章只`、过强 LongBench 证明措辞或旧版 RoleAlign KL 搜索口径。
+  - `git diff --check` passed.
+  - `latexmk -pdf main.tex` passed; `main.pdf` generated successfully, 108 pages.
+  - `thesis/main.log` 无 undefined refs/cits、rerun warning、LaTeX Error 或 natbib citation warning。
+- Risks / follow-ups:
+  - 本轮不处理图 3-2/3-3/3-4 重绘、表格合并、Chapter 4 多模型数据覆盖或参考文献二次扩展。
+  - `thesis/chapters/appendix.tex` 存在并行 dirty 改动，本轮不 stage、不提交。
+- Commit: <pending>

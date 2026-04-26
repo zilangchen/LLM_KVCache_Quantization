@@ -5,7 +5,7 @@
 \chapter{相关工作与技术基础}
 \label{chap:related-work}
 
-本章为后续方法章建立必要的技术前置与文献坐标。内容从 decoder-only Transformer 与注意力记号开始，随后分析 KV Cache 的工作机制与显存瓶颈，并补充量化技术基础；在此基础上，再梳理 KV Cache 压缩与高效推理相关工作，归纳本文的研究空白与切入位置。
+本章先给出后文必须用到的技术记号，再把本文放入已有工作的文献坐标中。内容从 decoder-only Transformer 与注意力机制开始，随后分析 KV Cache 的工作机制与显存瓶颈，并补充量化技术基础；在此基础上，梳理 KV Cache 压缩与高效推理相关工作，归纳本文的研究空白与切入位置。
 
 % ============================================================
 \section{Transformer 架构与自注意力机制}
@@ -122,16 +122,16 @@ x_q = \operatorname{clamp}\!\left(\operatorname{round}\!\left(\frac{x}{s}\right)
 \section{KV Cache 量化与高效推理相关工作}
 % ============================================================
 
-随着大语言模型的上下文窗口不断扩大，KV Cache 的显存开销已成为制约长序列推理效率的关键瓶颈。围绕这一瓶颈，近年来的相关工作大致可沿三条线索梳理：其一是面向 KV Cache 本身的量化压缩与校准方法，其二是围绕低比特失真展开的异常值处理、混合精度与恢复策略，其三是与缓存管理和高效注意力计算相关的系统优化工作。更一般的量化理论综述可参见 Nagel 等人~\cite{nagel2021whitepaper} 与 Hubara 等人~\cite{hubara2018quantized}；但对本文而言，更关键的是这些工作如何分别回答“压缩什么”“如何恢复”以及“如何落地”这三个问题。
+随着大语言模型的上下文窗口不断扩大，KV Cache 的显存开销已成为制约长序列推理效率的关键瓶颈。相关工作可以按三类问题组织：压缩对象与量化格式、低比特失真恢复、缓存管理与高效注意力实现。更一般的量化理论综述可参见 Nagel 等人~\cite{nagel2021whitepaper} 与 Hubara 等人~\cite{hubara2018quantized}；本节聚焦与本文主线直接相关的部分，即这些工作如何分别回答“压缩什么”“如何恢复”以及“如何落地”。
 
 \textbf{量化压缩与校准方法。}
 在直接面向 KV Cache 的量化路径中，KIVI~\cite{liu2024kivi} 是最具代表性的早期工作之一，其核心观察是 Key 与 Value 在统计结构上并不对称，因此采用逐通道（per-channel）Key 与逐词元（per-token）Value 的非对称量化格式，以在无需微调的条件下推进低比特缓存压缩。KVQuant~\cite{hooper2024kvquant} 进一步通过非均匀码本与 Pre-RoPE Key 量化，将 KV Cache 压缩推进到 sub-4-bit 区间，并尽量减轻 RoPE 对量化网格的扭曲。沿着相近思路，AsymKV~\cite{tao2024asymkv} 从层深度维度强调 K/V 敏感性的不对称，AQUA-KV~\cite{shutova2025aquakv} 则利用 K/V 的时序相关性构造自适应量化机制。这一类工作共同表明，KV Cache 量化并非简单沿用统一格式即可完成，而往往需要围绕量化轴、统计范围和校准方式做针对性设计。虽然 SmoothQuant~\cite{xiao2023smoothquant}、GPTQ~\cite{frantar2023gptq}、AWQ~\cite{lin2024awq} 与 LLM.int8()~\cite{dettmers2022gpt3int8} 主要面向权重或激活，但它们在平滑异常值、误差补偿和激活感知保护方面提供的方法学经验，也为 KV Cache 的低比特设计提供了重要启示。
 
 \textbf{低比特恢复与异常值处理。}
-除了直接决定量化轴与码本的工作之外，另一条重要思路是通过异常值处理、混合精度与误差补偿来延缓低比特失效。QuaRot~\cite{ashkboos2024quarot} 利用 Hadamard 旋转均匀化 Key 通道中的异常值分布，使标准对称量化在更低位宽下仍具可用性；ZipCache~\cite{he2024zipcache} 则依据 token 重要性实施混合精度缓存策略，在压缩与恢复之间寻找平衡。GEAR~\cite{kang2024gear} 通过残差低秩近似补偿量化误差，QServe~\cite{lin2024qserve} 进一步给出 W4A8KV4 的端到端联合量化系统，强调量化格式与运行时实现的协同。IntactKV~\cite{liu2024intactkv} 与 Outlier Tokens Tracing~\cite{su2025outliertoken} 则从“关键内容保护”的角度出发，以高精度保留枢纽 token 或异常 token；Atom~\cite{zhao2024atom} 探索了更动态的混合精度缓存压缩；QJL~\cite{zandieh2024qjl} 利用 Johnson--Lindenstrauss 随机投影将压缩推进到 1-bit 极限，SKVQ~\cite{duanmu2024skvq} 则引入滑动窗口下的差异化精度分配。总体来看，这一方向的共同特征是：它们不再把量化视为一次静态映射，而是把低比特恢复、异常值缓冲与内容重要性纳入统一考虑。
+除了直接决定量化轴与码本的工作之外，另一条重要思路是通过异常值处理、混合精度与误差补偿来延缓低比特失效。QuaRot~\cite{ashkboos2024quarot} 利用 Hadamard 旋转均匀化 Key 通道中的异常值分布，使标准对称量化在更低位宽下仍具可用性；ZipCache~\cite{he2024zipcache} 则依据 token 重要性实施混合精度缓存策略，在压缩与恢复之间寻找平衡。GEAR~\cite{kang2024gear} 通过残差低秩近似补偿量化误差，QServe~\cite{lin2024qserve} 进一步给出 W4A8KV4 的端到端联合量化系统，强调量化格式与运行时实现的协同。IntactKV~\cite{liu2024intactkv} 与 Outlier Tokens Tracing~\cite{su2025outliertoken} 则从“关键内容保护”的角度出发，以高精度保留枢纽 token 或异常 token；Atom~\cite{zhao2024atom} 探索了更动态的混合精度缓存压缩；QJL~\cite{zandieh2024qjl} 利用 Johnson--Lindenstrauss 随机投影将压缩推进到 1-bit 极限，SKVQ~\cite{duanmu2024skvq} 则引入滑动窗口下的差异化精度分配。这一方向的共同特征是：它们不再把量化视为一次静态映射，而是把低比特恢复、异常值缓冲与内容重要性纳入统一考虑。
 
 \textbf{缓存管理与量化的正交路线。}
-与“降低 bit-width”不同，另一类工作主要从缓存管理本身入手压缩 KV Cache。H2O~\cite{zhang2024h2o}、StreamingLLM~\cite{xiao2024efficient}、SnapKV~\cite{li2024snapkv} 与 PyramidKV~\cite{cai2024pyramidkv} 主要围绕缓存保留和驱逐展开。DuoAttention~\cite{xiao2024duoattention}、HeadKV~\cite{fu2025headkv} 与 ChunkKV~\cite{liu2025chunkkv} 则进一步从头级或 chunk 结构角度给出差异化管理策略。总体上，这些方法会根据注意力重要性、层级衰减、逐头贡献度或语义 chunk 结构决定哪些 KV 应被保留、驱逐或差异化处理。CacheGen~\cite{liu2024cachegen} 从流式编解码角度压缩缓存，ThinK~\cite{xu2024think} 则进一步探索查询驱动的 Key 剪枝。这一路线与量化并非替代关系，而是正交互补：缓存管理决定“保留哪些缓存”，量化决定“每个缓存以多少比特存储”，二者可以组合使用以进一步降低部署成本。系统性的 KV Cache 压缩 benchmark 可参见~\cite{yuan2024kvcompressionbench}。
+与“降低 bit-width”不同，另一类工作主要从缓存管理本身入手压缩 KV Cache。H2O~\cite{zhang2024h2o}、StreamingLLM~\cite{xiao2024efficient}、SnapKV~\cite{li2024snapkv} 与 PyramidKV~\cite{cai2024pyramidkv} 主要围绕缓存保留和驱逐展开。DuoAttention~\cite{xiao2024duoattention}、HeadKV~\cite{fu2025headkv} 与 ChunkKV~\cite{liu2025chunkkv} 则进一步从头级或 chunk 结构角度给出差异化管理策略。这些方法通常根据注意力重要性、层级衰减、逐头贡献度或语义 chunk 结构决定哪些 KV 应被保留、驱逐或差异化处理。CacheGen~\cite{liu2024cachegen} 从流式编解码角度压缩缓存，ThinK~\cite{xu2024think} 则进一步探索查询驱动的 Key 剪枝。这一路线与量化并非替代关系，而是正交互补：缓存管理决定“保留哪些缓存”，量化决定“每个缓存以多少比特存储”，二者可以组合使用以进一步降低部署成本。系统性的 KV Cache 压缩 benchmark 可参见~\cite{yuan2024kvcompressionbench}。
 
 \begin{table}[t]
   \centering
@@ -162,7 +162,7 @@ x_q = \operatorname{clamp}\!\left(\operatorname{round}\!\left(\frac{x}{s}\right)
   \end{tabularx}}
 \end{table}
 
-表~\ref{tab:ch2-kv-comparison} 对上述代表性工作给出了压缩后的比较。可以看到，现有路线已经覆盖了从角色差异化格式、非均匀码本、误差补偿到缓存驱逐与剪枝等多个方向，但这些工作对“校准目标”“低比特恢复”和“系统落地”的强调并不相同，因此很难用单一维度概括其贡献。
+表~\ref{tab:ch2-kv-comparison} 压缩了上述路线的差异。现有工作已经覆盖角色差异化格式、非均匀码本、误差补偿、缓存驱逐与剪枝等多个方向；分歧主要在于各自强调的承重对象不同：有的回答量化轴，有的回答低比特恢复，有的回答缓存选择或系统落地。
 
 \phantomsection
 \label{sec:ch2-quant-softmax}
@@ -172,7 +172,7 @@ x_q = \operatorname{clamp}\!\left(\operatorname{round}\!\left(\frac{x}{s}\right)
 \textbf{高效注意力与系统协同。}
 然而，仅解决“量化什么”并不足以自动换来实际部署收益。FlashAttention~\cite{dao2022flashattention} 及 FlashAttention-2~\cite{dao2024flashattention2} 通过分块计算、在线 softmax 与更高效的并行组织降低注意力计算的 IO 开销，在不引入近似的前提下提升长序列推理效率；vLLM~\cite{kwon2023vllm} 的 PagedAttention 则将分页思想引入 KV Cache 管理，以减少显存碎片并提升缓存利用率；Triton~\cite{tillet2019triton} 作为面向 GPU kernel 的领域特定语言，为量化 cache 场景下的反量化与注意力计算融合提供了重要实现载体。就部署而言，量化减少的是每个 token 的缓存字节数，而高效注意力与缓存管理优化处理的是布局、访存和 kernel 执行，两者共同决定长上下文推理的实际落地成本。
 
-总体来看，现有工作已经在量化格式、低比特恢复、缓存管理和高效推理上形成了较清晰的谱系，但这些路线对校准目标、恢复机制与部署接口的强调并不相同。下一节将在这一文献坐标基础上集中归纳本文关注的研究空白与切入位置。
+至此可以看出，现有工作已经在量化格式、低比特恢复、缓存管理和高效推理上形成了较清晰的谱系，但这些路线对校准目标、恢复机制与部署接口的强调并不相同。下一节将在这一文献坐标基础上集中归纳本文关注的研究空白与切入位置。
 
 % ============================================================
 \section{研究空白与本文定位}
@@ -194,6 +194,6 @@ x_q = \operatorname{clamp}\!\left(\operatorname{round}\!\left(\frac{x}{s}\right)
 \section{本章小结}
 % ============================================================
 
-本章围绕本文后续方法设计所需的技术前置与文献坐标，对相关工作与理论基础进行了分层梳理。首先，本文从仅解码器 Transformer 的自注意力机制出发，说明了多头注意力以及 MQA、GQA 等结构变体在查询头数与 KV 头数上的差异，并为后文的缓存结构分析建立了统一记号；随后讨论了 KV Cache 在自回归推理中的作用、Prefill 与 Decode 两阶段的计算特征，以及其随序列长度线性增长的显存占用规律，从而明确了长上下文部署中的核心资源瓶颈；在此基础上，本章进一步补充了对称量化、非对称量化与训练后校准的基本概念，并将 KV Cache 量化、低比特恢复、缓存管理与高效推理相关工作纳入同一文献坐标系中加以整理。
+本章为后续方法设计建立了必要前置：自注意力与 MQA/GQA 给出缓存结构记号，KV Cache 机制与显存公式说明长上下文部署瓶颈，对称/非对称量化与训练后校准提供低比特方法基础。随后，本章把 KV Cache 量化、低比特恢复、缓存管理与高效推理放入同一文献坐标系，明确本文不是继续追求单一压缩技巧，而是处理校准目标、退化解释与预算决策之间缺少统一组织对象的问题。
 
-结合前文对相关工作的梳理与研究空白的归纳可以看到，现有方法虽然已经在量化格式、低比特修复、缓存管理与系统优化等方向取得了重要进展，但仍缺少一个能够统一组织校准目标、低比特退化解释与后续预算决策的原则。下一章将据此从注意力行为保持的角度转入方法设计。
+现有方法已经在量化格式、低比特修复、缓存管理与系统优化上取得进展，但仍缺少一个贯通校准目标、低比特退化解释与预算决策的原则。第三章将以注意力行为保持为这个组织对象，转入方法设计。
