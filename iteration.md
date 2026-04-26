@@ -1346,4 +1346,4 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - `sec:app-sqnr-derivation` 现在是 A.7 内部 paragraph 锚点；当前无正文直接 `\ref` 该锚点，后续若新增正文引用应优先指向 `sec:app-int4-mechanism-boundary`。
   - 工作树仍存在 Ch4 图相关 dirty 项和外部 `iteration.md` 图修改记录，本轮提交需精确 staging，不能混入。
-- Commit: pending
+- Commit: `8d0a4f5` (`docs(appendix): group int4 mechanism and robustness supplements`)
