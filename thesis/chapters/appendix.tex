@@ -198,57 +198,57 @@ INT8 基准路径主线搜索为 $|\mathcal{P}_c| \times |\mathcal{G}| = 16$ 组
 INT4-RoleAlign 可枚举 $|\mathcal{P}_K| \times |\mathcal{P}_V| = 36$ 组用于审计，但 K-path 与 V-path 的代理需分别解释。
 
 % ============================================================
-\section{LongBench 补充结果与协议一致性检查}
+\section{LongBench、统计检验与质量趋势补充材料}
 \label{sec:app-longbench-full}
 % ============================================================
 
-本节只承担两个功能：保留 LongBench-style 合成评测的补充审计表，
-并记录一块官方 LongBench 小范围对照，用于检查主评测协议是否出现方向性误判。
-它不替代第四章主表，也不构成对广泛真实应用分布的充分证明。
+本节合并三类质量补充材料：LongBench-style 合成评测的完整审计表、
+官方 LongBench 小范围协议一致性检查、以及统计检验与上下文长度趋势图。
+这些材料共同服务于第四章的可信性边界，而不替代正文主表或扩大主结论适用范围。
 
-表~\ref{tab:app-longbench-full} 列出了三种模型在 32K 上下文长度下、七种量化模式的
+\paragraph{LongBench-style 补充聚合表。}
+表~\ref{tab:app-longbench-full} 列出了三种模型在 32K 上下文长度下、七种实验路径的
 LongBench-style 聚合结果，包含 F1 宏平均、包含匹配宏平均以及综合评分。
 数值后的``$\pm$''表示 Bootstrap 95\% 置信区间半宽。
-本表是正文基准保真与低比特恢复证据的补充审计材料：
-它支持 INT8-Canonical 的协议内保真读数，
-也暴露对称 INT4 在 Qwen 系列上更容易失稳这一现象；
-8B 的 INT4 读数不应被反向概括为低比特路径普遍安全。
+本表只作为正文基准保真与低比特恢复证据的补充审计材料；
+其中 8B 的 INT4 读数不应被反向概括为低比特路径普遍安全。
 
 \begin{table}[!htbp]
   \centering
-  \caption{LongBench-style 补充聚合结果（32K 上下文，三模型 $\times$ 七量化模式）}
+  \begin{threeparttable}
+  \caption{LongBench-style 补充聚合结果（32K 上下文，三模型 $\times$ 七实验路径）}
   \label{tab:app-longbench-full}
   \zihao{5}
-  \begin{tabular}{llrrr}
+  \begin{tabular}{lp{3.4cm}rrr}
     \toprule
-    \textbf{模型} & \textbf{量化模式} & \textbf{F1 宏平均} & \textbf{包含匹配率(\%)} & \textbf{综合评分} \\
+    \textbf{模型} & \textbf{实验路径} & \textbf{F1 宏平均} & \textbf{包含匹配率(\%)} & \textbf{综合评分} \\
     \midrule
     \multirow{7}{*}{1.5B}
-      & fp16            & $5.53 \pm 0.05$ & $99.9 \pm 0.2$ & $0.0482 \pm 0.0004$ \\
-      & int8\_baseline  & $5.50 \pm 0.02$ & $99.9 \pm 0.2$ & $0.0478 \pm 0.0002$ \\
-      & int8\_ours      & $5.54 \pm 0.04$ & $99.9 \pm 0.1$ & $0.0482 \pm 0.0004$ \\
-      & int4\_baseline  & $2.91 \pm 0.26$ & $45.9 \pm 2.0$ & $0.0298 \pm 0.0024$ \\
-      & int4\_fused     & $0.00 \pm 0.00$ & $0.0 \pm 0.0$  & $0.0515 \pm 0.0068$ \\
-      & int4\_ours      & $0.00 \pm 0.00$ & $0.0 \pm 0.0$  & $0.0241 \pm 0.0025$ \\
-      & kivi\_style     & $5.58 \pm 0.07$ & $99.9 \pm 0.1$ & $0.0481 \pm 0.0005$ \\
+      & FP16                         & $5.53 \pm 0.05$ & $99.9 \pm 0.2$ & $0.0482 \pm 0.0004$ \\
+      & INT8-Baseline                & $5.50 \pm 0.02$ & $99.9 \pm 0.2$ & $0.0478 \pm 0.0002$ \\
+      & INT8-Canonical               & $5.54 \pm 0.04$ & $99.9 \pm 0.1$ & $0.0482 \pm 0.0004$ \\
+      & INT4 percentile              & $2.91 \pm 0.26$ & $45.9 \pm 2.0$ & $0.0298 \pm 0.0024$ \\
+      & Fused INT4                   & $0.00 \pm 0.00$ & $0.0 \pm 0.0$  & $0.0515 \pm 0.0068$ \\
+      & Behavior-guided INT4         & $0.00 \pm 0.00$ & $0.0 \pm 0.0$  & $0.0241 \pm 0.0025$ \\
+      & KIVI-style                   & $5.58 \pm 0.07$ & $99.9 \pm 0.1$ & $0.0481 \pm 0.0005$ \\
     \midrule
     \multirow{7}{*}{7B}
-      & fp16            & $4.29 \pm 0.15$ & $100.0 \pm 0.0$ & $0.0378 \pm 0.0008$ \\
-      & int8\_baseline  & $4.38 \pm 0.14$ & $100.0 \pm 0.0$ & $0.0383 \pm 0.0007$ \\
-      & int8\_ours      & $4.44 \pm 0.14$ & $100.0 \pm 0.0$ & $0.0383 \pm 0.0009$ \\
-      & int4\_baseline  & $0.00 \pm 0.00$ & $0.0 \pm 0.0$   & $0.0172 \pm 0.0024$ \\
-      & int4\_fused     & $0.45 \pm 0.13$ & $4.2 \pm 0.9$   & $0.0183 \pm 0.0020$ \\
-      & int4\_ours      & $0.00 \pm 0.01$ & $0.4 \pm 0.5$   & $0.0027 \pm 0.0011$ \\
-      & kivi\_style     & $4.28 \pm 0.14$ & $99.9 \pm 0.1$  & $0.0378 \pm 0.0011$ \\
+      & FP16                         & $4.29 \pm 0.15$ & $100.0 \pm 0.0$ & $0.0378 \pm 0.0008$ \\
+      & INT8-Baseline                & $4.38 \pm 0.14$ & $100.0 \pm 0.0$ & $0.0383 \pm 0.0007$ \\
+      & INT8-Canonical               & $4.44 \pm 0.14$ & $100.0 \pm 0.0$ & $0.0383 \pm 0.0009$ \\
+      & INT4 percentile              & $0.00 \pm 0.00$ & $0.0 \pm 0.0$   & $0.0172 \pm 0.0024$ \\
+      & Fused INT4                   & $0.45 \pm 0.13$ & $4.2 \pm 0.9$   & $0.0183 \pm 0.0020$ \\
+      & Behavior-guided INT4         & $0.00 \pm 0.01$ & $0.4 \pm 0.5$   & $0.0027 \pm 0.0011$ \\
+      & KIVI-style                   & $4.28 \pm 0.14$ & $99.9 \pm 0.1$  & $0.0378 \pm 0.0011$ \\
     \midrule
     \multirow{7}{*}{8B}
-      & fp16            & $10.29 \pm 0.76$ & $99.7 \pm 0.5$ & $0.0792 \pm 0.0066$ \\
-      & int8\_baseline  & $10.71 \pm 0.85$ & $99.7 \pm 0.5$ & $0.0817 \pm 0.0092$ \\
-      & int8\_ours      & $10.72 \pm 0.85$ & $99.6 \pm 0.7$ & $0.0817 \pm 0.0092$ \\
-      & int4\_baseline  & $12.95 \pm 1.02$ & $99.7 \pm 0.5$ & $0.1037 \pm 0.0087$ \\
-      & int4\_fused     & $15.89 \pm 1.37$ & $99.8 \pm 0.3$ & $0.1505 \pm 0.0138$ \\
-      & int4\_ours      & $19.88 \pm 1.34$ & $99.4 \pm 0.5$ & $0.1908 \pm 0.0111$ \\
-      & kivi\_style     & $8.72 \pm 0.98$  & $99.6 \pm 0.3$ & $0.0682 \pm 0.0069$ \\
+      & FP16                         & $10.29 \pm 0.76$ & $99.7 \pm 0.5$ & $0.0792 \pm 0.0066$ \\
+      & INT8-Baseline                & $10.71 \pm 0.85$ & $99.7 \pm 0.5$ & $0.0817 \pm 0.0092$ \\
+      & INT8-Canonical               & $10.72 \pm 0.85$ & $99.6 \pm 0.7$ & $0.0817 \pm 0.0092$ \\
+      & INT4 percentile              & $12.95 \pm 1.02$ & $99.7 \pm 0.5$ & $0.1037 \pm 0.0087$ \\
+      & Fused INT4                   & $15.89 \pm 1.37$ & $99.8 \pm 0.3$ & $0.1505 \pm 0.0138$ \\
+      & Behavior-guided INT4         & $19.88 \pm 1.34$ & $99.4 \pm 0.5$ & $0.1908 \pm 0.0111$ \\
+      & KIVI-style                   & $8.72 \pm 0.98$  & $99.6 \pm 0.3$ & $0.0682 \pm 0.0069$ \\
     \bottomrule
   \end{tabular}
   \begin{tablenotes}
@@ -257,10 +257,13 @@ LongBench-style 聚合结果，包含 F1 宏平均、包含匹配宏平均以及
     7B = Qwen2.5-7B-Instruct，
     8B = LLaMA-3.1-8B-Instruct。
     合成 LongBench（7 类子任务），5 seeds 均值。
-    8B INT4 的较高 F1 可能与模型固有能力差异有关。
+    8B INT4 的较高 F1 可能反映合成任务、评分器或该模型/路径组合下的协议特异性，
+    不作为 INT4 优于 FP16 或 KIVI-style 的主证据。
   \end{tablenotes}
+  \end{threeparttable}
 \end{table}
 
+% Compatibility anchors retained after merging former A.7--A.9 sections.
 \phantomsection
 \paragraph{官方数据一致性检查。}
 \label{sec:app-longbench-official}
@@ -276,45 +279,46 @@ LongBench-style 聚合结果，包含 F1 宏平均、包含匹配宏平均以及
 这一小范围官方对照与合成协议对 INT8 基准路径保真方向的判断保持一致，
 其作用限定在协议一致性检查层面。
 
-% ============================================================
-\section{种子级统计明细}
+\phantomsection
+\paragraph{统计检验设置与结果。}
 \label{sec:app-seed-detail}
-% ============================================================
 
-表~\ref{tab:app-sig-quality} 合并列出了 INT8-Canonical 相对于 INT8-Baseline
-在质量指标（PPL/Needle/LongBench/RULER，$n=5$ 种子）与推理延迟
-（TPOT，$n=8$ 种子）上的统计检验结果。
+表~\ref{tab:app-sig-quality} 合并列出了 INT8 路径在质量指标
+（PPL/Needle/LongBench/RULER，$n=5$ 种子）与推理延迟
+（TPOT，$n=8$ 种子）上的审计统计结果。
+PPL 与 Needle 行对应主配置；LongBench 与 RULER 行使用主配置及补充配置的合并读数，
+因此只用于稳定性审计，不作为正文主路径 claim。
 所有检验均基于配对种子的 sign-flip 置换检验，
 多重比较校正采用 Benjamini-Hochberg FDR 控制（$\alpha=0.05$）。
 
 \begin{table}[!htbp]
   \centering
-  \caption{INT8-Canonical vs INT8-Baseline 质量与延迟统计检验（32K 上下文）}
+  \caption{INT8 质量与延迟审计统计（32K 上下文）}
   \label{tab:app-sig-quality}
   \zihao{5}
   \begin{tabular}{llrrrrrr}
     \toprule
-    \textbf{模型} & \textbf{指标} & \textbf{基线均值} & \textbf{本文均值} & \textbf{增益(\%)} & \textbf{$p$值} & \textbf{$q$值} & \textbf{显著} \\
+    \textbf{模型} & \textbf{指标} & \textbf{INT8-Baseline} & \textbf{审计对象} & \textbf{变化(\%)} & \textbf{$p$值} & \textbf{$q$值} & \textbf{显著} \\
     \midrule
     \multicolumn{8}{l}{\textit{质量指标（$n=5$ 种子 1234--1238）}} \\
     \midrule
     \multirow{4}{*}{1.5B}
-      & perplexity$\downarrow$      & 8.9316 & 8.9497 & $-0.20$ & 0.0909 & 0.0974 & 否 \\
-      & needle\_pass\_rate$\uparrow$ & 100.00 & 100.00 & $+0.00$ & 1.0000 & 1.0000 & 否 \\
-      & longbench\_score$\uparrow$  & 0.0478 & 0.0486 & $+1.77$ & 0.0909 & 0.1435 & 否 \\
-      & ruler\_pass\_rate$\uparrow$ & 24.45  & 23.81  & $-2.64$ & 0.0909 & 0.7273 & 否 \\
+      & PPL$\downarrow$             & 8.9316 & 8.9497 & $-0.20$ & 0.0909 & 0.0974 & 否 \\
+      & Needle pass rate$\uparrow$   & 100.00 & 100.00 & $+0.00$ & 1.0000 & 1.0000 & 否 \\
+      & LongBench score$\uparrow$    & 0.0478 & 0.0486 & $+1.77$ & 0.0909 & 0.1435 & 否 \\
+      & RULER pass rate$\uparrow$    & 24.45  & 23.81  & $-2.64$ & 0.0909 & 0.7273 & 否 \\
     \midrule
     \multirow{4}{*}{7B}
-      & perplexity$\downarrow$      & 6.7145 & 6.7322 & $-0.26$ & 0.0909 & 0.0974 & 否 \\
-      & needle\_pass\_rate$\uparrow$ & 100.00 & 100.00 & $+0.00$ & 1.0000 & 1.0000 & 否 \\
-      & longbench\_score$\uparrow$  & 0.0383 & 0.0383 & $+0.17$ & 0.9394 & 0.9553 & 否 \\
-      & ruler\_pass\_rate$\uparrow$ & 24.92  & 24.84  & $-0.31$ & 1.0000 & 1.0000 & 否 \\
+      & PPL$\downarrow$             & 6.7145 & 6.7322 & $-0.26$ & 0.0909 & 0.0974 & 否 \\
+      & Needle pass rate$\uparrow$   & 100.00 & 100.00 & $+0.00$ & 1.0000 & 1.0000 & 否 \\
+      & LongBench score$\uparrow$    & 0.0383 & 0.0383 & $+0.17$ & 0.9394 & 0.9553 & 否 \\
+      & RULER pass rate$\uparrow$    & 24.92  & 24.84  & $-0.31$ & 1.0000 & 1.0000 & 否 \\
     \midrule
     \multirow{4}{*}{8B}
-      & perplexity$\downarrow$      & 6.9193 & 6.9252 & $-0.09$ & 0.0909 & 0.0974 & 否 \\
-      & needle\_pass\_rate$\uparrow$ & 100.00 & 100.00 & $+0.00$ & 1.0000 & 1.0000 & 否 \\
-      & longbench\_score$\uparrow$  & 0.0817 & 0.0817 & $+0.09$ & 0.8788 & 0.9416 & 否 \\
-      & ruler\_pass\_rate$\uparrow$ & 32.58  & 31.25  & $-4.05$ & 0.0909 & 0.7273 & 否 \\
+      & PPL$\downarrow$             & 6.9193 & 6.9252 & $-0.09$ & 0.0909 & 0.0974 & 否 \\
+      & Needle pass rate$\uparrow$   & 100.00 & 100.00 & $+0.00$ & 1.0000 & 1.0000 & 否 \\
+      & LongBench score$\uparrow$    & 0.0817 & 0.0817 & $+0.09$ & 0.8788 & 0.9416 & 否 \\
+      & RULER pass rate$\uparrow$    & 32.58  & 31.25  & $-4.05$ & 0.0909 & 0.7273 & 否 \\
     \midrule
     \multicolumn{8}{l}{\textit{解码延迟 TPOT（$n=8$ 种子 1234--1241，batch=1，gen\_len=64）}} \\
     \midrule
@@ -325,15 +329,13 @@ LongBench-style 聚合结果，包含 F1 宏平均、包含匹配宏平均以及
   \end{tabular}
 
   \vspace{2pt}
-  {\footnotesize 注：质量指标的差异均未达到 BH-FDR 校正后的统计显著性；三种模型上的 TPOT 降低均达到显著性（$q < 0.05$），且加速幅度随模型规模增大而增大，与更大的 KV Cache 使融合核函数的带宽节省效果更显著一致。1.5B Needle 行报告 mainline 配置（5 种子均 100\%）；LongBench/RULER 的 INT8-Canonical 值为所有配置变体（mainline + 消融）的混合均值，RULER 退化（$-$2.64\%）主要受非 mainline 配置拉低。}
+  {\footnotesize 注：质量指标的差异均未达到 BH-FDR 校正后的统计显著性；三种模型上的 TPOT 降低均达到显著性（$q < 0.05$）。1.5B Needle 行报告主配置（5 种子均 100\%）；LongBench/RULER 行为主配置与补充配置的合并审计读数，其中 RULER 退化主要受补充配置影响。}
 \end{table}
 
-% ============================================================
-\section{质量评测补充图表}
+\phantomsection
+\paragraph{上下文长度质量趋势图。}
 \label{sec:app-quality-plots}
-% ============================================================
 
-本节提供主线质量评测指标的可视化补充。
 图~\ref{fig:app-ruler-vs-context} 展示了 RULER 通过率随上下文长度的变化趋势，
 图~\ref{fig:app-longbench-vs-context} 展示了 LongBench-style 合成综合评分的对应趋势。
 

@@ -36,6 +36,37 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-04-26 19:55 | docs(appendix): merge LongBench and quality supplements
+- Goal: 执行已批准的 Appendix P1，合并 LongBench 补充、统计检验与质量趋势图材料，并同步正文对该补充组的定位。
+- Scope:
+  - `thesis/chapters/appendix.tex`
+  - `thesis/chapters/ch4_experiments.tex`
+- Changed files:
+  - A.7-A.9 合并为 `LongBench、统计检验与质量趋势补充材料`，保留原 LongBench official check、seed statistics、quality plots 的兼容 label。
+  - LongBench 补充表改用论文叙事路径名，删除裸露配置字符串作为主显示名的问题。
+  - INT8 统计检验表改为审计统计口径，清理脚本字段名，并补充小样本统计 power 限定。
+  - Ch4 新增对合并后 A.7 的正文引用，并将 official LongBench 单种子对照改为方向一致性检查，不作显著性结论。
+- Commands:
+  - `git diff --check -- thesis/chapters/appendix.tex thesis/chapters/ch4_experiments.tex`
+  - `rg -n 'sec:app-longbench-full|sec:app-longbench-official|sec:app-seed-detail|sec:app-quality-plots|tab:app-longbench-full|tab:app-sig-quality|fig:app-quality-vs-context' thesis`
+  - `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+  - `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+  - `rg -n 'Undefined|undefined|There were undefined references|Rerun to get cross-references|Label\(s\) may have changed|LaTeX Error|Citation.*undefined|Warning: Citation|Font Warning' thesis/main.log`
+  - `rg -c 'Overfull' thesis/main.log`
+  - `pdfinfo thesis/main.pdf | rg Pages`
+- Outputs:
+  - `main.pdf` 生成成功，106 pages。
+  - 合并后 A.7 作为质量补充审计材料保留，不进入正文主证据矩阵。
+- Validation:
+  - 四个只读 Sub-agent review 已完成；正文一致性、统计 claim、LaTeX label、结构冗余问题均已处理。
+  - `git diff --check` 通过。
+  - `thesis/main.log` 未发现 undefined refs/cits、rerun warning、LaTeX Error、Font Warning 或 Overfull entries。
+  - 关键兼容 label 均可在 `thesis/main.aux` 中解析。
+- Risks / follow-ups:
+  - P1 只处理 LongBench/statistics/quality supplement group。下一步建议进入 P2，处理 A.1-A.6 的审计与配置分组。
+  - `thesis/figures/ch4/fig_ch4_05_regime_heatmap.pdf` 与 `scripts/thesis/plot_ch4_regime_combined.py` 属于未纳入本次范围的图相关工作，未 stage。
+- Commit: pending
+
 ### 2026-04-26 11:20 | chore(iteration): correct attribution of 11:20 commit 1f9d575
 - Goal: 修正前一条 timeline entry 的归属错位 — 本 session 在 11:20 尝试 add 3 个 ch3 tables 时，外部并行 agent 已于 11:14:25 提交 `42ab6de docs: align thesis figures and table boundaries` 抢先把 3 tables + 4 figures + ch3/ch4 文本全部落账。导致 `1f9d575` 实际只含 iteration.md 22 行（即被覆盖前的旧 11:20 entry 文本），不含任何 tables 内容 diff。本 entry 修正归属。
 - Actual content of `1f9d575`: 仅 `iteration.md` 一文件 22 行新增。
