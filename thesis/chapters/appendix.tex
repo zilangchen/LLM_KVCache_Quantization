@@ -339,34 +339,47 @@ PPL 与 Needle 行对应主配置；LongBench 与 RULER 行使用主配置及补
 \end{table}
 
 \phantomsection
-\paragraph{上下文长度质量趋势图。}
+\paragraph{上下文长度质量趋势表。}
 \label{sec:app-quality-plots}
 
-图~\ref{fig:app-ruler-vs-context} 展示了 RULER 通过率随上下文长度的变化趋势，
-图~\ref{fig:app-longbench-vs-context} 展示了 LongBench-style 合成综合评分的对应趋势。
+表~\ref{tab:app-quality-context-summary} 汇总了 Qwen2.5-1.5B-Instruct 上 RULER 与
+LongBench-style 综合评分在不同上下文长度下的关键读数。
+该表只保留 FP16 与 INT8-Canonical 两条主线参照，用于确认补充质量指标没有改变正文主结论；
+低比特长上下文边界则由图~\ref{fig:app-needle-depth-grid}
+和附录第~\ref{sec:app-int4-mechanism-boundary}~节补充。
 
-\begin{figure}[!htbp]
+\begin{table}[!htbp]
   \centering
-  \subcaptionbox{RULER 通过率\label{fig:app-ruler-vs-context}}
-    [0.48\textwidth]{\includegraphics[width=0.48\textwidth]{figures/ruler_pass_rate_vs_context.pdf}}
-  \hfill
-  \subcaptionbox{LongBench 综合评分\label{fig:app-longbench-vs-context}}
-    [0.48\textwidth]{\includegraphics[width=0.48\textwidth]{figures/longbench_score_vs_context.pdf}}
-  \caption{补充质量指标随上下文长度变化趋势（Qwen2.5-1.5B-Instruct）。
-  （a）RULER 通过率，含 S-NIAH、MK-NIAH、VT 和 CWE 四子任务聚合；
-  （b）LongBench-style 综合评分，为 7 类合成任务宏平均。}
-  \label{fig:app-quality-vs-context}
-\end{figure}
+  \caption{补充质量指标随上下文长度的关键读数（Qwen2.5-1.5B-Instruct）。}
+  \label{tab:app-quality-context-summary}
+  \scriptsize
+  \setlength{\tabcolsep}{4pt}
+  \begin{tabular}{@{}lcccc@{}}
+    \toprule
+    \textbf{上下文长度} & \makecell{\textbf{RULER}\\\textbf{FP16}}
+      & \makecell{\textbf{RULER}\\\textbf{INT8-Canonical}}
+      & \makecell{\textbf{LongBench}\\\textbf{FP16}}
+      & \makecell{\textbf{LongBench}\\\textbf{INT8-Canonical}} \\
+    \midrule
+    4K  & 24.84 & 24.87 & 4.37 & 4.51 \\
+    8K  & 24.92 & 24.92 & 4.82 & 5.00 \\
+    16K & 24.77 & 24.84 & 4.82 & 5.00 \\
+    32K & 24.38 & 23.88 & 4.82 & 4.92 \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{2pt}
+  {\footnotesize 注：RULER 为通过率（\%）；LongBench-style 综合评分按 $\times 100$ 报告。}
+\end{table}
 
 % ============================================================
 \section{Needle-in-a-Haystack 深度-位置热力图}
 \label{sec:app-needle-heatmaps}
 % ============================================================
 
-图~\ref{fig:app-needle-depth-grid} 与图~\ref{fig:app-needle-exact}
-补充展示 Needle 任务的深度位置热力图和精确匹配曲线。
-二者服务于正文第~\ref{subsec:ch4-int4-cliff}~节的 cliff pattern：
-它们说明对称 INT4 的退化主要在长上下文与深层 needle 位置上被放大，
+图~\ref{fig:app-needle-depth-grid} 补充展示 Needle 任务的深度位置热力图。
+该图服务于正文第~\ref{subsec:ch4-int4-cliff}~节的 cliff pattern：
+它说明在当前热力图覆盖设置下，对称 INT4 的退化主要在长上下文与深层 needle 位置上被放大，
 并为附录第~\ref{sec:app-int4-mechanism-boundary}~节中的噪声--长度推导提供可视化背景。
 
 \begin{figure}[!htbp]
@@ -379,13 +392,13 @@ PPL 与 Needle 行对应主配置；LongBench 与 RULER 行使用主配置及补
   \label{fig:app-needle-depth-grid}
 \end{figure}
 
-\begin{figure}[!htbp]
-  \centering
-  \includegraphics[width=0.85\textwidth]{figures/needle_exact_match_vs_context.pdf}
-  \caption{Needle-in-a-Haystack 精确匹配率随上下文长度的变化。
-  精确匹配（exact match）采用比通过率更严格的评判标准。}
-  \label{fig:app-needle-exact}
-\end{figure}
+精确匹配率（exact match）采用比通过率更严格的 Needle 判据，
+其趋势与图~\ref{fig:app-needle-depth-grid} 一致：
+FP16 在 4K--32K 均保持 100\%，INT8-Canonical 在 4K--16K 保持 100\%，
+并在 32K 端点给出约 70.3\% 的长上下文边界读数；
+对称 INT4 则在 4K 已显露边界，并在 8K 及以上区间构成长上下文边界对照。
+这些 exact-match 读数作为严格判据补充图~\ref{fig:app-needle-depth-grid}，
+不再作为独立视觉证据展开。
 
 % ============================================================
 \section{部署效率与批处理扩展补充}
@@ -393,25 +406,19 @@ PPL 与 Needle 行对应主配置；LongBench 与 RULER 行使用主配置及补
 % ============================================================
 
 本节汇总 Qwen2.5-1.5B-Instruct 上的系统补充读数，
-包括单序列 TPOT、吞吐/显存扩展图，以及 batch 维度的容量边界。
+包括单序列 TPOT 边界说明、吞吐/显存扩展图，以及 batch 维度的容量边界。
 这些材料只服务于第~\ref{sec:exp-deployment}~节的部署边界审计；
 硬件、backend、batch size 与 seq\_len 条件均不应外推为通用速度结论。
 
-\paragraph{单序列与资源扩展图。}
-图~\ref{fig:app-tpot-gain}、图~\ref{fig:app-throughput-dashboard}
-和图~\ref{fig:app-memory-dashboard} 分别对应 TPOT、吞吐和显存扩展读数。
+\paragraph{单序列 TPOT 边界与资源扩展图。}
+单序列 TPOT 读数在下文以文字说明；
+图~\ref{fig:app-throughput-dashboard} 和图~\ref{fig:app-memory-dashboard}
+分别补充展示吞吐与显存扩展读数。
 
-\begin{figure}[!htbp]
-  \centering
-  \includegraphics[width=0.85\textwidth]{figures/latency_tpot_gain_vs_fp16.pdf}
-  \caption{各量化模式相对 FP16 基线的 TPOT 变化（Qwen2.5-1.5B-Instruct，NVIDIA H20，batch=1）。
-  正值表示加速（TPOT 降低），负值表示减速。
-  本图只对应单模型、单序列的补充读数：
-  在该设置中，量化操作的固定开销尚未被批处理或更长序列摊薄。
-  第~\ref{sec:exp-deployment}~节给出的跨模型部署结论仍以正文表~\ref{tab:ch4-tpot-4k}
-  --\ref{tab:ch4-kvcache-memory} 为准。}
-  \label{fig:app-tpot-gain}
-\end{figure}
+单序列 TPOT 的补充读数显示，在 Qwen2.5-1.5B-Instruct、NVIDIA H20、batch=1 的设置下，
+量化路径仍受到固定开销约束，适合作为部署边界条件的说明。
+第~\ref{sec:exp-deployment}~节的部署结论仍以正文表~\ref{tab:ch4-tpot-4k}
+--\ref{tab:ch4-kvcache-memory} 以及本节的吞吐、显存补充读数为准。
 
 \begin{figure}[!htbp]
   \centering
