@@ -29,9 +29,9 @@
 
 | 段 | 章节 | 文件范围 | 触发原因 | 保留专业性的改法 | 证据锚点 / 检查点 | 证据等级 | Canonical source | 允许 / 禁止写法 | 状态 |
 |---:|---|---|---|---|---|---|---|---|---|
-| 1 | 摘要 | `thesis/chapters/abstract_zh.tex` | 完整三段式模板；“统一框架/可审计/图谱”高频抽象词集中 | 重写为具体问题、方法组件、关键数值/模型例外、边界 | INT8 canonical path、INT4-RoleAlign、cross-model regime、系统边界 | final-ready + boundary-only | `docs/thesis_upgrade_live_plan.md` freeze；clean-provenance readout | 允许写 5 条冻结 claim；禁止普适胜出 | todo |
-| 2 | Abstract | `thesis/chapters/abstract_en.tex` | 与中文摘要镜像；英文句式过于平滑 | 不直译中文摘要，按英文论文习惯重组，加入 concrete experimental anchors | 与中文摘要做事实一致但结构非镜像检查 | final-ready + boundary-only | 同上 | 允许事实一致；禁止逐句镜像和新增 claim | todo |
-| 3 | Abstract | `thesis/chapters/abstract_en.tex` | “regime map / universal winner story”成熟但像生成式总结 | 保留 `regime-based interpretation` / `family-/scale-/task-dependent regimes`，明确删除 `universal winner story`，并绑定模型族、规模、任务和预算条件 | 3B/8B/14B/Mistral；同量级 INT4 预算带 | final-ready + boundary-only | live plan 冻结的 Mistral-specific auto-k、3B early-layer、14B top-tier-not-winner | 允许 regime-map 观点；禁止跨 family universal winner | todo |
+| 1 | 摘要 | `thesis/chapters/abstract_zh.tex` | 完整三段式模板；“统一框架/可审计/图谱”高频抽象词集中 | 重写为具体问题、方法组件、关键数值/模型例外、边界 | INT8 canonical path、INT4-RoleAlign、cross-model regime、系统边界 | final-ready + boundary-only | `docs/thesis_upgrade_live_plan.md` freeze；clean-provenance readout | 允许写 5 条冻结 claim；禁止普适胜出 | done |
+| 2 | Abstract | `thesis/chapters/abstract_en.tex` | 与中文摘要镜像；英文句式过于平滑 | 不直译中文摘要，按英文论文习惯重组，加入 concrete experimental anchors | 与中文摘要做事实一致但结构非镜像检查 | final-ready + boundary-only | 同上 | 允许事实一致；禁止逐句镜像和新增 claim | done |
+| 3 | Abstract | `thesis/chapters/abstract_en.tex` | “regime map / universal winner story”成熟但像生成式总结 | 保留 `regime-based interpretation` / `family-/scale-/task-dependent regimes`，明确删除 `universal winner story`，并绑定模型族、规模、任务和预算条件 | 3B/8B/14B/Mistral；同量级 INT4 预算带 | final-ready + boundary-only | live plan 冻结的 Mistral-specific auto-k、3B early-layer、14B top-tier-not-winner | 允许 regime-map 观点；禁止跨 family universal winner | done |
 | 4 | 绪论 | `thesis/chapters/ch1_introduction.tex` | 大模型背景、KV Cache 引入是模板开场 | 缩短通用背景，直接落到 decode 阶段缓存字节数 | KV cache memory pressure；decode-stage constraint | not-claim | `objective.md` mission；Ch4 deployment boundary | 允许问题定位；禁止泛泛行业背景 | todo |
 | 5 | 绪论 | `thesis/chapters/ch1_introduction.tex` | 公式解释过完整，像教材说明 | 加入本文如何用公式界定实验变量，而非只解释符号 | batch/length/layers/head_dim/bit-width 变量口径 | definition-only | Ch1 formula context；Ch4 protocol | 允许变量口径说明；禁止教材式孤立解释 | todo |
 | 6 | 绪论 | `thesis/chapters/ch1_introduction.tex` | “压得更低不等于可用”过于总括 | 用 Qwen/LLaMA INT4 失稳差异提前埋钩子 | K4V8/K4V4 cliff；LLaMA exception | boundary-only | Ch4 K/V sensitivity and role diagnosis | 允许作为条件性背景钩子；禁止升级为 final-ready 主 claim 或所有模型同强度 Key 崩 | todo |
@@ -114,8 +114,25 @@
 
 ### M2: 摘要与 Abstract
 
-- 状态：todo
+- 状态：done
 - 片段：1-3
+- 改动文件：
+  - `thesis/chapters/abstract_zh.tex`
+  - `thesis/chapters/abstract_en.tex`
+- 本地验证：
+  - `git diff --check -- thesis/chapters/abstract_zh.tex thesis/chapters/abstract_en.tex`: PASS
+  - `python scripts/review_tool.py phase-gate`: PASS (`PHASE GATE: CLEAR`; only pre-existing `review_tracker.md` parse warnings)
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`: PASS (`main.pdf`, 106 pages)
+  - `rg -n "Undefined control sequence|LaTeX Error|Reference .* undefined|Citation .* undefined|There were undefined references|multiply defined|Rerun to get cross-references right|Label\(s\) may have changed" thesis/main.log`: PASS (no hits)
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m2.txt && rg -n "�|□|\?\?|undefined|para:|fig:|tab:" /tmp/thesis_main_m2.txt`: PASS (no hits)
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m2.txt && rg -n "INT8 规范路径|INT4RoleAlign|attentionside|outputside|;" /tmp/thesis_main_m2.txt`: PASS (no hits)
+  - `rg -n "universal winner|universally|positive case|recovery story|statistically close|final claim set|contribution|普适最优|全局胜出|赢家|图谱|clean_rerun|clean-provenance|/root|pin=|AutoDL|tmux|rsync|backend process|session" thesis/chapters/abstract_zh.tex thesis/chapters/abstract_en.tex`: PASS (no hits)
+  - `make4ht -ux -d /tmp/thesis_html_m2 main.tex`: current and baseline `19c5fea` both exit 1 on the existing tex4ht / Chinese template / Ghostscript graphics path; treated as pre-existing non-blocking for M2, with generated source-tree artifacts removed.
+- Agent review:
+  - Style/AIGC-risk: PASS after removing internal review phrasing and adding the 14B numeric anchor in English.
+  - Evidence/claim-boundary: PASS after scoping 3B to core mean and replacing unsupported `statistically close` wording.
+  - Terminology consistency: PASS after aligning `INT8 基准路径` / `INT8 canonical path`, `INT4-RoleAlign`, and `family-/scale-/task-dependent regimes`.
+  - LaTeX/reference/extraction: PASS after fixing PDF extraction for `INT4-RoleAlign`, hyphenated proxies, ASCII keyword separators, and recompiling `main.pdf`.
 
 ### M3: 绪论
 

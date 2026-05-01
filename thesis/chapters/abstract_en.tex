@@ -2,47 +2,44 @@
 
 \begin{abstracten}
 
-Long-context inference makes KV-cache memory grow linearly with
-sequence length and has become a central deployment bottleneck for
-large language models. Low-bit KV-cache quantization directly reduces
-cache storage, but minimizing numerical reconstruction error alone
-does not guarantee stable attention behavior: Key errors can alter the
-softmax distribution, while Value errors propagate through weighted
-aggregation. KV-cache quantization therefore requires more than a
-lower-bit representation; it needs an organizing principle that links
-calibration, low-bit accuracy preservation, and layer-wise budget allocation.
+This thesis starts from a failure mode that appears only after KV-cache
+compression is evaluated through the attention computation itself. A
+smaller cache is straightforward to obtain by lowering the bit-width,
+but a small reconstruction error does not determine whether the next
+softmax distribution, retrieval behavior, or task output remains stable.
+The choice in this thesis is to treat attention behavior as the object
+that should be preserved and audited, and to use it to connect three
+decisions that are often handled separately: calibration, low-bit
+recovery, and layer-wise budget allocation.
 
-This thesis proposes a behavior-guided framework organized around
-attention behavior. At the calibration layer, the framework treats
-attention-distribution drift and output perturbation as the relevant
-objects of analysis. Symmetric paths use attention-distribution KL as
-an auditable calibration proxy, whereas the role-aware low-bit path
-separates the Key-side attention-KL proxy from an independent
-Value-side output-perturbation proxy. The resulting offline artifacts
-also induce behavior sensitivity profiles, which are reused by the
-allocator and by the AutoK extension. The framework is unified by its
-workflow, artifact interface, and robust selection discipline, not by
-forcing every path into a single KL objective.
+The proposed pipeline uses different behavioral proxies for different
+roles in the cache. For the INT8 canonical path, the calibration
+target is an attention-distribution KL proxy, which gives a compact
+and reproducible fidelity instance. For the low-bit asymmetric path,
+\mbox{INT4-RoleAlign} keeps the K/V distinction explicit: Key perturbations
+are selected with an attention proxy, while Value perturbations
+are controlled through an output proxy. The same calibration
+artifacts also define layer sensitivity profiles, so the allocator and
+AutoK proposer read from the same evidence rather than from a separate
+hand-picked rule.
 
-The experiments answer three research questions. First, the INT8
-baseline path shows that behavior-guided calibration can form a
-stable, reproducible, and auditable fidelity path; the small official
-LongBench check is used only as a protocol-consistency sanity check,
-not as evidence of broad real-world generalization. Second, symmetric
-INT4 exposes a model-dependent low-bit transition threshold, with LLaMA-3.1-8B as an
-important architectural exception; INT4-RoleAlign then provides a
-role-aware low-bit instance under the same asymmetric format family as
-KIVI-style. Third, cross-model allocation within a same-order INT4
-budget band is best read as a regime map rather than evidence for a
-single cross-task optimum: Mistral-7B provides the clearest evidence for AutoK under this profile,
-Qwen2.5-3B reveals an early-layer preservation regime, LLaMA-3.1-8B shows a
-medium-scale consensus regime, and Qwen2.5-14B exhibits coexisting
-high-performing clusters with statistically close policy choices. The strong
-heuristic baseline further indicates that some regimes have
-intrinsically narrow feasible layer sets.
+The controlled main-protocol results support a bounded interpretation.
+On Qwen2.5-1.5B, the INT8 canonical path differs from FP16 by about
+$+0.02$ in the three-task mean, making it the canonical fidelity case
+in this thesis. In the cross-model INT4 budget band, the useful pattern
+is not one cross-model optimum. Mistral-7B is the clearest AutoK case
+($14.76$ core mean and $15.69$ on the extend tasks). On Qwen2.5-3B,
+behavior-guided $k=1$ reaches $6.90$ on the core mean, compared with
+$3.48$ for the middle-layer heuristic. On Qwen2.5-14B, uniform INT4
+reaches $7.23$ core mean while AutoK-cov90 reaches $7.15$, so the top
+policies remain close rather than ordered by one stable optimum. These
+findings support family-/scale-/task-dependent regimes in KV-cache
+quantization and allocation. Heuristic policies remain strong baselines
+in some regimes, so the thesis does not claim a single allocation rule
+across model families.
 
-\keywordsen{large language models; KV-cache quantization;
-behavior-guided calibration; regime map; asymmetric quantization;
-RoleAlign; AutoK; budget allocation}
+\keywordsen{large language models, KV-cache quantization,
+behavior-guided calibration, family-/scale-/task-dependent regimes,
+asymmetric quantization, INT4-RoleAlign, AutoK, budget allocation}
 
 \end{abstracten}
