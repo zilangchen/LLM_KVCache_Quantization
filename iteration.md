@@ -1626,3 +1626,36 @@ Canonical agent workflow directory is `.agents/`.
   - `make4ht` 在当前与 baseline `19c5fea` 上均 exit 1，集中于既有 tex4ht 中文模板与 Ghostscript 图形转换路径；M2 不改模板，已清理生成的 source-tree 中间产物。
   - 下一步进入 M3：绪论片段 4-10，重点压缩通用背景、改写 RQ 与章节导航。
 - Commit: 1e4575a
+
+### 2026-05-01 20:16 | M3 Introduction AIGC-Risk Revision
+- Goal:
+  - 完成 47 段 AIGC 误判风险矩阵中的片段 4-10，重写绪论背景、问题定义、相关研究定位、RQ 与章节导航，使其更贴近本文变量、证据边界和 `objective.md` 的 RQ1--RQ4 口径。
+- Changed files:
+  - `thesis/chapters/ch1_introduction.tex`
+  - `docs/aigc_revision_matrix_20260501.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch1_introduction.tex`
+  - `rg -n "需要强调的是|至此|共同表明|核心在于|问题\\s*-\\s*方法\\s*-\\s*证据|问题-方法-证据|图谱|论证链条|论证主线|universal winner|普适最优|全局胜出|赢家|所有模型同强度|理论中心|普适策略|跨条件稳定占优|分别回答 RQ1--RQ4|按 RQ1--RQ4" thesis/chapters/ch1_introduction.tex`
+  - `python scripts/review_tool.py phase-gate`
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`
+  - `rg -n "(^!|LaTeX Error|Undefined control sequence|Citation .* undefined|Reference .* undefined|There were undefined|Rerun to get cross-references right|Label\\(s\\) may have changed)" thesis/main.log`
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m3_final.txt`
+  - `sed -n '220,430p' /tmp/thesis_main_m3_final.txt | rg -n "�|□|\\?\\?|undefined|para:|fig:|tab:|INT4RoleAlign|INT4-$|^RoleAlign|问题 - 方法 - 证据"`
+- Outputs:
+  - 绪论开场从通用大模型背景改为 Decode 阶段 KV Cache 字节数与公式变量口径。
+  - 低比特压力点补入 Qwen/LLaMA、K4V8/K4V4 的条件性问题线索，并保留架构调制边界。
+  - 相关研究概述从 KIVI/KVQuant/ZipCache 并列罗列改为 gap 定位。
+  - RQ1--RQ4 与 `objective.md` 对齐：统一对象、INT8 基准路径、allocation regimes、AutoK/budget proposal。
+  - 章节结构说明改为具体证据承载，不再写“问题-方法-证据”“论证链条”或 Ch4 分别回答四个独立小节。
+- Validation:
+  - `git diff --check` 通过。
+  - 模板化/高风险短语扫描无命中。
+  - `python scripts/review_tool.py phase-gate` 通过，仍只有既有 `review_tracker.md` parse warnings。
+  - `latexmk` 通过，`main.pdf` 为 106 页。
+  - `main.log` 未检出 LaTeX error、未定义 refs/citations 或 rerun 提示。
+  - Ch1 PDF 抽取窗口未检出乱码、raw label、`INT4RoleAlign` 或 `INT4-RoleAlign` 断行残留。
+  - Style/AIGC-risk、Evidence/claim-boundary、Terminology/structure、LaTeX/reference/extraction 四个 reviewer 最终均 PASS。
+- Risks / follow-ups:
+  - 全 PDF 中仍存在非 M3 范围的历史表格/附录抽取断行片段；保留到 M5/M7 方法章与全稿抽取复核处理。
+  - 下一步进入 M4：相关工作片段 11-19，重点从教材式基础解释与排队式 survey 改为与本文实验瓶颈、softmax 行为和系统边界绑定。
+- Commit: f35e102
