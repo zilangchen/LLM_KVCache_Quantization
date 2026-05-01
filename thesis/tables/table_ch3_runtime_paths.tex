@@ -9,9 +9,9 @@
     \toprule
     路径 & 离线产物 & append 时量 & 缓存载荷 & 执行后端 & 备注 \\
     \midrule
-    INT8 基准路径 & static scale、保护裕度、轴元数据 & 当前 token 量化值与 scale & INT8 载荷 + 快照 & Triton fused & 主部署路径 \\
-    对称 INT4 试探路径 & 对称 scale、轴元数据 & packed INT4 + 元数据 & packed INT4 + 元数据 & Triton / torch ref & 低比特试探 \\
-    INT4-RoleAlign & $(p_K,p_V)$、K/V 轴元数据、角色规则 & 当前 token 的 K/V 参数 & 角色感知低比特 K/V & torch ref & 非对称核验证 \\
+    INT8 基准路径 & static scale、保护裕度、轴元数据 & 当前 token 量化值与 scale & INT8 载荷 + 快照 & Triton 融合后端 & 主部署路径 \\
+    对称 INT4 试探路径 & 对称 scale、轴元数据 & packed INT4 + 元数据 & packed INT4 + 元数据 & Triton / 参考实现 & 低比特试探 \\
+    INT4-RoleAlign & $(p_K,p_V)$、K/V 轴元数据、角色规则 & 当前 token 的 K/V 参数 & 角色感知低比特 K/V & 参考实现 & 非对称核验证 \\
     \bottomrule
   \end{tabular}
 \end{table}

@@ -1,7 +1,7 @@
-# T6 14B Top-Tier (debug)
-top-3 gaps: ['3.5%', '3.0%', '2.5%'], max=3.54%
+# T6 14B Top-Tier
+Top-3 relative gaps: 3.5%, 3.0%, 2.5%; max=3.54%.
 
-| Task | Uniform | BA-$k_7$ | Heur-$k_7$ | BA-AutoK (cov90) |
+| Task | Uniform | BA-$k_7$ | Heur-$k_7$ | BA-AutoK (90%) |
 |---|---|---|---|---|
 | NarrativeQA (F1) | 7.05 | 6.67 | 6.83 | 6.80 |
 | HotpotQA (F1) | 5.57 | 5.49 | 5.40 | 5.39 |

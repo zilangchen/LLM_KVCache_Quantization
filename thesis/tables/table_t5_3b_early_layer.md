@@ -1,4 +1,4 @@
-# T5 3B Early-Layer Rescue (debug)
+# T5 3B Early-Layer Protection Effect
 
 | Task | BA-k1 | Heur-k1 | AutoK | Uniform | Δ (BA-Heur) |
 |---|---|---|---|---|---|

@@ -1429,3 +1429,136 @@ Canonical agent workflow directory is `.agents/`.
   - `sec:app-sqnr-derivation` 现在是 A.7 内部 paragraph 锚点；当前无正文直接 `\ref` 该锚点，后续若新增正文引用应优先指向 `sec:app-int4-mechanism-boundary`。
   - 工作树仍存在 Ch4 图相关 dirty 项和外部 `iteration.md` 图修改记录，本轮提交需精确 staging，不能混入。
 - Commit: `8d0a4f5` (`docs(appendix): group int4 mechanism and robustness supplements`)
+
+### 2026-04-26 20:08 | Merge Chapter 4 Regime Figures
+- Goal:
+  - 将原图 4-5 与图 4-6 合并为单个双栏图 4-5，并同步正文引用、叙事口径与 active draft。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `docs/Chapter 4 Draft.md`
+  - `scripts/thesis/plot_ch4_regime_combined.py`
+  - `thesis/figures/ch4/fig_ch4_05_regime_heatmap.pdf`
+  - `iteration.md`
+- Commands:
+  - `python scripts/thesis/plot_ch4_regime_combined.py`
+  - `python -m py_compile scripts/thesis/plot_ch4_regime_combined.py`
+  - `bibtex main`
+  - `xelatex -interaction=nonstopmode main.tex`
+  - `xelatex -interaction=nonstopmode main.tex`
+  - `rg -n 'fig:ch4-regime-summary|fig:regime-map|fig_ch4_06|Figure 4-6|图 4-6|颜色越浅|lighter color|standalone Figure 4-6' thesis/chapters "docs/Chapter 4 Draft.md" scripts/thesis/plot_ch4_regime_combined.py thesis/main.aux`
+  - `rg -n 'Reference .* undefined|Citation .* undefined|There were undefined|Label\(s\) may have changed|Rerun to get' thesis/main.log`
+- Outputs:
+  - 新图 4-5 左栏为行内归一化策略适用区间热力图，颜色越深表示越接近该模型高性能区间。
+  - 新图 4-5 右栏改为第 4.4.2--4.4.5 的 case-order roadmap，承接原图 4-6 的 family/scale regime 收束功能。
+  - 正文删除旧 standalone 图 4-6 环境，移除兼容 label `fig:ch4-regime-summary` 与 `fig:regime-map`，并把相关段落改为“证据 + 阅读路线图”的分工。
+- Validation:
+  - 图生成脚本通过 py_compile，并对每个 model-policy-task 数据行执行唯一性与 finite 检查。
+  - LaTeX 完整编译通过；`thesis/main.log` 无未定义引用、未定义 citation 或需重跑提示。
+  - 源文件、active draft、脚本与 `main.aux` 中均无旧图 4-6、旧 label 或旧“颜色越浅”口径残留。
+  - 两轮 Agent 审查完成；第二轮未发现阻塞问题，脚本审查提出的精确行数校验已补齐。
+- Risks / follow-ups:
+  - 原 `fig_ch4_06_family_scale_summary.pdf` 仍作为未引用历史资产留在目录中，本轮不删除以避免影响并行图片 session。
+  - 当前工作树还包含图 4-1 相关 dirty 项，属于并行图片修改 session，本轮未触碰。
+- Commit: not committed
+
+### 2026-04-26 20:53 | Polish Chapter 4 Figure 4-5 Readability
+- Goal:
+  - 按用户反馈精修图 4-5：放大左侧数值，补充色深与 AutoK 解释，简化右侧模型适用区间速览并统一到图 3-2 风格配色。
+- Changed files:
+  - `scripts/thesis/plot_ch4_regime_combined.py`
+  - `thesis/chapters/ch4_experiments.tex`
+  - `docs/Chapter 4 Draft.md`
+  - `thesis/figures/ch4/fig_ch4_05_regime_heatmap.pdf`
+  - `iteration.md`
+- Commands:
+  - `python scripts/thesis/plot_ch4_regime_combined.py`
+  - `python -m py_compile scripts/thesis/plot_ch4_regime_combined.py`
+  - `git diff --check -- scripts/thesis/plot_ch4_regime_combined.py thesis/chapters/ch4_experiments.tex "docs/Chapter 4 Draft.md" iteration.md`
+  - `xelatex -interaction=nonstopmode main.tex`
+  - `bibtex main`
+  - `xelatex -interaction=nonstopmode main.tex`
+  - `rg -n 'Reference .* undefined|Citation .* undefined|There were undefined|Label\(s\) may have changed|Rerun to get' thesis/main.log`
+  - `rg -n 'Family / scale|颜色越浅|fig_ch4_06|图 4-6|fig:ch4-regime-summary|fig:regime-map' thesis/chapters "docs/Chapter 4 Draft.md" scripts/thesis/plot_ch4_regime_combined.py thesis/main.aux`
+  - `pdftoppm -png -r 150 -f 66 -l 66 thesis/main.pdf artifacts/figure_previews/main_fig_ch4_05_polished_page`
+- Outputs:
+  - 左侧 heatmap 数值字号增大，底部说明改为两行，明确“同一行内列越深代表越接近最佳参数效果”以及 AutoK 整体相对深色。
+  - 右侧标题改为“模型适用区间速览”，卡片文案改为更通俗的模型级解释。
+  - 右侧配色改为参考图 3-2 的低饱和蓝、金、青绿、绿体系，移除原棕/紫风格。
+  - `thesis/main.pdf` generated successfully, 105 pages.
+- Validation:
+  - 图脚本真实运行与 py_compile 均通过；数据唯一性与 finite 检查继续生效。
+  - `git diff --check` passed.
+  - `thesis/main.log` 无未定义 refs/citations 或 rerun 提示。
+  - 源文件、active draft、脚本与 `main.aux` 中无旧图 4-6、旧 label、旧 `Family / scale` 标题或“颜色越浅”口径残留。
+  - 已渲染 standalone 图与正文第 66 页预览，未发现文字重叠或裁切。
+- Risks / follow-ups:
+  - 正文页内图 4-5 与图 4-4 同页展示，图面实际显示尺寸受版面压缩；当前预览可读，但后续若单独上浮图 4-5 仍可进一步放大。
+  - `thesis/chapters/appendix.tex` 与图 4-1 相关文件仍是并行 session dirty 项，本轮未触碰。
+- Commit: not committed
+
+### 2026-04-26 21:03 | Cool Palette Adjustment for Chapter 4 Figure 4-5
+- Goal:
+  - 按用户反馈移除图 4-5 右侧暖色卡片，并把左侧色深说明上移、放大，使解释更靠近 heatmap 且正文页可读。
+- Changed files:
+  - `scripts/thesis/plot_ch4_regime_combined.py`
+  - `thesis/figures/ch4/fig_ch4_05_regime_heatmap.pdf`
+  - `iteration.md`
+- Commands:
+  - `python scripts/thesis/plot_ch4_regime_combined.py`
+  - `pdftoppm -png -r 170 -singlefile thesis/figures/ch4/fig_ch4_05_regime_heatmap.pdf artifacts/figure_previews/fig_ch4_05_cool_palette`
+  - `python -m py_compile scripts/thesis/plot_ch4_regime_combined.py`
+  - `git diff --check -- scripts/thesis/plot_ch4_regime_combined.py thesis/chapters/ch4_experiments.tex "docs/Chapter 4 Draft.md" iteration.md`
+  - `xelatex -interaction=nonstopmode main.tex`
+  - `xelatex -interaction=nonstopmode main.tex`
+  - `rg -n 'Reference .* undefined|Citation .* undefined|There were undefined|Label\(s\) may have changed|Rerun to get' thesis/main.log`
+  - `rg -n '#B2821A|#FAEFCA|#B45F3D|#7A6AAE|Family / scale|颜色越浅|fig_ch4_06|图 4-6|fig:ch4-regime-summary|fig:regime-map' thesis/chapters "docs/Chapter 4 Draft.md" scripts/thesis/plot_ch4_regime_combined.py thesis/main.aux`
+  - `pdftoppm -png -r 150 -f 67 -l 67 thesis/main.pdf artifacts/figure_previews/main_fig_ch4_05_cool_palette_page`
+- Outputs:
+  - 右侧四张卡片统一为冷色调：深蓝、蓝青、青绿、蓝灰；Qwen2.5-3B 卡片不再使用黄色/金色。
+  - 左侧色深说明从 `y=-0.26` 调整到 `y=-0.135`，字号从 `7.3pt` 调整到 `8.1pt`。
+  - `thesis/main.pdf` generated successfully, 105 pages.
+- Validation:
+  - 图脚本真实运行与 py_compile 均通过；数据唯一性与 finite 检查继续生效。
+  - `git diff --check` passed.
+  - `thesis/main.log` 无未定义 refs/citations 或 rerun 提示。
+  - 暖色旧码、旧图 4-6、旧 label、旧 `Family / scale` 与“颜色越浅”口径均无残留。
+  - 已渲染 standalone 图与正文第 67 页预览，说明文字未与 x 轴、图注或正文重叠。
+- Risks / follow-ups:
+  - 图 4-5 当前排到正文第 67 页，与表 4-10 同页；当前可读，若后续希望更突出，可单独调整浮动位置。
+  - 图 4-1 相关 dirty 项仍属于并行图片修改 session，本轮未触碰。
+- Commit: not committed
+
+### 2026-05-01 18:54 | Freeze Thesis P0 Review Cleanup
+- Goal:
+  - 将多轮 thesis P0 审查后的论文源、表格、图表与报告统一冻结到当前分支，并保留旧 `phase1_*` 表文件到开发记录目录，避免 active thesis 目录继续暴露内部阶段命名。
+- Changed files:
+  - `docs/thesis_overall_review_report_20260426.md`
+  - `development_history/archive_20260501_thesis_table_renames/`
+  - `docs/Chapter 4 Draft.md`
+  - `scripts/thesis/plot_ch4_kv_role_sensitivity.py`
+  - `scripts/thesis/plot_ch4_regime_combined.py`
+  - `thesis/chapters/*.tex`
+  - `thesis/figures/**/*.tex`
+  - `thesis/figures/**/*.pdf`
+  - `thesis/tables/*.{tex,md}`
+- Commands:
+  - `git status --short --branch`
+  - `git worktree list`
+  - `git diff --stat`
+  - `rg -n '<internal-name scan>' thesis/chapters thesis/tables`
+  - `rg -n '<tone scan>' thesis/chapters thesis/tables`
+  - `rg -n '<PPL binding scan>' thesis/chapters thesis/tables`
+  - `git diff --check -- thesis/chapters thesis/tables`
+  - `cd thesis && latexmk -xelatex -interaction=nonstopmode -halt-on-error main.tex`
+- Outputs:
+  - 旧 `phase1_*` standalone tables 已归档到 `development_history/archive_20260501_thesis_table_renames/`。
+  - Active thesis tables 使用 publication-facing `table_*` 命名。
+  - P0 审批报告更新为最终 PASS 口径。
+- Validation:
+  - P0 内部命名扫描、写作口吻扫描、PPL 误绑定扫描均为 0 命中。
+  - `git diff --check` 通过。
+  - `latexmk` 通过，`main.pdf` 生成成功，无 LaTeX error。
+- Risks / follow-ups:
+  - 当前 commit 将作为论文 P0 冻结点；后续若继续 polish，应在新 commit 中处理 P1/P2，不再回流内部阶段命名。
+  - `/private/tmp/triton-int4-v2` worktree 记录已显示 prunable，但本轮不执行清理，避免触碰非论文冻结范围。
+- Commit: pending

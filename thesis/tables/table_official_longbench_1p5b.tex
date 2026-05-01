@@ -1,0 +1,18 @@
+% LongBench comparison table — Qwen2.5-1.5B.
+\begin{table}[!htbp]
+\centering
+\caption{Qwen2.5-1.5B-Instruct 在官方 LongBench 三任务上的不同量化路径对比（$n=50$，4K 上下文，贪心解码，官方 LongBench 数据源）。KIVI-style 按统一协议复核。}
+\label{tab:official-longbench-1p5b}
+\begin{tabular}{llrrrr}
+\toprule
+任务 & 指标 & FP16 (baseline) & INT8-Canonical & KIVI-style & INT4-RoleAlign \\
+\midrule
+NarrativeQA & F1 & 7.07 & 7.13 & 6.93 & 7.05 \\
+$\hookrightarrow \Delta_{\text{FP16}}$ &  & (基线) & +0.8\% & -1.9\% & -0.2\% \\
+HotpotQA & F1 & 4.90 & 5.27 & 4.87 & 4.96 \\
+$\hookrightarrow \Delta_{\text{FP16}}$ &  & (基线) & +7.6\% & -0.7\% & +1.2\% \\
+GovReport & ROUGE-L & 9.21 & 9.25 & 9.23 & 8.83 \\
+$\hookrightarrow \Delta_{\text{FP16}}$ &  & (基线) & +0.4\% & +0.2\% & -4.1\% \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,4 +1,4 @@
-# T4 Mistral-7B AutoK 5-Task (debug)
+# T4 Mistral-7B AutoK 5-Task
 
 | Task | Uniform | BA-$k_3$ | Heur-$k_3$ | **BA-AutoK** |
 |---|---|---|---|---|

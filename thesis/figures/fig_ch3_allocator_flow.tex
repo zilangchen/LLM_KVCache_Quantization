@@ -1,144 +1,95 @@
 \begin{figure}[!htbp]
   \centering
+  \resizebox{0.96\linewidth}{!}{%
   \begin{tikzpicture}[
     x=1cm, y=1cm,
     >=Stealth,
     every node/.style={font=\rmfamily\small, align=center, text=black},
-    arr/.style={-stealth, line width=1.05pt, draw=black!78},
-    leftpanel/.style={
-      rectangle, rounded corners=7pt,
-      draw=black!70!cyan, line width=1.0pt,
-      fill=cyan!4,
-      minimum width=5.95cm, minimum height=8.30cm
-    },
-    rightpanel/.style={
-      rectangle, rounded corners=7pt,
-      draw=black!55, dashed, line width=1.0pt,
-      fill=gray!3,
-      minimum width=5.95cm, minimum height=8.30cm
-    },
-    titleL/.style={font=\bfseries\small, text=black!80!cyan},
-    titleR/.style={font=\bfseries\small, text=black!72},
-    subtitleL/.style={font=\rmfamily\scriptsize, text=black!65!cyan},
-    subtitleR/.style={font=\rmfamily\scriptsize, text=black!58},
-    tealcard/.style={
+    card/.style={
       rectangle, rounded corners=5pt,
-      draw=black!70!cyan, line width=0.95pt,
-      fill=white, text width=3.75cm,
-      minimum height=1.02cm, inner sep=5pt
+      fill=black!1, line width=0.75pt,
+      minimum height=4.35cm
     },
-    profilecard/.style={
-      rectangle, rounded corners=5pt,
-      draw=black!70!cyan, line width=0.95pt,
-      fill=white, text width=3.75cm,
-      minimum height=1.32cm, inner sep=5pt
+    title/.style={font=\bfseries\small, text=black, anchor=west},
+    subtitle/.style={font=\scriptsize, text=black!62, anchor=west},
+    head/.style={font=\bfseries\scriptsize},
+    box/.style={
+      rectangle, rounded corners=3pt,
+      minimum height=0.50cm, inner sep=2.7pt,
+      font=\scriptsize, line width=0.58pt
     },
-    tealslim/.style={
-      rectangle, rounded corners=5pt,
-      draw=black!70!cyan, line width=0.95pt,
-      fill=white, text width=3.15cm,
-      minimum height=0.88cm, inner sep=5pt
+    pill/.style={
+      rectangle, rounded corners=3pt,
+      minimum height=0.40cm, inner sep=2.4pt,
+      font=\scriptsize, line width=0.55pt
     },
-    redcard/.style={
-      rectangle, rounded corners=5pt,
-      draw=red!58!black, line width=0.95pt,
-      fill=white, text width=3.55cm,
-      minimum height=0.94cm, inner sep=5pt
-    },
-    sandcard/.style={
-      rectangle, rounded corners=5pt,
-      draw=black!52, line width=0.9pt,
-      fill=white, text width=3.55cm,
-      minimum height=1.02cm, inner sep=5pt
-    },
-    branchL/.style={
-      rectangle, rounded corners=5pt,
-      draw=black!70!cyan, line width=0.95pt,
-      fill=white, text width=2.25cm,
-      minimum height=1.16cm, inner sep=5pt
-    },
-    branchR/.style={
-      rectangle, rounded corners=5pt,
-      draw=black!52, line width=0.9pt,
-      fill=white, text width=2.25cm,
-      minimum height=1.16cm, inner sep=5pt
-    },
-    tiny/.style={font=\rmfamily\scriptsize}
+    arr/.style={-Stealth, draw=black!52, line width=0.72pt},
+    faintarr/.style={-Stealth, draw=black!36, line width=0.62pt},
+    faint/.style={draw=black!16, line width=0.55pt}
   ]
+    \definecolor{kBlue}{RGB}{58,104,173}
+    \definecolor{kBlueFill}{RGB}{224,235,249}
+    \definecolor{vTeal}{RGB}{66,139,133}
+    \definecolor{vTealFill}{RGB}{224,242,239}
+    \definecolor{safeGreen}{RGB}{73,135,96}
+    \definecolor{safeGreenFill}{RGB}{230,243,234}
+    \definecolor{anchorGold}{RGB}{178,130,26}
+    \definecolor{anchorGoldFill}{RGB}{250,239,202}
 
-    \node[font=\bfseries\large] at (0,5.02)
-      {行为敏感度画像到预算决策};
-    \node[font=\rmfamily\small, text=black!62] at (0,4.52)
-      {逐层主线与 K/V 角色预算接口};
-    \draw[brown!55!black, line width=0.8pt] (-5.95,4.10) -- (5.95,4.10);
+    \node[title] at (0.20,5.25) {行为敏感度画像到预算分配};
+    \node[subtitle] at (0.20,4.88) {逐层分配给出主线，K/V 角色预算保留为接口扩展};
+    \draw[faint] (0.20,4.62) -- (13.75,4.62);
 
-    \node[leftpanel] (lp) at (-3.45,0.12) {};
-    \node[rightpanel] (rp) at (3.45,0.12) {};
+    % Left card: main allocator
+    \node[card, draw=anchorGold, fill=anchorGoldFill, minimum width=6.25cm] (main) at (3.35,2.22) {};
+    \node[head, text=anchorGold!76!black] at (3.35,4.12) {（a）逐层预算主线};
 
-    % Left title
-    \node[titleL] at (-3.45,3.28) {逐层分配};
-    \node[subtitleL] at (-3.45,2.88) {从 readout 走到 layer-wise budget};
+    \node[box, draw=anchorGold, fill=white, text width=2.18cm] (read) at (1.58,3.42)
+      {离线读数\\$\sigma_K^{(l)},\sigma_V^{(l)}$};
+    \node[box, draw=anchorGold, fill=white, text width=2.18cm] (agg) at (1.58,2.50)
+      {聚合为层级画像\\$s^{(l)}=\operatorname{Agg}_\alpha$};
+    \node[box, draw=anchorGold, fill=white, text width=2.42cm] (policy) at (1.58,1.58)
+      {预算策略\\BA-$k$ / Heuristic-$k$\\AutoK};
+    \node[box, draw=anchorGold, fill=white, text width=2.18cm] (bits) at (1.58,0.66)
+      {逐层位宽向量\\$[b^{(1)},\ldots,b^{(L)}]$};
 
-    % Left vertical chain
-    \node[tealcard] (readout) at (-3.45,1.80)
-      {artifact-based readout\\[2pt]$\sigma_K^{(l)},\ \sigma_V^{(l)}$};
+    \draw[arr] (read.south) -- (agg.north);
+    \draw[arr] (agg.south) -- (policy.north);
+    \draw[arr] (policy.south) -- (bits.north);
 
-    \node[tealslim] (agg) at (-3.45,0.68)
-      {$\operatorname{Agg}_{\alpha}$，\ $\alpha\in\{\max,\mathrm{mean}\}$};
-
-    \node[profilecard] (profile) at (-3.45,-0.63)
-      {layer sensitivity profile\\[2pt]$S=\{s^{(l)}\}$};
-
-    % simple bars inside profile card
-    \foreach \x/\h in {-4.52/0.22,-4.31/0.62,-4.10/0.40,-3.89/0.82,-3.68/0.48,-3.47/0.30,-3.26/0.76,-3.05/0.45,-2.84/0.58} {
-      \fill[cyan!18] (\x,-1.48) rectangle ++(0.10,\h);
-      \draw[black!45!cyan, line width=0.32pt] (\x,-1.48) rectangle ++(0.10,\h);
+    \node[font=\scriptsize, text=black!62] at (4.50,3.40) {行为敏感度画像};
+    \draw[black!26, line width=0.55pt] (3.35,1.18) -- (5.60,1.18);
+    \foreach \x/\h in {3.55/0.44,3.82/0.82,4.09/0.52,4.36/1.08,4.63/0.66,4.90/0.36,5.17/0.94,5.44/0.58} {
+      \fill[anchorGoldFill] (\x,1.18) rectangle ++(0.13,\h);
+      \draw[anchorGold, line width=0.35pt] (\x,1.18) rectangle ++(0.13,\h);
     }
+    \node[pill, draw=anchorGold, fill=white, text width=2.02cm] at (4.50,0.66)
+      {保护集合 $\mathcal P_k$};
 
-    \node[tealslim] (topk) at (-3.45,-2.22)
-      {Top-$k$ 保护集合\\[1pt]$\mathcal P_k=\operatorname{TopK}(S,k)$};
+    \draw[faintarr] (agg.east) -- (3.35,2.48);
+    \draw[faintarr] (4.50,1.18) -- (4.50,0.88);
 
-    \node[redcard] (bits) at (-3.45,-3.48)
-      {layer-wise bit vector\\[2pt]$[b^{(1)},\dots,b^{(L)}]$};
+    % Right card: role-aware interface extension
+    \node[card, draw=black!34, fill=black!1, minimum width=5.75cm] (role) at (10.42,2.22) {};
+    \node[head, text=black!70] at (10.42,4.12) {（b）K/V 角色预算接口};
+    \node[font=\scriptsize, text=black!56] at (10.42,3.74) {扩展口径：定义角色位宽接口};
 
-    \draw[arr] (readout.south) -- (agg.north);
-    \draw[arr] (agg.south) -- (profile.north);
-    \draw[arr] (profile.south) -- (topk.north);
-    \draw[arr] (topk.south) -- (bits.north);
+    \node[box, draw=vTeal, fill=vTealFill, text width=3.30cm] (rread) at (10.42,3.05)
+      {角色读数 $(s_K^{(l)},\,s_V^{(l)})$};
+    \node[box, draw=kBlue, fill=kBlueFill, text width=1.65cm] (sk) at (9.28,2.02)
+      {K 保护集合\\$\mathcal P_K$};
+    \node[box, draw=vTeal, fill=vTealFill, text width=1.65cm] (sv) at (11.56,2.02)
+      {V 保护集合\\$\mathcal P_V$};
+    \node[box, draw=black!42, fill=black!4, text width=3.30cm] (pair) at (10.42,0.84)
+      {角色位宽接口\\$\mathbf b^{(l)}=(b_K^{(l)},\,b_V^{(l)})$};
 
-    % Right title
-    \node[titleR] at (3.45,3.28) {接口扩展};
-    \node[subtitleR] at (3.45,2.88) {只定义 K/V 角色预算接口，不作为主实证策略};
+    \draw[faintarr] (rread.south) -- (sk.north);
+    \draw[faintarr] (rread.south) -- (sv.north);
+    \draw[faintarr] (sk.south) -- ([xshift=-0.80cm]pair.north);
+    \draw[faintarr] (sv.south) -- ([xshift=0.80cm]pair.north);
 
-    \node[sandcard] (shared) at (3.45,1.86)
-      {可选角色条件化 readout\\[2pt]$(s_K^{(l)},\ s_V^{(l)})$};
-
-    \node[branchL] (sk) at (2.08,-0.08)
-      {$S_K$\\[2pt]Key budget\\interface};
-    \node[branchR] (sv) at (4.82,-0.08)
-      {$S_V$\\[2pt]Value budget\\interface};
-
-    \node[branchL] (pk) at (2.08,-1.92)
-      {$\mathcal P_K$\\[2pt]Key mask};
-    \node[branchR] (pv) at (4.82,-1.92)
-      {$\mathcal P_V$\\[2pt]Value mask};
-
-    \node[redcard] (pair) at (3.45,-3.58)
-      {pair-wise budget\\interface\\[2pt]$\mathbf b^{(l)}=(b_K^{(l)},\,b_V^{(l)})$};
-
-    \coordinate (split) at (3.45,0.82);
-    \coordinate (merge) at (3.45,-2.78);
-
-    \draw[arr] (shared.south) -- (split);
-    \draw[arr] (split) -- (sk.north);
-    \draw[arr] (split) -- (sv.north);
-    \draw[arr] (sk.south) -- (pk.north);
-    \draw[arr] (sv.south) -- (pv.north);
-    \draw[arr] (pk.south) -- (merge);
-    \draw[arr] (pv.south) -- (merge);
-    \draw[arr] (merge) -- (pair.north);
-
-  \end{tikzpicture}
-  \caption{行为敏感度画像到预算分配的两级流程：逐层主线与角色预算接口。左半部分给出本文主线实证使用的逐层分配链路，从 artifact-based readout 到排序、top-$k$ 保护集合与 layer-wise bit vector；右半部分只说明相同框架可以扩展到 K/V 角色预算接口，不构成本文已经完整验证的独立 role-aware allocator。}
+  \end{tikzpicture}%
+  }
+  \caption{行为敏感度画像到预算分配的两级流程：逐层主线与角色预算接口。左侧给出本文主线使用的逐层分配链路，从离线读数聚合为层级敏感度画像，再得到预算策略、保护集合与逐层位宽向量；右侧限定为 K/V 角色预算接口，用于表达角色位宽对，主实证链路仍以前述逐层分配为准。}
   \label{fig:ch3-allocation-flow}
 \end{figure}

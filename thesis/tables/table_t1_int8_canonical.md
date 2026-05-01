@@ -1,4 +1,4 @@
-| Task | FP16 | INT8-ours | INT4-RoleAlign | KIVI-style |
+| Task | FP16 | INT8-Canonical | INT4-RoleAlign | KIVI-style |
 |---|---|---|---|---|
 | NarrativeQA (F1) | 7.07 | 7.16 (+0.09) | 6.99 (-0.08) | 6.93 (-0.13) |
 | HotpotQA (F1) | 4.90 | 4.88 (-0.02) | 5.35 (+0.45) | 4.87 (-0.03) |

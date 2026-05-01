@@ -1,65 +1,78 @@
 \begin{figure}[!htbp]
   \centering
+  \resizebox{0.97\linewidth}{!}{%
   \begin{tikzpicture}[
     x=1cm, y=1cm,
     >=Stealth,
     every node/.style={font=\rmfamily\small, align=center, text=black},
-    arr/.style={-stealth, line width=0.95pt, draw=black!76},
-    stage/.style={
-      rectangle, rounded corners=3.5pt,
-      draw=black!62, line width=0.9pt,
-      fill=white,
-      text width=2.75cm, minimum height=1.12cm, inner sep=5pt
+    card/.style={
+      rectangle, rounded corners=5pt,
+      fill=black!1, line width=0.75pt,
+      minimum height=3.15cm
     },
-    ref/.style={stage, draw=blue!58!black, fill=blue!5},
-    cand/.style={stage, draw=orange!72!black, fill=orange!8, text width=3.05cm},
-    select/.style={stage, draw=red!58!black, fill=red!5, text width=2.95cm},
-    outcard/.style={stage, draw=cyan!58!black, fill=cyan!7, text width=3.00cm},
-    role/.style={
+    title/.style={font=\bfseries\small, text=black, anchor=west},
+    subtitle/.style={font=\scriptsize, text=black!62, anchor=west},
+    steplabel/.style={font=\bfseries\scriptsize},
+    tag/.style={
       rectangle, rounded corners=3pt,
-      draw=black!55, line width=0.75pt,
-      fill=gray!4,
-      text width=2.25cm, minimum height=0.72cm, inner sep=3pt,
-      font=\footnotesize
+      minimum height=0.40cm, inner sep=2.5pt,
+      font=\scriptsize, line width=0.55pt
     },
-    note/.style={
-      rectangle, rounded corners=3.5pt,
-      draw=black!45, line width=0.8pt,
-      fill=gray!6,
-      text width=11.5cm, minimum height=0.78cm, inner sep=5pt,
-      font=\footnotesize
-    }
+    line/.style={
+      rectangle, rounded corners=3pt,
+      minimum height=0.52cm, inner sep=2.5pt,
+      font=\scriptsize, line width=0.55pt
+    },
+    arr/.style={-Stealth, draw=black!52, line width=0.72pt},
+    faint/.style={draw=black!16, line width=0.55pt}
   ]
+    \definecolor{kBlue}{RGB}{58,104,173}
+    \definecolor{kBlueFill}{RGB}{224,235,249}
+    \definecolor{vTeal}{RGB}{66,139,133}
+    \definecolor{vTealFill}{RGB}{224,242,239}
+    \definecolor{safeGreen}{RGB}{73,135,96}
+    \definecolor{safeGreenFill}{RGB}{230,243,234}
+    \definecolor{anchorGold}{RGB}{178,130,26}
+    \definecolor{anchorGoldFill}{RGB}{250,239,202}
 
-    \node[font=\bfseries\large] at (0,3.25) {行为引导离线校准工作流};
+    \node[title] at (0.15,4.18) {行为引导离线校准工作流};
+    \node[subtitle] at (0.15,3.82) {从参考行为到冻结产物，统一的是流程、接口与稳健选择纪律};
+    \draw[faint] (0.15,3.56) -- (14.05,3.56);
 
-    \node[ref] (data) at (-4.95,1.65)
-      {\textbf{校准样本}\\FP16 前向记录\\attention distribution\\与输出响应};
+    \node[card, draw=vTeal!70!black, minimum width=2.95cm] (ref) at (1.65,1.80) {};
+    \node[steplabel, text=vTeal!70!black] at (1.65,3.00) {1 \quad 参考行为};
+    \node[tag, draw=vTeal, fill=vTealFill, text width=1.95cm] at (1.65,2.36) {FP16 前向记录};
+    \node[line, draw=vTeal!60!black, fill=white, text width=1.95cm] at (1.65,1.68) {注意力分布};
+    \node[line, draw=vTeal!60!black, fill=white, text width=1.95cm] at (1.65,1.06) {输出响应};
 
-    \node[cand] (paths) at (-1.55,1.65)
-      {\textbf{路径候选}\\INT8 基准路径\\对称 INT4 试探路径\\INT4-RoleAlign};
+    \node[card, draw=kBlue, fill=kBlueFill, minimum width=3.55cm] (path) at (5.15,1.80) {};
+    \node[steplabel, text=kBlue!75!black] at (5.15,3.00) {2 \quad 路径候选};
+    \node[line, draw=kBlue, fill=white, text width=2.45cm] at (5.15,2.42) {INT8 基准路径};
+    \node[line, draw=kBlue, fill=white, text width=2.45cm] at (5.15,1.86) {对称 INT4 路径};
+    \node[line, draw=kBlue, fill=white, text width=2.45cm] at (5.15,1.30) {INT4-RoleAlign};
+    \node[tag, draw=kBlue!50!black, fill=white, text width=1.12cm, font=\tiny] at (4.40,0.72)
+      {K：分布 KL};
+    \node[tag, draw=kBlue!50!black, fill=white, text width=1.12cm, font=\tiny] at (5.90,0.72)
+      {V：输出扰动};
 
-    \node[select] (select) at (1.95,1.65)
-      {\textbf{稳健选择}\\可行域约束\\尾部坏例优先\\裁剪率检查};
+    \node[card, draw=anchorGold, fill=anchorGoldFill, minimum width=3.10cm] (select) at (8.85,1.80) {};
+    \node[steplabel, text=anchorGold!76!black] at (8.85,3.00) {3 \quad 稳健选择};
+    \node[line, draw=anchorGold, fill=white, text width=2.05cm] at (8.85,2.32) {可行域约束};
+    \node[line, draw=anchorGold, fill=white, text width=2.05cm] at (8.85,1.66) {P95 尾部优先};
+    \node[line, draw=anchorGold, fill=white, text width=2.05cm] at (8.85,1.00) {裁剪率审计};
 
-    \node[outcard] (artifact) at (5.25,1.65)
-      {\textbf{离线输出}\\路径特定产物\\共享行为读数\\在线只读接口};
+    \node[card, draw=safeGreen!70!black, fill=safeGreenFill, minimum width=3.25cm] (out) at (12.55,1.80) {};
+    \node[steplabel, text=safeGreen!64!black] at (12.55,3.00) {4 \quad 冻结产物};
+    \node[line, draw=safeGreen!55!black, fill=white, text width=2.20cm] at (12.55,2.32) {路径参数};
+    \node[line, draw=safeGreen!55!black, fill=white, text width=2.20cm] at (12.55,1.66) {行为读数};
+    \node[line, draw=safeGreen!55!black, fill=white, text width=2.20cm] at (12.55,1.00) {在线只读接口};
 
-    \draw[arr] (data.east) -- (paths.west);
-    \draw[arr] (paths.east) -- (select.west);
-    \draw[arr] (select.east) -- (artifact.west);
+    \draw[arr] (ref.east) -- node[above, font=\tiny, text=black!55] {提取} (path.west);
+    \draw[arr] (path.east) -- node[above, font=\tiny, text=black!55] {搜索} (select.west);
+    \draw[arr] (select.east) -- node[above, font=\tiny, text=black!55] {固化} (out.west);
 
-    \node[role] (kpath) at (-2.78,-0.48)
-      {K-path\\attention-distribution KL};
-    \node[role] (vpath) at (-0.28,-0.48)
-      {V-path\\输出扰动代理};
-    \draw[arr, draw=orange!72!black] ([xshift=-0.70cm]paths.south) -- (kpath.north);
-    \draw[arr, draw=orange!72!black] ([xshift=0.70cm]paths.south) -- (vpath.north);
-
-    \node[note] at (0,-1.83)
-      {统一的是离线流程、产物接口与稳健选择纪律；不同路径可以使用不同参数家族与行为代理，RoleAlign 不被写成单一 KL 分数统一选择 $(p_K,p_V)$。};
-
-  \end{tikzpicture}
-  \caption{行为引导离线校准的统一工作流。输入侧提取 FP16 参考行为，候选侧按路径组织参数空间，选择侧执行可行域约束与尾部稳健优先，输出侧冻结为路径特定校准产物与共享行为读数。对于 INT4-RoleAlign，Key 路径以 attention-distribution KL 为主代理，Value 路径以输出扰动代理为主代理。}
+  \end{tikzpicture}%
+  }
+  \caption{行为引导离线校准的统一工作流。输入侧提取 FP16 参考行为，候选侧按路径组织参数空间，选择侧执行可行域约束、P95 尾部优先与裁剪率审计，输出侧冻结为路径特定校准产物与共享行为读数。对于 \texttt{INT4-RoleAlign}，K 路径以注意力分布 KL 为主代理，V 路径以输出扰动代理为主代理。}
   \label{fig:ch3-calibration-workflow}
 \end{figure}

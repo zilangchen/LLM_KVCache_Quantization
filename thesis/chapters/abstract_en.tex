@@ -1,7 +1,4 @@
-% ============================================================
-% abstract_en.tex — English Abstract 
-% Aligned with docs/thesis_chapter_drafts_20260420.md §1.4
-% ============================================================
+% English abstract.
 
 \begin{abstracten}
 
@@ -13,7 +10,7 @@ does not guarantee stable attention behavior: Key errors can alter the
 softmax distribution, while Value errors propagate through weighted
 aggregation. KV-cache quantization therefore requires more than a
 lower-bit representation; it needs an organizing principle that links
-calibration, low-bit recovery, and layer-wise budget allocation.
+calibration, low-bit accuracy preservation, and layer-wise budget allocation.
 
 This thesis proposes a behavior-guided framework organized around
 attention behavior. At the calibration layer, the framework treats
@@ -32,18 +29,17 @@ baseline path shows that behavior-guided calibration can form a
 stable, reproducible, and auditable fidelity path; the small official
 LongBench check is used only as a protocol-consistency sanity check,
 not as evidence of broad real-world generalization. Second, symmetric
-INT4 exposes a model-dependent low-bit cliff, with LLaMA-3.1-8B as an
+INT4 exposes a model-dependent low-bit transition threshold, with LLaMA-3.1-8B as an
 important architectural exception; INT4-RoleAlign then provides a
 role-aware low-bit instance under the same asymmetric format family as
 KIVI-style. Third, cross-model allocation within a same-order INT4
-budget band is best read as a regime map rather than a universal
-winner story: Mistral-7B is the clearest positive case for AutoK,
-Qwen2.5-3B reveals an early-layer rescue regime, LLaMA-3.1-8B shows a
+budget band is best read as a regime map rather than evidence for a
+single cross-task optimum: Mistral-7B provides the clearest evidence for AutoK under this profile,
+Qwen2.5-3B reveals an early-layer preservation regime, LLaMA-3.1-8B shows a
 medium-scale consensus regime, and Qwen2.5-14B exhibits coexisting
-high-performing clusters without a stable best policy. The strong
-heuristic baseline is therefore not a failure of the framework; it
-indicates that some regimes have intrinsically narrow feasible layer
-sets.
+high-performing clusters with statistically close policy choices. The strong
+heuristic baseline further indicates that some regimes have
+intrinsically narrow feasible layer sets.
 
 \keywordsen{large language models; KV-cache quantization;
 behavior-guided calibration; regime map; asymmetric quantization;

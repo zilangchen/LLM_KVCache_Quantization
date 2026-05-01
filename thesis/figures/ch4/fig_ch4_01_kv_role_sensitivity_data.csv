@@ -1,0 +1,46 @@
+metric,model_key,model,config,value,std,source_file,source_note
+needle,1p5b,Qwen2.5 1.5B,FP16,100.0,,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_1p5b.csv,FP16 maps to kv_mode=fp16
+ruler,1p5b,Qwen2.5 1.5B,FP16,24.37502,0.6536346701330948,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_1p5b.csv,FP16 maps to kv_mode=fp16
+longbench,1p5b,Qwen2.5 1.5B,FP16,4.82,0.03605551275463,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_1p5b.csv,FP16 maps to kv_mode=fp16
+needle,1p5b,Qwen2.5 1.5B,K8V8,100.0,,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_1p5b.csv,K8V8 maps to kv_mode=int8_ours
+ruler,1p5b,Qwen2.5 1.5B,K8V8,24.375,0.654,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_1p5b.csv,K8V8 maps to kv_mode=int8_ours
+longbench,1p5b,Qwen2.5 1.5B,K8V8,4.9969,0.10690000000000001,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_1p5b.csv,K8V8 maps to kv_mode=int8_ours
+needle,1p5b,Qwen2.5 1.5B,K8V4,100.0,,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table3_mixedkv_qwen25_1p5b.csv,K8V4 maps to MixedKV (K@INT8 + V@INT4)
+ruler,1p5b,Qwen2.5 1.5B,K8V4,24.8698,0.2017049726704825,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table3_mixedkv_qwen25_1p5b.csv,K8V4 maps to MixedKV (K@INT8 + V@INT4)
+longbench,1p5b,Qwen2.5 1.5B,K8V4,4.466,0.048270073544579996,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table3_mixedkv_qwen25_1p5b.csv,K8V4 maps to MixedKV (K@INT8 + V@INT4)
+needle,1p5b,Qwen2.5 1.5B,K4V8,0.0,0.0,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round2_postfix/emnlp_postfix_v2/runs,K4V8 Needle archived 32704-context mean across 5 profiles
+ruler,1p5b,Qwen2.5 1.5B,K4V8,0.0,0.0,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/final/final_data/kv_ablation/tables/kv_ablation_ruler.csv,K4V8 maps to K@INT4 + V@INT8 ablation
+longbench,1p5b,Qwen2.5 1.5B,K4V8,2.57666666666666,0.08144527815247,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/final/final_data/kv_ablation/tables/kv_ablation_longbench.csv,K4V8 maps to K@INT4 + V@INT8 ablation
+needle,1p5b,Qwen2.5 1.5B,K4V4,0.0,,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_1p5b.csv,K4V4 maps to kv_mode=int4_ours
+ruler,1p5b,Qwen2.5 1.5B,K4V4,0.0,0.0,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_1p5b.csv,K4V4 maps to kv_mode=int4_ours
+longbench,1p5b,Qwen2.5 1.5B,K4V4,2.414,0.19932385707685998,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_1p5b.csv,K4V4 maps to kv_mode=int4_ours
+needle,7b,Qwen2.5 7B,FP16,100.0,,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_7b.csv,FP16 maps to kv_mode=fp16
+ruler,7b,Qwen2.5 7B,FP16,24.92188,0.1746816304022826,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_7b.csv,FP16 maps to kv_mode=fp16
+longbench,7b,Qwen2.5 7B,FP16,3.782,0.06418722614352,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_7b.csv,FP16 maps to kv_mode=fp16
+needle,7b,Qwen2.5 7B,K8V8,100.0,,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_7b.csv,K8V8 maps to kv_mode=int8_ours
+ruler,7b,Qwen2.5 7B,K8V8,24.84376,0.2139404309615175,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_7b.csv,K8V8 maps to kv_mode=int8_ours
+longbench,7b,Qwen2.5 7B,K8V8,3.834,0.06877499545619,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_7b.csv,K8V8 maps to kv_mode=int8_ours
+needle,7b,Qwen2.5 7B,K8V4,72.41379310344827,,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table3_mixedkv_qwen25_7b.csv,K8V4 maps to MixedKV (K@INT8 + V@INT4)
+ruler,7b,Qwen2.5 7B,K8V4,25.15624,0.4453525210437224,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table3_mixedkv_qwen25_7b.csv,K8V4 maps to MixedKV (K@INT8 + V@INT4)
+longbench,7b,Qwen2.5 7B,K8V4,4.266,0.058137767414989994,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table3_mixedkv_qwen25_7b.csv,K8V4 maps to MixedKV (K@INT8 + V@INT4)
+needle,7b,Qwen2.5 7B,K4V8,0.0,0.0,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round2_postfix/emnlp_postfix_v2/runs,K4V8 Needle archived 32704-context mean across 8 profiles
+ruler,7b,Qwen2.5 7B,K4V8,0.0,0.0,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/final/final_data/kv_ablation/tables/kv_ablation_ruler.csv,K4V8 maps to K@INT4 + V@INT8 ablation
+longbench,7b,Qwen2.5 7B,K4V8,0.79666666666666,0.047258156262519994,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/final/final_data/kv_ablation/tables/kv_ablation_longbench.csv,K4V8 maps to K@INT4 + V@INT8 ablation
+needle,7b,Qwen2.5 7B,K4V4,0.0,,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_7b.csv,K4V4 maps to kv_mode=int4_ours
+ruler,7b,Qwen2.5 7B,K4V4,0.0,0.0,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_7b.csv,K4V4 maps to kv_mode=int4_ours
+longbench,7b,Qwen2.5 7B,K4V4,0.27399999999999997,0.09208691546577,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_qwen25_7b.csv,K4V4 maps to kv_mode=int4_ours
+needle,8b,LLaMA-3.1 8B,FP16,100.0,,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_llama31_8b.csv,FP16 maps to kv_mode=fp16
+ruler,8b,LLaMA-3.1 8B,FP16,31.48436,0.8992938857792816,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_llama31_8b.csv,FP16 maps to kv_mode=fp16
+longbench,8b,LLaMA-3.1 8B,FP16,7.922,0.52789203441612,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_llama31_8b.csv,FP16 maps to kv_mode=fp16
+needle,8b,LLaMA-3.1 8B,K8V8,100.0,,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_llama31_8b.csv,K8V8 maps to kv_mode=int8_ours
+ruler,8b,LLaMA-3.1 8B,K8V8,31.2546,0.9937026491863648,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_llama31_8b.csv,K8V8 maps to kv_mode=int8_ours
+longbench,8b,LLaMA-3.1 8B,K8V8,8.17,0.74491610265854,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_llama31_8b.csv,K8V8 maps to kv_mode=int8_ours
+needle,8b,LLaMA-3.1 8B,K8V4,100.0,,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table3_mixedkv_llama31_8b.csv,K8V4 maps to MixedKV (K@INT8 + V@INT4)
+ruler,8b,LLaMA-3.1 8B,K8V4,33.28126,0.7514198812914143,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table3_mixedkv_llama31_8b.csv,K8V4 maps to MixedKV (K@INT8 + V@INT4)
+longbench,8b,LLaMA-3.1 8B,K8V4,7.416,0.8318533524606301,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table3_mixedkv_llama31_8b.csv,K8V4 maps to MixedKV (K@INT8 + V@INT4)
+needle,8b,LLaMA-3.1 8B,K4V8,100.0,0.0,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round2_postfix/emnlp_postfix_v2/runs,K4V8 Needle archived 32704-context mean across 7 profiles
+ruler,8b,LLaMA-3.1 8B,K4V8,31.119766666666663,0.9021097956087902,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/final/final_data/kv_ablation/tables/kv_ablation_ruler.csv,K4V8 maps to K@INT4 + V@INT8 ablation
+longbench,8b,LLaMA-3.1 8B,K4V8,8.92333333333333,0.78678671400407,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/final/final_data/kv_ablation/tables/kv_ablation_longbench.csv,K4V8 maps to K@INT4 + V@INT8 ablation
+needle,8b,LLaMA-3.1 8B,K4V4,98.0,,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_llama31_8b.csv,K4V4 maps to kv_mode=int4_ours
+ruler,8b,LLaMA-3.1 8B,K4V4,34.218740000000004,2.185394299205522,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_llama31_8b.csv,K4V4 maps to kv_mode=int4_ours
+longbench,8b,LLaMA-3.1 8B,K4V4,19.08399999999999,0.8920369947485299,/Users/chenzilang/Desktop/LLM_KVCache_Quantization/results/archive/round4_misc/paper_tables/table1_main_quality_llama31_8b.csv,K4V4 maps to kv_mode=int4_ours

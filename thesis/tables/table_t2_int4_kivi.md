@@ -5,8 +5,8 @@
 | LLaMA-3.1-8B | 8 | 6.73 | 6.90 (+2.4%) | **6.90** (+2.4%) | 100% / **100/100%** | +0.00 |
 | Qwen2.5-14B | 8 | 4.68 | --- | **5.04** (+7.6%) | --- / **100/100%** | --- |
 
-### 1.5B LongBench Mean Quality (clean_rerun sanity check)
+### 1.5B LongBench Mean Quality (sanity check)
 
-- fp16: 7.060
-- int4_ours_asym: 7.125
-- kivi_style: 7.011
+- FP16: 7.060
+- RoleAlign: 7.125
+- KIVI-style: 7.011
