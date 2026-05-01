@@ -32,13 +32,13 @@
 | 1 | 摘要 | `thesis/chapters/abstract_zh.tex` | 完整三段式模板；“统一框架/可审计/图谱”高频抽象词集中 | 重写为具体问题、方法组件、关键数值/模型例外、边界 | INT8 canonical path、INT4-RoleAlign、cross-model regime、系统边界 | final-ready + boundary-only | `docs/thesis_upgrade_live_plan.md` freeze；clean-provenance readout | 允许写 5 条冻结 claim；禁止普适胜出 | done |
 | 2 | Abstract | `thesis/chapters/abstract_en.tex` | 与中文摘要镜像；英文句式过于平滑 | 不直译中文摘要，按英文论文习惯重组，加入 concrete experimental anchors | 与中文摘要做事实一致但结构非镜像检查 | final-ready + boundary-only | 同上 | 允许事实一致；禁止逐句镜像和新增 claim | done |
 | 3 | Abstract | `thesis/chapters/abstract_en.tex` | “regime map / universal winner story”成熟但像生成式总结 | 保留 `regime-based interpretation` / `family-/scale-/task-dependent regimes`，明确删除 `universal winner story`，并绑定模型族、规模、任务和预算条件 | 3B/8B/14B/Mistral；同量级 INT4 预算带 | final-ready + boundary-only | live plan 冻结的 Mistral-specific auto-k、3B early-layer、14B top-tier-not-winner | 允许 regime-map 观点；禁止跨 family universal winner | done |
-| 4 | 绪论 | `thesis/chapters/ch1_introduction.tex` | 大模型背景、KV Cache 引入是模板开场 | 缩短通用背景，直接落到 decode 阶段缓存字节数 | KV cache memory pressure；decode-stage constraint | not-claim | `objective.md` mission；Ch4 deployment boundary | 允许问题定位；禁止泛泛行业背景 | todo |
-| 5 | 绪论 | `thesis/chapters/ch1_introduction.tex` | 公式解释过完整，像教材说明 | 加入本文如何用公式界定实验变量，而非只解释符号 | batch/length/layers/head_dim/bit-width 变量口径 | definition-only | Ch1 formula context；Ch4 protocol | 允许变量口径说明；禁止教材式孤立解释 | todo |
-| 6 | 绪论 | `thesis/chapters/ch1_introduction.tex` | “压得更低不等于可用”过于总括 | 用 Qwen/LLaMA INT4 失稳差异提前埋钩子 | K4V8/K4V4 cliff；LLaMA exception | boundary-only | Ch4 K/V sensitivity and role diagnosis | 允许作为条件性背景钩子；禁止升级为 final-ready 主 claim 或所有模型同强度 Key 崩 | todo |
-| 7 | 绪论 | `thesis/chapters/ch1_introduction.tex` | 相关方向并列概述，句式统一 | 把 KIVI/KVQuant/ZipCache 改成各自留下的未解决问题 | format/control/calibration/cache-management gap | literature-positioning | Ch2 citations and thesis gap | 允许 gap 定位；禁止排队式综述 | todo |
-| 8 | 绪论 | `thesis/chapters/ch1_introduction.tex` | 研究问题是标准 proposal 语气 | 从本文观察出发：先出现现象，再提出问题 | INT8 parity、INT4 cliff、allocator regimes | final-ready + boundary-only | live plan frozen claims | 允许从观察导出 RQ；禁止先验全能问题设定 | todo |
-| 9 | 绪论 | `thesis/chapters/ch1_introduction.tex` | “问题-方法-证据”“论证链条”等元叙述密集 | 保留章节导航，减少抽象评价，写具体章节承载内容 | Chapter-to-RQ mapping | not-claim | thesis `main.tex` chapter structure | 允许章节承载说明；禁止抽象论证链复述 | todo |
-| 10 | 绪论 | `thesis/chapters/ch1_introduction.tex` | 五章安排是模板段 | 大幅压缩或改成“第几章回答哪个 RQ” | RQ1/RQ2/RQ3/RQ4 映射 | not-claim | Ch1 chapter overview | 允许 RQ 映射；禁止模板式章节介绍 | todo |
+| 4 | 绪论 | `thesis/chapters/ch1_introduction.tex` | 大模型背景、KV Cache 引入是模板开场 | 缩短通用背景，直接落到 decode 阶段缓存字节数 | KV cache memory pressure；decode-stage constraint | not-claim | `objective.md` mission；Ch4 deployment boundary | 允许问题定位；禁止泛泛行业背景 | done |
+| 5 | 绪论 | `thesis/chapters/ch1_introduction.tex` | 公式解释过完整，像教材说明 | 加入本文如何用公式界定实验变量，而非只解释符号 | batch/length/layers/head_dim/bit-width 变量口径 | definition-only | Ch1 formula context；Ch4 protocol | 允许变量口径说明；禁止教材式孤立解释 | done |
+| 6 | 绪论 | `thesis/chapters/ch1_introduction.tex` | “压得更低不等于可用”过于总括 | 用 Qwen/LLaMA INT4 失稳差异提前埋钩子 | K4V8/K4V4 cliff；LLaMA exception | boundary-only | Ch4 K/V sensitivity and role diagnosis | 允许作为条件性背景钩子；禁止升级为 final-ready 主 claim 或所有模型同强度 Key 崩 | done |
+| 7 | 绪论 | `thesis/chapters/ch1_introduction.tex` | 相关方向并列概述，句式统一 | 把 KIVI/KVQuant/ZipCache 改成各自留下的未解决问题 | format/control/calibration/cache-management gap | literature-positioning | Ch2 citations and thesis gap | 允许 gap 定位；禁止排队式综述 | done |
+| 8 | 绪论 | `thesis/chapters/ch1_introduction.tex` | 研究问题是标准 proposal 语气 | 从本文观察出发：先出现现象，再提出问题 | INT8 parity、INT4 cliff、allocator regimes | final-ready + boundary-only | live plan frozen claims | 允许从观察导出 RQ；禁止先验全能问题设定 | done |
+| 9 | 绪论 | `thesis/chapters/ch1_introduction.tex` | “问题-方法-证据”“论证链条”等元叙述密集 | 保留章节导航，减少抽象评价，写具体章节承载内容 | Chapter-to-RQ mapping | not-claim | thesis `main.tex` chapter structure | 允许章节承载说明；禁止抽象论证链复述 | done |
+| 10 | 绪论 | `thesis/chapters/ch1_introduction.tex` | 五章安排是模板段 | 大幅压缩或改成“第几章回答哪个 RQ” | RQ1/RQ2/RQ3/RQ4 映射 | not-claim | Ch1 chapter overview | 允许 RQ 映射；禁止模板式章节介绍 | done |
 | 11 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | KV Cache 基础解释像教科书 | 与实验瓶颈绑定：decode memory-bound 如何影响设计 | decode TPOT、KV memory、cache bytes | definition-only + boundary-only | Ch2 KV Cache basics；Ch4 deployment section | 允许面向本论文变量解释；禁止泛教材段 | todo |
 | 12 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 对称量化解释标准、完整、低个性 | 加入为何 INT8 作保守锚点、为何 INT4 是故障暴露点 | INT8 canonical path；INT4 cliff | final-ready (INT8 only) + boundary-only | clean-provenance readout；Ch4 low-bit diagnosis | 允许 INT8 canonical path 保真；INT4 只作为故障暴露/边界语境；禁止泛泛位宽优劣 | todo |
 | 13 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 非对称量化解释泛化 | 用 K/V 统计差异导入，不泛讲 per-channel/per-token | K/V role difference；per-channel K/per-token V | definition-only + boundary-only | Ch3 INT4-RoleAlign definition；Ch4 K/V diagnosis | 允许格式和角色差异绑定；禁止纯技术百科 | todo |
@@ -136,8 +136,23 @@
 
 ### M3: 绪论
 
-- 状态：todo
+- 状态：done
 - 片段：4-10
+- 改动文件：
+  - `thesis/chapters/ch1_introduction.tex`
+- 本地验证：
+  - `git diff --check -- thesis/chapters/ch1_introduction.tex`: PASS
+  - `rg -n "需要强调的是|至此|共同表明|核心在于|问题\s*-\s*方法\s*-\s*证据|问题-方法-证据|图谱|论证链条|论证主线|universal winner|普适最优|全局胜出|赢家|所有模型同强度|理论中心|普适策略|跨条件稳定占优|分别回答 RQ1--RQ4|按 RQ1--RQ4" thesis/chapters/ch1_introduction.tex`: PASS (no hits)
+  - `python scripts/review_tool.py phase-gate`: PASS (`PHASE GATE: CLEAR`; only pre-existing `review_tracker.md` parse warnings)
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`: PASS (`main.pdf`, 106 pages)
+  - `rg -n "(^!|LaTeX Error|Undefined control sequence|Citation .* undefined|Reference .* undefined|There were undefined|Rerun to get cross-references right|Label\(s\) may have changed)" thesis/main.log`: PASS (no hits)
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m3_final.txt`: PASS
+  - `sed -n '220,430p' /tmp/thesis_main_m3_final.txt | rg -n "�|□|\?\?|undefined|para:|fig:|tab:|INT4RoleAlign|INT4-$|^RoleAlign|问题 - 方法 - 证据"`: PASS (no hits in Ch1 extraction window)
+- Agent review:
+  - Style/AIGC-risk: PASS after adding RQ4, adding the bounded Qwen/LLaMA low-bit hook, and removing template meta-language.
+  - Evidence/claim-boundary: PASS after keeping Qwen/LLaMA and `AutoK` as problem-setting / allocation-extension context, not final-ready overclaims.
+  - Terminology/structure: PASS after aligning RQ1--RQ4 with `objective.md` and changing Ch4 wording from “separate RQ answers” to evidence coverage.
+  - LaTeX/reference/extraction: PASS after protecting `\mbox{INT4-RoleAlign}` and rechecking Ch1 PDF extraction.
 
 ### M4: 相关工作
 
