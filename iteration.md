@@ -1659,3 +1659,38 @@ Canonical agent workflow directory is `.agents/`.
   - 全 PDF 中仍存在非 M3 范围的历史表格/附录抽取断行片段；保留到 M5/M7 方法章与全稿抽取复核处理。
   - 下一步进入 M4：相关工作片段 11-19，重点从教材式基础解释与排队式 survey 改为与本文实验瓶颈、softmax 行为和系统边界绑定。
 - Commit: f35e102
+
+### 2026-05-01 20:40 | M4 Related Work AIGC-Risk Revision
+- Goal:
+  - 完成 47 段 AIGC 误判风险矩阵中的片段 11-19，重写第二章技术基础与相关工作，使其从教材式解释、排队式 survey 和宏观 gap 改为本文变量、softmax 行为代理、K/V 角色差异和部署边界驱动的定位。
+- Changed files:
+  - `thesis/chapters/ch2_related_work.tex`
+  - `docs/aigc_revision_matrix_20260501.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch2_related_work.tex docs/aigc_revision_matrix_20260501.md`
+  - `rg -n "需要强调的是|至此|共同表明|核心在于|图谱|论证链条|普适最优|全局胜出|赢家|统一框架|可审查|可审计|可复现|较清晰的谱系|接口视图|三个接口|四个可审查接口|这些接口|当前主流|为了增强表示能力|重要结构因素之一|统一的结构记号|真实 decode|融合 decode|decode 路径|INT8.*锚点" thesis/chapters/ch2_related_work.tex`
+  - `python scripts/review_tool.py phase-gate`
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`
+  - `rg -n "(^!|LaTeX Error|Undefined control sequence|Citation .* undefined|Reference .* undefined|There were undefined|Rerun to get cross-references right|Label\(s\) may have changed|multiply defined)" thesis/main.log`
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m4_tablefix.txt`
+  - `sed -n '434,800p' /tmp/thesis_main_m4_tablefix.txt | rg -n "�|□|\?\?|undefined|para:|fig:|tab:|INT4RoleAlign|INT4-$|^RoleAlign|问题 - 方法 - 证据|至此|共同表明|普适最优|universal winner|图谱|可审计|可复现|较清晰的谱系|接口|当前主流|为了增强表示能力"`
+  - `rg -n "同源行为读数|而不是只优化|一次压缩率|表 2-1|量化对注意力行为" /tmp/thesis_main_m4_tablefix.txt`
+- Outputs:
+  - 第二章开场、Transformer/MHA/GQA 与 KV Cache 解释改为服务 `S`、`H_{kv}`、bit-width 与 Decode 访存压力。
+  - 对称/非对称量化与校准段落绑定 `INT8` 基准路径、对称 `INT4` 失稳暴露点、K/V 计算角色和 MSE vs KL 代理差异。
+  - 相关工作从长队列综述改为格式证据、低比特恢复、缓存管理正交边界、softmax 行为扰动和系统路径判据。
+  - 研究空白改为四个具体问题，并分别连接第三章方法定义与第四章证据边界。
+  - M4 矩阵片段 11-19 标记为 `done`，并记录本地验证与 agent review gate。
+- Validation:
+  - `git diff --check` 通过。
+  - 模板化/高风险短语扫描无命中。
+  - `python scripts/review_tool.py phase-gate` 通过，仍只有既有 `review_tracker.md` parse warnings。
+  - `latexmk` 通过，`main.pdf` 为 104 页；最终复跑显示目标已 up-to-date。
+  - `main.log` 未检出 LaTeX error、未定义 refs/citations、重复 label 或 rerun 提示。
+  - Ch2 PDF 抽取窗口未检出乱码、raw label、`INT4RoleAlign`、`INT4-` 断行残留或旧模板短语。
+  - 页末风险句已连续抽取为“稳侧，预算分配也需要同源行为读数，而不是只优化一次压缩率。”，表 2-1 位于其后，未再插入段中。
+  - Style/AIGC-risk、Evidence/claim-boundary、Terminology/structure、LaTeX/reference/extraction 四个 reviewer 最终均 PASS。
+- Risks / follow-ups:
+  - M4 使用 `[H]` 固定表 2-1，以优先保证相关工作 PDF 抽取读序；M7 全稿复核时需继续检查全章分页质量。
+  - 下一步进入 M5：方法章片段 20-34，重点修公式抽取、拆分 KL/fallback/RoleAlign 长段，并把接口、schema、算法定义结构化。
+- Commit: 3926159
