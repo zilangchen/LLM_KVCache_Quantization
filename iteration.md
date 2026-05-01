@@ -1593,3 +1593,36 @@ Canonical agent workflow directory is `.agents/`.
   - 当前 commit 将作为论文 P0 冻结点；后续若继续 polish，应在新 commit 中处理 P1/P2，不再回流内部阶段命名。
   - `/private/tmp/triton-int4-v2` worktree 记录已显示 prunable，但本轮不执行清理，避免触碰非论文冻结范围。
 - Commit: 563cf99
+
+### 2026-05-01 20:00 | M2 Abstract AIGC-Risk Revision
+- Goal:
+  - 完成 47 段 AIGC 误判风险矩阵中的片段 1-3，重写中文摘要与英文 Abstract，使其更证据驱动、非镜像、边界清楚，并保持论文口吻。
+- Changed files:
+  - `thesis/chapters/abstract_zh.tex`
+  - `thesis/chapters/abstract_en.tex`
+  - `docs/aigc_revision_matrix_20260501.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/abstract_zh.tex thesis/chapters/abstract_en.tex`
+  - `python scripts/review_tool.py phase-gate`
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`
+  - `rg -n "Undefined control sequence|LaTeX Error|Reference .* undefined|Citation .* undefined|There were undefined references|multiply defined|Rerun to get cross-references right|Label\(s\) may have changed" thesis/main.log`
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m2.txt`
+  - `rg -n "�|□|\?\?|undefined|para:|fig:|tab:" /tmp/thesis_main_m2.txt`
+  - `rg -n "INT8 规范路径|INT4RoleAlign|attentionside|outputside|;" /tmp/thesis_main_m2.txt`
+  - `rg -n "universal winner|universally|positive case|recovery story|statistically close|final claim set|contribution|普适最优|全局胜出|赢家|图谱|clean_rerun|clean-provenance|/root|pin=|AutoDL|tmux|rsync|backend process|session" thesis/chapters/abstract_zh.tex thesis/chapters/abstract_en.tex`
+  - `make4ht -ux -d /tmp/thesis_html_m2 main.tex`
+- Outputs:
+  - 中文摘要改为具体问题、方法对象、受控读数与跨模型适用边界，不再使用“图谱/统一框架”式口号收束。
+  - 英文 Abstract 不再逐句镜像中文摘要，改为从 attention-computation failure mode、behavioral proxies 和受控主协议结果组织。
+  - M2 矩阵片段 1-3 标记为 `done`，并记录本地验证与 agent review gate。
+- Validation:
+  - `git diff --check` 通过。
+  - `python scripts/review_tool.py phase-gate` 通过，仍只有既有 `review_tracker.md` parse warnings。
+  - `latexmk` 通过，`main.pdf` 为 106 页。
+  - `main.log` 未检出 LaTeX error、未定义 refs/citations、重复 label 或 rerun 提示。
+  - PDF 抽取未检出乱码、raw label、`INT4RoleAlign`、`attentionside`、`outputside`、Greek question mark 或旧 `INT8 规范路径`。
+  - Style/AIGC-risk、Evidence/claim-boundary、Terminology、LaTeX/reference/extraction 四个 reviewer 最终均 PASS。
+- Risks / follow-ups:
+  - `make4ht` 在当前与 baseline `19c5fea` 上均 exit 1，集中于既有 tex4ht 中文模板与 Ghostscript 图形转换路径；M2 不改模板，已清理生成的 source-tree 中间产物。
+  - 下一步进入 M3：绪论片段 4-10，重点压缩通用背景、改写 RQ 与章节导航。
+- Commit: 1e4575a
