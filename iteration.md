@@ -1694,3 +1694,37 @@ Canonical agent workflow directory is `.agents/`.
   - M4 使用 `[H]` 固定表 2-1，以优先保证相关工作 PDF 抽取读序；M7 全稿复核时需继续检查全章分页质量。
   - 下一步进入 M5：方法章片段 20-34，重点修公式抽取、拆分 KL/fallback/RoleAlign 长段，并把接口、schema、算法定义结构化。
 - Commit: 3926159
+
+### 2026-05-01 21:42 | M5-A Method Chapter AIGC-Risk Revision
+- Goal:
+  - 完成 47 段 AIGC 误判风险矩阵中的片段 20-23，修正第三章方法开头的公式抽取、K/V 诊断、接口总览与 KL 代理说明，使其以证据锚点、作者取舍和边界说明降低误判风险。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `thesis/figures/fig1_error_decomposition.tex`
+  - `thesis/figures/fig_ch3_kv_diag_needle.tex`
+  - `docs/aigc_revision_matrix_20260501.md`
+- Commands:
+  - `git diff --check -- docs/aigc_revision_matrix_20260501.md thesis/chapters/ch3_method.tex thesis/figures/fig1_error_decomposition.tex thesis/figures/fig_ch3_kv_diag_needle.tex`
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`
+  - `rg -n "(^!|LaTeX Error|Undefined control sequence|Citation .* undefined|Reference .* undefined|There were undefined|Rerun to get cross-references right|Label\(s\) may have changed|multiply defined)" thesis/main.log`
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m5a.txt`
+  - `sed -n '790,1130p' /tmp/thesis_main_m5a.txt | rg -n "�|□|\?\?|undefined|para:|fig:|tab:|ref\{|cite\{|INT4RoleAlign|INT4-$|^RoleAlign|需要强调的是|至此|共同表明|核心在于|统一框架|可审计|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|cache writer|low-bit|P 精确|精确代数分解P|同强度坍塌|保持可用"`
+  - `python scripts/review_tool.py phase-gate`
+- Outputs:
+  - 第 3.1 节将输出误差解释改为分布侧传播项与聚合侧传播项，并明确两项是耦合读数而非隔离因果分量。
+  - 图 3-1 去掉图内重复求和公式，改为文字化传播标签，消除 `pdftotext` 中 `P 精确...` 类抽取污染。
+  - 第 3.2 节加入 Qwen2.5-1.5B PPL、Qwen 1.5B/7B RULER 0% 与表图锚点，并把 K8V4/MixedKV 收窄为 `未归零 / 未进入归零式失稳`。
+  - 第 3.3 节从抽象框架叙述改为模块接口：离线校准产物、预算分配读数和在线缓存写入规则。
+  - 第 3.4.1 节拆成 MSE、前向 KL 和数值稳定三组设计理由，并保留 KL 只服务 Key-sensitive 分布侧代理的边界。
+  - M5-A 矩阵片段 20-23 标记为 `done`；M5 总体保持 in-progress，片段 24-34 仍为 todo。
+- Validation:
+  - `git diff --check` 通过。
+  - `latexmk` 通过，`main.pdf` 为 103 页。
+  - `main.log` 未检出 LaTeX error、未定义 refs/citations、重复 label 或 rerun 提示。
+  - M5-A PDF 抽取窗口未检出乱码、raw label、`INT4RoleAlign`、旧模板短语、图 3-1 求和抽取污染或图 3-2 串句。
+  - `python scripts/review_tool.py phase-gate` 通过，仍只有既有 `review_tracker.md` parse warnings。
+  - Style/AIGC-risk、Evidence/claim-boundary、Terminology/structure、LaTeX/PDF extraction 四个 reviewer 最终均 PASS。
+- Risks / follow-ups:
+  - 本轮只完成 M5-A；片段 24-34 尚未处理，后续需继续拆分 workflow、fallback、RoleAlign、schema、kernel path 与章末总结。
+  - 为保持边界一致，本轮对第 3.5 中一处 Key-side cliff 表述做了最小范围限定；不代表片段 28 已完成。
+- Commit: 487270c
