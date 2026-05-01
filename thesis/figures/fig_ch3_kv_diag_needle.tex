@@ -62,44 +62,41 @@
     }
 
     \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (1.85,3.22) {可用};
-    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (3.25,3.22) {可用};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (3.25,3.22) {未归零};
     \node[statebox, fill=riskRedFill, draw=riskRed, text=riskRed!80!black] at (4.65,3.22) {崩塌};
     \node[statebox, fill=riskRedFill, draw=riskRed, text=riskRed!80!black] at (6.25,3.22) {崩塌};
 
     \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (1.85,2.42) {可用};
-    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (3.25,2.42) {可用};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (3.25,2.42) {未归零};
     \node[statebox, fill=riskRedFill, draw=riskRed, text=riskRed!80!black] at (4.65,2.42) {崩塌};
     \node[statebox, fill=riskRedFill, draw=riskRed, text=riskRed!80!black] at (6.25,2.42) {崩塌};
 
     \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (1.85,1.62) {可用};
-    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (3.25,1.62) {可用};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (3.25,1.62) {未归零};
     \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (4.65,1.62) {保留};
     \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (6.25,1.62) {保留};
 
     \node[font=\tiny, text=black!62, align=left, anchor=west] at (0.65,0.48)
-      {代表性检索观察（Needle）：K8V8 与 K8V4 保持可用；\\Qwen 系列在 4bit K 下更易崩塌；LLaMA-3.1-8B 保留较高通过率，\\说明强度受架构调制。};
+      {代表性检索观察（Needle）：K8V8 与 K8V4 未进入归零式失稳；\\Qwen 系列在 4bit K 下更易崩塌；LLaMA-3.1-8B 保留较高通过率，\\说明强度受架构调制。};
 
     % panel (b)
     \node[title] at (9.25,5.30) {（b）设计启示链};
     \node[note] at (9.25,4.95) {从诊断观察收束为低比特路径约束};
 
     \node[chainstep, fill=kBlueFill, draw=kBlue] (c1) at (11.88,4.28)
-      {高精度路径保持可用};
+      {高精度路径未触发 cliff};
     \node[chainstep, fill=vTealFill, draw=vTeal] (c2) at (11.88,3.34)
       {同预算落点暴露失效侧};
     \node[chainstep, fill=riskRedFill, draw=riskRed] (c3) at (11.88,2.40)
       {4bit K 可能越过注意力排序临界点};
     \node[chainstep, fill=anchorGoldFill, draw=anchorGold] (c4) at (11.88,1.42)
-      {优先保护 K，再区分 K/V 角色};
-    \node[chainstep, fill=black!4, draw=black!45] (c5) at (11.88,0.52)
-      {角色感知非对称格式};
+      {角色感知：优先保护 K，区分 K/V};
 
     \draw[arr] (c1.south) -- (c2.north);
     \draw[arr] (c2.south) -- (c3.north);
     \draw[arr] (c3.south) -- (c4.north);
-    \draw[arr] (c4.south) -- (c5.north);
   \end{tikzpicture}%
   }
-  \caption{K/V 位宽落点诊断的压缩版方法动机。子图（a）将 \texttt{K8V8} 基准、同平均位宽预算下的 \texttt{K8V4}/\texttt{K4V8} 对照，以及 \texttt{K4V4} 对称低比特锚点合并为 $3\times4$ 诊断矩阵，只保留代表性 Needle 观察：\texttt{K8V8} 与 \texttt{K8V4} 保持可用，Qwen 系列在 \texttt{K4V8}/\texttt{K4V4} 下出现 K 侧崩塌，而 LLaMA-3.1-8B 不呈现同强度坍塌。子图（b）将该观察收束为设计启示链：高精度路径保持可用，同预算落点暴露失效侧，4bit K 可能越过注意力排序临界点，因此低比特路径应优先保护 K，并进一步区分 K/V 角色。本图不承担完整实验比较；完整 Needle、RULER 与 LongBench 风格证据见第~\ref{subsec:ch4-kv-diagnosis}~节。}
+  \caption{K/V 位宽落点诊断的压缩版方法动机。子图（a）将 \texttt{K8V8} 基准、同平均位宽预算下的 \texttt{K8V4}/\texttt{K4V8} 对照，以及 \texttt{K4V4} 对称低比特锚点合并为 $3\times4$ 诊断矩阵，只保留代表性 Needle 观察：\texttt{K8V8} 与 \texttt{K8V4} 未进入归零式失稳，Qwen 系列在 \texttt{K4V8}/\texttt{K4V4} 下出现 K 侧崩塌，而 LLaMA-3.1-8B 不呈现同幅度 cliff。子图（b）将该观察收束为设计启示链：高精度路径未触发 cliff，同预算落点暴露失效侧，4bit K 可能越过注意力排序临界点，因此低比特路径应优先保护 K，并进一步区分 K/V 角色。本图不承担完整实验比较；完整 Needle、RULER 与 LongBench 风格证据见第~\ref{subsec:ch4-kv-diagnosis}~节。}
   \label{fig:ch3-kv-asymmetry}
 \end{figure}

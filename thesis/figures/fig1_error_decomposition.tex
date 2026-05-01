@@ -68,7 +68,7 @@
     };
     \node[vpath] (vp) at (4.55,-0.20) {
       \textbf{Value 误差 \(\rightarrow\) 聚合内容偏移}\\[-1pt]
-      \(\rightarrow \hat o-o\)
+      \(\rightarrow\) 聚合侧传播项
     };
 
     \draw[arr, cyan!60!black]   (kq.east) -- (kp.west);
@@ -76,18 +76,14 @@
 
     % Bottom decomposition
     \node[eqcard] (eq) at (-0.18,-2.20) {};
-    \node[font=\bfseries\small] at (-0.18,-1.80) {精确代数分解};
-    \node[font=\normalsize] at (-0.18,-2.35) {\(
-      \hat o-o
-      = \sum_i(\hat a_i-a_i)v_i
-      + \sum_i \hat a_i(\hat v_i-v_i)
-    \)};
+    \node[font=\bfseries\small] at (-0.18,-1.80) {输出误差分解};
+    \node[font=\normalsize] at (-0.18,-2.35) {分布侧传播项 \(+\) 聚合侧传播项};
 
     % subtle guide marks
     \draw[blue!18, line width=0.6pt] (-3.15,2.75) -- (-3.15,-1.25);
     \draw[red!18, line width=0.6pt] (1.05,2.75) -- (1.05,-1.25);
 
   \end{tikzpicture}
-  \caption{注意力误差的两条耦合传播路径及其精确代数分解。左侧为 FP16 attention flow，中部为量化扰动，右侧为由 Key 与 Value 误差分别触发的两条传播路径，底部给出输出误差的精确代数分解。}
+  \caption{注意力误差的两条耦合传播路径及其精确代数分解。左侧为 FP16 attention flow，中部为量化扰动，右侧为由 Key 与 Value 误差分别触发的两条传播路径，底部标出输出误差对应的两类传播项。}
   \label{fig:error-decomposition}
 \end{figure}

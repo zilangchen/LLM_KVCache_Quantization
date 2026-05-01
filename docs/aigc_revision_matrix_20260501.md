@@ -48,10 +48,10 @@
 | 17 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | softmax 相关工作概括太顺 | 加入这些工作与本文 KV-cache 设定不完全重合的限制 | softmax behavior vs cached K/V perturbation | literature-positioning | Ch2 softmax/attention behavior citations | 允许设定差异；禁止泛化为同一问题 | done |
 | 18 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 系统工作综述 + 总结句模板化 | 用“部署收益取决于 bit-width 与 kernel path 是否同向”替代泛总结 | fused decode、nibble unpack、H_kv | boundary-only | Ch4 deployment and system boundary | 允许系统条件读法；禁止无条件加速宣称 | done |
 | 19 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 研究空白四连段宏观、全能 | 分散到各小节末尾；每个 gap 配一个实验/设计响应 | gap-to-design mapping | literature-positioning | Ch2 section endings；Ch3/Ch4 response | 允许逐项 gap-response；禁止全能式 research gap | done |
-| 20 | 方法 | `thesis/chapters/ch3_method.tex` | 公式附近乱码，检测和可读性都会受影响 | 优先修排版/LaTeX 抽取问题；正文写清两项误差解释 | error decomposition formula | definition-only | Ch3 formula source | 允许修排版和定义；禁止新增经验结果 | todo |
-| 21 | 方法 | `thesis/chapters/ch3_method.tex` | 诊断结论清晰但像自动归纳 | 加入 K8V4/K4V8 的模型、指标、数值或表图锚点 | Qwen/LLaMA role sensitivity figures | boundary-only | Ch4 K/V role sensitivity figures | 允许作为模型条件诊断；禁止写成 final-ready 主 claim 或跨架构同强度结论 | todo |
-| 22 | 方法 | `thesis/chapters/ch3_method.tex` | “两层决策/系统层固化”框架化套话 | 改成接口定义：输入产物、输出模块 | calibration artifact -> runtime module | definition-only | Ch3 workflow/interface definitions | 允许输入输出接口；禁止空泛框架语 | todo |
-| 23 | 方法 | `thesis/chapters/ch3_method.tex` | KL 代理解释完整但长、抽象 | 拆成为何不用 MSE、为何前向 KL、数值稳定处理 | KL proxy definition and stability terms | definition-only | Ch3 KL proxy formula | 允许设计理由；禁止经验胜出预告 | todo |
+| 20 | 方法 | `thesis/chapters/ch3_method.tex`; `thesis/figures/fig1_error_decomposition.tex` | 公式附近乱码，检测和可读性都会受影响 | 优先修排版/LaTeX 抽取问题；正文写清两项误差解释 | error decomposition formula | definition-only | Ch3 formula source | 允许修排版和定义；禁止新增经验结果 | done |
+| 21 | 方法 | `thesis/chapters/ch3_method.tex`; `thesis/figures/fig_ch3_kv_diag_needle.tex` | 诊断结论清晰但像自动归纳 | 加入 K8V4/K4V8 的模型、指标、数值或表图锚点 | Qwen/LLaMA role sensitivity figures | boundary-only | Ch4 K/V role sensitivity figures | 允许作为模型条件诊断；禁止写成 final-ready 主 claim 或跨架构同强度结论 | done |
+| 22 | 方法 | `thesis/chapters/ch3_method.tex` | “两层决策/系统层固化”框架化套话 | 改成接口定义：输入产物、输出模块 | calibration artifact -> runtime module | definition-only | Ch3 workflow/interface definitions | 允许输入输出接口；禁止空泛框架语 | done |
+| 23 | 方法 | `thesis/chapters/ch3_method.tex` | KL 代理解释完整但长、抽象 | 拆成为何不用 MSE、为何前向 KL、数值稳定处理 | KL proxy definition and stability terms | definition-only | Ch3 KL proxy formula | 允许设计理由；禁止经验胜出预告 | done |
 | 24 | 方法 | `thesis/chapters/ch3_method.tex` | 统一工作流定义偏模板 | 用伪代码/定义表承载，正文只解释设计理由 | workflow algorithm/table | definition-only | Ch3 workflow table/algorithm | 允许结构化定义；禁止自然语言铺陈 | todo |
 | 25 | 方法 | `thesis/chapters/ch3_method.tex` | 指标符号解释太标准 | 保留但贴紧公式，不单独形成泛解释段 | local formula explanation | definition-only | Ch3 local formula context | 允许局部符号解释；禁止泛解释段 | todo |
 | 26 | 方法 | `thesis/chapters/ch3_method.tex` | fallback 规则和 INT4-RoleAlign 过渡连在一起 | 拆开；fallback 写算法规则，INT4-RoleAlign 写下一节动机 | fallback rule table/algorithm | definition-only | Ch3 algorithm/rule definitions | 允许规则化；禁止把 fallback 写成经验结论 | todo |
@@ -178,8 +178,29 @@
 
 ### M5: 方法章
 
-- 状态：todo
+- 状态：in-progress（M5-A done；片段 24-34 仍为 todo）
 - 片段：20-34
+
+#### M5-A: 公式分解、K/V 诊断、接口总览与 KL 代理
+
+- 状态：done
+- 片段：20-23
+- 改动文件：
+  - `thesis/chapters/ch3_method.tex`
+  - `thesis/figures/fig1_error_decomposition.tex`
+  - `thesis/figures/fig_ch3_kv_diag_needle.tex`
+- 本地验证：
+  - `git diff --check -- thesis/chapters/ch3_method.tex thesis/figures/fig1_error_decomposition.tex thesis/figures/fig_ch3_kv_diag_needle.tex`: PASS
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`: PASS (`main.pdf`, 103 pages)
+  - `rg -n "(^!|LaTeX Error|Undefined control sequence|Citation .* undefined|Reference .* undefined|There were undefined|Rerun to get cross-references right|Label\(s\) may have changed|multiply defined)" thesis/main.log`: PASS (no hits)
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m5a.txt`: PASS
+  - `sed -n '790,1130p' /tmp/thesis_main_m5a.txt | rg -n "�|□|\?\?|undefined|para:|fig:|tab:|ref\{|cite\{|INT4RoleAlign|INT4-$|^RoleAlign|需要强调的是|至此|共同表明|核心在于|统一框架|可审计|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|cache writer|low-bit|P 精确|精确代数分解P|同强度坍塌|保持可用"`: PASS (no hits)
+  - `python scripts/review_tool.py phase-gate`: PASS (`PHASE GATE: CLEAR`; only pre-existing `review_tracker.md` parse warnings)
+- Agent review:
+  - Style/AIGC-risk: PASS after replacing smooth framework narration with concrete formula boundaries, Qwen/LLaMA evidence anchors, and explicit KL design choices.
+  - Evidence/claim-boundary: PASS after narrowing K8V4/MixedKV to `未归零 / 未进入归零式失稳`, limiting Key-side cliff claims to Qwen settings, and retaining LLaMA architecture modulation.
+  - Terminology/structure: PASS after aligning `K-path/V-path`, `行为敏感度画像`, `MixedKV（图中 K8V4）`, and offline/online cache-write semantics.
+  - LaTeX/PDF extraction: PASS after changing Figure 3-1 formula text to propagation labels and removing the Figure 3-2 bottom-node extraction collision.
 
 ### M6: 实验章与结论
 
