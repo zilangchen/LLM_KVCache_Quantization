@@ -36,6 +36,37 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-01 19:36 | docs(aigc): initialize revision branch and 47-fragment matrix
+- Goal: 在独立分支中启动 AIGC 误判风险降噪改写任务，把用户提供的 47 段分析转成可审计、可回滚、带 evidence-tier gate 的执行矩阵。
+- Scope:
+  - Branch/worktree setup for `codex/aigc-risk-revision-20260501`
+  - M1 baseline matrix and review gate records
+- Changed files:
+  - `.agents/execplans/2026-05-01_aigc_risk_revision.md`
+  - `docs/aigc_revision_plan_20260501.md`
+  - `docs/aigc_revision_matrix_20260501.md`
+- Commands:
+  - `git worktree add -b codex/aigc-risk-revision-20260501 /Users/chenzilang/Desktop/LLM_KVCache_Quantization_aigc_revision main`
+  - `git status --short --branch`
+  - `python scripts/review_tool.py phase-gate`
+  - `git diff --check -- .agents/execplans/2026-05-01_aigc_risk_revision.md docs/aigc_revision_plan_20260501.md docs/aigc_revision_matrix_20260501.md`
+  - `git add -f .agents/execplans/2026-05-01_aigc_risk_revision.md docs/aigc_revision_plan_20260501.md docs/aigc_revision_matrix_20260501.md`
+  - `git diff --cached --stat && git diff --cached --check`
+  - `git commit -m "docs: add AIGC revision execution matrix"`
+- Outputs:
+  - New worktree created at `/Users/chenzilang/Desktop/LLM_KVCache_Quantization_aigc_revision`.
+  - M1 matrix now covers all 47 user-provided fragments with evidence tier, canonical source, allowed/forbidden language, and compiled source coverage.
+  - Four reviewer dimensions reached PASS after iterative fixes: Style/AIGC-risk, Evidence/claim-boundary, LaTeX/reference, Terminology consistency.
+- Validation:
+  - `git diff --check` passed after removing one Markdown trailing whitespace issue.
+  - `python scripts/review_tool.py phase-gate` reported `PHASE GATE: CLEAR` with only pre-existing `review_tracker.md` parse warnings.
+  - No thesis source files were modified in M1.
+- Risks / follow-ups:
+  - Original `main` worktree still contains many unrelated untracked files; this task remains isolated in the new worktree.
+  - `.agents/execplans/` is ignored by default, so future plan commits require explicit `git add -f`.
+  - M2 should only edit `thesis/chapters/abstract_zh.tex` and `thesis/chapters/abstract_en.tex`, then rerun the full review gate.
+- Commit: `28aff37`
+
 ### 2026-04-26 22:52 | docs(workflow): preserve appendix audit preferences as project skill
 - Goal: 将本轮 Appendix 清理中形成的稳定偏好与专项流程沉淀到项目 skill、项目规范和全局个人规范中。
 - Scope:
