@@ -1561,4 +1561,4 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - 当前 commit 将作为论文 P0 冻结点；后续若继续 polish，应在新 commit 中处理 P1/P2，不再回流内部阶段命名。
   - `/private/tmp/triton-int4-v2` worktree 记录已显示 prunable，但本轮不执行清理，避免触碰非论文冻结范围。
-- Commit: pending
+- Commit: 563cf99
