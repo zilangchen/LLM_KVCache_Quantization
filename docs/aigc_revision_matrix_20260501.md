@@ -39,15 +39,15 @@
 | 8 | 绪论 | `thesis/chapters/ch1_introduction.tex` | 研究问题是标准 proposal 语气 | 从本文观察出发：先出现现象，再提出问题 | INT8 parity、INT4 cliff、allocator regimes | final-ready + boundary-only | live plan frozen claims | 允许从观察导出 RQ；禁止先验全能问题设定 | done |
 | 9 | 绪论 | `thesis/chapters/ch1_introduction.tex` | “问题-方法-证据”“论证链条”等元叙述密集 | 保留章节导航，减少抽象评价，写具体章节承载内容 | Chapter-to-RQ mapping | not-claim | thesis `main.tex` chapter structure | 允许章节承载说明；禁止抽象论证链复述 | done |
 | 10 | 绪论 | `thesis/chapters/ch1_introduction.tex` | 五章安排是模板段 | 大幅压缩或改成“第几章回答哪个 RQ” | RQ1/RQ2/RQ3/RQ4 映射 | not-claim | Ch1 chapter overview | 允许 RQ 映射；禁止模板式章节介绍 | done |
-| 11 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | KV Cache 基础解释像教科书 | 与实验瓶颈绑定：decode memory-bound 如何影响设计 | decode TPOT、KV memory、cache bytes | definition-only + boundary-only | Ch2 KV Cache basics；Ch4 deployment section | 允许面向本论文变量解释；禁止泛教材段 | todo |
-| 12 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 对称量化解释标准、完整、低个性 | 加入为何 INT8 作保守锚点、为何 INT4 是故障暴露点 | INT8 canonical path；INT4 cliff | final-ready (INT8 only) + boundary-only | clean-provenance readout；Ch4 low-bit diagnosis | 允许 INT8 canonical path 保真；INT4 只作为故障暴露/边界语境；禁止泛泛位宽优劣 | todo |
-| 13 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 非对称量化解释泛化 | 用 K/V 统计差异导入，不泛讲 per-channel/per-token | K/V role difference；per-channel K/per-token V | definition-only + boundary-only | Ch3 INT4-RoleAlign definition；Ch4 K/V diagnosis | 允许格式和角色差异绑定；禁止纯技术百科 | todo |
-| 14 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 校准分类像综述教材 | 把分类服务于 critique：数值校准为何不足以解释 softmax 行为 | MSE vs KL；attention behavior | definition-only | Ch3 KL proxy and calibration interface | 允许解释本文 critique；禁止完整分类教科书 | todo |
-| 15 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 文献排队式总结，高风险 | 拆段；每段保留直接相关 2-3 篇并写差异 | KIVI/KVQuant/ZipCache 等相对定位 | literature-positioning | Ch2 citations | 允许解决什么/没覆盖什么/本文接哪里；禁止 “X 做 A, Y 做 B” 队列 | todo |
-| 16 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 缓存管理路线总结句式统一 | 强化“正交但可组合”的边界，用表格或对照替代长段 | cache eviction/management vs quantization | literature-positioning + boundary-only | Ch2 efficient inference section | 允许正交边界；禁止把管理路线写成本文主贡献 | todo |
-| 17 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | softmax 相关工作概括太顺 | 加入这些工作与本文 KV-cache 设定不完全重合的限制 | softmax behavior vs cached K/V perturbation | literature-positioning | Ch2 softmax/attention behavior citations | 允许设定差异；禁止泛化为同一问题 | todo |
-| 18 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 系统工作综述 + 总结句模板化 | 用“部署收益取决于 bit-width 与 kernel path 是否同向”替代泛总结 | fused decode、nibble unpack、H_kv | boundary-only | Ch4 deployment and system boundary | 允许系统条件读法；禁止无条件加速宣称 | todo |
-| 19 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 研究空白四连段宏观、全能 | 分散到各小节末尾；每个 gap 配一个实验/设计响应 | gap-to-design mapping | literature-positioning | Ch2 section endings；Ch3/Ch4 response | 允许逐项 gap-response；禁止全能式 research gap | todo |
+| 11 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | KV Cache 基础解释像教科书 | 与实验瓶颈绑定：decode memory-bound 如何影响设计 | decode TPOT、KV memory、cache bytes | definition-only + boundary-only | Ch2 KV Cache basics；Ch4 deployment section | 允许面向本论文变量解释；禁止泛教材段 | done |
+| 12 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 对称量化解释标准、完整、低个性 | 加入为何 INT8 作保守锚点、为何 INT4 是故障暴露点 | INT8 canonical path；INT4 cliff | final-ready (INT8 only) + boundary-only | clean-provenance readout；Ch4 low-bit diagnosis | 允许 INT8 canonical path 保真；INT4 只作为故障暴露/边界语境；禁止泛泛位宽优劣 | done |
+| 13 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 非对称量化解释泛化 | 用 K/V 统计差异导入，不泛讲 per-channel/per-token | K/V role difference；per-channel K/per-token V | definition-only + boundary-only | Ch3 INT4-RoleAlign definition；Ch4 K/V diagnosis | 允许格式和角色差异绑定；禁止纯技术百科 | done |
+| 14 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 校准分类像综述教材 | 把分类服务于 critique：数值校准为何不足以解释 softmax 行为 | MSE vs KL；attention behavior | definition-only | Ch3 KL proxy and calibration interface | 允许解释本文 critique；禁止完整分类教科书 | done |
+| 15 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 文献排队式总结，高风险 | 拆段；每段保留直接相关 2-3 篇并写差异 | KIVI/KVQuant/ZipCache 等相对定位 | literature-positioning | Ch2 citations | 允许解决什么/没覆盖什么/本文接哪里；禁止 “X 做 A, Y 做 B” 队列 | done |
+| 16 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 缓存管理路线总结句式统一 | 强化“正交但可组合”的边界，用表格或对照替代长段 | cache eviction/management vs quantization | literature-positioning + boundary-only | Ch2 efficient inference section | 允许正交边界；禁止把管理路线写成本文主贡献 | done |
+| 17 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | softmax 相关工作概括太顺 | 加入这些工作与本文 KV-cache 设定不完全重合的限制 | softmax behavior vs cached K/V perturbation | literature-positioning | Ch2 softmax/attention behavior citations | 允许设定差异；禁止泛化为同一问题 | done |
+| 18 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 系统工作综述 + 总结句模板化 | 用“部署收益取决于 bit-width 与 kernel path 是否同向”替代泛总结 | fused decode、nibble unpack、H_kv | boundary-only | Ch4 deployment and system boundary | 允许系统条件读法；禁止无条件加速宣称 | done |
+| 19 | 相关工作 | `thesis/chapters/ch2_related_work.tex` | 研究空白四连段宏观、全能 | 分散到各小节末尾；每个 gap 配一个实验/设计响应 | gap-to-design mapping | literature-positioning | Ch2 section endings；Ch3/Ch4 response | 允许逐项 gap-response；禁止全能式 research gap | done |
 | 20 | 方法 | `thesis/chapters/ch3_method.tex` | 公式附近乱码，检测和可读性都会受影响 | 优先修排版/LaTeX 抽取问题；正文写清两项误差解释 | error decomposition formula | definition-only | Ch3 formula source | 允许修排版和定义；禁止新增经验结果 | todo |
 | 21 | 方法 | `thesis/chapters/ch3_method.tex` | 诊断结论清晰但像自动归纳 | 加入 K8V4/K4V8 的模型、指标、数值或表图锚点 | Qwen/LLaMA role sensitivity figures | boundary-only | Ch4 K/V role sensitivity figures | 允许作为模型条件诊断；禁止写成 final-ready 主 claim 或跨架构同强度结论 | todo |
 | 22 | 方法 | `thesis/chapters/ch3_method.tex` | “两层决策/系统层固化”框架化套话 | 改成接口定义：输入产物、输出模块 | calibration artifact -> runtime module | definition-only | Ch3 workflow/interface definitions | 允许输入输出接口；禁止空泛框架语 | todo |
@@ -156,8 +156,25 @@
 
 ### M4: 相关工作
 
-- 状态：todo
+- 状态：done
 - 片段：11-19
+- 改动文件：
+  - `thesis/chapters/ch2_related_work.tex`
+- 本地验证：
+  - `git diff --check -- thesis/chapters/ch2_related_work.tex`: PASS
+  - `rg -n "需要强调的是|至此|共同表明|核心在于|图谱|论证链条|普适最优|全局胜出|赢家|统一框架|可审查|可审计|可复现|较清晰的谱系|接口视图|三个接口|四个可审查接口|这些接口|当前主流|为了增强表示能力|重要结构因素之一|统一的结构记号|真实 decode|融合 decode|decode 路径|INT8.*锚点" thesis/chapters/ch2_related_work.tex`: PASS (no hits)
+  - `rg -n "敏感度画像|INT8 基准路径|Decode 路径|融合 Decode|真实 Decode|接口" thesis/chapters/ch2_related_work.tex`: PASS (expected terminology hits only; no `接口` hit)
+  - `python scripts/review_tool.py phase-gate`: PASS (`PHASE GATE: CLEAR`; only pre-existing `review_tracker.md` parse warnings)
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`: PASS (`main.pdf`, 104 pages)
+  - `rg -n "(^!|LaTeX Error|Undefined control sequence|Citation .* undefined|Reference .* undefined|There were undefined|Rerun to get cross-references right|Label\(s\) may have changed|multiply defined)" thesis/main.log`: PASS (no hits)
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m4_tablefix.txt`: PASS
+  - `sed -n '434,800p' /tmp/thesis_main_m4_tablefix.txt | rg -n "�|□|\?\?|undefined|para:|fig:|tab:|INT4RoleAlign|INT4-$|^RoleAlign|问题 - 方法 - 证据|至此|共同表明|普适最优|universal winner|图谱|可审计|可复现|较清晰的谱系|接口|当前主流|为了增强表示能力"`: PASS (no hits)
+  - `rg -n "同源行为读数|而不是只优化|一次压缩率|表 2-1|量化对注意力行为" /tmp/thesis_main_m4_tablefix.txt`: PASS; key sentence remains continuous before Table 2-1.
+- Agent review:
+  - Style/AIGC-risk: PASS after compressing Transformer/MHA/GQA explanations, replacing literature queueing with problem-positioning, and removing template meta-language.
+  - Evidence/claim-boundary: PASS after keeping Ch2 claims at definition, literature-positioning, or boundary-only level and avoiding final-ready overclaims.
+  - Terminology/structure: PASS after aligning `行为敏感度画像`, `INT8 基准路径`, `Decode` terminology, and Ch2-to-Ch3/Ch4 handoff.
+  - LaTeX/reference/extraction: PASS after fixing Table 2-1 to `[H]`, shortening the page-end risk sentence, recompiling, and confirming PDF text extraction order.
 
 ### M5: 方法章
 
