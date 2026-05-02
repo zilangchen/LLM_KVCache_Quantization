@@ -52,10 +52,10 @@
 | 21 | 方法 | `thesis/chapters/ch3_method.tex`; `thesis/figures/fig_ch3_kv_diag_needle.tex` | 诊断结论清晰但像自动归纳 | 加入 K8V4/K4V8 的模型、指标、数值或表图锚点 | Qwen/LLaMA role sensitivity figures | boundary-only | Ch4 K/V role sensitivity figures | 允许作为模型条件诊断；禁止写成 final-ready 主 claim 或跨架构同强度结论 | done |
 | 22 | 方法 | `thesis/chapters/ch3_method.tex` | “两层决策/系统层固化”框架化套话 | 改成接口定义：输入产物、输出模块 | calibration artifact -> runtime module | definition-only | Ch3 workflow/interface definitions | 允许输入输出接口；禁止空泛框架语 | done |
 | 23 | 方法 | `thesis/chapters/ch3_method.tex` | KL 代理解释完整但长、抽象 | 拆成为何不用 MSE、为何前向 KL、数值稳定处理 | KL proxy definition and stability terms | definition-only | Ch3 KL proxy formula | 允许设计理由；禁止经验胜出预告 | done |
-| 24 | 方法 | `thesis/chapters/ch3_method.tex` | 统一工作流定义偏模板 | 用伪代码/定义表承载，正文只解释设计理由 | workflow algorithm/table | definition-only | Ch3 workflow table/algorithm | 允许结构化定义；禁止自然语言铺陈 | todo |
-| 25 | 方法 | `thesis/chapters/ch3_method.tex` | 指标符号解释太标准 | 保留但贴紧公式，不单独形成泛解释段 | local formula explanation | definition-only | Ch3 local formula context | 允许局部符号解释；禁止泛解释段 | todo |
-| 26 | 方法 | `thesis/chapters/ch3_method.tex` | fallback 规则和 INT4-RoleAlign 过渡连在一起 | 拆开；fallback 写算法规则，INT4-RoleAlign 写下一节动机 | fallback rule table/algorithm | definition-only | Ch3 algorithm/rule definitions | 允许规则化；禁止把 fallback 写成经验结论 | todo |
-| 27 | 方法 | `thesis/chapters/ch3_method.tex` | “需要强调的是”类元话语明显 | 删除强调句，直接说明本节不报告结果的原因 | method/result boundary | boundary-only | Ch3 method/result separation | 允许职责边界；禁止元话语强调 | todo |
+| 24 | 方法 | `thesis/chapters/ch3_method.tex`; `thesis/tables/table_ch3_path_instantiation.tex` | 统一工作流定义偏模板 | 用伪代码/定义表承载，正文只解释设计理由 | workflow algorithm/table | definition-only | Ch3 workflow table/algorithm | 允许结构化定义；禁止自然语言铺陈 | done |
+| 25 | 方法 | `thesis/chapters/ch3_method.tex` | 指标符号解释太标准 | 保留但贴紧公式，不单独形成泛解释段 | local formula explanation | definition-only | Ch3 local formula context | 允许局部符号解释；禁止泛解释段 | done |
+| 26 | 方法 | `thesis/chapters/ch3_method.tex` | fallback 规则和 INT4-RoleAlign 过渡连在一起 | 拆开；fallback 写算法规则，INT4-RoleAlign 写下一节动机 | fallback rule table/algorithm | definition-only | Ch3 algorithm/rule definitions | 允许规则化；禁止把 fallback 写成经验结论 | done |
+| 27 | 方法 | `thesis/chapters/ch3_method.tex` | “需要强调的是”类元话语明显 | 删除强调句，直接说明本节不报告结果的原因 | method/result boundary | boundary-only | Ch3 method/result separation | 允许职责边界；禁止元话语强调 | done |
 | 28 | 方法 | `thesis/chapters/ch3_method.tex` | 对称 INT4 到 INT4-RoleAlign 长段句式反复 | 拆短，加入对称搜索失败后升级格式的证据 | symmetric INT4 failure evidence | boundary-only | Ch4 INT4 cliff and INT4-RoleAlign comparison | 允许解释低比特恢复路径的设计动机；禁止写成 final-ready 主 claim 或普适击败 KIVI-style | todo |
 | 29 | 方法 | `thesis/chapters/ch3_method.tex` | K/V 量化轴解释偏公式前说明 | 补充轴选择如何对应 Key/Value 失稳差异 | per-channel K/per-token V rationale | definition-only + boundary-only | Ch3 INT4-RoleAlign format; Ch4 K/V diagnosis | 允许轴选择理由；禁止把格式本身写成最终因果证明 | todo |
 | 30 | 方法 | `thesis/chapters/ch3_method.tex` | INT4-RoleAlign 总结段抽象词密集 | 用最终配置表替代部分文字，正文只写选择依据 | path instantiation/config table | definition-only | Ch3 path instantiation table | 允许配置依据；禁止抽象价值宣言 | todo |
@@ -178,7 +178,7 @@
 
 ### M5: 方法章
 
-- 状态：in-progress（M5-A done；片段 24-34 仍为 todo）
+- 状态：in-progress（M5-A/M5-B done；片段 28-34 仍为 todo）
 - 片段：20-34
 
 #### M5-A: 公式分解、K/V 诊断、接口总览与 KL 代理
@@ -201,6 +201,26 @@
   - Evidence/claim-boundary: PASS after narrowing K8V4/MixedKV to `未归零 / 未进入归零式失稳`, limiting Key-side cliff claims to Qwen settings, and retaining LLaMA architecture modulation.
   - Terminology/structure: PASS after aligning `K-path/V-path`, `行为敏感度画像`, `MixedKV（图中 K8V4）`, and offline/online cache-write semantics.
   - LaTeX/PDF extraction: PASS after changing Figure 3-1 formula text to propagation labels and removing the Figure 3-2 bottom-node extraction collision.
+
+#### M5-B: 离线工作流、局部指标、回退规则与路径边界
+
+- 状态：done
+- 片段：24-27
+- 改动文件：
+  - `thesis/chapters/ch3_method.tex`
+  - `thesis/tables/table_ch3_path_instantiation.tex`
+- 本地验证：
+  - `git diff --check -- thesis/chapters/ch3_method.tex thesis/tables/table_ch3_path_instantiation.tex docs/aigc_revision_matrix_20260501.md`: PASS
+  - `sed -n '150,245p' thesis/chapters/ch3_method.tex | rg -n "需要强调的是|至此|共同表明|核心在于|统一框架|可审计|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|不是.*而是|不只是.*还|完整.*规整|框架化|表面统一性|Fallback|handoff|cache writer|low-bit|lexmin"`: PASS (no hits)
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`: PASS (`main.pdf`, 102 pages)
+  - `rg -n "(^!|LaTeX Error|Undefined control sequence|Citation .* undefined|Reference .* undefined|There were undefined|Rerun to get cross-references right|Label\(s\) may have changed|multiply defined)" thesis/main.log`: PASS (no hits)
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m5b.txt`: PASS
+  - `sed -n '1115,1265p' /tmp/thesis_main_m5b.txt | rg -n "�|□|\?\?|undefined|para:|fig:|tab:|ref\{|cite\{|INT4RoleAlign|INT4-$|需要强调的是|至此|共同表明|核心在于|统一框架|可审计|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|Fallback|handoff|lexmin|不是.*而是|不只是.*还|cache writer|low-bit"`: PASS (no hits)
+  - `python scripts/review_tool.py phase-gate`: PASS (`PHASE GATE: CLEAR`; only pre-existing `review_tracker.md` parse warnings)
+- Agent review:
+  - Style/AIGC-risk: PASS after replacing placeholder validation records with real regex scans and keeping the M5-B window structured around interfaces, formulas, and rules.
+  - Evidence/claim-boundary: PASS after changing the path table from an effect-like `恢复行为保持` phrase to the definition-only `定义 K/V 角色分离的固定产物接口`.
+  - Final consistency review: PASS after confirming fragments 24-27 are done, fragments 28-34 remain todo, validation commands are auditable, and no LaTeX/PDF extraction blocker remains in the M5-B window.
 
 ### M6: 实验章与结论
 

@@ -154,16 +154,32 @@ p_{\theta}^{(l,h,t)}
 \subsection{参数搜索空间与稳健选择准则}
 \label{subsec:ch3-two-stage}
 
-在上述代理定义之上，本文将离线校准组织为一个路径相关、但流程统一的参数搜索问题。给定某一路径对应的候选参数集合 $\Theta_{\mathrm{path}}$，其最优参数可抽象写为
+在上述代理定义之上，离线校准被写成路径化搜索接口。对任一路径 $\mathrm{path}$，正文只需要固定三项输入：
+\begin{enumerate}[label=(\roman*),leftmargin=2.4em,itemsep=2pt,topsep=2pt]
+  \item 候选参数集合 $\Theta_{\mathrm{path}}$；
+  \item 该路径实际使用的行为代理 $R_{\mathrm{path}}$；
+  \item 写入在线推理系统的产物字段。
+\end{enumerate}
+图~\ref{fig:ch3-calibration-workflow} 给出四步离线流程，表~\ref{tab:ch3-calibration-interfaces} 列出三条路径各自的接口差异。这样处理的目的，是让 \texttt{INT8}、对称 \texttt{INT4} 与 \texttt{INT4-RoleAlign} 共享参考行为提取、候选搜索、稳健选择和产物冻结这四个步骤，同时允许它们使用不同的参数家族与行为代理。
+
+% 图 3-4 建议置于本小节第 1 段与第 2 段之间
+% 图题：图 3-4 行为引导离线校准的统一工作流
+\input{figures/fig_ch3_calibration_workflow}
+
+% 表 3-1 建议置于本小节第 3 段之后
+% 表题：表 3-1 统一离线校准工作流下的路径参数化接口
+\input{tables/table_ch3_calibration_interfaces}
+
+给定候选集合后，路径参数的离线选择写为
 \begin{equation}
 \theta_{\mathrm{path}}^\star
 =
 \arg\min_{\theta \in \Theta_{\mathrm{path}}}
 R_{\mathrm{path}}(\theta),
 \end{equation}
-其中 $R_{\mathrm{path}}(\theta)$ 表示该路径上的稳健风险统计量。这里的“统一”体现在工作流与纪律层面：都需要在校准样本上生成参考行为、计算路径对应的行为代理、聚合尾部与整体统计量、并在可行域约束下给出最终参数；但这并不要求所有路径都必须共享同一个标量 score function。对称路径可直接用 attention-KL 定义风险，而 role-aware low-bit path 则允许在 K 与 V 两侧使用不同的行为代理。
+其中 $R_{\mathrm{path}}(\theta)$ 表示该路径上的稳健风险统计量。对称路径可直接以 attention-distribution KL 组织风险；角色感知低比特路径则在同一选择纪律下，把 K-path 与 V-path 的代理分开定义。
 
-对称路径（包括 INT8 基准路径与对称 \texttt{INT4} 试探路径）的选择纪律可写为一组统一的稳健统计。设校准样本集合为 $\mathcal D_{\mathrm{calib}}$，则可定义整体均值、尾部统计与 K/V 两侧的裁剪率：
+对称路径（包括 INT8 基准路径与对称 \texttt{INT4} 试探路径）使用同一组本地读数。设校准样本集合为 $\mathcal D_{\mathrm{calib}}$：
 \begin{equation}
 \mu(\theta)
 =
@@ -180,39 +196,35 @@ d_{\mathrm{KL}}^{(l,h,t)}(\theta),
 c_K(\theta)=\mathrm{clip\mbox{-}rate}_K(\theta), \qquad
 c_V(\theta)=\mathrm{clip\mbox{-}rate}_V(\theta).
 \end{equation}
-其中，$\mu(\theta)$ 反映整体平均行为偏移，$q_{0.95}(\theta)$ 反映尾部坏案例，而 $c_K(\theta)$ 与 $c_V(\theta)$ 用于约束“通过过度裁剪换取表面更低 KL”的伪优候选。基于此，首先定义满足双侧裁剪约束的可行域
+这里 $\mu(\theta)$ 只用于平均偏移读数，$q_{0.95}(\theta)$ 用于尾部案例排序，$c_K(\theta)$ 与 $c_V(\theta)$ 用于过滤靠过度裁剪换取低 KL 的候选。可行域定义为
 \begin{equation}
 \Theta_{\mathrm{feasible}}
 =
 \{\theta \in \Theta_{\mathrm{path}}: c_K(\theta)\le \tau_K,\; c_V(\theta)\le \tau_V\},
 \end{equation}
-再在可行域中按尾部稳健性优先选择
+若 $\Theta_{\mathrm{feasible}}\neq\emptyset$，选择规则为
 \begin{equation}
 \theta^\star
 =
 \arg\min_{\theta \in \Theta_{\mathrm{feasible}}}
 q_{0.95}(\theta).
 \end{equation}
-若所有候选均不满足裁剪率约束，则退化为优先最小化总裁剪负担 $c_K(\theta)+c_V(\theta)$，再以尾部统计与平均 KL 作为后续排序依据。该规则体现了本文一贯的校准纪律：不是简单选择“均值最小”的候选，而是优先压制长上下文场景中更具破坏性的尾部异常。
+\noindent\textbf{回退规则。} 若所有候选均违反裁剪率约束，则不再报告一个“可行最优”候选，而是按三项键做字典序排序：
+\begin{enumerate}[label=(\arabic*),leftmargin=2.4em,itemsep=1pt,topsep=2pt]
+  \item 先最小化总裁剪负担 $c_K(\theta)+c_V(\theta)$；
+  \item 若总裁剪负担相同，再比较尾部统计 $q_{0.95}(\theta)$；
+  \item 若尾部统计仍相同，最后比较平均偏移 $\mu(\theta)$。
+\end{enumerate}
+排序第一的候选记为 $\theta^\star$。产物中同时记录回退标志与触发原因。该规则只定义离线选择失败时的保守排序，不把回退候选解释为已经满足裁剪约束的正式可行解。
 
-对于 \texttt{INT4-RoleAlign}，离线搜索不再被写成“单一 attention-KL 分数统一选出 $(p_K,p_V)$”，而是拆分为同一流程中的两条角色感知接口。其一，\textbf{K-path} 以 $p_K$ 为候选参数，在 per-channel Key 非对称量化格式上使用注意力分布 KL 作为主代理，并在同一套稳健搜索纪律下完成选择；其二，\textbf{V-path} 以 $p_V$ 为候选参数，在 per-token Value 非对称量化格式上采用独立的输出扰动代理。本文的正式方法定义将这一 V-path 代理与通用共享校准口径区分开来，避免把未区分 K/V 角色的校准目标直接等同为 \texttt{RoleAlign}。也就是说，对 \texttt{RoleAlign} 而言，变化的是各路径的参数家族与行为代理；不变的是离线校准流程、可行域约束、尾部稳健优先与产物输出接口。正因为如此，本文后续才能在同一框架下同时讨论对称路径与角色感知路径，而不必为了维持表面统一性而误把两条角色路径压成一个数学上并不存在的单一目标。
-
-从输出形式上看，离线校准流程统一产生两类结果：一类是\emph{路径特定校准产物}，包括静态缩放参数、zero-point、分位数参数、分组元数据与保护参数等，用于在线推理时的直接读取与执行；不同路径对应的字段集合可以不同，但都服从同一只读产物接口。另一类是\emph{共享行为统计读数}，它们来自同一离线校准链路，并将在第 \ref{sec:ch3-allocator} 节中被进一步组织为逐层行为敏感度画像。校准层不仅回答“如何量化”，也为后续的预算分配提供同源读数。逐头温度校正等附加组件在本文主线中统一作为补充诊断对象，仅在附录中保留说明；主线方法默认不引入该组件。
-
-% 图 3-4 建议置于本小节第 1 段与第 2 段之间
-% 图题：图 3-4 行为引导离线校准的统一工作流
-\input{figures/fig_ch3_calibration_workflow}
-
-% 表 3-1 建议置于本小节第 3 段之后
-% 表题：表 3-1 统一离线校准工作流下的路径参数化接口
-\input{tables/table_ch3_calibration_interfaces}
+\noindent\textbf{\texttt{RoleAlign} 接口承接。} \texttt{INT4-RoleAlign} 沿用上述离线流程，但不把 $(p_K,p_V)$ 压成单一 attention-KL 分数。K-path 以 $p_K$ 为候选参数，在 per-channel Key 非对称格式上使用 attention-distribution KL 与尾部统计完成选择；V-path 以 $p_V$ 为候选参数，在 per-token Value 非对称格式上使用独立的输出扰动代理。本节结束时得到两类产物：路径特定校准字段，以及后续第 \ref{sec:ch3-allocator} 节会读取的共享行为统计。逐头温度校正等附加组件只作为补充诊断保留在附录中，主线方法默认不启用。
 
 \section{跨位宽量化路径的实例化设计}
 \label{sec:ch3-paths}
 
-第 \ref{sec:ch3-calibration} 节已经将行为引导原则具体化为统一的离线校准流程与稳健选择纪律，但这一流程本身并不规定唯一的位宽或唯一的量化格式。对本文而言，真正需要回答的问题是：当位宽与格式约束发生变化时，同一行为原则如何被实例化为可执行的量化路径。基于这一思路，本节按照由保守到激进的顺序组织三条路径：首先给出 \texttt{INT8} 基准路径，作为行为引导校准最干净、最可审计的验证实例；随后说明直接将同一思路机械降到对称 \texttt{INT4} 为什么会遇到结构性困难；最后引入 \texttt{INT4-RoleAlign} 作为角色感知的低比特实例，并在方法层面将其与 \texttt{KIVI-style} 的设计边界明确区分开来。
+第 \ref{sec:ch3-calibration} 节已经定义离线校准流程与稳健选择纪律，但这一流程本身不规定唯一位宽或唯一量化格式。本节只定义路径实例，不提前报告第四章的完整比较结果。三条路径按约束强度展开：\texttt{INT8} 基准路径用于检查校准闭环能否在较保守位宽下稳定落地；对称 \texttt{INT4} 试探路径用于暴露直接降位宽后的结构困难；\texttt{INT4-RoleAlign} 则把低比特路径改写为 K/V 角色分离的非对称格式，并在方法层面区分它与 \texttt{KIVI-style} 的参数来源。
 
-需要强调的是，本节的目标不是在方法章内提前报告完整实验结果，而是说明同一框架如何在不同位宽与不同量化格式约束下落成具体路径。后续路径之间变化的是参数接口、量化轴与行为代理的具体定义，不变的是第 \ref{sec:ch3-calibration} 节已经建立的离线校准流程、可行域约束与稳健选择纪律。正是在这一点上，本文的方法实例既保持了跨位宽的一致性，也为后续 allocator 与系统落地提供了统一接口。
+这些路径之间变化的是参数接口、量化轴与行为代理；不变的是第 \ref{sec:ch3-calibration} 节已经给出的参考行为提取、可行域约束、尾部优先选择和固定产物输出。allocator 与系统落地模块只读取这些产物和行为统计，不重新解释第四章的实验结论。
 
 % 表 3-2 建议置于此处
 % 表题：表 3-2 跨位宽路径的实例化关系与统一校准工作流
@@ -220,7 +232,7 @@ q_{0.95}(\theta).
 
 \subsection{INT8 基准路径：静态 Scale 与自适应保护}
 
-本文首先在 \texttt{INT8} 位宽下给出行为引导校准的 INT8 基准路径，其目的不是追求极限压缩，而是建立一个最干净、最稳定、最便于审计的验证实例。相较于 \texttt{INT4}，\texttt{INT8} 提供更细的量化网格，因此更适合作为校准层闭环是否成立的第一性验证对象。也正因为如此，本文将该路径定位为 INT8 基准路径：它在方法论上承担“基准验证实例”的角色，而不是在压缩率层面承担“最终目标路径”的角色。
+本文首先在 \texttt{INT8} 位宽下给出行为引导校准的 INT8 基准路径。该路径不追求极限压缩；它用于建立一个稳定、便于复核的验证实例。相较于 \texttt{INT4}，\texttt{INT8} 提供更细的量化网格，因此更适合作为校准层闭环是否成立的第一性验证对象。本文将该路径定位为 INT8 基准路径：它在方法论上承担“基准验证实例”的角色，压缩率层面则作为后续低比特路径的参照。
 
 在该路径中，Key 与 Value 均采用对称、逐组（per-group）的静态量化。记第 $l$ 层第 $j$ 个分组内的待量化张量为 $x_{l,j}$，对给定校准百分位参数 $p_c$ 与分组大小 $g$，其静态缩放参数定义为
 \begin{equation}
