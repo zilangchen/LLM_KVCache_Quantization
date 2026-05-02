@@ -1728,3 +1728,41 @@ Canonical agent workflow directory is `.agents/`.
   - 本轮只完成 M5-A；片段 24-34 尚未处理，后续需继续拆分 workflow、fallback、RoleAlign、schema、kernel path 与章末总结。
   - 为保持边界一致，本轮对第 3.5 中一处 Key-side cliff 表述做了最小范围限定；不代表片段 28 已完成。
 - Commit: 487270c
+
+### 2026-05-02 21:12 | M5-B Method Workflow and Boundary Revision
+- Goal:
+  - 完成 47 段 AIGC 误判风险矩阵中的片段 24-27，重写第三章离线校准工作流、局部指标、回退规则和 3.5 路径边界，使其由结构化接口、公式和规则承载，避免模板化长段与方法章内结果预告。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `thesis/tables/table_ch3_path_instantiation.tex`
+  - `docs/aigc_revision_matrix_20260501.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex thesis/tables/table_ch3_path_instantiation.tex docs/aigc_revision_matrix_20260501.md`
+  - `sed -n '150,245p' thesis/chapters/ch3_method.tex | rg -n "需要强调的是|至此|共同表明|核心在于|统一框架|可审计|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|不是.*而是|不只是.*还|完整.*规整|框架化|表面统一性|Fallback|handoff|cache writer|low-bit|lexmin"`
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`
+  - `rg -n "(^!|LaTeX Error|Undefined control sequence|Citation .* undefined|Reference .* undefined|There were undefined|Rerun to get cross-references right|Label\(s\) may have changed|multiply defined)" thesis/main.log`
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m5b.txt`
+  - `sed -n '1115,1265p' /tmp/thesis_main_m5b.txt | rg -n "�|□|\?\?|undefined|para:|fig:|tab:|ref\{|cite\{|INT4RoleAlign|INT4-$|需要强调的是|至此|共同表明|核心在于|统一框架|可审计|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|Fallback|handoff|lexmin|不是.*而是|不只是.*还|cache writer|low-bit"`
+  - `python scripts/review_tool.py phase-gate`
+- Outputs:
+  - 第 3.4.2 节从“统一工作流”长段改成路径化搜索接口，明确候选参数集合、行为代理和在线产物字段三类输入。
+  - 将图 3-4 和表 3-1 前移到工作流定义之后，用结构化图表承载流程和路径接口差异。
+  - 将 `mu`、`q0.95`、`c_K/c_V` 的解释贴回公式上下文，并把回退规则独立写成三项字典序排序。
+  - 将 `INT4-RoleAlign` 的 K-path / V-path 代理作为接口承接单独说明，避免压成单一 KL 目标。
+  - 第 3.5 开头删除“需要强调的是”，直接说明本节只定义路径实例、不提前报告第四章完整比较结果。
+  - 表 3-2 将 `恢复行为保持` 压为 `定义 K/V 角色分离的固定产物接口`，保持 definition-only 边界。
+  - M5-B 矩阵片段 24-27 标记为 `done`；片段 28-34 保持 `todo`。
+- Validation:
+  - `git diff --check` 通过。
+  - M5-B 源码窗口风险词扫描无命中。
+  - `latexmk` 通过，`main.pdf` 为 102 页。
+  - `main.log` 未检出 LaTeX error、未定义 refs/citations、重复 label 或 rerun 提示。
+  - M5-B PDF 抽取窗口未检出乱码、raw label、旧模板短语、`Fallback/handoff/lexmin` 或 `INT4RoleAlign`。
+  - `python scripts/review_tool.py phase-gate` 通过，仍只有既有 `review_tracker.md` parse warnings。
+  - Style/AIGC-risk 初审发现矩阵验证命令占位符问题；修正为真实 regex 后复审 PASS。
+  - Evidence/claim-boundary 初审 PASS；按残余风险进一步降级表格效果性措辞后复审 PASS。
+  - Final consistency reviewer PASS，确认 24-27 done、28-34 todo、验证记录可审计且无 M5-B LaTeX/PDF 阻塞项。
+- Risks / follow-ups:
+  - 第三章后续片段 28-34 仍存在待处理的长段动机、RoleAlign 轴说明、KIVI-style 对比、artifact schema、kernel path 和章末总结问题；下一步进入 M5-C。
+  - 全章后半部分仍可能包含本轮 regex 中的高风险表达，但矩阵中仍明确保持 `todo`，不作为 M5-B 完成范围。
+- Commit: 3460784
