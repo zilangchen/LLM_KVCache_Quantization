@@ -1766,3 +1766,39 @@ Canonical agent workflow directory is `.agents/`.
   - 第三章后续片段 28-34 仍存在待处理的长段动机、RoleAlign 轴说明、KIVI-style 对比、artifact schema、kernel path 和章末总结问题；下一步进入 M5-C。
   - 全章后半部分仍可能包含本轮 regex 中的高风险表达，但矩阵中仍明确保持 `todo`，不作为 M5-B 完成范围。
 - Commit: 3460784
+
+### 2026-05-03 21:26 | M5-C Method RoleAlign and Deployment Boundary Revision
+- Goal:
+  - 完成 47 段 AIGC 误判风险矩阵中的片段 28-34，重写第三章对称 INT4 到 `INT4-RoleAlign` 的升级动机、K/V 轴选择、KIVI-style 对比、离线校准字段、kernel 边界和章末小结。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `thesis/tables/table_ch3_runtime_paths.tex`
+  - `docs/This is Chapter 3 Writing.md`
+  - `docs/aigc_revision_matrix_20260501.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex thesis/tables/table_ch3_runtime_paths.tex 'docs/This is Chapter 3 Writing.md'`
+  - `sed -n '260,840p' thesis/chapters/ch3_method.tex | rg -n "需要强调的是|需要明确的是|至此|共同表明|核心在于|统一框架|可审计|可复现|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|不是.*而是|不只是.*还|框架化|表面统一性|证明在|自然生长|第三个主方法|真正|自然输出|artifact|GQA 映射|符号扩展|nibble unpack|进入 TPOT|runtime router|cache append|fallback marker|profile readout|provenance check"`
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`
+  - `rg -n "(^!|LaTeX Error|Undefined control sequence|Citation .* undefined|Reference .* undefined|There were undefined|Rerun to get cross-references right|Label\(s\) may have changed|multiply defined|Overfull \\hbox)" thesis/main.log`
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m5c_r4.txt`
+  - `sed -n '1320,2100p' /tmp/thesis_main_m5c_r4.txt | rg -n "需要强调的是|需要明确的是|至此|共同表明|核心在于|统一框架|可审计|可复现|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|不是.*而是|不只是.*还|框架化|表面统一性|证明在|自然生长|第三个主方法|真正|自然输出|artifact|GQA 映射|符号扩展|nibble unpack|进入 TPOT|runtime router|cache append|fallback marker|profile readout|provenance check"`
+  - `python scripts/review_tool.py phase-gate`
+- Outputs:
+  - 第 3.5.2 节改成低比特压力测试叙述，将 Qwen K/V 读数限定为格式升级动机，完整结论仍交给第四章表图。
+  - 第 3.5.3 节补充 K per-channel 与 V per-token 的角色理由，并新增表 3-3 固定 `INT4-RoleAlign` 的 K-path、V-path 与补充诊断配置。
+  - 第 3.5.4 节把 `KIVI-style` 对比收束为同格式控制变量：参数来源、冻结时机、复核边界和运行时载荷。
+  - 第 3.7.1 节新增离线校准字段表，明确典型字段、可选复核字段、头数元数据和运行时只读边界；运行路径表缩短为字段级表达。
+  - 第 3.7.2 节将 INT4 前端实现写为半字节解包、`+8` offset 还原和 scale/offset 读取，并把 GQA 映射约束绑定到 TPOT 边界。
+  - 章末小结压缩为两段接口收束，不再复写全章或提前宣称第四章速度结论。
+  - 矩阵中片段 28-34 标记为 `done`，M5 状态更新为 `done（M5-A/M5-B/M5-C done）`。
+- Validation:
+  - `git diff --check` 通过。
+  - M5-C 源码窗口和 PDF 抽取窗口风险词扫描均无命中。
+  - `latexmk` 通过，`main.pdf` 为 101 页。
+  - `main.log` 未检出 LaTeX error、未定义 refs/citations、重复 label、rerun 提示或 Overfull hbox。
+  - `python scripts/review_tool.py phase-gate` 通过，仍只有既有 `review_tracker.md` parse warnings。
+  - Style/AIGC-risk、Evidence/claim-boundary、LaTeX/reference/extraction 三个 reviewer 第一轮均给出 FAIL；修正内部工程词、GQA/字段边界、`+8` offset、表号同步和运行路径表后，第二轮三方均 PASS。
+- Risks / follow-ups:
+  - 表 3-7 的 PDF 文本抽取仍存在窄列表格的正常换行，但无乱码、错位或 LaTeX 阻塞信号；M7 全稿抽取复核时继续观察。
+  - 下一步进入 M6：实验章与结论片段 35-47，建议先拆 M6-A 处理实验环境、评测协议、benchmark、baseline 和统计纪律（35-39）。
+- Commit: 9a4c14a
