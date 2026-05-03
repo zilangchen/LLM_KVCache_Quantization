@@ -63,11 +63,11 @@
 | 32 | 方法 | `thesis/chapters/ch3_method.tex` | 产物接口解释长且平滑 | 改成离线校准字段表 + 一段解释 | offline calibration field table | definition-only | calibration runtime fields | 允许字段表说明；禁止长段复述 | done |
 | 33 | 方法 | `thesis/chapters/ch3_method.tex` | kernel 路径说明像系统综述 | 加入 `+8` offset 还原、GQA head mapping 对 TPOT 的影响 | INT4 fused decode constraints | boundary-only | Ch3 system path; Ch4 deployment boundary | 允许实现约束；禁止无条件性能结论 | done |
 | 34 | 方法 | `thesis/chapters/ch3_method.tex` | 章末总结高度模板化 | 压缩为 2 段，突出本章产出的接口 | chapter output interfaces | not-claim | Ch3 section outputs | 允许接口收束；禁止复述全章 | done |
-| 35 | 实验 | `thesis/chapters/ch4_experiments.tex` | 实验环境说明专业但半截被截断 | 检查 PDF 换行和脚注，修复抽取问题 | environment paragraph and table | not-claim | Ch4 environment table/source | 允许抽取和排版修复；禁止新增环境 claim | todo |
-| 36 | 实验 | `thesis/chapters/ch4_experiments.tex` | 五维评测协议完整但像生成式概述 | 改为每个指标承担的失败模式 | PPL/Needle/RULER/LongBench/TPOT roles | boundary-only | Ch4 protocol section | 允许指标职责；禁止泛称完整覆盖所有质量维度 | todo |
-| 37 | 实验 | `thesis/chapters/ch4_experiments.tex` | benchmark 说明过完整 | 用表格列任务、长度、指标、解释边界，正文少泛说明 | benchmark table/protocol | boundary-only | Ch4 benchmark/protocol source | 允许任务/长度/指标边界；禁止官方榜单外推 | todo |
-| 38 | 实验 | `thesis/chapters/ch4_experiments.tex` | 比较对象三分类很规整 | 加入为什么这些 baseline 是承重比较对象 | FP16 / MSE baseline / KIVI-style / heuristic baseline roles | final-ready (heuristic strong baseline only) + boundary-only | live plan frozen heuristic-strong-baseline claim；Ch4 baseline tables | 允许 baseline 角色和 heuristic 强基线；禁止 strawman 或 universal superiority | todo |
-| 39 | 实验 | `thesis/chapters/ch4_experiments.tex` | 统计纪律段像规范模板 | 加入实际 provenance：主结果、补充结果、降权原因，并明确不把 exploratory 结果升级为 final-ready claim | clean-provenance / exploratory / final-ready evidence boundaries | final-ready + exploratory + off-protocol + boundary-only | `docs/thesis_upgrade_live_plan.md` freeze；clean rerun docs | 允许证据分层；禁止 exploratory/final-ready 混写 | todo |
+| 35 | 实验 | `thesis/chapters/ch4_experiments.tex` | 实验环境说明专业但半截被截断 | 固定表 4-1 位置，压缩环境段与脚注邻近正文，复查 PDF 抽取顺序 | environment paragraph and table | not-claim | Ch4 environment table/source | 允许抽取和排版修复；禁止新增环境 claim | done |
+| 36 | 实验 | `thesis/chapters/ch4_experiments.tex` | 五维评测协议完整但像生成式概述 | 改为每个指标承担的失败模式 | PPL/Needle/RULER/LongBench/TPOT roles | boundary-only | Ch4 protocol section | 允许指标职责；禁止泛称完整覆盖所有质量维度 | done |
+| 37 | 实验 | `thesis/chapters/ch4_experiments.tex` | benchmark 说明过完整 | 用失败模式清单列任务、长度、指标、解释边界；不新增正式表以保持 4.1 表号冻结 | protocol ledger / benchmark boundary | boundary-only | Ch4 protocol source; Chapter 4 Writing frozen table plan | 允许任务/长度/指标边界；禁止官方榜单外推和新增正式表打乱表号 | done |
+| 38 | 实验 | `thesis/chapters/ch4_experiments.tex` | 比较对象三分类很规整 | 加入每类比较对象承担的控制问题，并单独定位 Uniform、BA-k、Heuristic-k 与 BA-AutoK 的第 4.4 节角色 | FP16 / percentile baseline / KIVI-style / heuristic baseline roles | boundary-only | Ch4 baseline tables; allocation strategy section | 允许 baseline 角色、Heuristic-k 位置先验基线与 BA-AutoK 画像驱动预算建议器定位；禁止 strawman 或 universal superiority | done |
+| 39 | 实验 | `thesis/chapters/ch4_experiments.tex` | 统计纪律段像规范模板 | 加入正文主结果、协议一致性/补充审计、较早批次补充读数三层证据，并说明降权原因 | unified-protocol / supplementary evidence boundaries | final-ready + supplementary + off-protocol + boundary-only | Ch4 statistics section; appendix LongBench-style audit | 允许证据分层；禁止补充读数替代正文主结论 | done |
 | 40 | 实验 | `thesis/chapters/ch4_experiments.tex` | 小节目标说明标准化 | 改成研究问题句 + 本节控制变量 | local subsection variables | boundary-only | Local Ch4 subsection protocol | 允许控制变量；禁止模板目标句 | todo |
 | 41 | 实验 | `thesis/chapters/ch4_experiments.tex` | 表述好但归因偏平滑 | 保留，补具体结果表编号和更多模型对照 | relevant table/figure references | boundary-only | Ch4 referenced tables/figures | 允许表图锚点归因；禁止平滑无锚点归因或升级为 frozen claim 外的新主张 | todo |
 | 42 | 实验 | `thesis/chapters/ch4_experiments.tex` | 表注和配置解释连成长段 | 拆为表注、正文解释、配置对应关系 | table note split | not-claim + boundary-only | Ch4 table notes | 允许表注/正文职责分离；禁止长段混合配置和结论 | todo |
@@ -245,8 +245,27 @@
 
 ### M6: 实验章与结论
 
-- 状态：todo
+- 状态：in-progress（M6-A done；片段 40-47 仍为 todo）
 - 片段：35-47
+
+#### M6-A: 实验设置、评测协议、比较对象与证据分层
+
+- 状态：done
+- 片段：35-39
+- 改动文件：
+  - `thesis/chapters/ch4_experiments.tex`
+- 本地验证：
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex`: PASS
+  - `sed -n '1,106p' thesis/chapters/ch4_experiments.tex | rg -v -F '\label' | rg -n '需要强调的是|需要明确的是|至此|共同表明|核心在于|统一框架|可审计|可复现|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|完整.*覆盖|五个互补维度|正交设计维度框架|不只是.*还|不是.*而是|benchmark|baseline 名字|Clean-provenance|clean-provenance|candidate-main|winner|普适定律|凭感觉|最终发布级|strawman'`: PASS (no hits)
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`: PASS (`main.pdf`, 101 pages)
+  - `rg -n '(^!|LaTeX Error|Undefined control sequence|Citation .* undefined|Reference .* undefined|There were undefined|Rerun to get cross-references right|Label\(s\) may have changed|multiply defined|Overfull \\hbox)' thesis/main.log`: PASS (no hits)
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m6a_r3.txt`: PASS
+  - `sed -n '2080,2265p' /tmp/thesis_main_m6a_r3.txt | rg -n '�|□|\?\?|undefined|para:|fig:|tab:|本节的组织顺序如下|五个互补维度|正交设计维度框架|benchmark|Clean-provenance|clean-provenance|candidate-main|winner|普适定律|需要强调的是|至此|共同表明|核心在于|完整.*覆盖|可审计|strawman'`: PASS (no hits)
+  - `python scripts/review_tool.py phase-gate`: PASS (`PHASE GATE: CLEAR`; only pre-existing `review_tracker.md` parse warnings)
+- Agent review:
+  - Style/AIGC-risk: PASS after replacing generic protocol overview with failure-mode responsibilities and concrete comparison roles.
+  - Evidence/claim-boundary: PASS after separating main results, consistency checks, and supplementary readings.
+  - LaTeX/reference/extraction: PASS after fixing Table 4-1 and Table 4-2 placement and rechecking PDF extraction.
 
 ### M7: 全稿一致性复核
 
