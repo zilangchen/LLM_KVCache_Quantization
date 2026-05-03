@@ -56,13 +56,13 @@
 | 25 | 方法 | `thesis/chapters/ch3_method.tex` | 指标符号解释太标准 | 保留但贴紧公式，不单独形成泛解释段 | local formula explanation | definition-only | Ch3 local formula context | 允许局部符号解释；禁止泛解释段 | done |
 | 26 | 方法 | `thesis/chapters/ch3_method.tex` | fallback 规则和 INT4-RoleAlign 过渡连在一起 | 拆开；fallback 写算法规则，INT4-RoleAlign 写下一节动机 | fallback rule table/algorithm | definition-only | Ch3 algorithm/rule definitions | 允许规则化；禁止把 fallback 写成经验结论 | done |
 | 27 | 方法 | `thesis/chapters/ch3_method.tex` | “需要强调的是”类元话语明显 | 删除强调句，直接说明本节不报告结果的原因 | method/result boundary | boundary-only | Ch3 method/result separation | 允许职责边界；禁止元话语强调 | done |
-| 28 | 方法 | `thesis/chapters/ch3_method.tex` | 对称 INT4 到 INT4-RoleAlign 长段句式反复 | 拆短，加入对称搜索失败后升级格式的证据 | symmetric INT4 failure evidence | boundary-only | Ch4 INT4 cliff and INT4-RoleAlign comparison | 允许解释低比特恢复路径的设计动机；禁止写成 final-ready 主 claim 或普适击败 KIVI-style | todo |
-| 29 | 方法 | `thesis/chapters/ch3_method.tex` | K/V 量化轴解释偏公式前说明 | 补充轴选择如何对应 Key/Value 失稳差异 | per-channel K/per-token V rationale | definition-only + boundary-only | Ch3 INT4-RoleAlign format; Ch4 K/V diagnosis | 允许轴选择理由；禁止把格式本身写成最终因果证明 | todo |
-| 30 | 方法 | `thesis/chapters/ch3_method.tex` | INT4-RoleAlign 总结段抽象词密集 | 用最终配置表替代部分文字，正文只写选择依据 | path instantiation/config table | definition-only | Ch3 path instantiation table | 允许配置依据；禁止抽象价值宣言 | todo |
-| 31 | 方法 | `thesis/chapters/ch3_method.tex` | KIVI-style 对比过于规整 | 加入参数来源、是否冻结、是否可复现实验审计 | KIVI-style vs INT4-RoleAlign control variables | definition-only + boundary-only | Ch3 comparison table; Ch4 same-format result | 允许同格式控制变量；禁止泛称 KIVI | todo |
-| 32 | 方法 | `thesis/chapters/ch3_method.tex` | 产物接口解释长且平滑 | 改成 artifact schema + 一段解释 | calibration JSON schema | definition-only | calibration artifact schema | 允许 schema 说明；禁止长段复述 | todo |
-| 33 | 方法 | `thesis/chapters/ch3_method.tex` | kernel 路径说明像系统综述 | 加入 nibble unpack、GQA head mapping 对 TPOT 的影响 | INT4 fused decode constraints | boundary-only | Ch3 system path; Ch4 deployment boundary | 允许实现约束；禁止无条件性能结论 | todo |
-| 34 | 方法 | `thesis/chapters/ch3_method.tex` | 章末总结高度模板化 | 压缩为 1 段，突出本章产出的接口 | chapter output interfaces | not-claim | Ch3 section outputs | 允许接口收束；禁止复述全章 | todo |
+| 28 | 方法 | `thesis/chapters/ch3_method.tex` | 对称 INT4 到 INT4-RoleAlign 长段句式反复 | 拆短，加入对称搜索失败后升级格式的证据 | symmetric INT4 failure evidence | boundary-only | Ch4 INT4 cliff and INT4-RoleAlign comparison | 允许解释低比特恢复路径的设计动机；禁止写成 final-ready 主 claim 或普适击败 KIVI-style | done |
+| 29 | 方法 | `thesis/chapters/ch3_method.tex` | K/V 量化轴解释偏公式前说明 | 补充轴选择如何对应 Key/Value 失稳差异 | per-channel K/per-token V rationale | definition-only + boundary-only | Ch3 INT4-RoleAlign format; Ch4 K/V diagnosis | 允许轴选择理由；禁止把格式本身写成最终因果证明 | done |
+| 30 | 方法 | `thesis/chapters/ch3_method.tex` | INT4-RoleAlign 总结段抽象词密集 | 用最终配置表替代部分文字，正文只写选择依据 | path instantiation/config table | definition-only | Ch3 path instantiation table | 允许配置依据；禁止抽象价值宣言 | done |
+| 31 | 方法 | `thesis/chapters/ch3_method.tex` | KIVI-style 对比过于规整 | 加入参数来源、是否冻结、是否可复现实验审计 | KIVI-style vs INT4-RoleAlign control variables | definition-only + boundary-only | Ch3 comparison table; Ch4 same-format result | 允许同格式控制变量；禁止泛称 KIVI | done |
+| 32 | 方法 | `thesis/chapters/ch3_method.tex` | 产物接口解释长且平滑 | 改成离线校准字段表 + 一段解释 | offline calibration field table | definition-only | calibration runtime fields | 允许字段表说明；禁止长段复述 | done |
+| 33 | 方法 | `thesis/chapters/ch3_method.tex` | kernel 路径说明像系统综述 | 加入 `+8` offset 还原、GQA head mapping 对 TPOT 的影响 | INT4 fused decode constraints | boundary-only | Ch3 system path; Ch4 deployment boundary | 允许实现约束；禁止无条件性能结论 | done |
+| 34 | 方法 | `thesis/chapters/ch3_method.tex` | 章末总结高度模板化 | 压缩为 2 段，突出本章产出的接口 | chapter output interfaces | not-claim | Ch3 section outputs | 允许接口收束；禁止复述全章 | done |
 | 35 | 实验 | `thesis/chapters/ch4_experiments.tex` | 实验环境说明专业但半截被截断 | 检查 PDF 换行和脚注，修复抽取问题 | environment paragraph and table | not-claim | Ch4 environment table/source | 允许抽取和排版修复；禁止新增环境 claim | todo |
 | 36 | 实验 | `thesis/chapters/ch4_experiments.tex` | 五维评测协议完整但像生成式概述 | 改为每个指标承担的失败模式 | PPL/Needle/RULER/LongBench/TPOT roles | boundary-only | Ch4 protocol section | 允许指标职责；禁止泛称完整覆盖所有质量维度 | todo |
 | 37 | 实验 | `thesis/chapters/ch4_experiments.tex` | benchmark 说明过完整 | 用表格列任务、长度、指标、解释边界，正文少泛说明 | benchmark table/protocol | boundary-only | Ch4 benchmark/protocol source | 允许任务/长度/指标边界；禁止官方榜单外推 | todo |
@@ -178,7 +178,7 @@
 
 ### M5: 方法章
 
-- 状态：in-progress（M5-A/M5-B done；片段 28-34 仍为 todo）
+- 状态：done（M5-A/M5-B/M5-C done）
 - 片段：20-34
 
 #### M5-A: 公式分解、K/V 诊断、接口总览与 KL 代理
@@ -221,6 +221,27 @@
   - Style/AIGC-risk: PASS after replacing placeholder validation records with real regex scans and keeping the M5-B window structured around interfaces, formulas, and rules.
   - Evidence/claim-boundary: PASS after changing the path table from an effect-like `恢复行为保持` phrase to the definition-only `定义 K/V 角色分离的固定产物接口`.
   - Final consistency review: PASS after confirming fragments 24-27 are done, fragments 28-34 remain todo, validation commands are auditable, and no LaTeX/PDF extraction blocker remains in the M5-B window.
+
+#### M5-C: RoleAlign、KIVI-style、校准字段、kernel 边界与章末小结
+
+- 状态：done
+- 片段：28-34
+- 改动文件：
+  - `thesis/chapters/ch3_method.tex`
+  - `thesis/tables/table_ch3_runtime_paths.tex`
+  - `docs/This is Chapter 3 Writing.md`
+- 本地验证：
+  - `git diff --check -- thesis/chapters/ch3_method.tex thesis/tables/table_ch3_runtime_paths.tex 'docs/This is Chapter 3 Writing.md'`: PASS
+  - `sed -n '260,840p' thesis/chapters/ch3_method.tex | rg -n "需要强调的是|需要明确的是|至此|共同表明|核心在于|统一框架|可审计|可复现|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|不是.*而是|不只是.*还|框架化|表面统一性|证明在|自然生长|第三个主方法|真正|自然输出|artifact|GQA 映射|符号扩展|nibble unpack|进入 TPOT|runtime router|cache append|fallback marker|profile readout|provenance check"`: PASS (no hits)
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`: PASS (`main.pdf`, 101 pages)
+  - `rg -n "(^!|LaTeX Error|Undefined control sequence|Citation .* undefined|Reference .* undefined|There were undefined|Rerun to get cross-references right|Label\(s\) may have changed|multiply defined|Overfull \\hbox)" thesis/main.log`: PASS (no hits)
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m5c_r4.txt`: PASS
+  - `sed -n '1320,2100p' /tmp/thesis_main_m5c_r4.txt | rg -n "需要强调的是|需要明确的是|至此|共同表明|核心在于|统一框架|可审计|可复现|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|不是.*而是|不只是.*还|框架化|表面统一性|证明在|自然生长|第三个主方法|真正|自然输出|artifact|GQA 映射|符号扩展|nibble unpack|进入 TPOT|runtime router|cache append|fallback marker|profile readout|provenance check"`: PASS (no hits)
+  - `python scripts/review_tool.py phase-gate`: PASS (`PHASE GATE: CLEAR`; only pre-existing `review_tracker.md` parse warnings)
+- Agent review:
+  - Style/AIGC-risk: PASS after replacing template transitions and internal-engineering phrasing, adding concrete K/V role evidence anchors, and syncing the Writing table list.
+  - Evidence/claim-boundary: PASS after keeping Ch4 results as method motivation, changing GQA mapping to runtime-inferred head metadata, and using `+8` offset restore instead of `符号扩展`.
+  - LaTeX/reference/extraction: PASS after deleting hard-coded table-number comments, stabilizing Tables 3-3 through 3-7, and shortening Table 3-7 to avoid PDF extraction artifacts.
 
 ### M6: 实验章与结论
 

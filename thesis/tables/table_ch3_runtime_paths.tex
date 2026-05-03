@@ -3,15 +3,15 @@
   \caption{不同量化路径的离线产物、运行时缓存载荷与默认执行后端}
   \label{tab:ch3-runtime-paths}
   \scriptsize
-  \setlength{\tabcolsep}{1.5pt}
-  \renewcommand{\arraystretch}{1.12}
-  \begin{tabular}{>{\raggedright\arraybackslash}p{1.55cm}>{\raggedright\arraybackslash}p{1.78cm}>{\raggedright\arraybackslash}p{1.55cm}>{\raggedright\arraybackslash}p{1.65cm}>{\raggedright\arraybackslash}p{1.28cm}>{\raggedright\arraybackslash}p{1.18cm}}
+  \setlength{\tabcolsep}{2.0pt}
+  \renewcommand{\arraystretch}{1.14}
+  \begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{1.35cm}>{\raggedright\arraybackslash}p{2.35cm}>{\raggedright\arraybackslash}p{2.95cm}>{\raggedright\arraybackslash}p{2.25cm}X}
     \toprule
-    路径 & 离线产物 & append 时量 & 缓存载荷 & 执行后端 & 备注 \\
+    路径 & 离线产物 & 追加写入 & 解码后端 & 边界说明 \\
     \midrule
-    INT8 基准路径 & static scale、保护裕度、轴元数据 & 当前 token 量化值与 scale & INT8 载荷 + 快照 & Triton 融合后端 & 主部署路径 \\
-    对称 INT4 试探路径 & 对称 scale、轴元数据 & packed INT4 + 元数据 & packed INT4 + 元数据 & Triton / 参考实现 & 低比特试探 \\
-    INT4-RoleAlign & $(p_K,p_V)$、K/V 轴元数据、角色规则 & 当前 token 的 K/V 参数 & 角色感知低比特 K/V & 参考实现 & 非对称核验证 \\
+    INT8 & scale、保护裕度、轴元数据 & INT8 K/V 与 scale & Triton 融合后端 & 主部署路径 \\
+    对称 INT4 & scale、轴元数据 & packed INT4 K/V & 参考实现或 Triton 试探 & 压力测试；解包计入成本 \\
+    RoleAlign & $(p_K,p_V)$、K/V 轴、头数 & K per-channel；V per-token & 参考实现；融合扩展 & 质量核对优先；速度见第四章 \\
     \bottomrule
-  \end{tabular}
+  \end{tabularx}
 \end{table}
