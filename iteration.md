@@ -1802,3 +1802,39 @@ Canonical agent workflow directory is `.agents/`.
   - 表 3-7 的 PDF 文本抽取仍存在窄列表格的正常换行，但无乱码、错位或 LaTeX 阻塞信号；M7 全稿抽取复核时继续观察。
   - 下一步进入 M6：实验章与结论片段 35-47，建议先拆 M6-A 处理实验环境、评测协议、benchmark、baseline 和统计纪律（35-39）。
 - Commit: 9a4c14a
+
+### 2026-05-03 21:41 | M6-A Experiment Setup and Evidence Boundary Revision
+- Goal:
+  - 完成 47 段 AIGC 误判风险矩阵中的片段 35-39，重写第四章实验设置、评测协议、比较对象和统计/数据溯源边界，使其从模板化协议说明改为失败模式、控制变量和证据层级驱动的作者性叙述。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `docs/aigc_revision_matrix_20260501.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_matrix_20260501.md`
+  - `sed -n '1,106p' thesis/chapters/ch4_experiments.tex | rg -v -F '\label' | rg -n "需要强调的是|需要明确的是|至此|共同表明|核心在于|统一框架|可审计|可复现|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|完整.*覆盖|五个互补维度|正交设计维度框架|不只是.*还|不是.*而是|benchmark|baseline 名字|Clean-provenance|clean-provenance|candidate-main|winner|普适定律|凭感觉|最终发布级|strawman"`
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`
+  - `rg -n "^!|LaTeX Error|Undefined control sequence|Citation .* undefined|Reference .* undefined|There were undefined|Rerun to get cross-references right|Label\(s\) may have changed|multiply defined" thesis/main.log`
+  - `rg -n -F "Overfull \hbox" thesis/main.log`
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m6a_final.txt`
+  - `sed -n '2080,2265p' /tmp/thesis_main_m6a_final.txt | rg -n "�|□|\?\?|undefined|para:|fig:|tab:|本节的组织顺序如下|五个互补维度|正交设计维度框架|benchmark|Clean-provenance|clean-provenance|candidate-main|winner|普适定律|需要强调的是|至此|共同表明|核心在于|完整.*覆盖|可审计|strawman"`
+  - `python scripts/review_tool.py phase-gate`
+- Outputs:
+  - 第 4.1 节开头从完整协议总述改为四个后文读数依赖项：模型/环境、失败模式指标、比较对象控制变量和证据层级。
+  - 第 4.1.1 节压缩模型矩阵和 H20 环境说明，并将表 4-1 固定在本小节内，避免 PDF 抽取时表格插入到后续协议说明。
+  - 第 4.1.2 节将 PPL、Needle、LongBench 风格任务、RULER、TPOT/KV Cache/峰值显存分别绑定到具体失败信号，不再写成“五维完整覆盖”。
+  - 第 4.1.3 节把 FP16、percentile baseline、INT8-Canonical、对称 INT4、INT4-RoleAlign、KIVI-style 与 MixedKV 写成各自承担的控制问题，并补充 Uniform、BA-k、Heuristic-k、BA-AutoK 在第 4.4 节的比较角色。
+  - 第 4.1.4 节把证据来源拆为正文主结果、协议一致性/补充审计和较早批次补充读数三层，明确 PPL 读数值幅度、不读统计显著性。
+  - 矩阵中片段 35-39 标记为 `done`，M6 状态更新为 `in-progress（M6-A done；片段 40-47 仍为 todo）`。
+- Validation:
+  - `git diff --check` 通过。
+  - M6-A 源码窗口风险词扫描无命中；最初一次扫描因 `\label` 转义写法失败，已用 fixed-string 过滤重跑通过。
+  - `latexmk` 通过，`main.pdf` 为 101 页且已处于 up-to-date 状态。
+  - `main.log` 未检出 LaTeX error、未定义 refs/citations、重复 label、rerun 提示或 Overfull hbox；最初一次 Overfull 组合 regex 因工具转义失败，已拆分为普通 regex 与 fixed-string 检查重跑通过。
+  - M6-A PDF 抽取窗口未检出乱码、raw label、旧模板短语或证据边界高风险词。
+  - `python scripts/review_tool.py phase-gate` 通过，仍只有既有 `review_tracker.md` parse warnings。
+  - Style/AIGC-risk、Evidence/claim-boundary、LaTeX/reference/extraction 三个 reviewer 对 M6-A 和最后的分配策略增量均 PASS。
+- Risks / follow-ups:
+  - 本轮只覆盖片段 35-39；片段 40-47 仍保持 todo。
+  - 第 4.1.2 未新增正式 benchmark 表，因为 `docs/This is Chapter 4 Writing.md` 已冻结 4.1 只保留表 4-1 与表 4-2；任务/长度/指标边界改由失败模式清单正文承载，避免打乱表号。
+  - 下一步进入 M6-B：处理片段 40-44，重点是局部研究问题、控制变量、表图证据锚点、表注/正文职责拆分、RoleAlign/KIVI 同格式注释和“最小可证结论”。
+- Commit: 7d3d401
