@@ -68,11 +68,11 @@
 | 37 | 实验 | `thesis/chapters/ch4_experiments.tex` | benchmark 说明过完整 | 用失败模式清单列任务、长度、指标、解释边界；不新增正式表以保持 4.1 表号冻结 | protocol ledger / benchmark boundary | boundary-only | Ch4 protocol source; Chapter 4 Writing frozen table plan | 允许任务/长度/指标边界；禁止官方榜单外推和新增正式表打乱表号 | done |
 | 38 | 实验 | `thesis/chapters/ch4_experiments.tex` | 比较对象三分类很规整 | 加入每类比较对象承担的控制问题，并单独定位 Uniform、BA-k、Heuristic-k 与 BA-AutoK 的第 4.4 节角色 | FP16 / percentile baseline / KIVI-style / heuristic baseline roles | boundary-only | Ch4 baseline tables; allocation strategy section | 允许 baseline 角色、Heuristic-k 位置先验基线与 BA-AutoK 画像驱动预算建议器定位；禁止 strawman 或 universal superiority | done |
 | 39 | 实验 | `thesis/chapters/ch4_experiments.tex` | 统计纪律段像规范模板 | 加入正文主结果、协议一致性/补充审计、较早批次补充读数三层证据，并说明降权原因 | unified-protocol / supplementary evidence boundaries | final-ready + supplementary + off-protocol + boundary-only | Ch4 statistics section; appendix LongBench-style audit | 允许证据分层；禁止补充读数替代正文主结论 | done |
-| 40 | 实验 | `thesis/chapters/ch4_experiments.tex` | 小节目标说明标准化 | 改成研究问题句 + 本节控制变量 | local subsection variables | boundary-only | Local Ch4 subsection protocol | 允许控制变量；禁止模板目标句 | todo |
-| 41 | 实验 | `thesis/chapters/ch4_experiments.tex` | 表述好但归因偏平滑 | 保留，补具体结果表编号和更多模型对照 | relevant table/figure references | boundary-only | Ch4 referenced tables/figures | 允许表图锚点归因；禁止平滑无锚点归因或升级为 frozen claim 外的新主张 | todo |
-| 42 | 实验 | `thesis/chapters/ch4_experiments.tex` | 表注和配置解释连成长段 | 拆为表注、正文解释、配置对应关系 | table note split | not-claim + boundary-only | Ch4 table notes | 允许表注/正文职责分离；禁止长段混合配置和结论 | todo |
-| 43 | 实验 | `thesis/chapters/ch4_experiments.tex` | INT4-RoleAlign / KIVI-style 对比注释过长 | 放进表格说明；正文强调同格式控制变量 | same-format comparison | boundary-only | Ch4 INT4-RoleAlign vs KIVI-style table | 允许同格式控制变量；禁止写成 final-ready 主 claim 或普适优势判定 | todo |
-| 44 | 实验 | `thesis/chapters/ch4_experiments.tex` | 小节总结像自动总结 | 用“本节支持的最小结论是……”列 2-3 个可证命题 | minimal supported claims | final-ready + boundary-only | Local Ch4 evidence and live-plan frozen claims | 允许最小命题；禁止扩展总结 | todo |
+| 40 | 实验 | `thesis/chapters/ch4_experiments.tex` | 小节目标说明标准化 | 改成研究问题句 + 本节控制变量 | local subsection variables | boundary-only | Ch4 RQ1/RQ2 section protocol | 允许控制变量；禁止模板目标句 | done |
+| 41 | 实验 | `thesis/chapters/ch4_experiments.tex` | 表述好但归因偏平滑 | 补表图锚点，并把结论压回具体模型、指标和配置 | relevant table/figure references | boundary-only | Ch4 Tables 4-3--4-8 and Figures 4-1--4-2 | 允许表图锚点归因；禁止平滑无锚点归因或升级为 frozen claim 外的新主张 | done |
+| 42 | 实验 | `thesis/chapters/ch4_experiments.tex` | 表注和配置解释连成长段 | 缩短表注，只保留协议/范围；配置解释移回正文 | table note split | not-claim + boundary-only | Ch4 table notes | 允许表注/正文职责分离；禁止长段混合配置和结论 | done |
+| 43 | 实验 | `thesis/chapters/ch4_experiments.tex` | INT4-RoleAlign / KIVI-style 对比注释过长 | 将同格式控制变量写在 4.3.3 正文，表注只说明共享格式、Needle 读法和 14B 配对边界 | same-format comparison | boundary-only | Ch4 INT4-RoleAlign vs KIVI-style table | 允许同格式控制变量；禁止写成 final-ready 主 claim 或普适优势判定 | done |
+| 44 | 实验 | `thesis/chapters/ch4_experiments.tex` | 小节总结像自动总结 | 用最小可证结论收束 RQ1/RQ2，并绑定表图证据 | minimal supported claims | final-ready + boundary-only | Local Ch4 evidence and live-plan frozen claims | 允许最小命题；禁止扩展总结 | done |
 | 45 | 实验 | `thesis/chapters/ch4_experiments.tex` | 表注被标记，风险低 | 不大改；确认不是显著加速宣称 | deployment boundary note | boundary-only | Ch4 deployment tables/figures | 允许当前 H20/后端条件；禁止显著加速泛称 | todo |
 | 46 | 实验 | `thesis/chapters/ch4_experiments.tex` | 章末总结覆盖多个 RQ，像摘要复写 | 拆成按 RQ 的结论，每条绑定证据和限制 | RQ evidence summary | final-ready + boundary-only | Ch4 chapter conclusion + live-plan frozen claims | 允许按 RQ 最小结论；禁止摘要复写和新增 claim | todo |
 | 47 | 结论 | `thesis/chapters/ch5_conclusion.tex` | 边界讨论抽象但风险低 | 保留克制语气，加入具体未覆盖分布/任务/部署条件 | limitations and future-work boundaries | boundary-only | Ch5 limitations; `objective.md` non-goals | 允许具体未覆盖范围；禁止抽象 caveat 替代边界 | todo |
@@ -245,7 +245,7 @@
 
 ### M6: 实验章与结论
 
-- 状态：in-progress（M6-A done；片段 40-47 仍为 todo）
+- 状态：in-progress（M6-A/M6-B done；片段 45-47 仍为 todo）
 - 片段：35-47
 
 #### M6-A: 实验设置、评测协议、比较对象与证据分层
@@ -266,6 +266,27 @@
   - Style/AIGC-risk: PASS after replacing generic protocol overview with failure-mode responsibilities and concrete comparison roles.
   - Evidence/claim-boundary: PASS after separating main results, consistency checks, and supplementary readings.
   - LaTeX/reference/extraction: PASS after fixing Table 4-1 and Table 4-2 placement and rechecking PDF extraction.
+
+#### M6-B: RQ1/RQ2 evidence anchors, table-note split, and minimal claims
+
+- 状态：done
+- 片段：40-44
+- 改动文件：
+  - `thesis/chapters/ch4_experiments.tex`
+- 本地验证：
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_matrix_20260501.md`: PASS
+  - `sed -n '118,386p' thesis/chapters/ch4_experiments.tex | rg -n '需要强调的是|需要明确的是|至此|共同表明|核心在于|统一框架|可审计|可复现|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|不是.*而是|不只是.*还|完整.*覆盖|五个互补维度|正交设计维度框架|普适胜出|远远甩开|真正|最容易审计|可固化|可扩展|一边倒.*差距|一边倒跑分差|模板'`: PASS (no hits)
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`: PASS (`main.pdf`, 101 pages)
+  - `rg -n 'LaTeX Error|Undefined control sequence|Citation.*undefined|Reference.*undefined|Rerun to get cross-references|There were undefined references|Package natbib Warning: Citation' thesis/main.log`: PASS (no hits)
+  - `rg -n -F 'Overfull \hbox' thesis/main.log`: PASS (no hits)
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m6b_final_r4.txt`: PASS
+  - `rg -n '4\.2     行为引导校准|表 4-3|4\.3   低比特路径|表 4-5|表 4-6|表 4-7|表 4-8|4\.4     跨模型' /tmp/thesis_main_m6b_final_r4.txt`: PASS (4.2/4.3 tables appear before 4.4)
+  - `sed -n '2268,2693p' /tmp/thesis_main_m6b_final_r4.txt | rg -n '需要强调的是|需要明确的是|至此|共同表明|核心在于|统一框架|可审计|可复现|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|不是.*而是|不只是.*还|完整.*覆盖|五个互补维度|正交设计维度框架|普适胜出|远远甩开|真正|最容易审计|可固化|可扩展|一边倒.*差距|一边倒跑分差|模板'`: PASS (no hits)
+  - `python scripts/review_tool.py phase-gate`: PASS (`PHASE GATE: CLEAR`; only pre-existing `review_tracker.md` parse warnings)
+- Agent review:
+  - Style/AIGC-risk: PASS after replacing template RQ introductions with controlled-variable questions, adding table/figure anchors, and changing section summaries to minimal supported claims.
+  - Evidence/claim-boundary: PASS after keeping INT8, official LongBench, K/V diagnosis, same-format RoleAlign/KIVI comparison, and 14B row within their stated evidence scopes.
+  - LaTeX/reference/extraction: PASS after fixing Tables 4-5 through 4-8 to `[H]`, shortening table notes, and rechecking PDF extraction order.
 
 ### M7: 全稿一致性复核
 

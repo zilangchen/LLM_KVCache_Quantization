@@ -119,17 +119,17 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
 \section{行为引导校准的保真度验证}
 \label{sec:ch4-rq1}
 
-第~\ref{sec:ch4-setup} 节已经交代统一实验协议。本节回答基准保真问题：行为引导校准是否能够在最保守位宽上形成稳定、可复现的基础保真路径。本节的职责是验证校准层本身是否成立，不讨论低比特恢复、预算分配或部署效率。
+第~\ref{sec:ch4-setup} 节固定了实验口径，本节只回答一个较窄的问题：在最保守的 \texttt{INT8} 位宽上，离线行为引导校准是否会改变模型的任务行为。这里控制的变量是位宽和校准产物本身；低比特格式、预算分配和后端效率都留到后续小节。
 
-为避免在更激进的低比特路径与跨模型比较中混入额外变量，本节分两步展开。首先，第~\ref{subsec:ch4-int8-canonical}~节以 \texttt{INT8-Canonical} 作为基准路径实例，检验行为引导校准在基准位宽下是否能够保持与 FP16 可比的任务行为。随后，第~\ref{subsec:ch4-longbench-official}~节引入主矩阵之外的一块官方 LongBench 真实数据对照，检查本文的合成 LongBench 风格评测是否会系统性高估该基准路径的保真度。两步共同回答的不是“INT8 是否很强”，而是框架能否先在最容易审计的设定上成立。
+证据按两张表读取。表~\ref{tab:ch4-int8-canonical} 比较 \texttt{FP16} 与 INT8 基准路径；表~\ref{tab:ch4-longbench-official} 检查三个官方 LongBench 任务上的方向。两者共同限定结论范围：本节验证基准位宽下的保真度，不把 \texttt{INT8} 结果用作低比特恢复或部署收益证据。
 
 \subsection{INT8 基准路径保真度}
 \label{subsec:ch4-int8-canonical}
 \label{subsec:exp-int8-canonical}
 
-本文首先验证 \texttt{INT8} 位宽下的行为引导校准。对应配置不承担极限压缩方案的角色，而是框架在最保守位宽下的基准实例。它回答的问题很窄：只考察离线行为引导校准本身，能否在稳定、可复现的设置上形成闭环。
+本小节只比较两条路径：未量化的 \texttt{FP16} 参考，以及使用离线行为引导校准产物的 \texttt{INT8-Canonical}。这张表不引入 \texttt{INT4-RoleAlign} 或 \texttt{KIVI-style}，因为它们会把低比特格式变量提前带入 RQ1。
 
-\begin{table}[t]
+\begin{table}[H]
   \centering
   \caption{INT8 基准路径保真度（Qwen2.5-1.5B-Instruct）}
   \label{tab:ch4-int8-canonical}
@@ -159,9 +159,9 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
 
 表~\ref{tab:ch4-int8-canonical} 汇总了 Qwen2.5-1.5B-Instruct 在三个 task-core LongBench 风格合成基准任务上的基准路径读数。\texttt{INT8-Canonical} 相对 \texttt{FP16} 的平均差异仅为 $+0.02$，且差异方向并不一致：NarrativeQA 上为 $+0.09$，HotpotQA 上为 $-0.02$，GovReport 上为 $-0.01$。这种幅度很小、方向不一致的模式，更接近量化噪声下的微小波动，而不是系统性的行为偏移。
 
-因此，本节建立的结论很窄：在当前基准设置下，行为引导校准能够把 \texttt{INT8} 路径维持在与 \texttt{FP16} 高度接近、且未见系统性偏移的范围内。框架先在最容易审计的位宽上形成了基础保真闭环。
+表~\ref{tab:ch4-int8-canonical} 支持的最小结论是：在 Qwen2.5-1.5B-Instruct 的 task-core 协议内，\texttt{INT8-Canonical} 没有表现出相对 \texttt{FP16} 的系统性任务偏移。
 
-表~\ref{tab:ch4-int8-canonical} 反映的是校准产物本身的保真度，而不是某个解码后端路径的速度收益。本小节证明的是行为引导校准在基准位宽下能够保持任务行为；Triton 融合核的系统收益只在第 4.5 节讨论。
+这个结论只归属于校准产物本身，不归属于任何解码后端。Triton 融合核的系统收益只在第 4.5 节讨论。
 
 \subsection{评测协议一致性检验：官方 LongBench 真实数据对照}
 \label{subsec:ch4-longbench-official}
@@ -170,7 +170,7 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
 
 为此，本文从官方 LongBench~\cite{bai2024longbench} 数据集中选取三个代表性子任务进行对照实验：NarrativeQA（单文档问答，F1）、HotpotQA（多文档问答，F1）与 GovReport（摘要，Rouge-L）。实验模型固定为 Qwen2.5-1.5B-Instruct，上下文截断至 32K，随机种子固定为 \texttt{1234}，每个任务最多采样 50 个官方样本；量化配置固定为 \texttt{INT8-Canonical} 主线配置。上述设定的作用，是对主文合成协议做一块最小但可信的一致性检查，而不是替代整章跨模型主实验。
 
-\begin{table}[t]
+\begin{table}[H]
   \centering
   \caption{官方 LongBench 真实数据对照（评测协议一致性检验）}
   \label{tab:ch4-longbench-official}
@@ -199,25 +199,25 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
 
 表~\ref{tab:ch4-longbench-official} 表明，官方真实数据上的单任务差异均控制在 $0.5$ pp 以内：NarrativeQA 为 $-0.43$ pp，HotpotQA 为 $+0.31$ pp，GovReport 为 $+0.08$ pp，而宏平均仅相差 $0.01$ pp。与第~\ref{subsec:ch4-int8-canonical}~节相似，这一小范围对照没有出现“统一朝某一方向偏移”的现象；这些差异更适合作为方向一致性检查，而不是官方真实分布上的显著性结论。
 
-本节据此得出的结论是：在最保守的 INT8 基准路径上，本文的合成 LongBench 风格评测与官方真实数据对照在结论方向上保持一致。这一对照为基准路径提供了一项有价值的可信度补充。关于为何本文在校准层采用 KL 而非 MSE，以及该选择在不同规模上的必要性差异，将在第 4.6.1 节中进一步讨论。
+表~\ref{tab:ch4-longbench-official} 的作用是排除一个具体风险：主文合成协议没有在这三个官方任务上把 \texttt{INT8-Canonical} 的方向性结论反转。它不证明真实数据分布上的全面泛化，也不替代跨模型主矩阵。关于为何校准层采用 KL 而非 MSE，以及该选择在不同规模上的必要性差异，将在第 4.6.1 节中讨论。
 
-至此，行为引导校准已在基准位宽上建立基础保真路径；接下来的问题是，当位宽继续压低到 \texttt{INT4} 时，它会在哪里失效、又如何被恢复。
+本节的两张表把 RQ1 限定在基准位宽：\texttt{INT8-Canonical} 在主协议和小范围官方真实数据对照中都没有出现方向性偏移。下一节再讨论 \texttt{INT4} 下的失效与恢复。
 
 \section{低比特路径从对称失效到 RoleAlign 恢复}
 \label{sec:ch4-rq2}
 \label{sec:exp-int4-kivi}
 \label{sec:exp-main}
 
-第~\ref{sec:ch4-rq1} 节已经在 INT8 基准路径上建立了行为引导校准的基础保真路径。本节进一步回答低比特恢复问题：当位宽继续压低到 \texttt{INT4} 时，这一路径会在何处失效，又如何被恢复。本节按“失效现象、角色诊断、格式恢复”的顺序展开，不把若干低比特结果并列堆叠在一起。
+第~\ref{sec:ch4-rq1} 节只验证了 \texttt{INT8} 基准位宽。本节把控制变量切换到低比特路径：同一行为引导原则被压到 \texttt{INT4} 后，先看对称格式是否仍可用，再定位 K/V 哪一侧触发失效，最后在同一非对称格式内比较离线校准与运行时统计。
 
-具体而言，第~\ref{subsec:ch4-int4-cliff}~节先立住对称 \texttt{INT4} 的架构依附性阶跃崩塌，说明 \texttt{INT8} 的成功并不能机械地下推到更低位宽；第~\ref{subsec:ch4-kv-diagnosis}~节再通过完整的 K/V 独立消融诊断，把低比特阶跃崩塌定位为由 Key 侧精度下降主导触发；最后，第~\ref{subsec:ch4-rolealign-kivi}~节在共享非对称格式的条件下比较 \texttt{INT4-RoleAlign} 与 \texttt{KIVI-style}，从而验证低比特恢复路径。整个第 4.3 节只服务于低比特恢复问题，不提前进入分配策略图谱、部署效率或长版机制讨论。
+本节的证据锚点依次是表~\ref{tab:ch4-int4-cliff}、表~\ref{tab:ch4-kv-ppl}、表~\ref{tab:ch4-kv-multitask} 与表~\ref{tab:ch4-rolealign-kivi}。它们分别承担四个判断：对称 \texttt{INT4} 在部分架构上跨过功能临界点；Key 侧低比特噪声是更直接的触发源；K/V 角色差异能在任务指标上复现；共享格式下的 \texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 应按校准来源而非格式差异来读。
 
 \subsection{对称 INT4 的架构依附性失效与阶跃崩塌}
 \label{subsec:ch4-int4-cliff}
 
-\texttt{INT8} 基准路径的成立表明，行为引导校准可以在较保守位宽上形成稳定的基础路径；但当位宽继续压低到 \texttt{INT4} 时，同一对称量化思路并不会自动延伸成一条可用的低比特路径。当前证据更支持一种更强也更窄的判断：当有效量化等级从 \texttt{INT8} 的 255 个骤降到对称 \texttt{INT4} 的 15 个时，退化不再表现为温和的连续滑落，而会在部分模型上直接跨过功能临界点，出现检索能力从“可用”到“不可用”的阶跃式崩塌。与此同时，这种崩塌又并非对所有架构强度相同，因此本节将其表述为\textbf{架构依附性失效}。
+\texttt{INT8} 基准路径的读数表明，行为引导校准可以在较保守位宽上保持任务行为；但当位宽继续压低到 \texttt{INT4} 时，同一对称量化思路并不会自动延伸成一条可用的低比特路径。当前证据更支持一种更强也更窄的判断：当有效量化等级从 \texttt{INT8} 的 255 个骤降到对称 \texttt{INT4} 的 15 个时，退化不再表现为温和的连续滑落，而会在部分模型上直接跨过功能临界点，出现检索能力从“可用”到“不可用”的阶跃式崩塌。与此同时，这种崩塌又并非对所有架构强度相同，因此本节将其表述为\textbf{架构依附性失效}。
 
-\begin{table}[t]
+\begin{table}[H]
   \centering
   \caption{对称 INT4 的阶跃崩塌摘要}
   \label{tab:ch4-int4-cliff}
@@ -238,12 +238,12 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
   \vspace{0.35em}
   \begin{minipage}{0.94\linewidth}
     \footnotesize
-    注：本表压缩汇总对称 \texttt{INT4} 的阶跃崩塌模式。Qwen2.5-1.5B/7B 上出现“100\%\,$\rightarrow$\,0\%”的检索阶跃；LLaMA-3.1-8B（$H_{kv}=8$）是当前主矩阵中的架构例外，其对称 \texttt{INT4} Needle 仍维持 98\%。这一小表是第 4.3.1 节的独立承重件，不替代后续第 4.3.2 节的完整诊断。
+    注：本表只汇总对称 \texttt{INT4} 的最小现象锚点。Qwen2.5-1.5B/7B 出现“100\%\,$\rightarrow$\,0\%”的检索阶跃；LLaMA-3.1-8B（$H_{kv}=8$）作为架构例外保留 98\% Needle。
   \end{minipage}
   }
 \end{table}
 
-表~\ref{tab:ch4-int4-cliff} 直接给出了这一阶跃崩塌模式的最小证据：在 Qwen2.5-1.5B 与 Qwen2.5-7B 上，对称 \texttt{INT4} 使 Needle 从 100\% 直接跌至 0\%，同时伴随语言建模层面的明显退化；而 LLaMA-3.1-8B 则是当前主实验矩阵中的唯一显式例外，其对称 \texttt{INT4} Needle 仍维持在 98\%。因此，第 4.3.1 节所确认的不是“\texttt{INT4} 普遍不可用”，而是：\textbf{对称 \texttt{INT4} 会在一类模型上出现架构依附性的阶跃崩塌。} 这一现象的直接含义是，低比特问题的性质已经从“参数再调一调”转变为“量化格式与误差传播结构是否匹配”。
+表~\ref{tab:ch4-int4-cliff} 直接给出了这一阶跃崩塌模式的最小证据：在 Qwen2.5-1.5B 与 Qwen2.5-7B 上，对称 \texttt{INT4} 使 Needle 从 100\% 直接跌至 0\%，同时伴随语言建模层面的明显退化；LLaMA-3.1-8B 则保留 98\% Needle。第 4.3.1 节只确认一个有边界的现象：\textbf{对称 \texttt{INT4} 会在一类模型上出现架构依附性的阶跃崩塌。} 这一现象的直接含义是，低比特问题的性质已经从“参数再调一调”转变为“量化格式与误差传播结构是否匹配”。
 
 造成这种阶跃而非平滑退化的原因，与 softmax 对 $QK^\top$ 分数的指数敏感性有关。一旦 Key 量化噪声将目标 token 的分数挤出 top-$k$ 区域，softmax 会把概率质量迅速转移到错误位置，因而检索能力会从 100\% 直接跌到 0\%，而不会出现 50\%/30\%/10\% 这类线性衰减轨迹。与之对照，LLaMA-3.1-8B 上 98\% 的剩余 Needle 则提示：在 $H_{kv}=8$ 的更强 GQA 噪声稀释条件下，极低比特 Key 噪声的有效幅度尚未完全越过崩塌阈值。于是，接下来的关键问题就不再是“对称 \texttt{INT4} 会不会崩”，而是：\textbf{这一崩塌究竟首先由 Key 侧还是 Value 侧触发。}
 
@@ -251,11 +251,11 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
 \label{subsec:ch4-kv-diagnosis}
 \label{sec:exp-kv-sensitivity}
 
-第三章第 3.2 节已经给出了压缩版动机诊断，但当前压缩版并不是对本节四配置矩阵的逐项复刻，而是从本节同源结果中抽取出的 bit-layout 诊断视图：\texttt{FP16} 与 \texttt{K8V8} 构成未量化与高精度量化参考，\texttt{K8V4} 与 \texttt{K4V8} 构成同平均 bit 预算下的角色对照，而 \texttt{K4V4} 提供对称低比特坍塌锚点。本节则给出支撑该判断的完整版证据。这里的完整诊断分为两层：第一层是在语言建模层面使用单侧极端干预，分别观察高精度或低精度的 Key / Value 单独变化时会不会触发 PPL cliff；第二层是在检索与任务层面使用统一的四配置矩阵，即 \texttt{K-only}、\texttt{V-only}、\texttt{K4V8} 与 \texttt{MixedKV}，以建立跨任务、跨模型的一致方向。
+第三章第 3.2 节使用的是压缩诊断视图：\texttt{K8V4} 与 \texttt{K4V8} 对照同平均 bit 预算下的 K/V 角色，\texttt{K4V4} 提供对称低比特坍塌锚点。本小节回到完整证据，先用表~\ref{tab:ch4-kv-ppl} 隔离 Key 与 Value 的单侧 PPL 影响，再用表~\ref{tab:ch4-kv-multitask} 和图~\ref{fig:ch4-kv-ruler32} 检查同一方向是否出现在检索压测与任务级指标上。
 
-在 PPL 层面，本文首先报告 Qwen2.5-1.5B 上的单侧干预结果。高精度侧包括两项：\texttt{K@INT8+V@FP16} 用于检验高精度 Key 是否足够安全，\texttt{K@FP16+V@INT8} 用于检验高精度 Value 是否带来额外收益。极低精度侧则用 \texttt{K@INT4+V@FP16} 与 \texttt{K@FP16+V@INT4} 分别隔离 Key 与 Value 的单侧影响。随后，在检索与任务层面再统一切换到四配置矩阵 \texttt{K-only / V-only / K4V8 / MixedKV}，以建立跨模型、跨任务的角色敏感性诊断。其中，第三章压缩视图中的 \texttt{K8V4} 与本节的恢复性配置 \texttt{MixedKV} 对应；因此，第 3.2 节与本节共享同一设计结论，但图面组织方式并不要求逐配置同构。
+表~\ref{tab:ch4-kv-ppl} 的四个干预项分别回答两个问题：高精度 Key 或 Value 是否已经足够安全，极低精度 Key 或 Value 哪一侧会单独触发 cliff。后续任务级矩阵切换为 \texttt{K-only / V-only / K4V8 / MixedKV}；其中，第三章压缩视图中的 \texttt{K8V4} 与本节恢复性配置 \texttt{MixedKV} 对应，因此两处共享设计结论，但不要求图面逐项同构。
 
-\begin{table}[t]
+\begin{table}[H]
   \centering
   \caption{Key/Value 单侧干预的 PPL 诊断表（Qwen2.5-1.5B-Instruct，WikiText-2，\texttt{chunk\_size=128}）}
   \label{tab:ch4-kv-ppl}
@@ -278,14 +278,14 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
   \vspace{0.35em}
   \begin{minipage}{0.94\linewidth}
     \footnotesize
-    注：PPL 为固定输入序列上的确定性 likelihood 指标，固定 \texttt{seed=1234} 报告；追加种子的数值与 \texttt{1234} 逐位一致，因此本表不适用 Bootstrap CI 或符号翻转检验。该表承担第 4.3.2 节的核心单表证据：在 Qwen2.5-1.5B 上，真正首先触发 cliff 的是 \texttt{K@INT4}，而不是 \texttt{V@INT4}。
+    注：PPL 为固定输入序列上的确定性 likelihood 指标，固定 \texttt{seed=1234} 报告；追加种子的数值与 \texttt{1234} 逐位一致，因此本表不适用 Bootstrap CI 或符号翻转检验。
   \end{minipage}
   }
 \end{table}
 
-表~\ref{tab:ch4-kv-ppl} 先从语言建模层面给出最直接的诊断证据。在 Qwen2.5-1.5B 上，仅将 Key 压到 \texttt{INT4}（\texttt{K@INT4 + V@FP16}）就会把 PPL 从 9.31 推高到 1290.9，相对 FP16 达到 $+13{,}774\%$；相比之下，仅将 Value 压到 \texttt{INT4}（\texttt{K@FP16 + V@INT4}）时，PPL 为 9.35，相对 FP16 仅增加 $0.4\%$，而 \texttt{K@INT8 + V@FP16} 也只增加 $0.2\%$。这说明对当前 low-bit path 而言，决定“是否越过功能临界点”的不是 Value 量化，而是 Key 精度是否已经进入足以扰动 attention ranking 的区域。\texttt{Key-first protection} 不是经验偏好，而是由单侧干预证据支持的设计方向。
+表~\ref{tab:ch4-kv-ppl} 先从语言建模层面给出最直接的诊断证据。在 Qwen2.5-1.5B 上，仅将 Key 压到 \texttt{INT4}（\texttt{K@INT4 + V@FP16}）就会把 PPL 从 9.31 推高到 1290.9，相对 FP16 达到 $+13{,}774\%$；相比之下，仅将 Value 压到 \texttt{INT4}（\texttt{K@FP16 + V@INT4}）时，PPL 为 9.35，相对 FP16 仅增加 $0.4\%$，而 \texttt{K@INT8 + V@FP16} 也只增加 $0.2\%$。这说明对当前 low-bit path 而言，决定“是否越过功能临界点”的主要变量是 Key 精度是否已经进入足以扰动 attention ranking 的区域。\texttt{Key-first protection} 的依据来自这组单侧干预证据。
 
-\begin{table}[t]
+\begin{table}[H]
   \centering
   \caption{K/V 消融多任务结果}
   \label{tab:ch4-kv-multitask}
@@ -321,17 +321,17 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
   }
 \end{table}
 
-表~\ref{tab:ch4-kv-multitask} 进一步在检索与任务级指标上建立了同方向证据。首先，\texttt{K@INT8} 的退化极小：在三个主评测模型上，\texttt{K-only} 的 RULER 几乎贴着各自 FP16 基线，说明 \texttt{INT8} 精度对 Key 的表达已经足够安全。其次，\texttt{V@INT4} 的影响有限：\texttt{V-only} 在 RULER 与 LongBench-style 指标上总体保持接近 FP16 的可用水平，符合 Value 侧“主要作为 softmax 加权求和目标”的角色。真正的 cliff 发生在 \texttt{K4V8}：在 Qwen2.5-1.5B 与 Qwen2.5-7B 上，RULER 直接坍缩为 0\%，而 LongBench-style 综合分也分别降至 2.58 与 0.80；但在 LLaMA-3.1-8B 上，\texttt{K4V8} 仍保留 31.12 的 RULER 与 8.92 的 LongBench-style 综合分，说明共同方向依然是 Key 主导退化，但其强度受模型族、规模与 $H_{kv}$ 调制。
+表~\ref{tab:ch4-kv-multitask} 把同一诊断放到检索压测和任务级指标中。第一，\texttt{K-only} 的 RULER 贴近各自 FP16 基线，说明 \texttt{INT8} Key 在该协议下不是主要风险源。第二，\texttt{V-only} 总体保持可用，说明单独压低 Value 不会触发表~\ref{tab:ch4-kv-ppl} 中那类 PPL cliff。第三，\texttt{K4V8} 在 Qwen2.5-1.5B 与 Qwen2.5-7B 上把 RULER 打到 0\%，而 LLaMA-3.1-8B 仍保留 31.12 的 RULER 与 8.92 的 LongBench-style 综合分；因此，Key 主导退化是共同方向，退化强度仍受模型族、规模与 $H_{kv}$ 调制。
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{figures/ch4/fig_ch4_01_kv_ruler32.pdf}
-  \caption{K/V 角色敏感性的跨指标诊断图。子图（a）--（c）分别在 Needle、RULER 与 LongBench-style 指标上比较主要位宽布局；横轴为模型，折线表示不同位宽布局的原始分数。为避免完全重叠，部分标记做微小纵向避让，但折线仍连接原始读数。子图（d）汇总 \texttt{K4V8} 相对 \texttt{K8V4} 的下降幅度。Qwen 系列在 \texttt{K4V8}/\texttt{K4V4} 下出现稳定 cliff，而 LLaMA-3.1-8B 不呈现同强度坍塌，因此该现象应理解为受架构调制的 Key-side low-bit 敏感性，而不是所有模型同强度规律。}
+  \caption{K/V 角色敏感性的跨指标诊断图。子图（a）--（c）分别在 Needle、RULER 与 LongBench-style 指标上比较主要位宽布局；横轴为模型，折线表示不同位宽布局的原始分数。为避免完全重叠，部分标记做微小纵向避让，但折线仍连接原始读数。子图（d）汇总 \texttt{K4V8} 相对 \texttt{K8V4} 的下降幅度。Qwen 系列在 \texttt{K4V8}/\texttt{K4V4} 下出现 cliff，LLaMA-3.1-8B 不呈现同强度坍塌，因此该现象应理解为受架构调制的 Key-side low-bit 敏感性，并非所有模型同强度规律。}
   \label{fig:ch4-kv-ruler32}
   \label{fig:kv-ablation-summary-ruler}
 \end{figure}
 
-图~\ref{fig:ch4-kv-ruler32} 将 Needle、RULER 与 LongBench-style 放到同一位宽布局矩阵中。Qwen2.5-1.5B 与 Qwen2.5-7B 的共同模式是：\texttt{K8V8} 与 \texttt{K8V4} 大体保持可用，而 \texttt{K4V8} 和 \texttt{K4V4} 在 Needle 与 RULER 上直接跌入 cliff，LongBench-style 也同步下降。LLaMA-3.1-8B 则不表现出同强度 cliff：\texttt{K4V8} 在三类指标上仍接近高精度路径，\texttt{K4V4} 在 Needle 与 RULER 上也未出现同幅度坍塌；其 LongBench-style 高读数作为 synthetic task-core 的格式敏感结果保留在图中，但不用于支持“\texttt{K4V4} 优于 \texttt{FP16}”这一判断。由此，本图支持的结论不是“所有模型都会同样 Key 崩”，而是：4bit Key 扰动在 Qwen 系列上会稳定触发行为崩塌，但其强度受到模型族、规模与 $H_{kv}$ 等架构因素调制。
+图~\ref{fig:ch4-kv-ruler32} 将 Needle、RULER 与 LongBench-style 放到同一位宽布局矩阵中。Qwen2.5-1.5B 与 Qwen2.5-7B 的共同模式是：\texttt{K8V8} 与 \texttt{K8V4} 大体保持可用，而 \texttt{K4V8} 和 \texttt{K4V4} 在 Needle 与 RULER 上直接跌入 cliff，LongBench-style 也同步下降。LLaMA-3.1-8B 则不表现出同强度 cliff：\texttt{K4V8} 在三类指标上仍接近高精度路径，\texttt{K4V4} 在 Needle 与 RULER 上也未出现同幅度坍塌；其 LongBench-style 高读数作为 synthetic task-core 的格式敏感结果保留在图中，但不用于支持“\texttt{K4V4} 优于 \texttt{FP16}”这一判断。由此，本图只支持一个受限结论：4bit Key 扰动在 Qwen 系列上会触发行为崩塌，但其强度受到模型族、规模与 $H_{kv}$ 等架构因素调制。
 
 \begin{figure}[t]
   \centering
@@ -342,16 +342,18 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
 
 图~\ref{fig:ch4-kv-error-heatmap} 从误差结构侧补充了这种架构依附性。配对热力图显示，在 \texttt{MixedKV} 配置下，Qwen2.5-1.5B 的高误差层段更早、更分散，而 LLaMA-3.1-8B 的误差峰值则更集中于后部层段，整体量级也更低。这张图不是 attention-KL 主指标的替代物，但它支持了与表~\ref{tab:ch4-kv-multitask} 同方向的解释：在更高 $H_{kv}$ 与更平滑的架构条件下，Key 量化噪声更不容易被放大成检索崩塌。
 
-最后，再用一条补充性扩展把这一结论从小模型与中等规模模型延伸到更大模型。在 Qwen2.5-14B 上，保持 Key 为高精度的 \texttt{K16V4} 可将 PPL 从 full \texttt{INT4} 的 5.040 恢复到 4.709，即恢复约 93\% 的退化；相对地，保持 Value 为高精度的 \texttt{K4V16} 仅能恢复到 4.813，恢复率约 64\%。这表明在当前 14B 的补充对比中，保持 Key 为高精度能够带来更大的恢复幅度。至此，本节可以把诊断结论压成一句设计启示：在本文考察的 low-bit 场景中，真正首先触发行为崩塌的是 Key 精度下降；而 \texttt{MixedKV} 的恢复则表明，低比特路径的首要动作不是继续平均压缩 K/V，而是优先保护 Key，并在此基础上升级量化格式。
+14B 补充对比只承担外推边界的提示作用。在 Qwen2.5-14B 上，保持 Key 为高精度的 \texttt{K16V4} 可将 PPL 从 full \texttt{INT4} 的 5.040 恢复到 4.709，约恢复 93\% 的退化；保持 Value 为高精度的 \texttt{K4V16} 恢复到 4.813，约恢复 64\%。这条补充读数与表~\ref{tab:ch4-kv-ppl} 和表~\ref{tab:ch4-kv-multitask} 同向，但不替代前三个模型上的主诊断。
+
+本小节支持的最小结论是：在本文考察的 low-bit 场景中，首先越过功能临界点的是 Key 精度下降；\texttt{MixedKV} 的恢复说明低比特路径需要优先保护 Key，并在此基础上升级量化格式。
 
 \subsection{INT4-RoleAlign 与 KIVI-style 的跨模型对比}
 \label{subsec:ch4-rolealign-kivi}
 \label{subsec:exp-int4-cross-model}
 \label{sec:exp-rolealign}
 
-如果第~\ref{subsec:ch4-kv-diagnosis}~节的结论成立，那么下一步就不应再在对称 \texttt{INT4} 的参数空间中继续调参，而应进入 role-aware 非对称格式空间。在这一空间内，本文采用的 \texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 共享相同的缓存格式，即 \texttt{per-channel K + per-token V}；因此，本小节比较的是同一量化格式下两种校准实例化方式。二者在设计层面的差异已在第三章第~\ref{subsec:ch3-rolealign-vs-kivi}~节中说明，这里不再重复放置设计差异表，而是集中报告同格式条件下的经验结果，并在表注中区分完整配对比较与仅用于界定适用范围的行。
+表~\ref{tab:ch4-kv-ppl} 与表~\ref{tab:ch4-kv-multitask} 已经把低比特失效定位到 Key 侧，因此本小节不再在对称 \texttt{INT4} 参数空间里继续比较。这里进入 \texttt{per-channel K + per-token V} 的同一非对称格式，并只比较两种实例化来源：离线 role-aware calibration 的 \texttt{INT4-RoleAlign}，以及运行时 \texttt{absmax/min} 的 \texttt{KIVI-style}。二者的设计差异已在第三章第~\ref{subsec:ch3-rolealign-vs-kivi}~节固定，本小节只读取表~\ref{tab:ch4-rolealign-kivi} 的同格式结果。
 
-\begin{table}[t]
+\begin{table}[H]
   \centering
   \caption{INT4-RoleAlign 与 KIVI-style 的跨模型主对比}
   \label{tab:ch4-rolealign-kivi}
@@ -374,16 +376,16 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
   \vspace{0.35em}
   \begin{minipage}{0.94\linewidth}
     \footnotesize
-    注：两者共享 \texttt{per-channel K + per-token V} 非对称格式，唯一差异是校准理念：\texttt{RoleAlign} 采用离线 role-aware calibration，其中 K-path 以 attention-distribution KL 为主代理，并在离线搜索纪律下确定参数，V-path 由独立输出扰动代理主导；\texttt{KIVI-style} 使用运行时 \texttt{absmax/min}。Needle 列中的“100/100”表示 \texttt{Needle-single-retrieval} 与 \texttt{MK-NIAH-2} 两类检索同时恢复到 100\%。Qwen2.5-1.5B、Qwen2.5-7B 与 LLaMA-3.1-8B 构成当前正文中的完整配对对比；Qwen2.5-14B 当前仅提供 RoleAlign 结果，因此该行主要用于界定比较范围，而不参与配对差异判断。为保持与现有结果资产的一致性，1.5B 行采用当前主协议下的重跑结果，7B/8B/14B 行采用同格式、同指标定义下的既有对比结果。
+    注：Qwen2.5-14B 当前仅提供 RoleAlign 结果，不参与配对差异判断。
   \end{minipage}
   }
 \end{table}
 
-表~\ref{tab:ch4-rolealign-kivi} 显示，在共享非对称格式的前提下，\texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 的经验差距并不是一边倒式的大缺口。在当前可直接配对的 1.5B、7B 与 8B 三个模型上，RoleAlign 相对 KIVI-style 的 PPL 差距分别为 $+0.15$、$+0.05$ 与 $+0.00$；Needle 则在三者上都恢复到 100/100\%。14B 的 RoleAlign 行只用于说明该格式在更大模型上的当前覆盖范围，不参与差异判断。这一结果首先说明：\textbf{决定低比特检索恢复的关键首先是角色感知非对称格式本身。} 一旦从对称 per-group 升级到 \texttt{per-channel K + per-token V}，低比特路径就已经从“完全崩塌”转回“可用状态”。在此基础上，校准理念的差异更多体现在实例化方式，而不是大幅拉开质量缺口。
+表~\ref{tab:ch4-rolealign-kivi} 的配对范围是 1.5B、7B 与 8B 三个模型；14B 行只说明当前 RoleAlign 覆盖范围。配对模型上，RoleAlign 相对 KIVI-style 的 PPL 差距为 $+0.15$、$+0.05$ 与 $+0.00$，两类 Needle 任务均恢复到 100\%。这些读数首先支持一个较窄判断：从对称 per-group 升级到 \texttt{per-channel K + per-token V} 后，低比特检索从崩塌状态回到可用状态；在这一格式内，校准来源没有造成大幅质量分化。
 
-离线行为引导校准的独立价值主要体现在组织方式而非一边倒的经验差距。当前证据支持的更稳解释是：在同格式条件下，\texttt{RoleAlign} 的优势不在于把 \texttt{KIVI-style} 远远甩开，而在于它把低比特路径组织成了一条\textbf{可固化、可审计、可扩展}的实例化路径。\texttt{KIVI-style} 依赖运行时 \texttt{absmax/min} 重算 scale，\texttt{RoleAlign} 则将 K-path 与 V-path 的分路校准结果固化为离线校准结果；也正因为如此，\texttt{RoleAlign} 才能自然延伸到后续的行为引导分配器，而不是停留在一个只做运行时统计的缓存格式基线上。本小节支持的是“格式是一阶、离线校准是二阶组织增益”的当前判断。
+校准来源的差异仍然有方法层价值，但表~\ref{tab:ch4-rolealign-kivi} 未显示稳定、可外推的质量分化。\texttt{KIVI-style} 在运行时根据 \texttt{absmax/min} 更新 scale；\texttt{RoleAlign} 则把 K-path 与 V-path 的分路校准结果固化为离线产物，并把同一产物继续交给第 4.4 节的行为引导分配器。因此，本小节读取的是“同格式恢复 + 离线产物组织”的组合，不将其读成跨模型无条件优越。
 
-至此，低比特恢复问题已经得到回答：第~\ref{subsec:ch4-int4-cliff}~节说明行为引导原则在对称 \texttt{INT4} 上首先遭遇架构依附性的阶跃失效；第~\ref{subsec:ch4-kv-diagnosis}~节进一步表明，该失效主要由 Key 侧精度下降触发，而 \texttt{MixedKV} 的恢复指向“Key 优先保护”与角色感知格式升级；最后，本小节说明在共享非对称格式的公平设置下，\texttt{INT4-RoleAlign} 可以把这一路径恢复为一个可审计、可扩展的低比特实例。接下来的问题，不再是低比特路径能否被恢复，而是恢复后的行为敏感度画像能否进一步支撑跨模型预算分配，并读出稳定的策略适用区间结构。
+第 4.3 节支持的最小结论是三条。第一，表~\ref{tab:ch4-int4-cliff} 显示对称 \texttt{INT4} 在 Qwen 系列上出现阶跃崩塌，但 LLaMA-3.1-8B 构成架构例外。第二，表~\ref{tab:ch4-kv-ppl}、表~\ref{tab:ch4-kv-multitask} 与图~\ref{fig:ch4-kv-ruler32} 将崩塌主因定位到 Key 侧低比特噪声。第三，表~\ref{tab:ch4-rolealign-kivi} 表明共享非对称格式能够恢复检索可用性，而 \texttt{RoleAlign} 的独立价值主要在离线产物和后续分配接口。下一节据此转向一个新的问题：恢复后的行为敏感度画像能否支撑跨模型预算分配。
 
 \section{跨模型预算分配与策略适用区间图谱}
 \label{sec:ch4-rq3}
