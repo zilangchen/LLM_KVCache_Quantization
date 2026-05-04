@@ -137,7 +137,7 @@ p_{\theta}^{(l,h,t)}
 \end{equation}
 本文优化的是\emph{分布侧 KL 代理}，不声称输出误差 $(\hat o-o)$ 与 KL 数学等价。KL 的作用是把联合行为目标落到校准层可执行的分布读数上。
 
-为什么不直接用 MSE？原因在于 MSE 工作在张量重建空间，只比较 $K$ 或 $V$ 的逐元素差异；而 Key 误差真正进入模型功能前，要先经过 $qK^\top$、softmax 排序和概率质量分配。一个 MSE 较小的候选仍可能把关键 token 的注意力质量移走。选择 attention-distribution KL，是因为它直接比较参考分布与量化后分布。回顾
+为什么不直接用 MSE？原因在于 MSE 工作在张量重建空间，只比较 $K$ 或 $V$ 的逐元素差异；而 Key 误差影响模型功能前，要先经过 $qK^\top$、softmax 排序和概率质量分配。一个 MSE 较小的候选仍可能把关键 token 的注意力质量移走。选择 attention-distribution KL，是因为它直接比较参考分布与量化后分布。回顾
 \[
 \hat o-o
 =
@@ -252,7 +252,7 @@ q
 \qquad
 \hat x = q\, s_{l,j}^{\mathrm{static}}.
 \end{equation}
-这里真正由第 \ref{sec:ch3-calibration} 节确定的是 $(p_c,g)$ 如何被搜索与筛选；本小节关心的则是这些离线选出的参数如何被具体地转写为一条对称 \texttt{INT8} 路径。
+第 \ref{sec:ch3-calibration} 节确定 $(p_c,g)$ 如何被搜索与筛选；本小节关心这些离线选出的参数如何被具体地转写为一条对称 \texttt{INT8} 路径。
 
 在静态缩放参数之外，本文还为 INT8 基准路径引入自适应保护机制，用以处理运行时输入分布超出校准覆盖范围的情况。记由当前写入 token 估计得到的动态尺度为 $s_{l,j}^{\mathrm{dyn}}$，保护裕度参数为 $m$，则最终使用的缩放参数可写为
 \begin{equation}

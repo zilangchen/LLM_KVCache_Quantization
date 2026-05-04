@@ -23,7 +23,7 @@
     = \mathrm{softmax}\!\left(\frac{\bQ \bK^\top}{\sqrt{d_k}}\right)\bV
   \label{eq:attention}
 \end{equation}
-其中 $d_k$ 为 Key 的头维度。因果掩码使当前位置只能访问历史 token；因此，后文真正需要跟踪的是历史 $\bK/\bV$ 的存储规模、访问方式以及量化后对 softmax 排序和聚合输出的影响。
+其中 $d_k$ 为 Key 的头维度。因果掩码使当前位置只能访问历史 token；因此，后文需要跟踪的是历史 $\bK/\bV$ 的存储规模、访问方式以及量化后对 softmax 排序和聚合输出的影响。
 
 多头注意力（Multi-Head Attention, MHA）把 $\bQ$、$\bK$ 和 $\bV$ 沿头维度拆分后并行计算，再在输出端拼接：
 \begin{equation}
@@ -48,7 +48,7 @@
 
 在仅解码器 Transformer 的自回归推理过程中，当前步只新生成一个 Query，但这个 Query 仍要访问全部历史 Key，并用相应 Value 聚合上下文信息。若每一步都重新计算历史 Key/Value，重复投影会随历史长度累积；实际推理系统因此把各层历史词元对应的 Key 和 Value 保存在显存中，并在后续解码步直接读取，这一机制即为 KV Cache。
 
-本文关心的瓶颈主要发生在 Decode 阶段。Prefill 一次性处理完整提示词序列，并行度较高；Decode 每步只处理一个新词元，却必须读取随上下文长度线性增长的历史 $K/V$。因此，后文报告 TPOT、融合 Decode 路径和 $H_{kv}$ 交叉边界时，关注点不是“缓存机制是否存在”，而是每个 Decode 步要搬运多少缓存字节，以及低比特格式能否真的减少这部分访存负担。
+本文关心的瓶颈主要发生在 Decode 阶段。Prefill 一次性处理完整提示词序列，并行度较高；Decode 每步只处理一个新词元，却必须读取随上下文长度线性增长的历史 $K/V$。因此，后文报告 TPOT、融合 Decode 路径和 $H_{kv}$ 交叉边界时，本文具体追踪每个 Decode 步要搬运多少缓存字节，以及低比特格式能否真的减少这部分访存负担。
 
 \subsection{KV Cache 显存占用分析}
 
@@ -72,7 +72,7 @@ M_{KV}
 \section{模型量化技术基础}
 % ============================================================
 
-量化（Quantization）将浮点张量映射为低比特整数表示，其直接效果是降低每个元素的存储字节数。本文不讨论训练阶段的量化感知优化，而只处理推理期不断增长的 KV Cache；因此，后文需要的不是完整量化分类，而是三类会进入方法设计的概念：对称量化作为保守基准，非对称量化作为 K/V 角色差异的格式入口，校准代理作为离线选择量化参数的依据。
+量化（Quantization）将浮点张量映射为低比特整数表示，其直接效果是降低每个元素的存储字节数。本文不讨论训练阶段的量化感知优化，而只处理推理期不断增长的 KV Cache；因此，后文只保留三类会进入方法设计的概念：对称量化作为保守基准，非对称量化作为 K/V 角色差异的格式入口，校准代理作为离线选择量化参数的依据。
 
 \subsection{对称量化}
 
@@ -105,7 +105,7 @@ x_q = \operatorname{clamp}\!\left(\operatorname{round}\!\left(\frac{x}{s}\right)
 \hat{x} = (x_q-z)\cdot s.
   \label{eq:asym_quant}
 \end{equation}
-与对称量化相比，非对称量化能够更充分地利用有限整数范围来覆盖偏斜分布，因此在张量均值明显偏离零点、或不同维度统计特征差异较大时，往往具有更好的表示能力。本文引入该格式的原因并不是一般性地偏好非对称表示，而是后文的 K/V 角色诊断需要一种能分别处理 Key 通道尺度与 Value 时序动态的参数化入口。
+与对称量化相比，非对称量化能够更充分地利用有限整数范围来覆盖偏斜分布，因此在张量均值明显偏离零点、或不同维度统计特征差异较大时，往往具有更好的表示能力。本文引入该格式，是因为后文的 K/V 角色诊断需要一种能分别处理 Key 通道尺度与 Value 时序动态的参数化入口。
 
 在更细粒度的实现层面，量化轴会改变误差落点。逐通道（per-channel）量化更直接面向通道尺度差异，逐 token（per-token）量化更直接面向沿时序变化的动态范围。对于 KV Cache，这不是纯粹的工程选项：Key 先进入 logits 与 softmax 排序，Value 则在注意力权重下被聚合；二者在计算图中的角色不同，决定了后文不能只讨论“使用多少 bit”，还必须说明 bit 落在哪一侧、沿哪一轴被分配。
 
@@ -113,7 +113,7 @@ x_q = \operatorname{clamp}\!\left(\operatorname{round}\!\left(\frac{x}{s}\right)
 
 量化校准（Calibration）在本文中指离线确定缩放因子、裁剪阈值及相关参数的过程。它不重新训练模型，也不改变模型权重；它要解决的问题是，在部署前用少量样本选择一组上线后可复用的量化参数。
 
-后文只需要区分两种校准视角。第一种直接看张量重建，例如用百分位裁剪抑制异常值，或用均方误差（MSE）衡量量化前后张量的逐元素差异。第二种把目标移到行为空间，例如用 KL 散度比较参考路径与量化路径诱导出的概率分布。二者的差别不是术语差别，而是代理对象不同：MSE 约束“张量像不像”，KL 约束“softmax 后的注意力分布是否仍然把概率质量放在相近位置”。
+后文只需要区分两种校准视角。第一种直接看张量重建，例如用百分位裁剪抑制异常值，或用均方误差（MSE）衡量量化前后张量的逐元素差异。第二种把目标移到行为空间，例如用 KL 散度比较参考路径与量化路径诱导出的概率分布。二者的差别在于代理对象：MSE 约束“张量像不像”，KL 约束“softmax 后的注意力分布是否仍然把概率质量放在相近位置”。
 
 这一点在 KV Cache 上尤其关键。量化后的 Key 和 Value 并不会被下游任务直接读取，而是先经过点积、softmax 与加权聚合，再影响最终输出。数值空间中的较小重建误差，因此不自动等价于注意力行为被保持；Key 侧的有限扰动也可能通过排序变化被 softmax 放大。下一节据此回到已有 KV Cache 压缩工作：哪些工作已经处理了格式、异常值或缓存选择，哪些问题仍需要一个行为层代理来组织。
 
@@ -169,7 +169,7 @@ x_q = \operatorname{clamp}\!\left(\operatorname{round}\!\left(\frac{x}{s}\right)
 若只看压缩率，容易漏掉量化误差进入注意力计算后的形态变化。本文需要的文献锚点有两个：Key 误差可能经 logits 与 softmax 改写概率质量，输出侧误差则要回到聚合结果中评价。KVTuner~\cite{xu2025kvtuner} 分析了 Key 量化误差在注意力得分中的放大，并观察到高误差注意力头往往不再保持稀疏结构；Softmax Bias Correction~\cite{bondarenko2023softmax} 从 softmax 量化角度指出 SQNR 劣化和近零概率问题。QeRL~\cite{agarwal2025qerl}、Softmax-Not-Enough~\cite{velickovic2024softmax} 与 AhaKV~\cite{gu2025ahakv} 提供了概率平坦化、温度和缓存重要性的相邻证据，但它们并不直接等同于本文的 KV Cache 量化设定。
 
 \textbf{高效注意力与系统协同。}
-量化格式成立之后，还要经过系统路径检查。FlashAttention~\cite{dao2022flashattention} 及 FlashAttention-2~\cite{dao2024flashattention2} 通过分块计算、在线 softmax 与更高效的并行组织降低注意力计算 IO；vLLM~\cite{kwon2023vllm} 的 PagedAttention 通过分页式 KV Cache 管理减少显存碎片；Triton~\cite{tillet2019triton} 则为反量化与注意力计算融合提供 kernel 编写载体。对本文而言，这些工作给出的不是无条件加速前提，而是部署判据：bit-width 降低后，若 nibble unpack、GQA head mapping 和 kernel 调度开销没有被 Decode 阶段的访存节省抵消，低比特缓存未必会转化为更低 TPOT。因此，第四章会把系统收益写成 $H_{kv}$、序列长度和后端路径共同决定的经验边界。
+量化格式成立之后，还要经过系统路径检查。FlashAttention~\cite{dao2022flashattention} 及 FlashAttention-2~\cite{dao2024flashattention2} 通过分块计算、在线 softmax 与更高效的并行组织降低注意力计算 IO；vLLM~\cite{kwon2023vllm} 的 PagedAttention 通过分页式 KV Cache 管理减少显存碎片；Triton~\cite{tillet2019triton} 则为反量化与注意力计算融合提供 kernel 编写载体。对本文而言，这些工作提供的部署判据是：bit-width 降低后，若 nibble unpack、GQA head mapping 和 kernel 调度开销没有被 Decode 阶段的访存节省抵消，低比特缓存未必会转化为更低 TPOT。因此，第四章会把系统收益写成 $H_{kv}$、序列长度和后端路径共同决定的经验边界。
 
 上述文献已经分别覆盖格式设计、低比特恢复、缓存选择与系统执行。本文不替代这些路线，而是沿三件事继续推进：用行为代理选择参数，用 K/V 角色差异解释低比特断点，用行为敏感度画像驱动预算分配和部署路径判断。
 

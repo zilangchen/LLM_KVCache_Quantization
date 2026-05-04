@@ -12,7 +12,7 @@ Value 侧扰动则主要进入加权聚合；
 并明确区分哪些结论已经进入主证据链，哪些只承担边界或扩展说明。
 
 方法上，本文构建了一条行为引导的 KV Cache 量化与分配流程。
-INT8 基准路径使用 attention-distribution KL 作为可审计的校准代理；
+INT8 基准路径使用 attention-distribution KL 作为便于复核的校准代理；
 INT4-RoleAlign 则在非对称 K/V 格式下分别处理 Key 侧注意力偏移和 Value 侧输出扰动，
 避免把两类误差压成同一个目标。
 离线校准同时产生逐层行为敏感度画像，

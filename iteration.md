@@ -1913,3 +1913,45 @@ Canonical agent workflow directory is `.agents/`.
   - 表 4-12 至表 4-14 使用 `[H]` 稳定抽取顺序，但会提高局部排版刚性；M7 继续检查页面节奏。
   - Ch5 5.1/5.2 中仍有若干全稿主线术语和总结性表达，未作为 M6-C 局限性窗口处理，留给 M7 全稿一致性复核。
 - Commit: 469f7bf
+
+### 2026-05-04 17:10 | M7 Thesis-Wide Consistency and Extraction Sweep
+- Goal:
+  - 完成 AIGC 误判风险修订计划的 M7 全稿一致性复核，清理摘要、Ch1--Ch5、附录和图表源中的残留模板化表达、内部平台痕迹、PDF 抽取断裂和跨图表数值不一致问题。
+- Changed files:
+  - `thesis/chapters/abstract_zh.tex`
+  - `thesis/chapters/ch1_introduction.tex`
+  - `thesis/chapters/ch2_related_work.tex`
+  - `thesis/chapters/ch3_method.tex`
+  - `thesis/chapters/ch4_experiments.tex`
+  - `thesis/chapters/ch5_conclusion.tex`
+  - `thesis/chapters/appendix.tex`
+  - `thesis/tables/table_s3_rolealign_vs_kivi.tex`
+  - `scripts/thesis/plot_ch4_regime_combined.py`
+  - `thesis/figures/ch4/fig_ch4_05_regime_heatmap.pdf`
+  - `docs/aigc_revision_matrix_20260501.md`
+- Commands:
+  - `git diff --check -- scripts/thesis/plot_ch4_regime_combined.py thesis/chapters/abstract_zh.tex thesis/chapters/ch1_introduction.tex thesis/chapters/ch2_related_work.tex thesis/chapters/ch3_method.tex thesis/chapters/ch4_experiments.tex thesis/chapters/ch5_conclusion.tex thesis/chapters/appendix.tex thesis/tables/table_s3_rolealign_vs_kivi.tex`
+  - `rg -n "需要强调的是|需要明确的是|至此|共同表明|核心在于|统一框架|可审计|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|不是.*而是|不只是.*还|AutoDL|tmux|rsync|/root|pin=|backend process|session" thesis/chapters thesis/tables/table_s3_rolealign_vs_kivi.tex scripts/thesis/plot_ch4_regime_combined.py`
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m7.txt`
+  - `rg -n "�|□|\?\?|undefined|para:|fig:|tab:|ref\{|cite\{|INT4RoleAlign|INT4-$|需要强调的是|需要明确的是|至此|共同表明|核心在于|统一框架|可审计|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|不是.*而是|不只是.*还|AutoDL|tmux|rsync|/root|pin=|backend process|session" /tmp/thesis_main_m7.txt`
+  - `rg -n "LaTeX Error|Undefined control sequence|Citation.*undefined|Reference.*undefined|Rerun to get cross-references|There were undefined references|Package natbib Warning: Citation|Label\\(s\\) may have changed|multiply defined" thesis/main.log`
+  - `python scripts/review_tool.py phase-gate`
+- Outputs:
+  - 全稿高风险词扫描清零，重点替换了 Ch4/Ch5 中的 `图谱`、`普适最优`、`可审计`、模板化对照句式和自动总结式收束。
+  - 附录环境表删除 `AutoDL Cloud` 平台痕迹，Triton 变体和 prompt-adaptive 补充段改为复核/边界说明。
+  - Figure 4-5 文案从“稳定赢家”改为“稳定最优”，并用 clean readout full-precision Step 2 数值重生成，PDF 抽取与表 4-9 对齐为 `6.75 / 7.23 / 14.76`。
+  - 附录 `INT4-RoleAlign` 说明加 `\mbox{}`，修复 PDF 中 `INT4-` 行尾断裂。
+  - `docs/aigc_revision_matrix_20260501.md` 的 M7 状态更新为 `done`，并记录验证和三类 review 结果。
+- Validation:
+  - `git diff --check` 通过。
+  - 源级与 PDF 抽取级高风险词扫描均无命中。
+  - `latexmk` 通过，`main.pdf` 为 99 页。
+  - `main.log` 未检出 LaTeX error、未定义 refs/citations、rerun 提示或 multiply defined。
+  - `python scripts/review_tool.py phase-gate` 通过，仍只有既有 `review_tracker.md` parse warnings。
+  - Style/AIGC-risk、Evidence/claim-boundary、LaTeX/PDF extraction 三位 reviewer 最终统一 PASS；LaTeX/PDF 初审提出 Figure 4-5 mean 行 0.01 漂移，已用 full-precision readout 重生成并复审通过。
+- Risks / follow-ups:
+  - Figure 4-5 重生成依赖 `results/clean_rerun_20260419T09/summary_final.csv`，当前 worktree 未跟踪该 CSV；本轮按 `docs/clean_rerun_20260419T09/readout_final.md` 中的 full-precision Step 2 values 临时重建输入后生成图，并已清理临时文件。
+  - LaTeX 编译产物保持 ignored 未提交；最终提交仅包含论文源、图源脚本、更新后的图 PDF、矩阵和本记录。
+  - M7 已完成；下一步可进入最终全稿人工通读或按用户指定进入下一里程碑。
+- Commit: pending

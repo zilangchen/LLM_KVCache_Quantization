@@ -104,7 +104,7 @@ REGIME_CARDS = [
     {
         "model": "Qwen2.5-14B",
         "policy": "多策略近簇",
-        "title": "多种策略接近，难分稳定赢家",
+        "title": "多种策略接近，难分稳定最优",
         "note": "敏感层铺得更开",
         "color": "#5B718E",
         "fill": "#E8EEF4",

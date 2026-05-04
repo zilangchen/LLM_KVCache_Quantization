@@ -312,4 +312,26 @@
 
 ### M7: 全稿一致性复核
 
-- 状态：todo
+- 状态：done
+- 改动文件：
+  - `thesis/chapters/abstract_zh.tex`
+  - `thesis/chapters/ch1_introduction.tex`
+  - `thesis/chapters/ch2_related_work.tex`
+  - `thesis/chapters/ch3_method.tex`
+  - `thesis/chapters/ch4_experiments.tex`
+  - `thesis/chapters/ch5_conclusion.tex`
+  - `thesis/chapters/appendix.tex`
+  - `thesis/tables/table_s3_rolealign_vs_kivi.tex`
+  - `scripts/thesis/plot_ch4_regime_combined.py`
+  - `thesis/figures/ch4/fig_ch4_05_regime_heatmap.pdf`
+- 本地验证：
+  - `git diff --check -- scripts/thesis/plot_ch4_regime_combined.py thesis/chapters/abstract_zh.tex thesis/chapters/ch1_introduction.tex thesis/chapters/ch2_related_work.tex thesis/chapters/ch3_method.tex thesis/chapters/ch4_experiments.tex thesis/chapters/ch5_conclusion.tex thesis/chapters/appendix.tex thesis/tables/table_s3_rolealign_vs_kivi.tex`: PASS
+  - `rg -n "需要强调的是|需要明确的是|至此|共同表明|核心在于|统一框架|可审计|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|不是.*而是|不只是.*还|AutoDL|tmux|rsync|/root|pin=|backend process|session" thesis/chapters thesis/tables/table_s3_rolealign_vs_kivi.tex scripts/thesis/plot_ch4_regime_combined.py`: PASS (no hits)
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`: PASS (`main.pdf`, 99 pages)
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m7.txt && rg -n "�|□|\?\?|undefined|para:|fig:|tab:|ref\{|cite\{|INT4RoleAlign|INT4-$|需要强调的是|需要明确的是|至此|共同表明|核心在于|统一框架|可审计|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|不是.*而是|不只是.*还|AutoDL|tmux|rsync|/root|pin=|backend process|session" /tmp/thesis_main_m7.txt`: PASS (no hits)
+  - `rg -n "LaTeX Error|Undefined control sequence|Citation.*undefined|Reference.*undefined|Rerun to get cross-references|There were undefined references|Package natbib Warning: Citation|Label\(s\) may have changed|multiply defined" thesis/main.log`: PASS (no hits)
+  - `python scripts/review_tool.py phase-gate`: PASS (`PHASE GATE: CLEAR`; only pre-existing `review_tracker.md` parse warnings)
+- Agent review:
+  - Style/AIGC-risk: PASS after the global sweep removed residual template contrast, `图谱` / `普适最优` / `可审计` wording, and internal platform traces.
+  - Evidence/claim-boundary: PASS after confirming INT8, INT4-RoleAlign, cross-model strategy regimes, heuristic strong-baseline, and official LongBench boundaries remain scoped to their evidence levels.
+  - LaTeX/PDF extraction: PASS after regenerating Figure 4-5 from full-precision Step 2 values, aligning PDF labels with Table 4-9 (`6.75 / 7.23 / 14.76`), and fixing the appendix `INT4-RoleAlign` line-break extraction.
