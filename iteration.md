@@ -1838,3 +1838,40 @@ Canonical agent workflow directory is `.agents/`.
   - 第 4.1.2 未新增正式 benchmark 表，因为 `docs/This is Chapter 4 Writing.md` 已冻结 4.1 只保留表 4-1 与表 4-2；任务/长度/指标边界改由失败模式清单正文承载，避免打乱表号。
   - 下一步进入 M6-B：处理片段 40-44，重点是局部研究问题、控制变量、表图证据锚点、表注/正文职责拆分、RoleAlign/KIVI 同格式注释和“最小可证结论”。
 - Commit: 7d3d401
+
+### 2026-05-04 15:56 | M6-B RQ1/RQ2 Evidence Anchor and Claim Boundary Revision
+- Goal:
+  - 完成 47 段 AIGC 误判风险矩阵中的片段 40-44，重写第四章 4.2--4.3 的 RQ1/RQ2 局部叙述，使其从模板化小节目标、长表注和自动总结式归纳，改为控制变量、表图锚点和最小可证结论驱动的作者性论证。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `docs/aigc_revision_matrix_20260501.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_matrix_20260501.md`
+  - `sed -n '118,386p' thesis/chapters/ch4_experiments.tex | rg -n "需要强调的是|需要明确的是|至此|共同表明|核心在于|统一框架|可审计|可复现|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|不是.*而是|不只是.*还|完整.*覆盖|五个互补维度|正交设计维度框架|普适胜出|远远甩开|真正|最容易审计|可固化|可扩展|一边倒.*差距|一边倒跑分差|模板"`
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`
+  - `rg -n "LaTeX Error|Undefined control sequence|Citation.*undefined|Reference.*undefined|Rerun to get cross-references|There were undefined references|Package natbib Warning: Citation" thesis/main.log`
+  - `rg -n -F "Overfull \hbox" thesis/main.log`
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m6b_final_r4.txt`
+  - `rg -n "4\\.2     行为引导校准|表 4-3|4\\.3   低比特路径|表 4-5|表 4-6|表 4-7|表 4-8|4\\.4     跨模型" /tmp/thesis_main_m6b_final_r4.txt`
+  - `sed -n '2268,2693p' /tmp/thesis_main_m6b_final_r4.txt | rg -n "需要强调的是|需要明确的是|至此|共同表明|核心在于|统一框架|可审计|可复现|图谱|论证链条|普适最优|全局胜出|赢家|自动归纳|不是.*而是|不只是.*还|完整.*覆盖|五个互补维度|正交设计维度框架|普适胜出|远远甩开|真正|最容易审计|可固化|可扩展|一边倒.*差距|一边倒跑分差|模板"`
+  - `python scripts/review_tool.py phase-gate`
+- Outputs:
+  - 第 4.2 节从标准化目标句改为较窄问题：在 `INT8` 基准位宽上，离线行为引导校准是否改变任务行为；同时将低比特格式、预算分配和后端效率明确延后。
+  - 第 4.2.1/4.2.2 节将 INT8-Canonical、官方 LongBench 对照和 KL/MSE 后续讨论分别限定为基准保真、协议一致性检查和后文方法选择，不再外推为真实数据全面泛化或部署收益。
+  - 第 4.3 节把证据锚点绑定到表 4-5、表 4-6、表 4-7、图 4-1、图 4-2 和表 4-8，并把 Qwen/LLaMA/14B 读数分成主诊断、架构例外和外推边界。
+  - 表 4-5 至表 4-8 的表注压缩为协议/范围说明，配置解释和同格式 RoleAlign/KIVI 控制变量移回正文；表 4-5 至表 4-8 改为 `[H]` 以稳定 PDF 抽取顺序。
+  - 第 4.3.3 和小节收束改为最小可证命题：共享非对称格式恢复检索可用性，`RoleAlign` 的独立价值主要在离线产物和后续分配接口，而非跨模型无条件优越。
+  - 矩阵中片段 40-44 标记为 `done`，M6 状态更新为 `in-progress（M6-A/M6-B done；片段 45-47 仍为 todo）`。
+- Validation:
+  - `git diff --check` 通过。
+  - M6-B 源码窗口与 PDF 抽取窗口风险词扫描均无命中；额外将 4.3.3 中“未显示一边倒跑分差”改为“未显示稳定、可外推的质量分化”。
+  - `latexmk` 通过，`main.pdf` 为 101 页。
+  - `main.log` 未检出 LaTeX error、未定义 refs/citations、rerun 提示或 Overfull hbox。
+  - PDF 抽取顺序复核通过：4.2、表 4-3、4.3、表 4-5/4-6/4-7/4-8 均出现在 4.4 标题前。
+  - `python scripts/review_tool.py phase-gate` 通过，仍只有既有 `review_tracker.md` parse warnings。
+  - Style/AIGC-risk 与 Evidence/claim-boundary reviewer 初审 PASS；LaTeX/reference/extraction reviewer 前两轮因浮动体顺序 FAIL，改为 `[H]` 并重编译后最终 PASS。
+- Risks / follow-ups:
+  - 本轮只覆盖片段 40-44；片段 45-47 仍保持 todo。
+  - 表 4-5 至表 4-8 使用 `[H]` 稳定了本轮 PDF 抽取顺序，但会提高局部排版刚性；M7 全稿一致性复核时继续检查页面节奏。
+  - 第 4.4 仍包含片段 45-46 对应的部署表注与章末总结风险词，本轮按 M6-B 范围不处理。
+- Commit: 1193aa3
