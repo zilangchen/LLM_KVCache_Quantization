@@ -73,9 +73,9 @@
 | 42 | 实验 | `thesis/chapters/ch4_experiments.tex` | 表注和配置解释连成长段 | 缩短表注，只保留协议/范围；配置解释移回正文 | table note split | not-claim + boundary-only | Ch4 table notes | 允许表注/正文职责分离；禁止长段混合配置和结论 | done |
 | 43 | 实验 | `thesis/chapters/ch4_experiments.tex` | INT4-RoleAlign / KIVI-style 对比注释过长 | 将同格式控制变量写在 4.3.3 正文，表注只说明共享格式、Needle 读法和 14B 配对边界 | same-format comparison | boundary-only | Ch4 INT4-RoleAlign vs KIVI-style table | 允许同格式控制变量；禁止写成 final-ready 主 claim 或普适优势判定 | done |
 | 44 | 实验 | `thesis/chapters/ch4_experiments.tex` | 小节总结像自动总结 | 用最小可证结论收束 RQ1/RQ2，并绑定表图证据 | minimal supported claims | final-ready + boundary-only | Local Ch4 evidence and live-plan frozen claims | 允许最小命题；禁止扩展总结 | done |
-| 45 | 实验 | `thesis/chapters/ch4_experiments.tex` | 表注被标记，风险低 | 不大改；确认不是显著加速宣称 | deployment boundary note | boundary-only | Ch4 deployment tables/figures | 允许当前 H20/后端条件；禁止显著加速泛称 | todo |
-| 46 | 实验 | `thesis/chapters/ch4_experiments.tex` | 章末总结覆盖多个 RQ，像摘要复写 | 拆成按 RQ 的结论，每条绑定证据和限制 | RQ evidence summary | final-ready + boundary-only | Ch4 chapter conclusion + live-plan frozen claims | 允许按 RQ 最小结论；禁止摘要复写和新增 claim | todo |
-| 47 | 结论 | `thesis/chapters/ch5_conclusion.tex` | 边界讨论抽象但风险低 | 保留克制语气，加入具体未覆盖分布/任务/部署条件 | limitations and future-work boundaries | boundary-only | Ch5 limitations; `objective.md` non-goals | 允许具体未覆盖范围；禁止抽象 caveat 替代边界 | todo |
+| 45 | 实验 | `thesis/chapters/ch4_experiments.tex` | 表注被标记，风险低 | 不大改；确认不是显著加速宣称 | deployment boundary note | boundary-only | Ch4 deployment tables/figures | 允许当前 H20/后端条件；禁止显著加速泛称 | done |
+| 46 | 实验 | `thesis/chapters/ch4_experiments.tex` | 章末总结覆盖多个 RQ，像摘要复写 | 拆成按 RQ 的结论，每条绑定证据和限制 | RQ evidence summary | final-ready + boundary-only | Ch4 chapter conclusion + live-plan frozen claims | 允许按 RQ 最小结论；禁止摘要复写和新增 claim | done |
+| 47 | 结论 | `thesis/chapters/ch5_conclusion.tex` | 边界讨论抽象但风险低 | 保留克制语气，加入具体未覆盖分布/任务/部署条件 | limitations and future-work boundaries | boundary-only | Ch5 limitations; `objective.md` non-goals | 允许具体未覆盖范围；禁止抽象 caveat 替代边界 | done |
 
 ## Compiled Source Coverage
 
@@ -245,7 +245,7 @@
 
 ### M6: 实验章与结论
 
-- 状态：in-progress（M6-A/M6-B done；片段 45-47 仍为 todo）
+- 状态：done（M6-A/M6-B/M6-C done）
 - 片段：35-47
 
 #### M6-A: 实验设置、评测协议、比较对象与证据分层
@@ -287,6 +287,28 @@
   - Style/AIGC-risk: PASS after replacing template RQ introductions with controlled-variable questions, adding table/figure anchors, and changing section summaries to minimal supported claims.
   - Evidence/claim-boundary: PASS after keeping INT8, official LongBench, K/V diagnosis, same-format RoleAlign/KIVI comparison, and 14B row within their stated evidence scopes.
   - LaTeX/reference/extraction: PASS after fixing Tables 4-5 through 4-8 to `[H]`, shortening table notes, and rechecking PDF extraction order.
+
+#### M6-C: deployment boundary, RQ evidence summary, and concrete conclusion limits
+
+- 状态：done
+- 片段：45-47
+- 改动文件：
+  - `thesis/chapters/ch4_experiments.tex`
+  - `thesis/chapters/ch5_conclusion.tex`
+- 本地验证：
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex thesis/chapters/ch5_conclusion.tex docs/aigc_revision_matrix_20260501.md`: PASS
+  - `sed -n '590,842p' thesis/chapters/ch4_experiments.tex | rg -n '<M6-C risk pattern>'`: PASS (no hits)
+  - `sed -n '42,84p' thesis/chapters/ch5_conclusion.tex | rg -n '<M6-C risk pattern>'`: PASS (no hits)
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`: PASS (`main.pdf`, 99 pages)
+  - `rg -n 'LaTeX Error|Undefined control sequence|Citation.*undefined|Reference.*undefined|Rerun to get cross-references|There were undefined references|Package natbib Warning: Citation|Label\(s\) may have changed' thesis/main.log`: PASS (no hits)
+  - `rg -n -F 'Overfull \hbox' thesis/main.log`: PASS (no hits)
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m6c_floatfix2.txt`: PASS
+  - `sed -n '3060,3260p' /tmp/thesis_main_m6c_floatfix2.txt`: PASS (Tables 4-12, 4-13, and 4-14 appear after their subsection lead-ins and before callout paragraphs; no sentence interruption)
+  - `python scripts/review_tool.py phase-gate`: PASS (`PHASE GATE: CLEAR`; only pre-existing `review_tracker.md` parse warnings)
+- Agent review:
+  - Style/AIGC-risk: PASS after replacing deployment and conclusion summaries with evidence anchors, scoped limits, and concrete uncovered settings.
+  - Evidence/claim-boundary: PASS after confirming no 4K acceleration overclaim, `\Delta T` claims bound to Qwen2.5-14B/H20/`batch=1`/current backend, and Ch5 limitations introduce no new unbounded claim.
+  - LaTeX/reference/extraction: PASS after changing Tables 4-12, 4-13, and 4-14 to `[H]` and rechecking PDF extraction order.
 
 ### M7: 全稿一致性复核
 
