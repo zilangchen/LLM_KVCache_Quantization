@@ -1875,3 +1875,41 @@ Canonical agent workflow directory is `.agents/`.
   - 表 4-5 至表 4-8 使用 `[H]` 稳定了本轮 PDF 抽取顺序，但会提高局部排版刚性；M7 全稿一致性复核时继续检查页面节奏。
   - 第 4.4 仍包含片段 45-46 对应的部署表注与章末总结风险词，本轮按 M6-B 范围不处理。
 - Commit: 1193aa3
+
+### 2026-05-04 16:43 | M6-C Deployment Boundary and Conclusion Limit Revision
+- Goal:
+  - 完成 47 段 AIGC 误判风险矩阵中的片段 45-47，处理第四章部署表注、部署边界、章末 RQ 小结，以及第五章局限性/未来工作/结语中的抽象边界表达，使其更像作者基于实验读数做出的克制收束。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `thesis/chapters/ch5_conclusion.tex`
+  - `docs/aigc_revision_matrix_20260501.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex thesis/chapters/ch5_conclusion.tex docs/aigc_revision_matrix_20260501.md`
+  - `sed -n '590,842p' thesis/chapters/ch4_experiments.tex | rg -n "<M6-C risk pattern>"`
+  - `sed -n '42,84p' thesis/chapters/ch5_conclusion.tex | rg -n "<M6-C risk pattern>"`
+  - `cd thesis && latexmk -pdf -halt-on-error -file-line-error main.tex`
+  - `rg -n "LaTeX Error|Undefined control sequence|Citation.*undefined|Reference.*undefined|Rerun to get cross-references|There were undefined references|Package natbib Warning: Citation|Label\\(s\\) may have changed" thesis/main.log`
+  - `rg -n -F "Overfull \\hbox" thesis/main.log`
+  - `pdftotext -layout thesis/main.pdf /tmp/thesis_main_m6c_floatfix2.txt`
+  - `sed -n '3060,3260p' /tmp/thesis_main_m6c_floatfix2.txt`
+  - `python scripts/review_tool.py phase-gate`
+- Outputs:
+  - 第 4.5 节把部署读数改为“入口读数 -> 长序列放大 -> 经验边界 -> 部署建议”的证据顺序；表 4-12 表注明确 4K 不用于宣称加速收益。
+  - 第 4.5.2/4.5.3 将加速与交叉边界绑定到 Qwen2.5-14B、H20、`batch=1`、当前 backend 和具体 `\Delta T` 读数，不再写成普适系统规律。
+  - 表 4-12、表 4-13、表 4-14 改为 `[H]`，关闭 PDF 抽取中表格插断正文的问题。
+  - 第 4.7 改为按 RQ1/RQ2/RQ3/系统线分别列出最小结论、表图锚点和限制，避免章末摘要复写。
+  - 第 5.3--5.5 将局限性具体化为未覆盖任务分布、模型结构、硬件、batch/runtime 和 prompt 级动态路由边界；结语改为证据链和适用域收束。
+  - 矩阵中片段 45-47 标记为 `done`，M6 状态更新为 `done（M6-A/M6-B/M6-C done）`，并新增 M6-C review 记录。
+- Validation:
+  - `git diff --check` 通过。
+  - M6-C 源码窗口风险词扫描无命中。
+  - `latexmk` 通过，`main.pdf` 为 99 页。
+  - `main.log` 未检出 LaTeX error、未定义 refs/citations、rerun 提示或 Overfull hbox。
+  - PDF 抽取复核通过：第 4.4 收尾段在第 4.5 前完整结束，表 4-12/4-13/4-14 均位于对应小节引入段之后、正文 callout 之前，没有再切断句子。
+  - `python scripts/review_tool.py phase-gate` 通过，仍只有既有 `review_tracker.md` parse warnings。
+  - Style/AIGC-risk、Evidence/claim-boundary reviewer 初审 PASS；LaTeX/reference/extraction reviewer 初审因 §4.5 表格浮动 FAIL，三张部署表改为 `[H]` 并重编译后，三位 reviewer 复审统一 PASS。
+- Risks / follow-ups:
+  - M6 已完成片段 35-47；下一步进入 M7 全稿一致性复核，重点检查摘要、Ch1--Ch5、附录引用、PDF 抽取顺序和术语全局一致性。
+  - 表 4-12 至表 4-14 使用 `[H]` 稳定抽取顺序，但会提高局部排版刚性；M7 继续检查页面节奏。
+  - Ch5 5.1/5.2 中仍有若干全稿主线术语和总结性表达，未作为 M6-C 局限性窗口处理，留给 M7 全稿一致性复核。
+- Commit: 469f7bf
