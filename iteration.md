@@ -1954,4 +1954,4 @@ Canonical agent workflow directory is `.agents/`.
   - Figure 4-5 重生成依赖 `results/clean_rerun_20260419T09/summary_final.csv`，当前 worktree 未跟踪该 CSV；本轮按 `docs/clean_rerun_20260419T09/readout_final.md` 中的 full-precision Step 2 values 临时重建输入后生成图，并已清理临时文件。
   - LaTeX 编译产物保持 ignored 未提交；最终提交仅包含论文源、图源脚本、更新后的图 PDF、矩阵和本记录。
   - M7 已完成；下一步可进入最终全稿人工通读或按用户指定进入下一里程碑。
-- Commit: pending
+- Commit: a71eb0b
