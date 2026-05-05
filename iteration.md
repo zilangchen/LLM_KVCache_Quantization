@@ -62,7 +62,7 @@ Canonical agent workflow directory is `.agents/`.
   - Needle verification agent PASS.
 - Risks / follow-ups:
   - P2 abstract terminology polish remains optional and is intentionally excluded from this M8-B functional unit.
-- Commit: <pending M8-B>
+- Commit: 8308e2e
 
 ### 2026-05-06 03:35 | M8-A Thesis P0 Submission Closure
 - Goal: 修复 Claude/Codex 复核后确认属实的三项投稿前 P0：Ch1/Ch5 RQ 闭环不一致、Ch3 方法章零引用、Abstract 中 Mistral `15.69` 缺 Ch4 显式出处。
