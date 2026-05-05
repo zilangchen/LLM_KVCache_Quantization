@@ -36,6 +36,34 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-06 03:42 | M8-B Thesis P1 Table Note Protocol Closure
+- Goal: 修复精简清单中两项 P1 表注自足性问题：TPOT 表缺 repeat/CI 口径，Needle 百分比缺分母/seed 解释。
+- Scope:
+  - Ch4 Needle 相关表注的 exact-match、context/depth sweep、双检索任务与 seed 口径
+  - Ch4 4K TPOT 表注的 8 fixed seeds 与不单独报告 CI 口径
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `iteration.md`
+- Commands:
+  - `rg -n 'label\{subsec:ch4-(benchmarks|statistics)\}|ref\{subsec:ch4-(benchmarks|statistics)\}|Needle 百分比|Needle-single-retrieval|MK-NIAH-2|所有 TPOT 读数|表中不单独报告 CI|5 个固定 seeds|8 个固定 seeds' thesis/chapters/ch4_experiments.tex`
+  - `git diff --check`
+  - `cd thesis && xelatex -interaction=nonstopmode main.tex`
+  - `rg -n "LaTeX Warning: (Citation|Reference)|undefined|There were undefined|Rerun to get cross-references right|Citation .* undefined|Reference .* undefined" thesis/main.log thesis/main.out`
+  - Two read-only verification agents for TPOT and Needle table-note closure.
+- Outputs:
+  - `tab:ch4-int4-cliff` now explains Needle exact-match percentages over 4K--32K context and unified depth sweep, with 5 fixed seeds.
+  - `tab:ch4-rolealign-kivi` now explains that `100/100%` denotes Needle-single-retrieval and MK-NIAH-2 both reaching 100%, with 5 fixed seeds.
+  - `tab:ch4-tpot-4k` now explains TPOT uses the 8 fixed seeds throughput protocol and does not report CI in that table.
+- Validation:
+  - `git diff --check` passed.
+  - XeLaTeX completed and wrote `main.pdf` at 99 pages.
+  - `main.log` / `main.out` scan found no undefined references/citations or rerun warnings.
+  - TPOT verification agent PASS.
+  - Needle verification agent PASS.
+- Risks / follow-ups:
+  - P2 abstract terminology polish remains optional and is intentionally excluded from this M8-B functional unit.
+- Commit: <pending M8-B>
+
 ### 2026-05-06 03:35 | M8-A Thesis P0 Submission Closure
 - Goal: 修复 Claude/Codex 复核后确认属实的三项投稿前 P0：Ch1/Ch5 RQ 闭环不一致、Ch3 方法章零引用、Abstract 中 Mistral `15.69` 缺 Ch4 显式出处。
 - Scope:
@@ -66,7 +94,7 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - M8-B still needs the two P1 table-note fixes: TPOT 4K repeat/scope note and Needle denominator/seed semantics.
   - P2 abstract terminology polish remains optional and is intentionally excluded from M8-A.
-- Commit: <pending M8-A>
+- Commit: d758b85
 
 ### 2026-05-01 19:36 | docs(aigc): initialize revision branch and 47-fragment matrix
 - Goal: 在独立分支中启动 AIGC 误判风险降噪改写任务，把用户提供的 47 段分析转成可审计、可回滚、带 evidence-tier gate 的执行矩阵。
