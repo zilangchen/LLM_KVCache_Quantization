@@ -222,7 +222,7 @@ q_{0.95}(\theta).
 \section{跨位宽量化路径的实例化设计}
 \label{sec:ch3-paths}
 
-第 \ref{sec:ch3-calibration} 节已经定义离线校准流程与稳健选择纪律，但这一流程本身不规定唯一位宽或唯一量化格式。本节只定义路径实例，不提前报告第四章的完整比较结果。三条路径按约束强度展开：\texttt{INT8} 基准路径用于检查校准闭环能否在较保守位宽下稳定落地；对称 \texttt{INT4} 试探路径用于暴露直接降位宽后的结构困难；\texttt{INT4-RoleAlign} 则把低比特路径改写为 K/V 角色分离的非对称格式，并在方法层面区分它与 \texttt{KIVI-style} 的参数来源。
+第 \ref{sec:ch3-calibration} 节已经定义离线校准流程与稳健选择纪律，但这一流程本身不规定唯一位宽或唯一量化格式。本节只定义路径实例，不提前报告第四章的完整比较结果。三条路径按约束强度展开：\texttt{INT8} 基准路径用于检查校准闭环能否在较保守位宽下稳定落地；对称 \texttt{INT4} 试探路径用于暴露直接降位宽后的结构困难；\texttt{INT4-RoleAlign} 则把低比特路径改写为 K/V 角色分离的非对称格式，并在方法层面区分它与 \texttt{KIVI-style}~\cite{liu2024kivi} 的参数来源。
 
 这些路径之间变化的是参数接口、量化轴与行为代理；不变的是第 \ref{sec:ch3-calibration} 节已经给出的参考行为提取、可行域约束、尾部优先选择和固定产物输出。allocator 与系统落地模块只读取这些产物和行为统计，不重新解释第四章的实验结论。
 
@@ -683,9 +683,9 @@ Q_{\theta_t^{(l)}}\!\left(x_t^{(l)}\right),
 \subsection{Triton 融合解码核函数设计}
 \label{subsec:ch3-triton-int4-asym}
 
-在自回归解码阶段，单步计算通常只涉及一个新的 query token，但需要访问全部历史 KV Cache，因此瓶颈主要来自访存。朴素路径会先从低比特缓存中读出 K/V，将其完整反量化为中间 FP16 张量，再把这些中间张量送入标准注意力计算。该过程功能正确，但会引入额外中间张量物化与高带宽显存读写开销。本文在 INT8 基准路径上采用 Triton 融合解码核函数，用同一注意力算法减少这些中间物化。
+在自回归解码阶段，单步计算通常只涉及一个新的 query token，但需要访问全部历史 KV Cache，因此瓶颈主要来自访存。朴素路径会先从低比特缓存中读出 K/V，将其完整反量化为中间 FP16 张量，再把这些中间张量送入标准注意力计算。该过程功能正确，但会引入额外中间张量物化与高带宽显存读写开销。本文在 INT8 基准路径上采用 Triton~\cite{tillet2019triton} 融合解码核函数，用同一注意力算法减少这些中间物化。
 
-对 \texttt{INT8} 路径而言，融合核函数的主数据流可以概括为以下四步。首先，从量化缓存中按 block 读取一块低比特 $K_B, V_B$ 及其对应的缩放参数与元数据；其次，在片上存储（SRAM / register）内完成解包与反量化；随后，直接在片上计算当前 query 与该块 Key 的点积；最后，利用在线 softmax 维护跨块递推状态，并将结果直接累加到输出而不显式物化完整注意力矩阵。设第 $r$ 个 block 的在线 softmax 状态分别记为最大值、归一化和输出累加器
+对 \texttt{INT8} 路径而言，融合核函数的主数据流可以概括为以下四步。首先，从量化缓存中按 block 读取一块低比特 $K_B, V_B$ 及其对应的缩放参数与元数据；其次，在片上存储（SRAM / register）内完成解包与反量化；随后，直接在片上计算当前 query 与该块 Key 的点积；最后，利用在线 softmax 维护跨块递推状态，并将结果直接累加到输出而不显式物化完整注意力矩阵。该递推形式与分块注意力实现中的 online softmax 思路一致~\cite{dao2022flashattention}。设第 $r$ 个 block 的在线 softmax 状态分别记为最大值、归一化和输出累加器
 \[
 m^{(r)}, \qquad \ell^{(r)}, \qquad o^{(r)},
 \]
@@ -717,7 +717,7 @@ e^{m^{(r)}-m^{(r+1)}}\ell^{(r)}o^{(r)}
 
 对 \texttt{INT4} 路径而言，注意力算法本身并未发生变化，新增复杂度主要来自数据表示。\texttt{INT4} 采用 nibble packing，即两个 4-bit 整数打包到一个 8-bit 字节中；核函数前端需要完成半字节解包、\texttt{+8} offset 还原和 scale/offset 读取，随后复用与 \texttt{INT8} 类似的片上反量化、点积、online softmax 与输出累加流水线。4-bit 载荷减少了全局读字节数，但解包、寄存器压力和元数据访问会转化为每输出 token 时间（TPOT）中的额外开销；正文在此只给出实现约束，关于融合核函数的不同迭代版本、命名与实现差异，保留到附录第~\ref{sec:app-triton-variants}~节说明。
 
-为了兼容 GQA，融合核函数还需要将 query heads 映射到共享的 KV heads。设 query 头数为 $H_q$、KV 头数为 $H_{kv}$，则重复因子为
+为了兼容 GQA~\cite{ainslie2023gqa}，融合核函数还需要将 query heads 映射到共享的 KV heads。设 query 头数为 $H_q$、KV 头数为 $H_{kv}$，则重复因子为
 \begin{equation}
 N_{\mathrm{rep}}=\frac{H_q}{H_{kv}},
 \end{equation}

@@ -36,6 +36,38 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-06 03:35 | M8-A Thesis P0 Submission Closure
+- Goal: 修复 Claude/Codex 复核后确认属实的三项投稿前 P0：Ch1/Ch5 RQ 闭环不一致、Ch3 方法章零引用、Abstract 中 Mistral `15.69` 缺 Ch4 显式出处。
+- Scope:
+  - Ch5 RQ1--RQ4 结论闭环
+  - Ch3 方法章必要 citation 锚点
+  - Ch4 Mistral core/extend mean traceability
+- Changed files:
+  - `thesis/chapters/ch5_conclusion.tex`
+  - `thesis/chapters/ch3_method.tex`
+  - `thesis/chapters/ch4_experiments.tex`
+  - `.agents/execplans/2026-05-04_thesis_p0_p1_submission_fix.md`（force-add; ignored execplan audit trail）
+- Commands:
+  - `rg -n "三个问题|四个问题|RQ4|AutoK|预算建议" thesis/chapters/ch1_introduction.tex thesis/chapters/ch5_conclusion.tex`
+  - `rg -n -F "\\cite" thesis/chapters/ch3_method.tex`
+  - `rg -n "15\\.69|15\\.6946|extend mean|core mean|5-task|五任务均值|Mistral-7B" thesis/chapters/abstract_zh.tex thesis/chapters/abstract_en.tex thesis/chapters/ch4_experiments.tex`
+  - `cd thesis && bibtex main && xelatex -interaction=nonstopmode main.tex && xelatex -interaction=nonstopmode main.tex && xelatex -interaction=nonstopmode main.tex`
+  - `rg -n "LaTeX Warning: Citation|LaTeX Warning: Reference|undefined|There were undefined|Rerun to get cross-references right" thesis/main.log thesis/main.out`
+  - Two read-only verification agents for RQ/numeric traceability and Ch3 citation/LaTeX state.
+- Outputs:
+  - Ch5 now explicitly answers four questions; RQ4 is bounded as a model-level AutoK/profiling budget candidate mechanism, not a universal cross-model rule.
+  - Ch3 now contains four method citations: `liu2024kivi`, `tillet2019triton`, `dao2022flashattention`, `ainslie2023gqa`.
+  - Ch4 table note now states Mistral core mean `14.76`, extend mean `15.69`, and five-task mean `15.14`, making the abstract numbers traceable in the main chapter.
+- Validation:
+  - BibTeX + three XeLaTeX passes completed; `main.pdf` generated at 99 pages.
+  - `main.log` / `main.out` scan found no undefined references/citations or rerun warnings.
+  - RQ/numeric verification agent PASS.
+  - Citation/LaTeX verification agent PASS.
+- Risks / follow-ups:
+  - M8-B still needs the two P1 table-note fixes: TPOT 4K repeat/scope note and Needle denominator/seed semantics.
+  - P2 abstract terminology polish remains optional and is intentionally excluded from M8-A.
+- Commit: <pending M8-A>
+
 ### 2026-05-01 19:36 | docs(aigc): initialize revision branch and 47-fragment matrix
 - Goal: 在独立分支中启动 AIGC 误判风险降噪改写任务，把用户提供的 47 段分析转成可审计、可回滚、带 evidence-tier gate 的执行矩阵。
 - Scope:
