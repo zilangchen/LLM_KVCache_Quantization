@@ -36,6 +36,51 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-07 01:31 | Thesis Layout, RQ Wording, and Font Polish
+- Goal: 修复用户指出的三类论文版式与表达问题：目录后第 8 页空白、正文可见 `RQ1/RQ2` 英文缩写、第二章开头内部技术文档口吻，并将 LaTeX 正文/标题/目录/封面字体统一为中文宋体、英文 Times New Roman。
+- Scope:
+  - 去掉 `twoside` 下 `\mainmatter` 自动插入的目录后空白偶数页，同时保留双面页眉设置。
+  - 将 Ch1/Ch4/Ch5 纸面可见的 `RQ1`--`RQ4` 改为“研究问题 1”--“研究问题 4”或“第一章研究问题 2”等中文表达；内部 `\label{sec:ch4-rq1}` 保持不动。
+  - 重写 Ch2 开头“本章只保留后文会反复调用的技术记号...”和 §2.1 开头，使其成为论文式技术背景说明。
+  - 将正文、标题、目录、封面、摘要关键词和 `\texttt{}` 所用字体映射到宋体 / Times New Roman。
+- Changed files:
+  - `.agents/execplans/2026-05-07_thesis_layout_font_polish.md`
+  - `thesis/main.tex`
+  - `thesis/setup/fonts.tex`
+  - `thesis/setup/format.tex`
+  - `thesis/setup/toc.tex`
+  - `thesis/setup/commands.tex`
+  - `thesis/chapters/ch1_introduction.tex`
+  - `thesis/chapters/ch2_related_work.tex`
+  - `thesis/chapters/ch4_experiments.tex`
+  - `thesis/chapters/ch5_conclusion.tex`
+  - `iteration.md`
+- Commands:
+  - `pdftotext -layout -f 48 -l 48 thesis/main.pdf -`
+  - `pdftoppm -f 47 -l 49 -png -r 120 thesis/main.pdf tmp/pdf_pages/main_range`
+  - `rg -n "RQ[0-9]|RQ1--RQ4|Ch1 RQ|本章只保留|技术记号|在线自适应" thesis/chapters thesis/setup thesis/main.tex -g '*.tex'`
+  - `git diff --check`
+  - `cd thesis && xelatex -interaction=nonstopmode main.tex && xelatex -interaction=nonstopmode main.tex && xelatex -interaction=nonstopmode main.tex`
+  - `rg -n "LaTeX Warning: (Citation|Reference)|undefined|There were undefined|Rerun to get cross-references right|Citation .* undefined|Reference .* undefined|Label\\(s\\) may have changed" thesis/main.log thesis/main.out`
+  - `pdfinfo thesis/main.pdf`
+  - `pdftotext -layout -f 8 -l 8 thesis/main.pdf -`
+  - `pdffonts thesis/main.pdf`
+- Outputs:
+  - `main.pdf` 从 99 页变为 98 页；物理第 8 页现在是第一章正文，不再是罗马页码 `vi` 的空白页。
+  - Ch1/Ch4/Ch5 纸面可见 `RQ` 英文编号清零。
+  - 第二章开头改为论文式背景定位，不再使用“只保留技术记号”表达。
+  - 正文、标题、目录、封面、代码样式的 LaTeX 字体不再引入 `STHeitiSC`、`STKaitiSC` 或 `Courier New`。
+- Validation:
+  - `git diff --check` passed.
+  - Three XeLaTeX passes completed; `main.pdf` generated at 98 pages.
+  - `main.log` / `main.out` scan found no undefined references/citations or rerun warnings.
+  - `pdftotext -f 8 -l 8` confirms page 8 contains Chapter 1 content.
+  - `pdffonts` confirms LaTeX body fonts are `STSongti-SC` and `TimesNewRoman`; remaining `ArialUnicodeMS/DejaVu` entries come from embedded external PDF figures and require a separate figure-regeneration pass if full figure-font unification is required.
+- Risks / follow-ups:
+  - 第 48 页附近的大空白并非内容缺失：当前物理第 48 页是 4.1.2 正文；原先可见空白主要来自章节结束页或第四章开章页的表格/分页约束，不建议把下一章强行接到上一章末页。
+  - 若学校要求图内文字也严格宋体/Times，需要另起 figure-font pass 重生成 Ch4 PDF 图。
+- Commit: <pending>
+
 ### 2026-05-07 00:50 | M8-C Pre-merge Consistency Nits
 - Goal: 合并前最后一轮文本级一致性补丁，仅修文字编号与术语口径；不动数据、图、表、公式。
 - Scope:

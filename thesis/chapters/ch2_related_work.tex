@@ -5,13 +5,13 @@
 \chapter{相关工作与技术基础}
 \label{chap:related-work}
 
-本章只保留后文会反复调用的技术记号与文献位置。第 \ref{sec:ch2-kv-memory} 节把 decoder-only Transformer、GQA/MQA 与 KV Cache 显存公式连接到本文后续控制的变量：序列长度、$H_{kv}$、bit-width 与 Decode 阶段访存压力。随后，本章讨论量化格式、校准代理、KV Cache 压缩与高效推理工作，并说明本文为何把注意力行为保持作为连接校准、低比特恢复和预算分配的对象。
+本章梳理本文所依赖的模型结构、缓存机制、量化方法与高效推理研究，并据此界定后续工作的论证边界。第 \ref{sec:ch2-kv-memory} 节把 decoder-only Transformer、GQA/MQA 与 KV Cache 显存公式连接到本文后续控制的变量：序列长度、$H_{kv}$、bit-width 与 Decode 阶段访存压力。随后，本章讨论量化格式、校准代理、KV Cache 压缩与高效推理工作，并说明本文为何把注意力行为保持作为连接校准、低比特恢复和预算分配的对象。
 
 % ============================================================
 \section{Transformer 架构与自注意力机制}
 % ============================================================
 
-本文只在 decoder-only Transformer 的因果自注意力设定下引入后文会用到的记号。给定输入序列的隐藏状态矩阵 $\bm{H}$，Query、Key 和 Value 由三组线性投影得到：
+本文在 decoder-only Transformer 的因果自注意力设定下给出后文使用的基本公式。给定输入序列的隐藏状态矩阵 $\bm{H}$，Query、Key 和 Value 由三组线性投影得到：
 
 \begin{equation}
   \bQ = \bm{H}\bm{W}_Q, \quad \bK = \bm{H}\bm{W}_K, \quad \bV = \bm{H}\bm{W}_V

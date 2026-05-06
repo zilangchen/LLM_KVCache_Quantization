@@ -1,34 +1,32 @@
 % ============================================================
-% fonts.tex — 字体设置 (macOS 优先，Fandol 回退)
+% fonts.tex — 字体设置（中文宋体，英文 Times New Roman）
 % ============================================================
 
 % --- 中文字体 ---
-% macOS: Songti SC / Heiti SC / Kaiti SC
-% Linux/Fandol: FandolSong / FandolHei / FandolKai
+% 学校规范要求中文统一用宋体。标题、目录、封面标签等需要粗体处使用
+% 宋体合成粗体，不再切换到黑体或楷体。
 \IfFontExistsTF{Songti SC}{%
-  \setCJKmainfont[BoldFont=Heiti SC, ItalicFont=Kaiti SC, AutoFakeBold=2.5]{Songti SC}
-  \setCJKsansfont{Heiti SC}[AutoFakeBold=2.5]
-  \setCJKmonofont{Kaiti SC}[AutoFakeBold=2.5]
-  % 绑定 ctex 内部 CJK 家族名 (zhsong/zhhei/zhkai) 到真实 macOS 字体,
-  % 避免 ctex 去找不存在的 STSong/STHeiti 导致 bold/italic shape fallback
-  \setCJKfamilyfont{zhsong}[AutoFakeBold=2.5, ItalicFont=Kaiti SC]{Songti SC}
-  \setCJKfamilyfont{zhhei}[AutoFakeBold=2.5]{Heiti SC}
-  \setCJKfamilyfont{zhkai}[AutoFakeBold=2.5]{Kaiti SC}
+  \setCJKmainfont[AutoFakeBold=2.5, AutoFakeSlant=0.167]{Songti SC}
+  \setCJKsansfont[AutoFakeBold=2.5, AutoFakeSlant=0.167]{Songti SC}
+  \setCJKmonofont[AutoFakeBold=2.5, AutoFakeSlant=0.167]{Songti SC}
+  \setCJKfamilyfont{zhsong}[AutoFakeBold=2.5, AutoFakeSlant=0.167]{Songti SC}
+  \setCJKfamilyfont{zhhei}[AutoFakeBold=2.5, AutoFakeSlant=0.167]{Songti SC}
+  \setCJKfamilyfont{zhkai}[AutoFakeBold=2.5, AutoFakeSlant=0.167]{Songti SC}
 }{%
-  \setCJKmainfont[BoldFont=FandolHei, ItalicFont=FandolKai, AutoFakeBold=2.5]{FandolSong}
-  \setCJKsansfont{FandolHei}[AutoFakeBold=2.5]
-  \setCJKmonofont{FandolKai}[AutoFakeBold=2.5]
-  \setCJKfamilyfont{zhsong}[AutoFakeBold=2.5, ItalicFont=FandolKai]{FandolSong}
-  \setCJKfamilyfont{zhhei}[AutoFakeBold=2.5]{FandolHei}
-  \setCJKfamilyfont{zhkai}[AutoFakeBold=2.5]{FandolKai}
+  \setCJKmainfont[AutoFakeBold=2.5, AutoFakeSlant=0.167]{FandolSong}
+  \setCJKsansfont[AutoFakeBold=2.5, AutoFakeSlant=0.167]{FandolSong}
+  \setCJKmonofont[AutoFakeBold=2.5, AutoFakeSlant=0.167]{FandolSong}
+  \setCJKfamilyfont{zhsong}[AutoFakeBold=2.5, AutoFakeSlant=0.167]{FandolSong}
+  \setCJKfamilyfont{zhhei}[AutoFakeBold=2.5, AutoFakeSlant=0.167]{FandolSong}
+  \setCJKfamilyfont{zhkai}[AutoFakeBold=2.5, AutoFakeSlant=0.167]{FandolSong}
 }
-% 注: \songti \heiti \kaishu 已由 ctex 自动定义，无需重复声明
-% AutoFakeBold=2.5 确保即使 bold shape 未定义也有合成粗体回退
+
+\providecommand{\songti}{\CJKfamily{zhsong}}
+\providecommand{\heiti}{\CJKfamily{zhhei}}
+\providecommand{\kaishu}{\CJKfamily{zhkai}}
 
 % --- 英文字体 ---
 % 学校规范要求: 英文字体为 Times New Roman
-% 为了严格限制字体总数, sans/mono 都统一指向 Times New Roman 的对应变体
-% (避免引入 Helvetica/Menlo 等额外字体家族)
 \setmainfont{Times New Roman}
 \setsansfont{Times New Roman}
-\setmonofont{Courier New}
+\setmonofont{Times New Roman}

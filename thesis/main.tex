@@ -2,7 +2,7 @@
 % main.tex — 华南理工大学本科毕业设计（论文）
 % 面向高效推理的大语言模型键值缓存行为对齐量化框架
 % ============================================================
-\documentclass[a4paper, zihao=-4, twoside, openany, UTF8, chapter]{ctexbook}
+\documentclass[a4paper, zihao=-4, twoside, openany, UTF8, chapter, fontset=none]{ctexbook}
 % 注: twoside 启用偶数/奇数页页眉区分（学校规范要求）
 % 若需电子版单面排版，将 twoside 改为 oneside 并删除 openany
 
@@ -39,7 +39,12 @@
 \tableofcontents
 
 % === 正文（阿拉伯页码 + 页眉）===
+% twoside 下 \mainmatter 默认调用 \cleardoublepage，会在目录后补空白偶数页。
+% 本文采用 openany 起章策略，因此这里仅取消这一处清双页，保留后续 twoside 页眉。
+\let\SCUTsavedcleardoublepage\cleardoublepage
+\let\cleardoublepage\clearpage
 \mainmatter
+\let\cleardoublepage\SCUTsavedcleardoublepage
 \pagestyle{mainmatter}
 
 \input{chapters/ch1_introduction}
