@@ -79,7 +79,7 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - 第 48 页附近的大空白并非内容缺失：当前物理第 48 页是 4.1.2 正文；原先可见空白主要来自章节结束页或第四章开章页的表格/分页约束，不建议把下一章强行接到上一章末页。
   - 若学校要求图内文字也严格宋体/Times，需要另起 figure-font pass 重生成 Ch4 PDF 图。
-- Commit: <pending>
+- Commit: 11d97fd
 
 ### 2026-05-07 00:50 | M8-C Pre-merge Consistency Nits
 - Goal: 合并前最后一轮文本级一致性补丁，仅修文字编号与术语口径；不动数据、图、表、公式。
