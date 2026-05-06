@@ -69,7 +69,7 @@ Canonical agent workflow directory is `.agents/`.
   - M8-C verification agent PASS.
 - Risks / follow-ups:
   - Ready for fast-forward merge to `main`; keep local until user explicitly approves push.
-- Commit: <pending M8-C>
+- Commit: 4c10c4f
 
 ### 2026-05-06 03:42 | M8-B Thesis P1 Table Note Protocol Closure
 - Goal: 修复精简清单中两项 P1 表注自足性问题：TPOT 表缺 repeat/CI 口径，Needle 百分比缺分母/seed 解释。
