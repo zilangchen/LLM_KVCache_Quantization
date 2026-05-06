@@ -31,8 +31,8 @@ is not one cross-model optimum. Mistral-7B is the clearest AutoK case
 ($14.76$ core mean and $15.69$ on the extend tasks). On Qwen2.5-3B,
 behavior-guided $k=1$ reaches $6.90$ on the core mean, compared with
 $3.48$ for the middle-layer heuristic. On Qwen2.5-14B, uniform INT4
-reaches $7.23$ core mean while AutoK-cov90 reaches $7.15$, so the top
-policies remain close rather than ordered by one stable optimum. These
+reaches $7.23$ core mean while AutoK-cov90 reaches $7.15$ ($\sim 1.1\%$ relative
+gap), so the top policies remain close rather than ordered by one stable optimum. These
 findings support family-/scale-/task-dependent regimes in KV-cache
 quantization and allocation. Heuristic policies remain strong baselines
 in some regimes, so the thesis does not claim a single allocation rule

@@ -26,13 +26,13 @@ INT8 基准路径与 FP16 的三任务均值差约为 $+0.02$，
 支持其作为最干净的保真实例。
 跨模型 INT4 预算带中，Mistral-7B 给出 AutoK 最清晰的单模型支持
 （core mean $14.76$，extend mean $15.69$）；
-Qwen2.5-3B 则显示早层保护 regime，
+Qwen2.5-3B 则显示早层保护适用区间，
 其中 behavior-guided $k=1$ 在 core mean 上为 $6.90$，
 明显高于中层 heuristic 的 $3.48$。
 Qwen2.5-14B 不支持“自动策略稳定胜出”的读法：
 uniform INT4 的 core mean 为 $7.23$，
-AutoK-cov90 为 $7.15$，二者差距很小。
-这些结果把本文结论限定为 family-/scale-/task-dependent regimes，
+AutoK-cov90 为 $7.15$，相对差距约 $1.1\%$，未分出明确高下。
+这些结果把本文结论限定为家族、规模、任务共同决定的适用区间，
 同时也正面承认 heuristic 是强基线，而不是把单一策略写成跨模型统一最优答案。
 
 \keywordszh{大语言模型；KV Cache 量化；行为引导校准；非对称量化；预算分配}
