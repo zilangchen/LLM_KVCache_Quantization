@@ -36,6 +36,41 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-07 00:50 | M8-C Pre-merge Consistency Nits
+- Goal: 合并前最后一轮文本级一致性补丁，仅修文字编号与术语口径；不动数据、图、表、公式。
+- Scope:
+  - Ch4 可见 RQ 口径显式映射到 Ch1 全局 RQ：INT8 保真线对应 Ch1 RQ2，低比特恢复线作为 Ch1 RQ1/RQ2 的证据线，跨模型分配与 AutoK 对应 Ch1 RQ3/RQ4；内部 `\label{sec:ch4-rq1}` 保持不动以避免 ref churn。
+  - `abstract_en.tex` 将 `controlled main-protocol results` 改为 `controlled task-core and extend-profile results`。
+  - `ch5_conclusion.tex` 将“在线自适应”改为“在线参数调整”，避免与 Ch3 的离线冻结产物和 adaptive protection 口径混淆。
+  - `iteration.md` 追加本条 pre-merge 记录。
+- Context:
+  - M8-C 是 pre-merge consistency nits，不是新发现的 P0/P1。
+  - 本支线在合并前总规模为 25 commits / 21 files / 约 `+1700/-425`。独立审查将其拆为两类工作：约 40% 是 AIGC-risk revision，包括术语统一、模板化连接词减少、内部平台和路径痕迹清理；约 60% 是投稿就绪严谨度补写，包括 Ch3 方法章结构化补写、必要 citation 补全、Ch4 表注自足性强化与数字 traceability 修复。
+  - 这些质量补写超出最初 polish 范围，但均服务论文严谨度，且已经过 Claude、Codex 与多轮只读 verification agent 交叉审查。
+- Changed files:
+  - `thesis/chapters/abstract_en.tex`
+  - `thesis/chapters/ch4_experiments.tex`
+  - `thesis/chapters/ch5_conclusion.tex`
+  - `iteration.md`
+- Commands:
+  - `rg -n "controlled task-core|controlled main-protocol|Ch1 RQ2|低比特恢复线|Ch1 RQ3/RQ4|RQ1--RQ3|在线参数调整|在线自适应" thesis/chapters/abstract_en.tex thesis/chapters/ch4_experiments.tex thesis/chapters/ch5_conclusion.tex`
+  - `git diff --check`
+  - `cd thesis && xelatex -interaction=nonstopmode main.tex && xelatex -interaction=nonstopmode main.tex && xelatex -interaction=nonstopmode main.tex`
+  - `rg -n "LaTeX Warning: (Citation|Reference)|undefined|There were undefined|Rerun to get cross-references right|Citation .* undefined|Reference .* undefined|Label\\(s\\) may have changed" thesis/main.log thesis/main.out`
+  - One read-only verification agent for M8-C scope and no-new-issue review.
+- Outputs:
+  - Ch4 no longer uses a local visible `RQ1--RQ3` numbering scheme that conflicts with Ch1 RQ1--RQ4.
+  - English abstract no longer mixes `main-protocol` wording with extend-profile evidence.
+  - Ch5 INT8 conclusion no longer uses the ambiguous “online adaptation” phrasing.
+- Validation:
+  - `git diff --check` passed.
+  - Three XeLaTeX passes completed; `main.pdf` generated at 99 pages.
+  - `main.log` / `main.out` scan found no undefined references/citations or rerun warnings.
+  - M8-C verification agent PASS.
+- Risks / follow-ups:
+  - Ready for fast-forward merge to `main`; keep local until user explicitly approves push.
+- Commit: <pending M8-C>
+
 ### 2026-05-06 03:42 | M8-B Thesis P1 Table Note Protocol Closure
 - Goal: 修复精简清单中两项 P1 表注自足性问题：TPOT 表缺 repeat/CI 口径，Needle 百分比缺分母/seed 解释。
 - Scope:
