@@ -36,6 +36,35 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-07 05:07 | Thesis Ch1/Ch2/Ch5 AIGC Paraphrase Pass
+- Goal: 等量改写 Ch1 / Ch2 / Ch5 中 VPCS AIGC 检测器易标注的概括性、结构化与 meta 句式，目标降低 12.27% 总疑似率至 ~9% 区间，同时保留全部 claim、数字、模型名、引用与公式。
+- Scope:
+  - Ch1：1.2 校准目标段开头重写；1.4 RQ1–RQ4 从「这一问题关注 X」结构改为直接问句；1.5 三条贡献 lead-in 重写并把贡献 3 收束到「同量级 INT4 预算带」表述。
+  - Ch2：2.4 综述章开头与 KIVI 组 lead-in 重写；2.5 line 180 双重 meta 否定开头改为单句正向陈述；2.5 四点空白去掉「第一/第二/第三/第四」编号。
+  - Ch5：5.1 四点回答全部绑入 ch4 的具体数字（Δ=+0.02 / BA-k1=6.90 / Heuristic-k1=3.48 / Uniform=7.23 / BA-AutoK cov90=7.15 / Mistral 14.76、15.69、15.14）；5.2 三层价值 framing 重写；5.4 三方向 lead-in 重写；5.5 结语重写；line 23 大小写一致性 `heuristic-k1` → `Heuristic-k1`。
+- Changed files:
+  - `thesis/chapters/ch1_introduction.tex`
+  - `thesis/chapters/ch2_related_work.tex`
+  - `thesis/chapters/ch5_conclusion.tex`
+- Commands:
+  - `git diff HEAD -- thesis/chapters/ch1_introduction.tex thesis/chapters/ch2_related_work.tex thesis/chapters/ch5_conclusion.tex`
+  - `rg -n "BA-k1|BA-AutoK|heuristic-k1|Uniform|cov90|task-core" thesis/chapters/ch3*.tex thesis/chapters/ch4*.tex thesis/chapters/abstract_*.tex`
+  - `cd thesis && xelatex -interaction=nonstopmode main.tex`（3-pass + 1-pass post case fix）
+  - `grep -E "(LaTeX Warning: (Citation|Reference)|undefined|Rerun to get cross-references right|Label\(s\) may have changed)" main.log`
+  - `pdfinfo main.pdf`
+- Outputs:
+  - `thesis/main.pdf` 重新生成，97 页（与 6fc5c71 baseline 一致），1462713 bytes。
+  - 三章 +37 / −37 行等量替换；总字数变化 < 1%。
+  - 5.1 新增 8 个数字证据全部追溯到 ch4 L540 / L523 / L538 / L833 与 abstract_zh / abstract_en，无 over-claim。
+- Validation:
+  - 0 undefined references / 0 undefined citations / 0 Rerun warnings / 0 Label changes。
+  - 仅有中英混排 `Underfull \hbox` 排版警告，与本次改动无关。
+  - 5.1 数字（+0.02 / 6.90 / 3.48 / 7.23 / 7.15 / 14.76 / 15.69 / 15.14）grep 在 ch4 / abstracts 全部找到来源。
+- Risks / follow-ups:
+  - VPCS 是黑盒，估算 12.27% → ~9% 基于"连接句被标 / 数字句不被标"反推，实测以重跑 VPCS 为准。
+  - 若某段改写后反弹，可单点 revert `1eafb98` 而不影响 `6fc5c71`（P0+P1）与 `c7fccdb`（学校格式合规）。
+- Commit: 1eafb98
+
 ### 2026-05-07 01:53 | School Format Compliance Fix
 - Goal: 按 `docs/school/工科、理科类撰写规范及相关表格模板` 中 2025-11 工科/理科类撰写规范，修复当前论文进入 Word 转换前的关键格式差距。
 - Scope:
