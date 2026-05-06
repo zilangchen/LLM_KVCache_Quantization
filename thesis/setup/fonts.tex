@@ -1,23 +1,38 @@
 % ============================================================
-% fonts.tex — 字体设置（中文宋体，英文 Times New Roman）
+% fonts.tex — 字体设置（正文宋体、标题黑体、英文 Times New Roman）
 % ============================================================
 
 % --- 中文字体 ---
-% 学校规范要求中文统一用宋体。标题、目录、封面标签等需要粗体处使用
-% 宋体合成粗体，不再切换到黑体或楷体。
+% 学校规范要求正文中文用宋体，章标题、目录标题、摘要标题等标题类文字用黑体。
 \IfFontExistsTF{Songti SC}{%
   \setCJKmainfont[AutoFakeBold=2.5, AutoFakeSlant=0.167]{Songti SC}
-  \setCJKsansfont[AutoFakeBold=2.5, AutoFakeSlant=0.167]{Songti SC}
+  \IfFontExistsTF{Heiti SC}{%
+    \setCJKsansfont[AutoFakeBold=2.5, AutoFakeSlant=0.167]{Heiti SC}
+  }{%
+    \setCJKsansfont[AutoFakeBold=2.5, AutoFakeSlant=0.167]{Songti SC}
+  }
   \setCJKmonofont[AutoFakeBold=2.5, AutoFakeSlant=0.167]{Songti SC}
   \setCJKfamilyfont{zhsong}[AutoFakeBold=2.5, AutoFakeSlant=0.167]{Songti SC}
-  \setCJKfamilyfont{zhhei}[AutoFakeBold=2.5, AutoFakeSlant=0.167]{Songti SC}
+  \IfFontExistsTF{Heiti SC}{%
+    \setCJKfamilyfont{zhhei}[AutoFakeBold=2.5, AutoFakeSlant=0.167]{Heiti SC}
+  }{%
+    \setCJKfamilyfont{zhhei}[AutoFakeBold=2.5, AutoFakeSlant=0.167]{Songti SC}
+  }
   \setCJKfamilyfont{zhkai}[AutoFakeBold=2.5, AutoFakeSlant=0.167]{Songti SC}
 }{%
   \setCJKmainfont[AutoFakeBold=2.5, AutoFakeSlant=0.167]{FandolSong}
-  \setCJKsansfont[AutoFakeBold=2.5, AutoFakeSlant=0.167]{FandolSong}
+  \IfFontExistsTF{FandolHei}{%
+    \setCJKsansfont[AutoFakeBold=2.5, AutoFakeSlant=0.167]{FandolHei}
+  }{%
+    \setCJKsansfont[AutoFakeBold=2.5, AutoFakeSlant=0.167]{FandolSong}
+  }
   \setCJKmonofont[AutoFakeBold=2.5, AutoFakeSlant=0.167]{FandolSong}
   \setCJKfamilyfont{zhsong}[AutoFakeBold=2.5, AutoFakeSlant=0.167]{FandolSong}
-  \setCJKfamilyfont{zhhei}[AutoFakeBold=2.5, AutoFakeSlant=0.167]{FandolSong}
+  \IfFontExistsTF{FandolHei}{%
+    \setCJKfamilyfont{zhhei}[AutoFakeBold=2.5, AutoFakeSlant=0.167]{FandolHei}
+  }{%
+    \setCJKfamilyfont{zhhei}[AutoFakeBold=2.5, AutoFakeSlant=0.167]{FandolSong}
+  }
   \setCJKfamilyfont{zhkai}[AutoFakeBold=2.5, AutoFakeSlant=0.167]{FandolSong}
 }
 
