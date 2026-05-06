@@ -121,10 +121,10 @@ x_q = \operatorname{clamp}\!\left(\operatorname{round}\!\left(\frac{x}{s}\right)
 \section{KV Cache 量化与高效推理相关工作}
 % ============================================================
 
-随着上下文窗口扩大，KV Cache 压缩已经从“能否省显存”推进到三个更具体的问题：低比特格式如何适配 K/V 的不同统计结构，失真如何在注意力行为层被发现和恢复，节省的 bit-width 如何在真实 Decode 路径中转化为收益。更一般的量化理论综述可参见 Nagel 等人~\cite{nagel2021whitepaper} 与 Hubara 等人~\cite{hubara2018quantized}；本节只讨论与本文主线相邻的工作。
+长上下文场景下，KV Cache 压缩研究已经不只回答“能否省显存”。相邻工作大致沿三条路径展开：低比特格式如何适配 K/V 的统计结构，量化失真如何在注意力行为层被发现和恢复，以及 bit-width 节省如何在 Decode 阶段转化为实际收益。更一般的量化理论综述可参见 Nagel 等人~\cite{nagel2021whitepaper} 与 Hubara 等人~\cite{hubara2018quantized}；本节只讨论与本文主线直接相邻的工作。
 
 \textbf{量化压缩与校准方法。}
-这一组工作首先给出 K/V 不应被同轴处理的格式证据。KIVI~\cite{liu2024kivi} 采用 per-channel Key 与 per-token Value 的非对称格式，是本文低比特角色感知路径的直接参照；KVQuant~\cite{hooper2024kvquant} 通过非均匀码本与 Pre-RoPE Key 量化进一步处理 RoPE 后表示对量化网格的影响；AsymKV~\cite{tao2024asymkv} 与 AQUA-KV~\cite{shutova2025aquakv} 则提示 K/V 敏感性还会随层深度和时序相关性变化。本文沿用这些格式和统计差异的判断，但关注点转到离线参数来源：量化参数应由什么行为信号选出，以及这些读数能否继续进入预算分配。
+这组工作从不同侧面说明，KV Cache 量化不宜只按统一位宽或统一轴处理。KIVI~\cite{liu2024kivi} 采用 per-channel Key 与 per-token Value 的非对称格式，是本文低比特角色感知路径的直接参照；KVQuant~\cite{hooper2024kvquant} 通过非均匀码本与 Pre-RoPE Key 量化进一步处理 RoPE 后表示对量化网格的影响；AsymKV~\cite{tao2024asymkv} 与 AQUA-KV~\cite{shutova2025aquakv} 则提示 K/V 敏感性还会随层深度和时序相关性变化。本文沿用这些格式和统计差异的判断，但关注点转到离线参数来源：量化参数应由什么行为信号选出，以及这些读数能否继续进入预算分配。
 
 \textbf{低比特恢复与异常值处理。}
 低比特恢复工作提供了两类相邻证据。第一类直接缓冲量化误差：QuaRot~\cite{ashkboos2024quarot} 用旋转缓解 Key 通道异常值，GEAR~\cite{kang2024gear} 用残差低秩近似补偿量化误差，QServe~\cite{lin2024qserve} 把低比特格式放入端到端系统路径。第二类先判断哪些内容应被保护：ZipCache~\cite{he2024zipcache} 依据 token 重要性分配精度，IntactKV~\cite{liu2024intactkv} 保留枢纽 token，SKVQ~\cite{duanmu2024skvq} 在滑动窗口下做差异化精度分配；Outlier Tokens Tracing~\cite{su2025outliertoken}、Atom~\cite{zhao2024atom} 与 QJL~\cite{zandieh2024qjl} 在表~\ref{tab:ch2-kv-comparison} 中作为边界路线保留。对本文而言，这些工作留下的问题是：低比特恢复需要先识别失稳侧，预算分配也需要同源行为读数，而不是只优化一次压缩率。
@@ -177,17 +177,17 @@ x_q = \operatorname{clamp}\!\left(\operatorname{round}\!\left(\frac{x}{s}\right)
 \section{研究空白与本文定位}
 % ============================================================
 
-基于上述文献位置，本文不再把研究空白写成“已有工作尚未整体解决 KV Cache 压缩”。更具体地说，本文只处理四个问题。
+综合上述文献位置，本文将贡献边界收束为四个需要在后续方法与实验中串联验证的问题。
 
-第一，校准目标需要从张量重建扩展到注意力行为保持。MSE、百分位裁剪和运行时统计仍是有用工具，但 KV Cache 误差必须经过 logits、softmax 和 Value 聚合后才变成下游功能损伤。第三章因此把 attention-distribution KL 写成可执行的分布侧代理，并同时保留它与输出扰动代理的边界。
+在校准目标上，仅依赖张量重建难以充分刻画下游功能偏移。MSE、百分位裁剪和运行时统计仍是有用工具，但 KV Cache 误差必须经过 logits、softmax 和 Value 聚合后才变成下游功能损伤。第三章因此把 attention-distribution KL 写成可执行的分布侧代理，并同时保留它与输出扰动代理的边界。
 
-第二，低比特恢复需要解释 K/V 角色差异，而不能只报告某个 \texttt{INT4} 路径是否可用。KIVI 等工作已经给出角色差异化格式，本文在此基础上把对称 \texttt{INT4} 的断点、\texttt{K4V8}/\texttt{K8V4} 的角色对照以及 \texttt{INT4-RoleAlign} 的格式升级放入同一条诊断路径；第四章再检查这种解释在不同模型族、规模和 $H_{kv}$ 下的边界。
+进入低比特路径后，本文不只报告某个 \texttt{INT4} 路径是否可用，还进一步追问失稳与 Key/Value 角色差异、量化轴选择和执行路径之间的关系。KIVI 等工作已经给出角色差异化格式，本文在此基础上把对称 \texttt{INT4} 的断点、\texttt{K4V8}/\texttt{K8V4} 的角色对照以及 \texttt{INT4-RoleAlign} 的非对称路径实例放入同一条诊断路径；第四章再检查这种解释在不同模型族、规模和 $H_{kv}$ 下的边界。
 
-第三，校准结果还需要继续服务预算分配。已有混合精度和缓存管理工作通常回答“哪里保留更多内容”或“哪里使用更高精度”，但这些决策常与校准参数选择分开组织。本文把同源行为敏感度画像从校准层传递到 allocation / \texttt{AutoK} 层，用来解释 family-/scale-/task-dependent regimes，而不是宣称单一固定策略跨模型成立。
+预算分配层面还存在进一步衔接校准结果的问题。已有混合精度和缓存管理工作通常回答“哪里保留更多内容”或“哪里使用更高精度”，但这些决策常与校准参数选择分开组织。本文把同源行为敏感度画像从校准层传递到 allocation / \texttt{AutoK} 层，用来解释 family-/scale-/task-dependent regimes，而不是宣称单一固定策略跨模型成立。
 
-第四，部署收益必须经过后端路径验证。低 bit-width 给出的是缓存字节数下降，TPOT 是否下降还取决于反量化、nibble unpack、GQA head mapping 与 kernel 调度是否同向。第四章因此把显存收益与时间收益分开报告，并把融合 Decode 路径写成受 $H_{kv}$ 和序列长度共同调制的条件性结果。
+最后，部署收益不能直接由 bit-width 推出。低 bit-width 给出的是缓存字节数下降，TPOT 是否下降还取决于反量化、nibble unpack、GQA head mapping 与 kernel 调度是否同向。第四章因此把显存收益与时间收益分开报告，并把融合 Decode 路径写成受 $H_{kv}$ 和序列长度共同调制的条件性结果。
 
-这些问题共同决定了第三章的方法组织：本文以注意力行为保持为主线，分别定义离线校准代理、低比特角色感知路径、预算分配机制和系统执行边界。
+这四个问题决定了第三章的方法组织：本文以注意力行为保持为主线，分别定义离线校准代理、低比特角色感知路径、预算分配机制和系统执行边界。
 
 % ============================================================
 \section{本章小结}
