@@ -1484,3 +1484,116 @@ q_{0.95}(\theta),
 
 ### v2 落地稿见 git commit。
 
+
+
+## §3.5.1 INT8 基准路径 — 审改循环
+
+**目标行**: ch3_method.tex line 194-241 (含 §3.5 父节开头 + §3.5.1 主体, v0)
+
+### Round 1 综合（v0 审）
+
+加权综合: **6.53 / 10** — 🔴 不通过
+
+| Agent | 分数 | Verdict | 关键问题 |
+|-------|------|---------|---------|
+| D1 顶会 | 6.5 | 🟡 | P0-1 $s^\mathrm{dyn}$ 公式缺 / P0-2 $m$ 无值 / P1 元叙述 4 处 |
+| D2 数学 | 8.2 | ✅ | P2: $s^\mathrm{dyn}$ + $m$ + $g$ 维度 / P3: $q_\max$ 数值 |
+| D3 复现 | 5.2 | 🔴 | P1 阻断: $s^\mathrm{dyn}$ = absmax/127 / $m=1.0$ / $q_\max=127$ |
+| D4 中文 | 5.2 | 🔴 | §18 元叙述 5 处 / §17 防御负向 3 处 / §19 PPT 3 处 |
+| D5 Skeptical | 7.0 | 🟡 | P2: max 机制 trade-off 未披露 / "主导"无条件使用 |
+| D6 博士生 | 7.2 | 🟡 | P1: line 241 "其一/其二" PPT / line 229 $m$ 来源不明 |
+
+### Round 1 必改清单
+
+**P0 — 4+ agent 一致:**
+- **P0-1 $s^\mathrm{dyn}$ 计算公式** (D1, D2, D3, D6) — 代码: $\mathrm{absmax}/q_\max$
+- **P0-2 $m$ 取值** (D1, D2, D3, D6) — 代码: $m=1.0$（下界保护，非放大）
+- **P0-3 元叙述清理** (D1, D4, D6) — line 197/199/207/241 多处
+- **P0-4 "其一/其二" PPT 段删除** (D1, D4, D6) — line 241 整段重写
+
+**P1:**
+- $q_\max=127$ 显式 (D1, D2, D3)
+- $g=128$ 分组维度沿通道 (D2, D3)
+- K/V 自适应开关独立 (D3)
+- "只在必要时触发" → "每步 max" (D3)
+- max trade-off 量化误差扩大 (D5)
+- $q\in\mathbb Z$ 引入句 (D1)
+
+### v1 候选稿（应用 P0/P1 修订）
+
+```latex
+\section{跨位宽量化路径的实例化设计}
+\label{sec:ch3-paths}
+
+第~\ref{sec:ch3-calibration}~节给出的离线校准流程与稳健选择纪律不规定唯一位宽或唯一量化格式。后文先用 \texttt{INT8} 基准路径检查校准闭环能否在保守位宽下稳定落地，再用对称 \texttt{INT4} 试探路径暴露直接降位宽后的结构困难，最后用 \texttt{INT4-RoleAlign} 把低比特路径改写为 K/V 角色分离的非对称格式，并在方法层面区分它与 \texttt{KIVI-style}~\cite{liu2024kivi} 的参数来源。三条路径共享第~\ref{sec:ch3-calibration}~节的参考行为提取、可行域约束、尾部优先选择和固定产物输出，差异仅在参数接口、量化轴与行为代理。
+
+\input{tables/table_ch3_path_instantiation}
+
+\subsection{INT8 基准路径：静态 Scale 与自适应保护}
+
+\texttt{INT8} 位宽提供 255 级离散网格，校准层输出的 scale 误差可逐 token 精确追溯，本文以此作为行为引导校准闭环的第一性验证实例。压缩率上 \texttt{INT8} 也作为后续低比特路径的对照基线。
+
+在该路径中，Key 与 Value 均采用对称、逐组（per-group，沿通道维度每 $g=128$ 个元素一组共享一个缩放参数）的静态量化。记第 $l$ 层第 $j$ 个分组内的待量化张量为 $x_{l,j}$，对给定校准百分位参数 $p_c$ 与分组大小 $g$，静态缩放参数为
+\begin{equation}
+s_{l,j}^{\mathrm{static}}
+=
+\frac{\operatorname{Percentile}\!\big(|x_{l,j}|; p_c\big)}
+{q_{\max}},
+\end{equation}
+其中 $q_{\max}$ 表示对称量化网格的正端点（\texttt{INT8} 取 127）。令 $q\in\mathbb{Z}$ 为量化整数输出，量化—反量化写为
+\begin{equation}
+q
+=
+\operatorname{clamp}\!\left(
+\operatorname{round}\!\left(\frac{x}{s_{l,j}^{\mathrm{static}}}\right),
+-q_{\max},\, q_{\max}
+\right),
+\qquad
+\hat x = q\, s_{l,j}^{\mathrm{static}}.
+\end{equation}
+$(p_c, g)$ 在 $\Theta_\mathrm{path}$ 候选网格上由第~\ref{subsec:ch3-two-stage}~节的 KL 尾部统计与裁剪率约束筛选选出。
+
+为处理运行时输入分布超出校准覆盖范围的情况，本路径在静态缩放参数之外引入自适应保护机制。记当前写入张量为 $x^{\mathrm{cur}}_{l,j}$，动态尺度
+\begin{equation}
+s_{l,j}^{\mathrm{dyn}}
+=
+\frac{\operatorname{absmax}\!\big(|x^{\mathrm{cur}}_{l,j}|\big)}{q_{\max}},
+\end{equation}
+保护裕度 $m\ge 1$ 为固定超参（本文取 $m=1$）。最终缩放参数取
+\begin{equation}
+s_{l,j}^{\mathrm{final}}
+=
+\max\!\left(
+m \cdot s_{l,j}^{\mathrm{static}},
+\;
+s_{l,j}^{\mathrm{dyn}}
+\right),
+\end{equation}
+即在校准分布内静态参数主导；当当前 token 的 $\operatorname{absmax}$ 超出 $m \cdot s_{l,j}^{\mathrm{static}}\cdot q_{\max}$ 对应的覆盖时，由动态尺度接管以避免裁剪溢出。$\max$ 操作在每个写入步独立执行，K 与 V 的自适应保护开关相互独立。极端漂移下 $s_{l,j}^{\mathrm{final}}$ 增大会带来一定量化误差扩大，作为换取裁剪安全的工程代价。该机制在缓存写入时是否回写历史缓存的系统语义见第~\ref{sec:ch3-deployment}~节。
+```
+
+
+### Round 2 综合（v1 审）
+
+加权综合: **8.48 / 10** — ✅ PASS（阈值 8.0）
+
+| Agent | 分数 | Verdict | 关键残留 |
+|-------|------|---------|---------|
+| D1 顶会 | 8.1 | ✅ | P1-A $m\ge 1$ 冗余 / P1-B absmax 双绝对值 / P1-C 父节末 forward ref |
+| D2 数学 | 9.1 | ✅ | 仅 2 P3 不阻挡 |
+| D3 复现 | 9.0 | ✅ | 仅 2 P3 ($m\ge 1$ vs $>0$ / ε=1e-5 零向量保护) |
+| D4 中文 | 8.6 | ✅ | P1: "以避免裁剪溢出" 轻度负向 |
+| D5 Skeptical | 8.1 | 🟢 | P3: "逐 token 精确追溯" 与 per-group 矛盾 |
+| D6 博士生 | 7.5 | 🟡 | **P1: "逐 token" 粒度矛盾 / P1: $m=1$ 公式保留动机** |
+
+### Round 2 整合修订（v1 → v2，落地版）
+
+1. **D5 P3 + D6 P1**: "逐 token 精确追溯" → "逐组（per-group）精确追溯"
+2. **D1 P1-B + D6 P2**: $\operatorname{absmax}(|x^\mathrm{cur}|)$ → $\operatorname{absmax}(x^\mathrm{cur})$（去双重绝对值）
+3. **D1 P1-A**: "$m\ge 1$ 为固定超参（本文取 $m=1$）" → "$m$ 为固定超参（本文取 $m=1$）"
+4. **D4 P1**: "由动态尺度接管以避免裁剪溢出" → "由动态尺度接管以维持当前 token 的量化覆盖"
+5. **D6 P2**: 加 "防止异常 token 被强制截断至 $q_{\max}$" 在 max trade-off 段
+6. **D1 P1-C**: 父节末加 forward ref to §3.6 allocator
+
+### v2 落地稿见 git commit。
+

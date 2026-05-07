@@ -194,26 +194,22 @@ q_{0.95}(\theta).
 \section{跨位宽量化路径的实例化设计}
 \label{sec:ch3-paths}
 
-第 \ref{sec:ch3-calibration} 节已经定义离线校准流程与稳健选择纪律，但这一流程本身不规定唯一位宽或唯一量化格式。本节只定义路径实例，不提前报告第四章的完整比较结果。三条路径按约束强度展开：\texttt{INT8} 基准路径用于检查校准闭环能否在较保守位宽下稳定落地；对称 \texttt{INT4} 试探路径用于暴露直接降位宽后的结构困难；\texttt{INT4-RoleAlign} 则把低比特路径改写为 K/V 角色分离的非对称格式，并在方法层面区分它与 \texttt{KIVI-style}~\cite{liu2024kivi} 的参数来源。
+第~\ref{sec:ch3-calibration}~节给出的离线校准流程与稳健选择纪律不规定唯一位宽或唯一量化格式。后文先用 \texttt{INT8} 基准路径检查校准闭环能否在保守位宽下稳定落地，再用对称 \texttt{INT4} 试探路径暴露直接降位宽后的结构困难，最后用 \texttt{INT4-RoleAlign} 把低比特路径改写为 K/V 角色分离的非对称格式，并在方法层面区分它与 \texttt{KIVI-style}~\cite{liu2024kivi} 的参数来源。三条路径共享第~\ref{sec:ch3-calibration}~节的参考行为提取、可行域约束、尾部优先选择和固定产物输出，差异仅在参数接口、量化轴与行为代理；三条路径输出的逐层敏感度统计共同供第~\ref{sec:ch3-allocator}~节的 allocator 读取。
 
-这些路径之间变化的是参数接口、量化轴与行为代理；不变的是第 \ref{sec:ch3-calibration} 节已经给出的参考行为提取、可行域约束、尾部优先选择和固定产物输出。allocator 与系统落地模块只读取这些产物和行为统计，不重新解释第四章的实验结论。
-
-% 表 3-2 建议置于此处
-% 表题：表 3-2 跨位宽路径的实例化关系与统一校准工作流
 \input{tables/table_ch3_path_instantiation}
 
 \subsection{INT8 基准路径：静态 Scale 与自适应保护}
 
-本文首先在 \texttt{INT8} 位宽下给出行为引导校准的 INT8 基准路径。该路径不追求极限压缩；它用于建立一个稳定、便于复核的验证实例。相较于 \texttt{INT4}，\texttt{INT8} 提供更细的量化网格，因此更适合作为校准层闭环是否成立的第一性验证对象。本文将该路径定位为 INT8 基准路径：它在方法论上承担“基准验证实例”的角色，压缩率层面则作为后续低比特路径的参照。
+\texttt{INT8} 位宽提供 255 级离散网格，校准层输出的 scale 误差可逐组（per-group）精确追溯，本文以此作为行为引导校准闭环的第一性验证实例。压缩率上 \texttt{INT8} 也作为后续低比特路径的对照基线。
 
-在该路径中，Key 与 Value 均采用对称、逐组（per-group）的静态量化。记第 $l$ 层第 $j$ 个分组内的待量化张量为 $x_{l,j}$，对给定校准百分位参数 $p_c$ 与分组大小 $g$，其静态缩放参数定义为
+在该路径中，Key 与 Value 均采用对称、逐组（per-group，沿通道维度每 $g=128$ 个元素一组共享一个缩放参数）的静态量化。记第 $l$ 层第 $j$ 个分组内的待量化张量为 $x_{l,j}$，对给定校准百分位参数 $p_c$ 与分组大小 $g$，静态缩放参数为
 \begin{equation}
 s_{l,j}^{\mathrm{static}}
 =
 \frac{\operatorname{Percentile}\!\big(|x_{l,j}|; p_c\big)}
 {q_{\max}},
 \end{equation}
-其中 $q_{\max}$ 表示对称量化网格的正端点。由此，对应的量化—反量化写为
+其中 $q_{\max}$ 表示对称量化网格的正端点（\texttt{INT8} 取 127）。令 $q\in\mathbb{Z}$ 为量化整数输出，量化—反量化写为
 \begin{equation}
 q
 =
@@ -224,9 +220,15 @@ q
 \qquad
 \hat x = q\, s_{l,j}^{\mathrm{static}}.
 \end{equation}
-第 \ref{sec:ch3-calibration} 节确定 $(p_c,g)$ 如何被搜索与筛选；本小节关心这些离线选出的参数如何被具体地转写为一条对称 \texttt{INT8} 路径。
+$(p_c, g)$ 在 $\Theta_\mathrm{path}$ 候选网格上由第~\ref{subsec:ch3-two-stage}~节的 KL 尾部统计与裁剪率约束筛选选出。
 
-在静态缩放参数之外，本文还为 INT8 基准路径引入自适应保护机制，用以处理运行时输入分布超出校准覆盖范围的情况。记由当前写入 token 估计得到的动态尺度为 $s_{l,j}^{\mathrm{dyn}}$，保护裕度参数为 $m$，则最终使用的缩放参数可写为
+为处理运行时输入分布超出校准覆盖范围的情况，本路径在静态缩放参数之外引入自适应保护机制。记当前写入张量为 $x^{\mathrm{cur}}_{l,j}$，动态尺度
+\begin{equation}
+s_{l,j}^{\mathrm{dyn}}
+=
+\frac{\operatorname{absmax}\!\big(x^{\mathrm{cur}}_{l,j}\big)}{q_{\max}},
+\end{equation}
+保护裕度 $m$ 为固定超参（本文取 $m=1$，作为工程扩展预留）。最终缩放参数取
 \begin{equation}
 s_{l,j}^{\mathrm{final}}
 =
@@ -234,11 +236,9 @@ s_{l,j}^{\mathrm{final}}
 m \cdot s_{l,j}^{\mathrm{static}},
 \;
 s_{l,j}^{\mathrm{dyn}}
-\right).
+\right),
 \end{equation}
-这一设计保留离线校准主导的路径语义，并在极端分布漂移时加入保守防护。静态缩放参数仍是主路径，自适应保护只在当前写入步必要时触发，用于避免异常输入导致的剧烈裁剪。关于该机制在缓存写入时的具体系统语义，例如其是否会回写历史缓存，留到第 \ref{sec:ch3-deployment} 节再说明。
-
-因此，INT8 基准路径在本文中的地位应被理解为行为引导校准的基准实例，而非极限压缩方案。它给后续低比特路径提供两个参照：其一，在较保守位宽下检验注意力行为代理是否能稳定工作；其二，用同一产物接口保存缩放、保护与轴元数据，便于第四章按同一协议复核。
+即在校准分布内静态参数主导；当当前 token 的 $\operatorname{absmax}$ 超出 $m \cdot s_{l,j}^{\mathrm{static}}\cdot q_{\max}$ 对应的覆盖时，由动态尺度接管以维持当前 token 的量化覆盖、防止异常 token 被强制截断至 $q_{\max}$。$\max$ 操作在每个写入步独立执行，K 与 V 的自适应保护开关相互独立。极端漂移下 $s_{l,j}^{\mathrm{final}}$ 增大会带来一定量化误差扩大，作为换取裁剪安全的工程代价。该机制在缓存写入时是否回写历史缓存的系统语义见第~\ref{sec:ch3-deployment}~节。
 
 \subsection{对称 INT4 的局限与格式升级动因}
 

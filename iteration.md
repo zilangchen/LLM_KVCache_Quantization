@@ -36,6 +36,25 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 08:10 | Thesis Ch3 §3.5.1 INT8 基准路径 2-Round 6-Agent Audit + v2 落地
+- Goal: §3.5 父节+§3.5.1 INT8 基准路径节用工作流, v0 (Round 1 6.53 🔴) → v1 (Round 2 8.48 ✅) → v2 整合 4 处一致 P1 落地
+- Scope:
+  - 12 agent 报告 (6 reviewer × 2 rounds)
+  - **关键 P0 修复 (v0→v1)**: $s^\mathrm{dyn} = \mathrm{absmax}/q_\max$ 公式 / $m=1$ 取值 + 下界保护语义 / $q_\max=127$ 显式 / $g=128$ 沿通道 / 元叙述清理 / "其一/其二" PPT 段删除
+  - **关键 P1 整合 (v1→v2)**: "逐 token" → "逐组(per-group)"粒度 (D5+D6 一致) / $\operatorname{absmax}(|x|)$ → $\operatorname{absmax}(x)$ 去双绝对值 (D1+D6) / $m\ge 1$ → $m$ 固定为 1 (D1) / "避免裁剪溢出" → "维持当前 token 的量化覆盖" (D4) / 加 "防止异常 token 被强制截断" (D6) / 父节末加 forward ref to §3.6 allocator (D1)
+  - **D3 关键修复**: $g$ 沿通道维度声明 / K/V 自适应开关独立 / "max 每步独立执行"措辞修复 v0 "只在必要时触发"误读 / max trade-off 量化误差扩大显式披露
+- Changed files:
+  - `thesis/chapters/ch3_method.tex` line 194-242 (§3.5 父节+§3.5.1 v0→v2 全文重写, 删 49 行写 49 行；net 0)
+  - `docs/ch3_writing_quality_audit_20260508.md`（追加 Round 1 综合 + v1 候选 + Round 2 综合 + v2 整合）
+- Commands: `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex` × 2
+- Outputs:
+  - 96 pages PDF, 0 errors, 0 undefined references, 0 multiply defined labels
+  - Round 2: D1 8.1 ✅ / D2 9.1 ✅ / D3 9.0 ✅ / D4 8.6 ✅ / D5 8.1 🟢 / D6 7.5 🟡 (加权 8.48)
+- Validation: forward ref (sec:ch3-calibration / sec:ch3-allocator / sec:ch3-deployment / subsec:ch3-two-stage) 全部解析；4 公式数学链完整; 与 int8_basic.py / int8_cache.py 代码对照: $s^\mathrm{dyn}$=absmax/127, m=1.0 (default), group_size=128 全部一致
+- Risks / follow-ups:
+  - D3 提示 ε=1e-5 零向量保护未在论文显式 (P3, 工程实现细节)
+  - 后续 9 个 §3.x subsection 待审改 (§3.5.2 起)
+
 ### 2026-05-08 07:50 | Thesis Ch3 §3.4.2 2-Round 6-Agent Audit + v2 落地
 - Goal: 沿用工作流对 §3.4.2 参数搜索空间与稳健选择准则节执行审改, v0 (Round 1 6.18 🔴) → v1 (Round 2 7.86 接近 PASS) → v2 整合落地。
 - Scope:
