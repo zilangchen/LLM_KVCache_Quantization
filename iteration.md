@@ -36,6 +36,36 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 06:35 | Thesis Ch3 §3.1 5-Round 6-Agent Audit + v4 落地
+- Goal: 严格按用户新工作流（A→B→C→D→E→F：原稿审 → 综合 → 候选稿 → 多 agent 审 → 迭代重修 → 落地）完成 §3.1 注意力近似误差代数分解节的写作质量审查与重写，达到 EMNLP/ACL/NeurIPS senior reviewer 通过水准。
+- Scope:
+  - 6 视角并行审查：D1 顶会 reviewer / D2 数学严谨 / D3 复现实验者 / D4 中文写作专家（严守 codex prefs ground truth）/ D5 skeptical reader / D6 同行博士生
+  - 5 轮迭代：v0 (commit dd869e4) → v1 → v2 → v3 → v4 (落地)
+  - 30 个 agent 报告（6 reviewer × 5 rounds）
+  - codex prefs ground truth 文件：`/Users/chenzilang/.codex/rules/writing_preferences.md` 作为 D4 评分 rubric
+  - 关键 review 演化：v0→v1 修 D4 round 1 6 处中文残留；v1→v2 删 codex prefs 违规；v2→v3 修 D5 4 处实质问题；v3→v4 修 D5 KL 代理 gap + GQA 共享悬挂 + $(a,o)$ 正面论证
+- Changed files:
+  - `thesis/chapters/ch3_method.tex` line 3-46（§3.1 v0→v4 完整重写，net +7 -11，删 v0 章末过渡 + 合并 v0 图后段到末段 + 补 KL 论证桥）
+  - `docs/ch3_writing_quality_audit_20260508.md`（新建，~700 行 audit log，含 §3.1+§3.2 各 6-agent 审查 + 5 轮 D-phase + 落地状态）
+- Commands:
+  - `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`（pass 1 + pass 2）
+  - `git diff --check thesis/chapters/ch3_method.tex`
+- Outputs:
+  - v4 加权平均 9.02（轨迹：v0=6.7 → v1=8.5 → v2=8.05 → v3=8.68 → v4=9.02）
+  - 6/6 PASS：D1=9.2 / D2=9.4 / D3=9.5 / D4=8.7 / D5=8.5（**撤回 round 4 NOT PASS**）/ D6=8.8
+  - xelatex 编译 96 页，零 LaTeX Error，零 undefined references；Underfull 在 line 140/756（与 §3.1 无关）
+  - D5 明确"何时停止"判定：「v4 达到 PhD 论文方法章首节的合理标准...停止建议：此稿提交。剩余可疑点均属于答辩响应层面，不是论文修改层面。」
+- Validation:
+  - .tex 落地后 xelatex 双轮编译通过 96 页
+  - `git diff --check` OK（无 whitespace 错误）
+  - codex prefs 12 项 (A-L) v4 全合规（v0 仅 5/12 → v4 12/12）
+- Risks / follow-ups:
+  - 末段密度 v3 4 句 → v4 6 句（D6 + D4 双双警告"潜在 P3"，都判 PASS，归档供后续打磨）
+  - `$Q_{\theta_K}$` 作用域"逐元素/逐通道/逐 token"列举越界（连续 5 轮 D1 提及，归档不阻塞）
+  - "间接约束聚合侧"措辞精度（D2 round 5 提议加限定"权重分布 $\hat a_i$"，D5 判答辩可承担）
+  - 下一节 §3.2 同流程审查待启动（v0 audit 已在 MD 第 168-293 行完成，6.0/10 Major revision needed，待 candidate v1 + D 阶段迭代）
+  - codex prefs 反馈待用户决策：D4 提议补充 2 条（交叉引用密度控制 + 批评对象显式引出规则）
+
 ### 2026-05-07 05:07 | Thesis Ch1/Ch2/Ch5 AIGC Paraphrase Pass
 - Goal: 等量改写 Ch1 / Ch2 / Ch5 中 VPCS AIGC 检测器易标注的概括性、结构化与 meta 句式，目标降低 12.27% 总疑似率至 ~9% 区间，同时保留全部 claim、数字、模型名、引用与公式。
 - Scope:
@@ -869,61 +899,3 @@ Canonical agent workflow directory is `.agents/`.
   - §3.4 有 10 subsection 可能偏多（需 user 审视是否要 promote 部分为 subsubsection/paragraph）
   - §3.2 现有 5 subsection（2 个原 §3.2 + 3 A 类），可进一步精简用户若觉得细
   - 下一步：tag `thesis-m-plus-v3` 标记新骨架，memory 已更新写作纪律第三条
-
-### 2026-04-21 00:37 | 术语统一 + 散装英文中文化 + 内部工作语言清理（281 处批处理）
-- Goal: 用户对 Ch3 结构重组 + 术语命名提议中发现 7 条术语冲突 + 26 个散装英文词 + 大量内部工作语言（Phase 1/3/8/9、Gate C、final-ready、Level-5、story §X.Y、Weak/Mixed、clean-provenance pin=）泄露进论文正文；约定先做全局术语清理再动 Ch3 结构（顺序反了会漏清理）
-- Scope: thesis/chapters/ 8 个 tex 文件批处理，281 处替换 (stage1=39 / stage2=186 / stage3=55 / comments=7)；新增 normalize_terminology.py 可复用脚本
-- Changed files:
-  - scripts/thesis/normalize_terminology.py (new, 173 lines)
-  - thesis/chapters/abstract_en.tex / abstract_zh.tex / appendix.tex / ch1-ch5 (+232/-232, 纯替换)
-- Commands:
-  - `python3 scripts/thesis/normalize_terminology.py --dry-run` (分布核对)
-  - `python3 scripts/thesis/normalize_terminology.py --apply`
-  - 中途 bug: Stage 3 cross-model 规则在 mask 之前跑，破坏 8 处 `\label{*-cross-model-*}` / `\ref{}` → 写 one-shot restore python patch 还原 5 文件 label 参数
-  - `cd thesis && xelatex -interaction=nonstopmode main.tex` ×2
-- Outputs: main.pdf 101 pages / 1.64 MB
-- Validation:
-  - 0 undefined references / 0 multiply-defined / 0 dimension too large / 0 error
-  - sanity grep: 行为对齐=0 / Gate C=0 / Phase 1 TPOT=0 / Level-5 clean=0 / Weak/Mixed=0 / clean-provenance pin=0 / BA-guided=0
-  - 残留: `\label{sec:discussion-final-ready}` 1 处 (LaTeX label 不进 PDF) + 英文 abstract `regime map` 2 处 (脚本跳过 abstract_en 预期行为)
-- 写作纪律新增: 用户明确"整个文章你有很多把我们内部工作的那些叙述全部泄露了...不要把那些内部的分析...写进去"——待 commit 后固化到 `feedback_thesis_writing_style.md` 第三条纪律
-- Risks / follow-ups:
-  - 脚本已修 bug（cross-model 规则移到 Stage 2 / Stage 3 先于 mask），未来重跑不会再破坏 label
-  - 下一步：Ch3 结构重组（§3.1 改 "注意力近似误差分析" / §3.2 精简+融入原 §3.9 A 类 / §3.4 合并 §3.4+§3.5+§3.8 Triton 为 3.4.4 / §3.5 合并 §3.6+§3.7 AutoK / §3.6=原 §3.9 B 类复杂度）
-
-### 2026-04-20 22:27 | Codex 7 issues 全修 + 写作纪律固化（memory）
-- Goal: 用户审批 Codex adversarial-review 的 8 条意见全部为真问题，按 1-7 顺序全修（P2.8 图 vs 文档归为 control doc 层低优先做）；同时用户提出两条贯穿全文的写作纪律——正向陈述不写反向、学术论文语气不写技术报告——固化到 memory 并应用到这一轮所有修改
-- 写作纪律固化：
-  - `feedback_thesis_writing_style.md` 新建：两条纪律（正向陈述 / 不堆 bullet / 不暴露 internal terms）+ 正反例
-  - MEMORY.md 索引追加；未来论文写作贯穿适用
-- Codex 7 issues 修复（按 1-7 顺序执行）：
-  1. **P1.3 附录 A/B 数字错**：从 `results/l2_prompt_adaptive_summary_final.csv`（frozen CSV）+ `completion_report 8B table` 重生附录 A（8B）与附录 B（1.5B/7B）的 15 row × 3 variant 完整数据，学术段落替代 "Gate C / OFF-PROTOCOL / Weak-Mixed" 等 internal verdict
-  2. **P2.6 + Ch4 §4.6 旧叙事孤岛**：Ch4 §4.6 "综合讨论"开头 "以 H_kv 为组织轴" 段 + 3 bulleted "主要发现"（旧 KL-MSE/Key 主导/融合核相位图 = 旧 5-Contribution summary）整段重写为 behavior-guided framework 贯通 C1/C2/C3 的连贯叙事段；威胁效度第 1 条"H_kv 与规模共变" 降级为"$H_{kv}$ 作为解释变量，不是全文组织脊柱"；Ch2 §2 "研究空白四" 从 "H_kv 组织轴" 重构为 "behavior 保持度作为贯通 calibration 与 allocation 的统一目标"；Ch3 §3.2 L248 "以 H_kv 为结构性相关变量的实验起点" 也改
-  3. **P1.1 provenance + P1.2 matched-budget 口径统一**：Ch4 clean-provenance 段落从"本章所有正文数字"软化为"final-ready 数据来自 clean-provenance + supporting 对比跨模型用 legacy backport"；Ch1 §1.4 C3 + Abstract en + T3 caption + T3 note + Ch4 §4.5.1 Mistral 共 5 处 "matched INT4 budget" → "same-order INT4 budget band" 正向表述；T3 note "±3%" 改为指向 budget band 定义段的 forward ref；Ch2/Ch4/Ch5 中 3 处 "本章不包含 X" / "只做 X，不做 Y" 反向陈述改为正向 scope 声明
-  4. **P2.5 Ch3 tau⁻¹ 主体内部冲突**：§3.2 在线推理阶段 tau⁻¹ 预缩放描述 → 静态 Scale-only 在线路径；§3.3 "两阶段搜索策略" subsection 重写为 "Scale 搜索策略"（第二阶段 tau⁻¹ 搜索段改写为 "温度校正的历史定位" —— 诊断观察在 appendix 保留）；§3.5 生成循环集成 tau⁻¹ hook 注入描述 → 静态 Scale 路由；tab:ch3-kv-modes 的 $\tau^{-1}$ 列删除（6 列→5 列）；复杂度段 "第二阶段 tau⁻¹ 搜索" 删除；校准产物存储段 tau⁻¹ 删除
-  5. **P1.4 §4.1 scope 分层**：L47 "实验覆盖四个开源大语言模型" → "六个开源大语言模型...依 experimental role 分为三类 (canonical validation / cross-model main matrix / supporting reference)"；LongBench-style 7 任务 benchmark vs 5 task main matrix 关系补写
-  6. **P2.7 附录 internal terms**：与 #1 合并处理，附录 A/B 重写时全部清零
-  7. **P2.8 图 vs 画图文档漂移**：tracker 追加"图表与 doc 对齐说明"；story §11 图④ spec 由用户手动调整（接受 linter 改动不 revert）
-- Changed files:
-  - thesis/chapters/ch1_introduction.tex (matched-budget)
-  - thesis/chapters/ch2_related_work.tex (H_kv 组织轴 + 空白四 + positioning 段)
-  - thesis/chapters/ch3_method.tex (tau⁻¹ 主体清理 × 5 处)
-  - thesis/chapters/ch4_experiments.tex (provenance + scope + §4.6 整段 + matched-budget × 3)
-  - thesis/chapters/ch5_conclusion.tex (Limitation 5 正向化)
-  - thesis/chapters/abstract_en.tex (matched-budget → same-order)
-  - thesis/chapters/appendix.tex (附录 A + B 重生 with frozen CSV + internal terms 清零)
-  - thesis/tables/table_t3_cross_model_main.tex (caption + note 改口径)
-  - scripts/thesis/make_table_cross_model_compare.py (脚本 source 同步)
-  - docs/thesis_rewrite_tracker_20260420.md (figure sync note)
-  - ~/.claude/...memory/feedback_thesis_writing_style.md (新建, 写作纪律 memory)
-  - ~/.claude/...memory/MEMORY.md (索引追加)
-- Validation:
-  - xelatex × 2 pass → main.pdf 100 → 101 pages, 1.64 MB
-  - 0 undefined ref / 0 undefined cite / 0 multiply-defined / 0 Dimension too large / 0 error
-  - grep 附录 A 新数字（9.73/10.77/12.16/10.03）✓ 匹配 frozen CSV
-  - grep Hook-conditional 语言 → 0 match
-  - grep H_kv 组织轴 → 清理到合理引用
-- Risks / follow-ups:
-  - 进入"逐段 collaborative review"模式（用户明确要求）
-  - main.pdf 100 → 101（+1 from §4.6 重写 + 附录扩写）
-- Commit: <pending 本批>

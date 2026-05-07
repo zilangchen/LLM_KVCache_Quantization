@@ -3,17 +3,17 @@
 \section{注意力近似误差的代数分解与问题形式化}
 \label{sec:ch3-problem}
 
-KV Cache 的量化误差并非下游任务的直接观测量；它先经过注意力打分与 softmax 聚合，再以输出形式影响生成结果。因此本文不以 $K$ 与 $V$ 的逐元素重建距离作为唯一对象，而是把量化前后的注意力分布 $a$ 与注意力输出 $o$ 共同视作需保持的行为。下文先固定单头 Decode 注意力的记号，再对量化引起的输出误差作精确代数分解。
+下游任务感知到的是注意力分布 $a$ 与注意力输出 $o$，而非 $K, V$ 的逐元素重建距离。因此本文以 $(a,o)$ 这对联合对象作为量化保持的目标，并在单头 MHA 设定下推导其代数分解，刻画两条传播路径的耦合结构。
 
-约定 $q$ 视作行向量 $q\in\mathbb{R}^{1\times d_k}$，历史上下文长度为 $S$，$K\in\mathbb{R}^{S\times d_k}$、$V\in\mathbb{R}^{S\times d_v}$ 由其行向量 $k_i, v_i$ 拼接而成；本文沿用第~\ref{sec:ch2-kv-memory}~节的 $d_v=d_k$ 约定。标准单头注意力可写为
+约定 $q$ 视作行向量 $q\in\mathbb{R}^{1\times d_k}$，历史上下文长度为 $S$，$K\in\mathbb{R}^{S\times d_k}$、$V\in\mathbb{R}^{S\times d_v}$ 由其行向量 $k_i, v_i$ 拼接而成；本文实验涵盖的 Qwen2.5/LLaMA-3 系列均满足 $d_v=d_k$ 约定，由此 $q$ 与 $o$ 同维。标准单头注意力可写为
 \begin{equation}
 a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 \end{equation}
-其中 $a\in\mathbb{R}^{1\times S}$ 表示注意力分布（按分量索引为 $a_i\in\mathbb{R}$），$o\in\mathbb{R}^{1\times d_v}$ 表示注意力输出。基于此，本文将注意力行为形式化为如下联合对象：
+其中 $a\in\mathbb{R}^{1\times S}$ 表示注意力分布（按分量索引为 $a_i\in\mathbb{R}$），$o\in\mathbb{R}^{1\times d_v}$ 表示注意力输出。注意力行为记作联合对象
 \begin{equation}
 \mathcal{B}(q,K,V):=(a,o).
 \end{equation}
-本节默认在单头 MHA 设定下展开；多层、多头情形按层索引 $\ell$ 与头索引 $h$ 重复，记为 $q^{(\ell,h)}, K^{(\ell,h)}$ 等。GQA/MQA 下查询头到 KV 头的映射已在第~\ref{sec:ch2-kv-memory}~节给出。
+多层、多头情形按层索引 $\ell$ 与头索引 $h$ 平行展开，记为 $q^{(\ell,h)}, K^{(\ell,h)}$ 等；本节代数分析对每个 KV 头独立成立，GQA/MQA 下查询头到 KV 头的映射已在第~\ref{sec:ch2-kv-memory}~节给出。
 
 设 $Q_{\theta_K}(\cdot)$ 与 $Q_{\theta_V}(\cdot)$ 分别表示作用于 Key 与 Value 的量化映射；参数 $\theta_K, \theta_V$ 的具体含义（scale、zero-point、bit-width 等）以及作用域（逐元素、逐通道或逐 token）由量化路径决定，详见第~\ref{sec:ch3-paths}~节。量化后的 Key 与 Value 记为
 \begin{equation}
@@ -23,11 +23,11 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 \begin{equation}
 \hat a=\mathrm{softmax}\!\left(\frac{q\hat K^\top}{\sqrt{d_k}}\right), \qquad \hat o=\hat a \hat V.
 \end{equation}
-于是，KV Cache 量化在概念层上的目标可写为
+KV Cache 量化的目标即
 \begin{equation}
 \min_{\theta_K,\theta_V}\Delta_{\mathrm{beh}}\big((a,o),(\hat a,\hat o)\big),
 \end{equation}
-其中 $\Delta_{\mathrm{beh}}: (\mathbb{R}^{1\times S}\times\mathbb{R}^{1\times d_v})^2 \to \mathbb{R}_{\ge 0}$ 满足 $\Delta_{\mathrm{beh}}(x,x)=0$，刻画量化前后注意力行为的联合偏移；其形式在概念层成立，不要求各量化路径共享同一标量损失。具体实例化由量化路径决定（第~\ref{sec:ch3-calibration}~节）。
+其中 $\Delta_{\mathrm{beh}}: (\mathbb{R}^{1\times S}\times\mathbb{R}^{1\times d_v})^2 \to \mathbb{R}_{\ge 0}$ 满足 $\Delta_{\mathrm{beh}}(x,x)=0$，刻画量化前后注意力行为的联合偏移；其作为损失函数使用，无需满足度量空间的对称性或三角不等式。$\Delta_{\mathrm{beh}}$ 的具体实例化由量化路径决定（第~\ref{sec:ch3-calibration}~节），并对每个 $(\ell, h)$ 独立求解。
 
 由 $\hat o=\hat a\hat V$ 与 $o=aV$ 的定义，输出误差可作如下精确代数展开：
 \begin{align}
@@ -37,14 +37,10 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 &=\sum_{i=1}^{S}\hat a_i(\hat v_i-v_i)+\sum_{i=1}^{S}(\hat a_i-a_i)v_i.
 \label{eq:ch3-error-decomp}
 \end{align}
-式~\eqref{eq:ch3-error-decomp} 系恒等代数变形。右侧第一项描述 Value 侧内容被量化后如何进入聚合结果；右侧第二项描述 Key 侧扰动经 logits 与 softmax 改变注意力分布后如何传到输出。其中第一项的权重为量化后分布 $\hat a_i$ 而非参考分布 $a_i$，因此聚合侧误差与 Key 侧扰动并非独立——若 Key 量化已经改变 $\hat a$，聚合项的有效权重也随之变化。
+式~\eqref{eq:ch3-error-decomp} 是恒等变形。右侧第一项（聚合侧/Value 通路）描述 Value 侧内容被量化后如何进入聚合结果；右侧第二项（分布侧/Key 通路）描述 Key 侧扰动经 logits 与 softmax 改变注意力分布后如何传到输出。两条通路同时进入输出，单独追踪 $a$ 或 $o$ 均会遗漏一侧。第一项的权重为量化后分布 $\hat a_i$ 而非参考分布 $a_i$，因此聚合侧误差与 Key 侧扰动并非加性可分——Key 量化通过 $\hat a$ 同时改变第二项的分布偏移与第一项的聚合权重。张量重建误差并不刻画这种交叉依赖；离线校准因此选择以注意力分布上的 KL 散度作为 $\Delta_{\mathrm{beh}}$ 的可执行代理（第~\ref{sec:ch3-calibration}~节），KL 直接惩罚第二项的分布偏移，并经 $\hat a$ 在第一项中的权重作用间接约束聚合侧。
 
 % 图题：图 3-1 注意力误差的两条耦合传播路径及其精确代数分解
 \input{figures/fig1_error_decomposition}
-
-由式~\eqref{eq:ch3-error-decomp}，下游任务感知到的是注意力行为偏移而非 $K, V$ 的逐元素距离：Key 侧扰动通过 $q\hat K^\top$ 与 softmax 影响分布形态，Value 侧扰动则在已量化分布 $\hat a$ 加权下进入输出。仅以张量重建误差为度量，将忽略 softmax 非线性与加权聚合共同导致的行为层失真。
-
-由此，KV Cache 量化在本文中被形式化为注意力行为保持问题；第~\ref{sec:ch3-motivation-kv}~节进一步诊断低比特场景下的失稳侧。
 
 \section{动机诊断：K/V 敏感性不对称及其设计启示}
 \label{sec:ch3-motivation-kv}
