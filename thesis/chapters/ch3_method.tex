@@ -92,6 +92,7 @@ b^\star = \mathcal{A}(\mathcal{S};\bar b),\quad \tfrac{1}{L}\sum_{l=1}^{L} b^\st
 对称路径与角色感知低比特路径在候选参数家族与代理形式上不必相同，但都在离线样本上计算行为读数，在可行域约束下控制尾部坏案例，并把最终选择写入固定校准产物。
 
 \subsection{注意力分布 KL 散度目标}
+\label{subsec:ch3-kl-target}
 
 设第 $l$ 层、第 $h$ 个注意力头、时间步 $t$ 的 Query 与 Key 分别为 $q^{(l,h,t)}\in\mathbb{R}^{d_k}$ 与 $K^{(l,h,t)}\in\mathbb{R}^{N\times d_k}$，二者均在 \texttt{input\_layernorm} 与 RoPE 处理后取出，$N$ 为当前位置可见的上下文长度。FP16 参考路径下的注意力分布
 \begin{equation}
@@ -136,32 +137,22 @@ MSE 工作在张量重建空间，仅比较 $K$ 或 $V$ 的逐元素差异；而
 \subsection{参数搜索空间与稳健选择准则}
 \label{subsec:ch3-two-stage}
 
-在上述代理定义之上，离线校准被写成路径化搜索接口。对任一路径 $\mathrm{path}$，正文只需要固定三项输入：
-\begin{enumerate}[label=(\roman*),leftmargin=2.4em,itemsep=2pt,topsep=2pt]
-  \item 候选参数集合 $\Theta_{\mathrm{path}}$；
-  \item 该路径实际使用的行为代理 $R_{\mathrm{path}}$；
-  \item 写入在线推理系统的产物字段。
-\end{enumerate}
-图~\ref{fig:ch3-calibration-workflow} 给出四步离线流程，表~\ref{tab:ch3-calibration-interfaces} 列出三条路径各自的接口差异。这样处理的目的，是让 \texttt{INT8}、对称 \texttt{INT4} 与 \texttt{INT4-RoleAlign} 共享参考行为提取、候选搜索、稳健选择和产物冻结这四个步骤，同时允许它们使用不同的参数家族与行为代理。
+第~\ref{subsec:ch3-kl-target}~节给出均值代理 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 后，对一条具体路径还需要确定有限离散候选网格 $\Theta_{\mathrm{path}}$、该路径使用的行为代理 $R_{\mathrm{path}}$，以及写入在线推理系统的产物字段。图~\ref{fig:ch3-calibration-workflow} 给出参考行为提取、候选搜索、稳健选择与产物冻结四步离线流程，表~\ref{tab:ch3-calibration-interfaces} 列出 \texttt{INT8}、对称 \texttt{INT4} 与 \texttt{INT4-RoleAlign} 三条路径在这四步上各自的接口实例化。
 
-% 图 3-4 建议置于本小节第 1 段与第 2 段之间
-% 图题：图 3-4 行为引导离线校准的统一工作流
 \input{figures/fig_ch3_calibration_workflow}
 
-% 表 3-1 建议置于本小节第 3 段之后
-% 表题：表 3-1 统一离线校准工作流下的路径参数化接口
 \input{tables/table_ch3_calibration_interfaces}
 
-给定候选集合后，路径参数的离线选择写为
+给定候选网格 $\Theta_\mathrm{path}$ 后，路径参数的离线选择写为
 \begin{equation}
 \theta_{\mathrm{path}}^\star
 =
 \arg\min_{\theta \in \Theta_{\mathrm{path}}}
 R_{\mathrm{path}}(\theta),
 \end{equation}
-其中 $R_{\mathrm{path}}(\theta)$ 表示该路径上的稳健风险统计量。对称路径可直接以 attention-distribution KL 组织风险；角色感知低比特路径则在同一选择纪律下，把 K-path 与 V-path 的代理分开定义。
+其中 $R_{\mathrm{path}}(\theta)$ 是该路径上的稳健风险统计量。对称路径取 $R_{\mathrm{path}}(\theta) = q_{0.95}(\theta)$，即下文式~\eqref{eq:ch3-q95} 给出的 attention-distribution KL 95\% 分位数；角色感知低比特路径在同一选择纪律下，把 K-path 与 V-path 的代理分开定义。
 
-对称路径（包括 INT8 基准路径与对称 \texttt{INT4} 试探路径）使用同一组本地读数。设校准样本集合为 $\mathcal D_{\mathrm{calib}}$：
+对称路径（包括 \texttt{INT8} 基准与对称 \texttt{INT4} 试探路径）使用同一组本地读数。设校准样本集合为 $\mathcal D_{\mathrm{calib}}$（来源、规模与序列长度见第~\ref{sec:ch3-deployment}~节），$K^{\mathrm{cal}}$ 与 $V^{\mathrm{cal}}$ 分别为 $\mathcal D_{\mathrm{calib}}$ 上抽取的 Key 与 Value 张量元素集合，定义
 \begin{equation}
 \mu(\theta)
 =
@@ -169,38 +160,37 @@ R_{\mathrm{path}}(\theta),
 d_{\mathrm{KL}}^{(l,h,t)}(\theta),
 \end{equation}
 \begin{equation}
+\label{eq:ch3-q95}
 q_{0.95}(\theta)
 =
 \operatorname{P95}_{(x,l,h,t)\in\mathcal D_{\mathrm{calib}}}
 d_{\mathrm{KL}}^{(l,h,t)}(\theta),
 \end{equation}
 \begin{equation}
-c_K(\theta)=\mathrm{clip\mbox{-}rate}_K(\theta), \qquad
-c_V(\theta)=\mathrm{clip\mbox{-}rate}_V(\theta).
+c_K(\theta) = \frac{|\{x\in K^{\mathrm{cal}}: |x| > q_{\max}^{\mathrm{int}}(\theta)\}|}{|K^{\mathrm{cal}}|}, \qquad
+c_V(\theta) = \frac{|\{x\in V^{\mathrm{cal}}: |x| > q_{\max}^{\mathrm{int}}(\theta)\}|}{|V^{\mathrm{cal}}|}.
 \end{equation}
-这里 $\mu(\theta)$ 只用于平均偏移读数，$q_{0.95}(\theta)$ 用于尾部案例排序，$c_K(\theta)$ 与 $c_V(\theta)$ 用于过滤靠过度裁剪换取低 KL 的候选。可行域定义为
+其中 $\mu(\theta)$ 沿用第~\ref{subsec:ch3-kl-target}~节的均值代理逐候选化，$q_{0.95}(\theta)$ 是同一逐位置 KL 的 95\% 分位数，$c_K(\theta), c_V(\theta)$ 是量化后归一化张量绝对值越过整数上界 $q_{\max}^{\mathrm{int}}(\theta)$（\texttt{INT8} 取 127、\texttt{INT4} 取 7）的元素比例，用于过滤靠过度裁剪换取低 KL 的候选。可行域定义为
 \begin{equation}
 \Theta_{\mathrm{feasible}}
 =
 \{\theta \in \Theta_{\mathrm{path}}: c_K(\theta)\le \tau_K,\; c_V(\theta)\le \tau_V\},
 \end{equation}
-若 $\Theta_{\mathrm{feasible}}\neq\emptyset$，选择规则为
+本文取 $\tau_K = \tau_V = 0.01$。若 $\Theta_{\mathrm{feasible}}\neq\emptyset$，选择规则为
 \begin{equation}
 \theta^\star
 =
 \arg\min_{\theta \in \Theta_{\mathrm{feasible}}}
 q_{0.95}(\theta).
 \end{equation}
-\noindent\textbf{回退规则。} 若所有候选均违反裁剪率约束，则不再报告一个“可行最优”候选，而是按三项键做字典序排序：
-\begin{enumerate}[label=(\arabic*),leftmargin=2.4em,itemsep=1pt,topsep=2pt]
-  \item 先最小化总裁剪负担 $c_K(\theta)+c_V(\theta)$；
-  \item 若总裁剪负担相同，再比较尾部统计 $q_{0.95}(\theta)$；
-  \item 若尾部统计仍相同，最后比较平均偏移 $\mu(\theta)$。
-\end{enumerate}
-排序第一的候选记为 $\theta^\star$。产物中同时记录回退标志与触发原因。该规则只定义离线选择失败时的保守排序，不把回退候选解释为已经满足裁剪约束的正式可行解。
+最终以尾部统计为主序，$\mu$ 不参与主选 argmin，仅作为下文回退场景下的次级排序键。
 
-\noindent\textbf{\texttt{RoleAlign} 接口承接。} \texttt{INT4-RoleAlign} 沿用上述离线流程，但不把 $(p_K,p_V)$ 压成单一 attention-KL 分数。K-path 以 $p_K$ 为候选参数，在 per-channel Key 非对称格式上使用 attention-distribution KL 与尾部统计完成选择；V-path 以 $p_V$ 为候选参数，在 per-token Value 非对称格式上使用独立的输出扰动代理。本节结束时得到两类产物：路径特定校准字段，以及后续第 \ref{sec:ch3-allocator} 节会读取的共享行为统计。逐头温度校正等附加组件只作为补充诊断保留在附录中，主线方法默认不启用。
+若所有候选均违反裁剪率约束，回退规则按字典序选取：先最小化总裁剪负担 $c_K(\theta)+c_V(\theta)$；若总裁剪负担相同，再比较尾部统计 $q_{0.95}(\theta)$；若尾部统计仍相同，最后比较平均偏移 $\mu(\theta)$。排序第一的候选记为 $\theta^\star$，并在产物字段中标记触发回退及其原因。
 
+\paragraph{\texttt{INT4-RoleAlign} 路径承接}
+\texttt{INT4-RoleAlign} 沿用上述四步流程，但不把 $(p_K, p_V)$ 压成单一 attention-KL 分数。K-path 以 $p_K$（per-channel Key 非对称量化的百分位裁剪参数，详见第~\ref{sec:ch3-paths}~节）为候选参数，使用 attention-distribution KL 与尾部统计完成选择，与对称路径共享相同的可行域约束 $\Theta_{\mathrm{feasible}}$；V-path 以 $p_V$（per-token Value 非对称量化的百分位裁剪参数）为候选参数，使用独立的输出扰动代理 $R_V(\theta)$，其具体形式见第~\ref{sec:ch3-paths}~节。
+
+产物字段分为两类：路径特定校准字段供在线缓存写入直接读取，逐层敏感度统计供第~\ref{sec:ch3-allocator}~节的预算分配模块读取。逐头温度校正作为补充诊断收入附录，不进入主线流程。
 \section{跨位宽量化路径的实例化设计}
 \label{sec:ch3-paths}
 

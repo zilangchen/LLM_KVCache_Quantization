@@ -1350,3 +1350,137 @@ MSE 工作在张量重建空间，仅比较 $K$ 或 $V$ 的逐元素差异；而
 数值上对 $p_{\mathrm{ref}}$ 与 $p_\theta$ 均在 $[\varepsilon, 1]$ 上做 clamp 截断（取 $\varepsilon=10^{-6}$）以避免极端尾部概率引起的不稳定。KL 在不同模型规模与 bit-width 下的收益强弱见第~\ref{chap:experiments}~章。
 ```
 
+
+
+## §3.4.2 参数搜索空间与稳健选择准则 — 审改循环
+
+**目标行**: ch3_method.tex line 136-202 (v0)
+
+### Round 1 综合（v0 审）
+
+加权综合: **6.18 / 10** — 🔴 不通过
+
+| Agent | 分数 | Verdict | 关键问题 |
+|-------|------|---------|---------|
+| D1 顶会 | 6.8 | 🟡 | P0: $R_\mathrm{path}$ 未定义 / clip-rate 未定义 / $\tau$ 阈值缺失 |
+| D2 数学 | 5.8 | 🟡 | P1: clip-rate 公式 / V-path R 公式 / K-path 尾部统计公式 |
+| D3 复现 | 6.2 | 🟡 | P1 阻断: clip-rate 计算 / $\tau=0.01$ / $\mathcal D_\mathrm{calib}$ forward ref |
+| D4 中文 | 5.8 | 🟡 | §19 元叙述 4 处 / §17 防御负向 2 处 / enumerate 双层 |
+| D5 Skeptical | 6.2 | 🟡 | **HIGH: clip-rate 循环定义** + **HIGH: §3.4.1 mean vs §3.4.2 P95 关系矛盾** |
+| D6 博士生 | 6.4 | 🟡 | P1: clip-rate 缺定义式 / §3.4.1 与 §3.4.2 接口断层 |
+
+### Round 1 必改清单
+
+**P0 — 多 agent 一致 (5 agents):**
+- **P0-1 clip-rate 操作公式定义** (D1, D2, D3, D5, D6) — 必须给 $c_K = |\{|x|>q_{\max}^{int}\}|/N$
+- **P0-2 §3.4.1 mean vs §3.4.2 P95 关系显式衔接** (D5 HIGH, D6 P1) — "$\mu$ 沿用 §3.4.1 但 P95 为主序"
+- **P0-3 元叙述清理** (D1, D4: L139, L145, L202; D6) — 多处 §19/§17
+
+**P1 — 必改:**
+- **P1-4 $\tau_K=\tau_V=0.01$ 数值** (D1, D2, D3)
+- **P1-5 校准数据集 forward ref to §3.7** (D3) — WikiText-2, 128×512
+- **P1-6 $p_K, p_V$ 提前 forward ref to §3.5.3** (D3, D5, D6)
+- **P1-7 回退规则末句 + L202 "默认不启用" 防御负向删除** (D4, D5)
+- **P1-8 enumerate (i)(ii)(iii) → 内嵌** (D4)
+- **P1-9 \noindent\textbf{} → \paragraph{}** (D1)
+- **P1-10 $\Theta_\mathrm{path}$ 离散性声明** (D2)
+- **P1-11 "对称路径可直接以 KL 组织风险" hedge** (D5)
+
+### v1 候选稿（应用 P0/P1 修订）
+
+```latex
+\subsection{参数搜索空间与稳健选择准则}
+\label{subsec:ch3-two-stage}
+
+§\ref{subsec:ch3-kl-target}~节给出均值代理 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 后，对一条具体路径还需要确定有限离散候选网格 $\Theta_{\mathrm{path}}$、该路径使用的行为代理 $R_{\mathrm{path}}$，以及写入在线推理系统的产物字段。图~\ref{fig:ch3-calibration-workflow} 给出参考行为提取、候选搜索、稳健选择与产物冻结四步离线流程，表~\ref{tab:ch3-calibration-interfaces} 列出 \texttt{INT8}、对称 \texttt{INT4} 与 \texttt{INT4-RoleAlign} 三条路径在这四步上各自的接口实例化。
+
+\input{figures/fig_ch3_calibration_workflow}
+
+\input{tables/table_ch3_calibration_interfaces}
+
+给定候选网格 $\Theta_\mathrm{path}$ 后，路径参数的离线选择写为
+\begin{equation}
+\theta_{\mathrm{path}}^\star
+=
+\arg\min_{\theta \in \Theta_{\mathrm{path}}}
+R_{\mathrm{path}}(\theta),
+\end{equation}
+其中 $R_{\mathrm{path}}(\theta)$ 是该路径上的稳健风险统计量。对称路径以 attention-distribution KL 的尾部统计组织 $R_{\mathrm{path}}$；角色感知低比特路径在同一选择纪律下，把 K-path 与 V-path 的代理分开定义。
+
+对称路径（包括 \texttt{INT8} 基准与对称 \texttt{INT4} 试探路径）使用同一组本地读数。设校准样本集合为 $\mathcal D_{\mathrm{calib}}$（来源、规模与序列长度见第~\ref{sec:ch3-deployment}~节），定义
+\begin{equation}
+\mu(\theta)
+=
+\operatorname{Mean}_{(x,l,h,t)\in\mathcal D_{\mathrm{calib}}}
+d_{\mathrm{KL}}^{(l,h,t)}(\theta),
+\end{equation}
+\begin{equation}
+q_{0.95}(\theta)
+=
+\operatorname{P95}_{(x,l,h,t)\in\mathcal D_{\mathrm{calib}}}
+d_{\mathrm{KL}}^{(l,h,t)}(\theta),
+\end{equation}
+\begin{equation}
+c_K(\theta) = \frac{|\{x\in K^{\mathrm{cal}}: |x| > q_{\max}^{\mathrm{int}}(\theta)\}|}{|K^{\mathrm{cal}}|}, \qquad
+c_V(\theta) = \frac{|\{x\in V^{\mathrm{cal}}: |x| > q_{\max}^{\mathrm{int}}(\theta)\}|}{|V^{\mathrm{cal}}|}.
+\end{equation}
+其中 $\mu(\theta)$ 沿用第~\ref{subsec:ch3-kl-target}~节的均值代理逐候选化作为辅助读数；$q_{0.95}(\theta)$ 是同一逐位置 KL 的 95\% 分位数，用于尾部案例排序；$c_K(\theta), c_V(\theta)$ 是量化后归一化张量绝对值越过整数上界 $q_{\max}^{\mathrm{int}}(\theta)$（\texttt{INT8} 取 127、\texttt{INT4} 取 7）的元素比例，用于过滤靠过度裁剪换取低 KL 的候选。可行域定义为
+\begin{equation}
+\Theta_{\mathrm{feasible}}
+=
+\{\theta \in \Theta_{\mathrm{path}}: c_K(\theta)\le \tau_K,\; c_V(\theta)\le \tau_V\},
+\end{equation}
+本文取 $\tau_K = \tau_V = 0.01$。若 $\Theta_{\mathrm{feasible}}\neq\emptyset$，选择规则为
+\begin{equation}
+\theta^\star
+=
+\arg\min_{\theta \in \Theta_{\mathrm{feasible}}}
+q_{0.95}(\theta),
+\end{equation}
+最终以尾部统计为主序，均值 $\mu$ 仅作辅助读数与回退场景下的次级排序键。
+
+若所有候选均违反裁剪率约束，回退规则按字典序排序：
+\begin{enumerate}[label=(\arabic*),leftmargin=2.4em,itemsep=1pt,topsep=2pt]
+  \item 先最小化总裁剪负担 $c_K(\theta)+c_V(\theta)$；
+  \item 若 $c_K+c_V$ 相同，再比较尾部统计 $q_{0.95}(\theta)$；
+  \item 若尾部统计仍相同，最后比较平均偏移 $\mu(\theta)$。
+\end{enumerate}
+排序第一的候选记为 $\theta^\star$，并在产物字段中标记触发回退及其原因。
+
+\paragraph{\texttt{INT4-RoleAlign} 路径承接}
+\texttt{INT4-RoleAlign} 沿用上述四步流程，但不把 $(p_K, p_V)$ 压成单一 attention-KL 分数。K-path 以 $p_K$（per-channel Key 非对称量化的百分位裁剪参数，详见第~\ref{sec:ch3-paths}~节）为候选参数，使用 attention-distribution KL 与尾部统计完成选择；V-path 以 $p_V$（per-token Value 非对称量化的百分位裁剪参数）为候选参数，使用独立的输出扰动代理。本节产出两类产物：路径特定校准字段供在线缓存写入直接读取，逐层敏感度统计供第~\ref{sec:ch3-allocator}~节的预算分配模块读取。逐头温度校正作为补充诊断收入附录，不进入主线流程。
+```
+
+
+### Round 2 综合（v1 审）
+
+加权综合: **7.86 / 10** — 接近阈值（D1 8.6 / D4 8.1 通过；D2 7.4 / D3 7.6 / D5 7.6 / D6 7.6 条件通过）
+
+| Agent | 分数 | Verdict | 关键残留 |
+|-------|------|---------|---------|
+| D1 顶会 | 8.6 | ✅ | P1-A enumerate 未内嵌 / P1-B V-path R 公式缺 |
+| D2 数学 | 7.4 | 🟡 | GAP-1 $K^\mathrm{cal}/V^\mathrm{cal}$ 未定义 / GAP-2 $\mu$ vs $\Delta^{cal}$ 关系 / GAP-3 V-path R |
+| D3 复现 | 7.6 | 🟡 | P1-A 回退 ties 多级 tiebreaker / P1-B $p_V$ 搜索域悬空 |
+| D4 中文 | 8.1 | ✅ | P1-A enumerate 仍独立列表 / P1-B "本节产出"轻微元叙述 |
+| D5 Skeptical | 7.6 | 🟢 | MED $\mu$ 辅助读数用途 / MED RoleAlign 是否沿用 $\Theta_\mathrm{feasible}$ |
+| D6 博士生 | 7.6 | 🟡 | P1-1 $R_\mathrm{path}$ 符号断层 / P1-2 $\mu$ 双重身份 / P1-3 RoleAlign 段密度 |
+
+### Round 2 整合修订（v1 → v2，落地版）
+
+整合 6 agent 一致 P1 必改 (mechanical 整合)：
+
+1. **D1 P1-B + D2 GAP-3 + D6 P1-3**: V-path $R_V(\theta)$ 给符号 + forward ref to §3.5.3
+2. **D1 P1-A + D4 P1-A**: enumerate (1)/(2)/(3) → 内嵌单句 "先...再...最后..."
+3. **D5 MED + D6 P1-2**: $\mu$ 双重身份澄清: "$\mu$ 不参与主选 argmin，仅作为回退次级排序键"
+4. **D2 GAP-1 局部 + D6 P1-1**: $R_\mathrm{path}(\theta) = q_{0.95}(\theta)$ 显式绑定 + \label{eq:ch3-q95}
+5. **D2 GAP-1 + D6 P3**: $K^\mathrm{cal}, V^\mathrm{cal}$ 与 $\mathcal D_\mathrm{calib}$ 显式绑定
+6. **D4 P1-B**: "本节产出两类产物" → "产物字段分为两类"
+7. **D6 P1-3**: RoleAlign 承接段拆段（K/V 路径 + 产物 + 附录处置）
+8. **D5 MED RoleAlign**: K-path 与对称路径共享 $\Theta_\mathrm{feasible}$ 显式说明
+
+不采纳:
+- D3 P1-A 多级 tiebreaker (v_rel_l2_mean / log2(group_size) / clip_percentile) — 实现细节，属 §3.7 范围
+- D3 P1-B $p_V$ 搜索域 — 推迟到 §3.5.3 落地（避免在 §3.4.2 暴露具体实例值）
+
+### v2 落地稿见 git commit。
+

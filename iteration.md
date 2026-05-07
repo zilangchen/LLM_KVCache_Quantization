@@ -36,6 +36,29 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 07:50 | Thesis Ch3 §3.4.2 2-Round 6-Agent Audit + v2 落地
+- Goal: 沿用工作流对 §3.4.2 参数搜索空间与稳健选择准则节执行审改, v0 (Round 1 6.18 🔴) → v1 (Round 2 7.86 接近 PASS) → v2 整合落地。
+- Scope:
+  - 12 个 agent 报告（6 reviewer × 2 rounds），与 §3.3/§3.4.1 同节奏
+  - **关键 P0 修复 (v0→v1)**: clip-rate 操作公式 ($c_K = |\{|x|>q_{\max}^{int}\}|/|K^{cal}|$, INT8 取 127 / INT4 取 7) / §3.4.1 mean vs §3.4.2 P95 关系显式衔接 / 元叙述清理 (L139, L145, L202)
+  - **关键 P1 整合 (v1→v2)**: V-path $R_V(\theta)$ 给符号 + forward ref / enumerate (1)/(2)/(3) 内嵌单句 / $\mu$ 双重身份澄清 ("不参与主选 argmin，仅作为回退次级排序键") / $R_\mathrm{path}(\theta) = q_{0.95}(\theta)$ 显式绑定 / $K^\mathrm{cal}, V^\mathrm{cal}$ 与 $\mathcal D_\mathrm{calib}$ 绑定
+  - **D3 重要修复**: $\tau_K=\tau_V=0.01$ 数值显式 / $\mathcal D_\mathrm{calib}$ forward ref to §3.7
+  - **同时给 §3.4.1 加 \label{subsec:ch3-kl-target}**: 供 §3.4.2 forward ref
+- Changed files:
+  - `thesis/chapters/ch3_method.tex` line 95 (§3.4.1 加 label) + line 137-204 (§3.4.2 v0→v2 全文重写, 删 68 行写 57 行；net -11 行)
+  - `docs/ch3_writing_quality_audit_20260508.md`（追加 Round 1 综合 + v1 候选 + Round 2 综合 + v2 落地稿）
+- Commands:
+  - `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex` × 2
+  - `grep -n "label{chap:experiments\|label{subsec:ch3-kl-target}" thesis/`
+- Outputs:
+  - 96 pages PDF, 0 errors, 0 undefined references, 0 multiply defined labels
+  - Round 2 各 reviewer: D1 8.6 ✅ / D2 7.4 🟡 / D3 7.6 🟡 / D4 8.1 ✅ / D5 7.6 🟢 / D6 7.6 🟡
+- Validation: 7 forward ref（subsec:ch3-kl-target / sec:ch3-deployment / sec:ch3-paths / sec:ch3-allocator / fig:ch3-calibration-workflow / tab:ch3-calibration-interfaces / eq:ch3-q95）全部解析；clip-rate / 选择规则 / 回退规则三阶段 7 公式数学链完整
+- Risks / follow-ups:
+  - D3 提示代码层面回退 ties 还有 v_rel_l2_mean / log2(group_size) / clip_percentile 三级 tiebreaker，论文未写（属 §3.7 实现细节范围）
+  - $p_V$ 搜索域 $\{95, 97, 99, 99.5, 99.9, 100.0\}$ 推到 §3.5.3 落地
+  - 后续 11 个 §3.x subsection 待审改
+
 ### 2026-05-08 07:30 | Thesis Ch3 §3.4.1 2-Round 6-Agent Audit + v2 落地
 - Goal: 沿用 §3.3 同流程对 §3.4.1 注意力分布 KL 散度目标节执行审改，v0 (Round 1 6.23 🔴) → v1 (Round 2 8.41 ✅) → v2 整合落地。
 - Scope:
