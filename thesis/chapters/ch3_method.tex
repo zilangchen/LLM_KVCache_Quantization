@@ -45,17 +45,17 @@ KV Cache 量化的目标即
 \section{动机诊断：K/V 敏感性不对称及其设计启示}
 \label{sec:ch3-motivation-kv}
 
-Key 与 Value 误差虽同时进入注意力输出，但二者在低比特场景下未必同等脆弱：由式~\eqref{eq:ch3-error-decomp}，Key 项需经 softmax 非线性放大后再加权进入输出，Value 项则以 $\hat a_i(\hat v_i-v_i)$ 形式线性进入聚合。这一差异预示二者在低比特预算下的脆弱程度不对称，本节据此诊断哪一侧最先触发任务级失稳，为后续低比特路径的格式选择提供依据。
+由式~\eqref{eq:ch3-error-decomp}，Key 项需经 softmax 非线性放大后再加权进入输出，Value 项则以 $\hat a_i(\hat v_i-v_i)$ 形式线性进入聚合，两条路径在低比特预算下的脆弱程度可能不对称。后文以 K/V 单侧诊断与对称低比特锚点验证这种不对称，为低比特路径的格式选择提供依据。
 
-本节使用两套配置记号：\texttt{K?V?} 表示位宽组合（如 \texttt{K4V8} 即 4-bit Key 与 8-bit Value），\texttt{K@bit+V@bit} 表示以 FP16 隔离非诊断侧的单侧诊断；\texttt{MixedKV} $\equiv$ \texttt{K8V4}。图~\ref{fig:ch3-kv-asymmetry} 从第~\ref{sec:exp-kv-sensitivity}~节抽取压缩诊断视图：\texttt{FP16} 为未量化参考，\texttt{K8V8} 为高精度量化参考，\texttt{K8V4}/\texttt{K4V8} 构成同平均位宽预算下的角色对照，\texttt{K4V4} 提供对称低比特锚点。完整跨模型读数与统计口径见第~\ref{sec:exp-kv-sensitivity}~节。
-
-单侧 PPL 诊断在 Qwen2.5-1.5B 上显示：单独压低 Key 精度使 PPL 相对 FP16 基线放大约两个数量级，而单独压低 Value 精度仅引起基线邻域内的微小变化。32K 任务诊断中，\texttt{K4V8} 使 Qwen2.5-1.5B 与 Qwen2.5-7B 的 RULER 通过率完全归零，而 \texttt{K8V4}（即 \texttt{MixedKV}）未出现归零式失稳。两类诊断同向指出：在 Qwen 系列当前低比特设定下，最先触发任务级失稳的是 Key 精度下降，而非 Value 的对称压缩；具体读数与统计协议见表~\ref{tab:ch4-kv-ppl}、表~\ref{tab:ch4-kv-multitask} 与第~\ref{sec:exp-kv-sensitivity}~节。
+本节使用两套配置记号：\texttt{K?V?} 表示位宽组合（如 \texttt{K4V8} 即 4-bit Key 与 8-bit Value），\texttt{K@bit+V@bit} 表示以 FP16 隔离非诊断侧的单侧诊断（仅压低标注侧位宽，另一侧保留 FP16）；\texttt{MixedKV} $\equiv$ \texttt{K8V4}。图~\ref{fig:ch3-kv-asymmetry} 呈现压缩诊断视图：\texttt{FP16} 为未量化参考，\texttt{K8V8} 为高精度量化参考，\texttt{K8V4}/\texttt{K4V8} 构成同平均位宽预算下的角色对照，\texttt{K4V4} 提供对称低比特锚点。
 
 \input{figures/fig_ch3_kv_diag_needle}
 
-该不对称在不同模型族上强度不同：Qwen 系列（$H_{kv}=2$ 或 $4$）在 \texttt{K4V8} 与 \texttt{K4V4} 下出现完全的检索归零，而具有更高 $H_{kv}$ 或不同头共享结构的模型（如 LLaMA-3.1-8B，$H_{kv}=8$）失稳幅度显著较弱，详见第~\ref{sec:exp-kv-sensitivity}~节。本文因此把"Key 侧低比特退化"作为低比特路径设计的核心约束，但其严重性与触发位宽的具体边界仍受模型规模、训练数据与 GQA 配置共同调制；解耦上述因素的独立贡献留作后续工作。
+对 Qwen2.5-1.5B 的单侧 PPL 诊断表明：\texttt{K@INT4+V@FP16} 使 PPL 相对 FP16 基线放大约两个数量级（原始读数与统计协议见表~\ref{tab:ch4-kv-ppl}），而 \texttt{K@FP16+V@INT4} 仅引起基线邻域内的微小变化。32K 任务诊断中，\texttt{K4V8} 使 Qwen2.5-1.5B 与 Qwen2.5-7B 的 RULER 通过率完全归零，\texttt{K8V4} 未出现归零式失稳。同一量化配置下两类指标均显示：在 Qwen 系列当前低比特设定下，最先触发任务级失稳的是 Key 精度下降，而非 Value 的对称压缩；这一诊断结果与首段基于式~\eqref{eq:ch3-error-decomp} 的机制预测一致。
 
-据此，本文将低比特路径的设计目标从"对称压低 K 与 V"调整为"优先保护 Key 的表示能力，避免 4-bit 率先落在 Key 上"。这一调整的核心论据来自单侧 PPL 诊断的隔离证据（K@INT4 单独触发数量级 PPL 退化）；\texttt{K4V8}/\texttt{K4V4} 的位宽对照作为剂量-响应（dose-response）验证与之同向，但因二者同时压低 K 与 V，单独不构成 K 主导的隔离推断。继续沿用对 K 与 V 同等处理的对称压缩在结构上缺乏依据，下文将这一设计动机实例化为非对称量化路径。
+该不对称在不同模型族上强度不同：Qwen 系列（$H_{kv}=2$ 或 $4$）在 \texttt{K4V8} 与 \texttt{K4V4} 下出现完全的检索归零，而具有更高 $H_{kv}$ 或不同头共享结构的模型（如 LLaMA-3.1-8B，$H_{kv}=8$）失稳幅度较小，单 KV 头量化误差被其对应的 $H_q/H_{kv}$ 个查询头共享，$H_{kv}$ 较大时每组 KV 头影响的查询头数更少（详见表~\ref{tab:ch4-kv-multitask}）。其严重性与触发位宽的具体边界仍受模型规模、训练数据与 GQA 配置共同调制；$H_{kv}$ 在此充当组间差异的代理变量。
+
+因此 Key 侧低比特退化被确立为低比特路径设计的核心约束。这一结论的核心论据是单侧 PPL 诊断的隔离证据（\texttt{K@INT4+V@FP16} 单独触发数量级 PPL 退化）；\texttt{K4V8}/\texttt{K4V4} 的位宽对照作为剂量-响应（dose-response）验证与之同向，但因二者同时压低 K 与 V，单独不构成 K 主导的隔离推断。完整跨模型读数与统计协议（Bootstrap 95\% CI、sign-flip 置换检验与 BH-FDR 多重比较校正）见表~\ref{tab:ch4-kv-ppl}、表~\ref{tab:ch4-kv-multitask} 与第~\ref{sec:exp-kv-sensitivity}~节。
 
 \section{行为引导量化框架总览}
 \label{sec:ch3-framework}

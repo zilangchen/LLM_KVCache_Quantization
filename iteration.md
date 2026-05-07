@@ -36,6 +36,34 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 07:00 | Thesis Ch3 §3.2 4-Round 6-Agent Audit + v3 落地
+- Goal: 沿用 §3.1 同流程对 §3.2 K/V 敏感性不对称动机诊断节执行 6-agent 多视角审查与迭代重写，v0 (commit 90cb485) → v3 全 PASS 落地。
+- Scope:
+  - 6 视角并行审查：D1 顶会 / D2 数学 / D3 复现 / D4 中文（codex prefs ground truth）/ D5 skeptical / D6 博士生
+  - 4 轮迭代：v0 (commit 90cb485) → v1 → v2 → v3 (落地)
+  - 24 个 agent 报告（6 reviewer × 4 rounds，含 D4/D6 round 3 因 prompt 行号定位错误 re-spawn 一次）
+  - 关键 critical bug 抓取：D2 round 3 抓出 v2 "$H_{kv}$ 个查询头均摊" 数学错误（应为 $H_q/H_{kv}$ 个查询头共享），D6 round 3 独立确认
+- Changed files:
+  - `thesis/chapters/ch3_method.tex` line 45-58（§3.2 v0→v3 完整重写，net +6 -6 = 0；6 段重写 + 图 \input 位置移到段 2 后）
+  - `docs/ch3_writing_quality_audit_20260508.md`（追加 §3.2 v1/v2/v3 候选稿 + 4 轮 D-phase 对照 + 6-agent 总结）
+- Commands:
+  - `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`（pass 1 + pass 2）
+  - `git diff --check thesis/chapters/ch3_method.tex`
+- Outputs:
+  - v3 加权平均 8.90（v0=6.0 → v1=7.43 → v2=8.38 → v3=8.90）
+  - 6/6 PASS：D1=8.6 / D2=8.8 / D3=9.0 / D4=9.2 / D5=8.6 / D6=9.2
+  - xelatex 编译 96 页，零 LaTeX Error，零 undefined references
+  - D5/D6 双双明确"何时停止"：「v3 封版，可投稿；继续迭代边际收益低于风险」
+- Validation:
+  - .tex 落地后 xelatex 双轮编译通过 96 页
+  - `git diff --check` OK（无 whitespace 错误）
+  - codex prefs 12 项 (A-L) v3 全合规
+- Risks / follow-ups:
+  - D5 R1: 桥接句"机制预测"方向性依赖读者从公式推导 K 更脆弱（归档，可在终稿审读时补脚注）
+  - D5 R2: GQA 单因素归因 $H_{kv}$（$H_q$ 也参与调制，归档）
+  - D1/D2/D4/D6 各 1 处 P3 minor 归档（不阻塞）
+  - 下一节 §3.3 行为引导量化框架总览审查待启动（v0 line 60-94，状态 ⚪ 待审）
+
 ### 2026-05-08 06:35 | Thesis Ch3 §3.1 5-Round 6-Agent Audit + v4 落地
 - Goal: 严格按用户新工作流（A→B→C→D→E→F：原稿审 → 综合 → 候选稿 → 多 agent 审 → 迭代重修 → 落地）完成 §3.1 注意力近似误差代数分解节的写作质量审查与重写，达到 EMNLP/ACL/NeurIPS senior reviewer 通过水准。
 - Scope:
