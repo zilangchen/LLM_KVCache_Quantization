@@ -36,6 +36,26 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 07:30 | Thesis Ch3 §3.4.1 2-Round 6-Agent Audit + v2 落地
+- Goal: 沿用 §3.3 同流程对 §3.4.1 注意力分布 KL 散度目标节执行审改，v0 (Round 1 6.23 🔴) → v1 (Round 2 8.41 ✅) → v2 整合落地。
+- Scope:
+  - 12 个 agent 报告（6 reviewer × 2 rounds），与 §3.3 相同收敛速度
+  - **关键修复**: P0 聚合公式缺失 → eq.(4) 显式 $\Delta^{cal}(\theta) = \frac{1}{|T|}\sum d_{KL}^{(l,h,t)}$；§3.3 v2 引入的 $\Delta^{cal}$ 接口 → §3.4.1 显式实例化为 KL 均值
+  - **v1 → v2 整合 D1/D3/D4/D5/D6 一致 P1**: $\tilde K_\theta$ 显式定义为 dequant∘quant / 删除"截断可忽略"无背书 claim / line 1226 "本节把...展开为" 元叙述消除 / "见第四章实验" → \ref{chap:experiments} / ε clamp 作用对象 ($p_\mathrm{ref},p_\theta$ 均) / mass-covering "匹配...需求" → "对应...设计需求" hedge 降级
+  - **D3 重要修复**: $q^{(l,h,t)}$ 公式标注经 input_layernorm + RoPE（CAL-019/020 教训进入论文文本）
+- Changed files:
+  - `thesis/chapters/ch3_method.tex` line 87-134（§3.4 父节+§3.4.1 v0→v2 全文重写，删 51 行写 48 行；net -3 行）
+  - `docs/ch3_writing_quality_audit_20260508.md`（追加 §3.4.1 Round 1 综合 + v1 候选 + Round 2 综合 + v2 落地稿）
+- Commands:
+  - `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex` × 2
+  - `grep -n "label{chap:experiments\|label{subsec:ch3-two-stage\|label{eq:ch3-error-decomp}" thesis/` 验证 forward ref label
+- Outputs:
+  - 96 pages PDF, 0 errors, 0 undefined references, 0 multiply defined labels
+  - Round 2 各 reviewer: D1 8.3 ✅ / D2 9.0 ✅ / D3 8.5 ✅ / D4 8.2 ✅ / D5 7.8 🟡(条件) / D6 8.6 ✅
+- Validation: 4 forward ref（sec:ch3-problem / sec:ch3-framework / sec:ch3-paths / chap:experiments / subsec:ch3-two-stage / eq:ch3-error-decomp）全部解析；KL 数学链 $p_\mathrm{ref}\to p_\theta\to d_{KL}\to\Delta^{cal}$ 完整
+- Risks / follow-ups:
+  - 后续 12 个 §3.x subsection 待审改
+
 ### 2026-05-08 07:16 | Thesis Ch3 §3.3 2-Round 6-Agent Audit + v2 落地
 - Goal: 沿用 §3.1/§3.2 同流程对 §3.3 行为引导量化框架总览节执行 6-agent 多视角审查与迭代，v0 → v2 直接落地（一轮迭代收敛）。
 - Scope:

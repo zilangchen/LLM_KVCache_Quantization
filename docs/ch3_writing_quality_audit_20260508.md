@@ -1178,3 +1178,175 @@ b^\star = \mathcal{A}(\mathcal{S};\bar b),\quad \tfrac{1}{L}\sum_{l=1}^{L} b^\st
 \input{figures/fig_ch3_framework_shared_profile}
 ```
 
+
+
+## §3.4.1 注意力分布 KL 散度目标 — 审改循环
+
+**目标行**: ch3_method.tex line 90-137 (含 §3.4 父节开头段 + §3.4.1 主体, v0)
+
+### Round 1 综合（v0 审）
+
+加权综合: **6.23 / 10** — 🔴 不通过
+
+| Agent | 分数 | Verdict | 关键问题 |
+|-------|------|---------|---------|
+| D1 顶会 | 6.2 | 🔴 | P0: 聚合公式缺失 / P0: $\Delta^{cal}$ 桥接 / P1: 反问句式 / P1: §4 边界暴露 |
+| D2 数学 | 6.2 | 🟡 | P1: $D_{KL}$ 输入域 / P1: 聚合公式 / P1: ε 操作精化 / P2: $q,K$ 维度 |
+| D3 复现 | 5.5 | 🟡 | P1: ε=1e-6 clamp / P1: q-RoPE/layernorm 标注 / P2: Value proxy forward ref |
+| D4 中文 | 5.8 | 🟡 | 8 处违规: 3 元叙述 (§19) + 3 防御负向 (§17) + 2 反问 (§28) |
+| D5 Skeptical | 7.2 | 🟡 | MED: line 133 KL claim / MED: $\Delta^{cal}$ 绑定 / MED: mass-covering 写成事实 |
+| D6 博士生 | 6.8 | 🟡 | M1: 聚合缺 / M2: 反问 / M3: 防御 / M4: $v$ 未定义 / M5: ε 位置 |
+
+### Round 1 必改清单（一致排序）
+
+**P0 — 多 agent 一致 (必改):**
+- **P0-1 聚合公式 $\Delta^{cal}(\theta) = \frac{1}{|T|}\sum d_{KL}^{(l,h,t)}$ 显式定义** (D1, D2, D6 一致)
+- **P0-2 与 §3.3 $\Delta^{cal}$ 桥接显式声明** (D1, D2, D5, D6 一致)
+- **P0-3 反问句式 line 125/135 改正向陈述** (D1, D4, D6)
+- **P0-4 防御负向 + 元叙述清理 line 90-92, 123, 137** (D1, D4, D6)
+
+**P1 — 必改:**
+- **P1-5 ε 实现细节精化** (D2, D3, D4): "$\varepsilon=10^{-6}$ 的 clamp"
+- **P1-6 q/K 经 input_layernorm + RoPE 标注** (D3): CAL-019/020 教训
+- **P1-7 $D_{KL}$ 输入域 + $q,K$ 维度** (D2): $p\in\Delta^{N-1}$, $q\in\mathbb{R}^{d_k}$, $K\in\mathbb{R}^{N\times d_k}$
+- **P1-8 Value proxy forward ref to §3.5** (D3, D5): \ref{sec:ch3-paths}
+- **P1-9 $\hat a_i \leftrightarrow p_\theta$ 符号绑定** (D2, D6): 在 MSE 段加 $a_i\equiv p_{\mathrm{ref},i}$
+
+**P2:**
+- "属于第四章" 改 forward ref (D1)
+- $v_i, \hat v_i$ 定义引用 (D6)
+- mass-covering line 135 hedge (D5)
+
+### v1 候选稿（应用 P0/P1 修订）
+
+```latex
+\section{行为引导校准目标与参数搜索策略}
+\label{sec:ch3-calibration}
+
+第~\ref{sec:ch3-problem}~节把量化质量评判落到联合行为偏移 $\Delta_{\mathrm{beh}}$，但该量在样本上无显式可执行形式。本节把第~\ref{sec:ch3-framework}~节引入的代理 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 展开为校准层可计算的具体形式：用注意力分布侧 KL 给出 Key-sensitive 路径的离线读数，并在路径相关的候选参数家族上完成稳健选择。
+
+对称路径与角色感知低比特路径在候选参数家族与代理形式上不必相同，但都在离线样本上计算行为读数，在可行域约束下控制尾部坏案例，并把最终选择写入固定校准产物。
+
+\subsection{注意力分布 KL 散度目标}
+
+设第 $l$ 层、第 $h$ 个注意力头、时间步 $t$ 的 Query 与 Key 分别为 $q^{(l,h,t)}\in\mathbb{R}^{d_k}$ 与 $K^{(l,h,t)}\in\mathbb{R}^{N\times d_k}$，二者均在 \texttt{input\_layernorm} 与 RoPE 处理后取出，$N$ 为当前位置可见的上下文长度。FP16 参考路径下的注意力分布
+\begin{equation}
+p_{\mathrm{ref}}^{(l,h,t)}
+=
+\operatorname{softmax}\!\left(
+\frac{q^{(l,h,t)} K^{(l,h,t)\top}}{\sqrt{d_k}}
+\right)\in\Delta^{N-1}.
+\end{equation}
+对候选量化参数 $\theta$，记量化—反量化后的 Key 为 $\tilde K_{\theta}^{(l,h,t)}$，对应分布
+\begin{equation}
+p_{\theta}^{(l,h,t)}
+=
+\operatorname{softmax}\!\left(
+\frac{q^{(l,h,t)} \tilde K_{\theta}^{(l,h,t)\top}}{\sqrt{d_k}}
+\right).
+\end{equation}
+单位置分布偏移取前向 KL
+\begin{equation}
+d_{\mathrm{KL}}^{(l,h,t)}(\theta)
+=
+D_{\mathrm{KL}}\!\left(
+p_{\mathrm{ref}}^{(l,h,t)}
+\;\middle\|\;
+p_{\theta}^{(l,h,t)}
+\right),
+\end{equation}
+将第~\ref{sec:ch3-framework}~节引入的 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}(\theta)$ 实例化为校准样本集合 $T$ 上的均值
+\begin{equation}
+\Delta_{\mathrm{beh}}^{\mathrm{cal}}(\theta)
+=
+\frac{1}{|T|}\sum_{(l,h,t)\in T} d_{\mathrm{KL}}^{(l,h,t)}(\theta),
+\end{equation}
+作为离线参数搜索的优化目标，$|T|$ 是 $(l,h,t)$ 三元组数量。
+
+MSE 工作在张量重建空间，仅比较 $K$ 或 $V$ 的逐元素差异；而 Key 误差影响输出之前要先经 $qK^\top$、softmax 排序与概率质量分配，一个 MSE 较小的候选仍可能把关键 token 的注意力质量移走。式~\eqref{eq:ch3-error-decomp} 把误差分解为分布侧 $\sum_i(\hat a_i-a_i)v_i$ 与聚合侧 $\sum_i \hat a_i(\hat v_i-v_i)$ 两条路径，其中 $a_i\equiv p_{\mathrm{ref},i}^{(l,h,t)}$、$\hat a_i\equiv p_{\theta,i}^{(l,h,t)}$，$v_i$ 与 $\hat v_i$ 分别为参考与量化 Value。KL 直接约束 $(\hat a-a)$ 并经 $\hat a_i$ 在聚合侧传递，因此在 Key-sensitive 校准中比逐元素重建误差更贴近输出层面的注意力行为。
+
+前向 KL $D_{\mathrm{KL}}(p_{\mathrm{ref}}\|p_\theta)$ 对参考高概率位置在量化路径下被低估的情况惩罚更强，匹配长上下文检索“不漏关键 token”的需求；反向 KL 偏向量化分布自身的高概率区域，JS 散度更对称，二者作为补充诊断保留。Value 路径使用独立的输出扰动代理，详见第~\ref{sec:ch3-paths}~节。
+
+数值上对概率以小常数 $\varepsilon=10^{-6}$ 做 clamp 截断以避免极端尾部概率引起的不稳定，截断对 KL 取值的影响在校准产物的实际取值上可忽略；KL 在不同模型规模与 bit-width 下的收益强弱见第四章实验。
+```
+
+
+### Round 2 综合（v1 审）
+
+加权综合: **8.41 / 10** — ✅ PASS (阈值 8.0)
+
+| Agent | 分数 | Verdict | 关键残留 |
+|-------|------|---------|---------|
+| D1 顶会 | 8.3 | ✅ | P0: $\tilde K_\theta$ 语义 / P1: "可忽略" claim 无依据 |
+| D2 数学 | 9.0 | ✅ | P3: $p_\theta\in\Delta^{N-1}$ 对称标注（v0 4 P1 全修复）|
+| D3 复现 | 8.5 | ✅ | P1: ε clamp 作用对象不清（应同时对 ref/θ）|
+| D4 中文 | 8.2 | ✅ | M1: line 1226 "本节把...展开为" 元叙述 (§19) / M2: 末句叠加 |
+| D5 Skeptical | 7.8 | 🟡 | **MED**: 新增"截断可忽略"无背书 / mass-covering "匹配...需求"跳跃 |
+| D6 博士生 | 8.6 | ✅ | 必改: $\tilde K_\theta$ 定义 / 裸文字 "第四章" 缺 \ref |
+
+### Round 2 整合修订（v1 → v2，落地版）
+
+整合 D1/D3/D4/D5/D6 一致 P1 必改 (mechanical 整合，不再 spawn Round 3)：
+
+1. **D1 P0 + D6 必改-2**: $\tilde K_\theta$ 显式定义 "$= \mathrm{dequant}(\mathrm{quant}(K;\theta);\theta)$"
+2. **D6 必改-1**: "见第四章实验" → "见第~\ref{chap:experiments}~章"（实际 label, line 4）
+3. **D4 M1**: line 1226 "本节把...展开为" → 改为直接陈述
+4. **D5 MED + D1 P1**: 删除"截断对 KL 取值的影响...可忽略"无背书声明
+5. **D3 P1**: ε clamp 作用对象 → "对 $p_{\mathrm{ref}}$ 与 $p_\theta$ 均在 $[\varepsilon, 1]$ 上"
+6. **D5 LOW + D1 P2**: "匹配...需求" → "对应...的设计需求"
+7. **D2 P3**: $p_\theta$ 加 $\in\Delta^{N-1}$ 对称标注
+8. **D5 MED 一致性**: 加 forward ref to §3.4.2 "尾部稳健选择准则延至..."
+
+### v2 落地稿
+
+```latex
+\section{行为引导校准目标与参数搜索策略}
+\label{sec:ch3-calibration}
+
+第~\ref{sec:ch3-problem}~节把量化质量评判落到联合行为偏移 $\Delta_{\mathrm{beh}}$，但该量在样本上无显式可执行形式。代理 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 在 Key-sensitive 路径下取注意力分布侧 KL 散度作为离线参数搜索的可计算目标，并在路径相关的候选参数家族上完成稳健选择。
+
+对称路径与角色感知低比特路径在候选参数家族与代理形式上不必相同，但都在离线样本上计算行为读数，在可行域约束下控制尾部坏案例，并把最终选择写入固定校准产物。
+
+\subsection{注意力分布 KL 散度目标}
+
+设第 $l$ 层、第 $h$ 个注意力头、时间步 $t$ 的 Query 与 Key 分别为 $q^{(l,h,t)}\in\mathbb{R}^{d_k}$ 与 $K^{(l,h,t)}\in\mathbb{R}^{N\times d_k}$，二者均在 \texttt{input\_layernorm} 与 RoPE 处理后取出，$N$ 为当前位置可见的上下文长度。FP16 参考路径下的注意力分布
+\begin{equation}
+p_{\mathrm{ref}}^{(l,h,t)}
+=
+\operatorname{softmax}\!\left(
+\frac{q^{(l,h,t)} K^{(l,h,t)\top}}{\sqrt{d_k}}
+\right)\in\Delta^{N-1}.
+\end{equation}
+对候选量化参数 $\theta$，记量化—反量化映射 $\tilde K_{\theta}^{(l,h,t)} = \mathrm{dequant}(\mathrm{quant}(K^{(l,h,t)};\theta);\theta)$，对应分布
+\begin{equation}
+p_{\theta}^{(l,h,t)}
+=
+\operatorname{softmax}\!\left(
+\frac{q^{(l,h,t)} \tilde K_{\theta}^{(l,h,t)\top}}{\sqrt{d_k}}
+\right)\in\Delta^{N-1}.
+\end{equation}
+单位置分布偏移取前向 KL
+\begin{equation}
+d_{\mathrm{KL}}^{(l,h,t)}(\theta)
+=
+D_{\mathrm{KL}}\!\left(
+p_{\mathrm{ref}}^{(l,h,t)}
+\;\middle\|\;
+p_{\theta}^{(l,h,t)}
+\right),
+\end{equation}
+将第~\ref{sec:ch3-framework}~节引入的 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}(\theta)$ 实例化为校准样本集合 $T$ 上的均值
+\begin{equation}
+\Delta_{\mathrm{beh}}^{\mathrm{cal}}(\theta)
+=
+\frac{1}{|T|}\sum_{(l,h,t)\in T} d_{\mathrm{KL}}^{(l,h,t)}(\theta),
+\end{equation}
+作为离线参数搜索的优化目标，$|T|$ 是 $(l,h,t)$ 三元组数量。尾部稳健的选择准则与候选参数家族延至第~\ref{subsec:ch3-two-stage}~节给出。
+
+MSE 工作在张量重建空间，仅比较 $K$ 或 $V$ 的逐元素差异；而 Key 误差影响输出之前要先经 $qK^\top$、softmax 排序与概率质量分配，一个 MSE 较小的候选仍可能把关键 token 的注意力质量移走。式~\eqref{eq:ch3-error-decomp} 把误差分解为分布侧 $\sum_i(\hat a_i-a_i)v_i$ 与聚合侧 $\sum_i \hat a_i(\hat v_i-v_i)$ 两条路径，其中 $a_i\equiv p_{\mathrm{ref},i}^{(l,h,t)}$、$\hat a_i\equiv p_{\theta,i}^{(l,h,t)}$，$v_i$ 与 $\hat v_i$ 分别为参考与量化 Value。KL 直接约束 $(\hat a-a)$ 并经 $\hat a_i$ 在聚合侧传递，因此在分布侧误差路径上比逐元素重建误差更贴近输出层面的注意力行为。
+
+前向 KL $D_{\mathrm{KL}}(p_{\mathrm{ref}}\|p_\theta)$ 对参考高概率位置在量化路径下被低估的情况惩罚更强，对应长上下文检索“不漏关键 token”的设计需求；反向 KL 偏向量化分布自身的高概率区域，JS 散度更对称，二者作为补充诊断保留。Value 路径使用独立的输出扰动代理，详见第~\ref{sec:ch3-paths}~节。
+
+数值上对 $p_{\mathrm{ref}}$ 与 $p_\theta$ 均在 $[\varepsilon, 1]$ 上做 clamp 截断（取 $\varepsilon=10^{-6}$）以避免极端尾部概率引起的不稳定。KL 在不同模型规模与 bit-width 下的收益强弱见第~\ref{chap:experiments}~章。
+```
+

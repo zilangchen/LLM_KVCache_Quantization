@@ -87,54 +87,51 @@ b^\star = \mathcal{A}(\mathcal{S};\bar b),\quad \tfrac{1}{L}\sum_{l=1}^{L} b^\st
 \section{行为引导校准目标与参数搜索策略}
 \label{sec:ch3-calibration}
 
-第 \ref{sec:ch3-problem} 节给出了联合行为目标，但该目标不能直接作为离线搜索中的单一损失。本节把它转写为校准层可执行的代理：先定义注意力分布侧 KL，再说明它与 MSE、反向 KL 的取舍，最后给出参数搜索与选择纪律。
+第~\ref{sec:ch3-problem}~节把量化质量评判落到联合行为偏移 $\Delta_{\mathrm{beh}}$，但该量在样本上无显式可执行形式。代理 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 在 Key-sensitive 路径下取注意力分布侧 KL 散度作为离线参数搜索的可计算目标，并在路径相关的候选参数家族上完成稳健选择。
 
-本节统一的是流程和产物边界，不是强行要求所有路径共享同一个评分函数。对称路径与角色感知低比特路径可以有不同候选参数家族和代理定义；共同点是都在离线样本上计算行为读数，在可行域约束下优先控制尾部坏案例，并把最终选择写入固定校准产物。
+对称路径与角色感知低比特路径在候选参数家族与代理形式上不必相同，但都在离线样本上计算行为读数，在可行域约束下控制尾部坏案例，并把最终选择写入固定校准产物。
 
 \subsection{注意力分布 KL 散度目标}
 
-设第 $l$ 层、第 $h$ 个注意力头、在时间步 $t$ 的 Query、Key 分别记为 $q^{(l,h,t)}$ 与 $K^{(l,h,t)}$。在 FP16 参考路径下，其注意力分布写为
+设第 $l$ 层、第 $h$ 个注意力头、时间步 $t$ 的 Query 与 Key 分别为 $q^{(l,h,t)}\in\mathbb{R}^{d_k}$ 与 $K^{(l,h,t)}\in\mathbb{R}^{N\times d_k}$，二者均在 \texttt{input\_layernorm} 与 RoPE 处理后取出，$N$ 为当前位置可见的上下文长度。FP16 参考路径下的注意力分布
 \begin{equation}
 p_{\mathrm{ref}}^{(l,h,t)}
 =
 \operatorname{softmax}\!\left(
 \frac{q^{(l,h,t)} K^{(l,h,t)\top}}{\sqrt{d_k}}
-\right).
+\right)\in\Delta^{N-1}.
 \end{equation}
-对给定候选量化参数 $\theta$，记量化—反量化后的 Key 为 $\tilde K_{\theta}^{(l,h,t)}$，则对应的量化后注意力分布为
+对候选量化参数 $\theta$，记量化—反量化映射 $\tilde K_{\theta}^{(l,h,t)} = \mathrm{dequant}(\mathrm{quant}(K^{(l,h,t)};\theta);\theta)$，对应分布
 \begin{equation}
 p_{\theta}^{(l,h,t)}
 =
 \operatorname{softmax}\!\left(
 \frac{q^{(l,h,t)} \tilde K_{\theta}^{(l,h,t)\top}}{\sqrt{d_k}}
-\right).
+\right)\in\Delta^{N-1}.
 \end{equation}
-基于此，本文将单个位置上的分布侧行为偏移代理定义为
+单位置分布偏移取前向 KL
 \begin{equation}
 d_{\mathrm{KL}}^{(l,h,t)}(\theta)
 =
-D_{\mathrm{KL}}
-\!\left(
+D_{\mathrm{KL}}\!\left(
 p_{\mathrm{ref}}^{(l,h,t)}
 \;\middle\|\;
 p_{\theta}^{(l,h,t)}
-\right).
+\right),
 \end{equation}
-本文优化的是\emph{分布侧 KL 代理}，不声称输出误差 $(\hat o-o)$ 与 KL 数学等价。KL 的作用是把联合行为目标落到校准层可执行的分布读数上。
-
-为什么不直接用 MSE？原因在于 MSE 工作在张量重建空间，只比较 $K$ 或 $V$ 的逐元素差异；而 Key 误差影响模型功能前，要先经过 $qK^\top$、softmax 排序和概率质量分配。一个 MSE 较小的候选仍可能把关键 token 的注意力质量移走。选择 attention-distribution KL，是因为它直接比较参考分布与量化后分布。回顾
-\[
-\hat o-o
+将第~\ref{sec:ch3-framework}~节引入的 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}(\theta)$ 实例化为校准样本集合 $T$ 上的均值
+\begin{equation}
+\Delta_{\mathrm{beh}}^{\mathrm{cal}}(\theta)
 =
-\sum_i(\hat a_i-a_i)v_i
-+
-\sum_i \hat a_i(\hat v_i-v_i),
-\]
-其中左项是分布侧传播路径，右项是聚合侧传播路径。KL 不能覆盖全部输出误差，但它直接约束 $(\hat a-a)$，也会影响聚合侧使用的权重 $\hat a_i$。因此，在 Key-sensitive 校准中，KL 是比逐元素重建误差更贴近注意力行为的代理。
+\frac{1}{|T|}\sum_{(l,h,t)\in T} d_{\mathrm{KL}}^{(l,h,t)}(\theta),
+\end{equation}
+作为离线参数搜索的优化目标，$|T|$ 是 $(l,h,t)$ 三元组数量。尾部稳健的选择准则与候选参数家族延至第~\ref{subsec:ch3-two-stage}~节给出。
 
-为什么使用前向 KL？本文关心的是参考路径中高概率位置是否被保住。前向 KL $D_{\mathrm{KL}}(p_{\mathrm{ref}}\|p_\theta)$ 对参考高概率位置被量化路径低估的情况惩罚更强，适合长上下文检索中“不能漏掉关键 token”的需求。反向 KL 更偏向量化分布自身的高概率区域，JS 散度则更对称；它们可以作为补充诊断，但不是本文主路径的默认校准目标。
+MSE 工作在张量重建空间，仅比较 $K$ 或 $V$ 的逐元素差异；而 Key 误差影响输出之前要先经 $qK^\top$、softmax 排序与概率质量分配，一个 MSE 较小的候选仍可能把关键 token 的注意力质量移走。式~\eqref{eq:ch3-error-decomp} 把误差分解为分布侧 $\sum_i(\hat a_i-a_i)v_i$ 与聚合侧 $\sum_i \hat a_i(\hat v_i-v_i)$ 两条路径，其中 $a_i\equiv p_{\mathrm{ref},i}^{(l,h,t)}$、$\hat a_i\equiv p_{\theta,i}^{(l,h,t)}$，$v_i$ 与 $\hat v_i$ 分别为参考与量化 Value。KL 直接约束 $(\hat a-a)$ 并经 $\hat a_i$ 在聚合侧传递，因此在分布侧误差路径上比逐元素重建误差更贴近输出层面的注意力行为。
 
-数值实现上，本文先对概率做小常数 $\varepsilon$ 截断，再计算 KL，以避免极端尾部概率造成不稳定。KL 在不同模型规模和 bit-width 下的收益强弱属于第四章的实验问题，不作为本节前提。另一个边界是：attention-distribution KL 服务于 Key-sensitive 的分布侧校准；Value 路径使用独立输出扰动代理，不被强行写成同一个 KL 目标。
+前向 KL $D_{\mathrm{KL}}(p_{\mathrm{ref}}\|p_\theta)$ 对参考高概率位置在量化路径下被低估的情况惩罚更强，对应长上下文检索“不漏关键 token”的设计需求；反向 KL 偏向量化分布自身的高概率区域，JS 散度更对称，二者作为补充诊断保留。Value 路径使用独立的输出扰动代理，详见第~\ref{sec:ch3-paths}~节。
+
+数值上对 $p_{\mathrm{ref}}$ 与 $p_\theta$ 均在 $[\varepsilon, 1]$ 上做 clamp 截断（取 $\varepsilon=10^{-6}$）以避免极端尾部概率引起的不稳定。KL 在不同模型规模与 bit-width 下的收益强弱见第~\ref{chap:experiments}~章。
 
 \subsection{参数搜索空间与稳健选择准则}
 \label{subsec:ch3-two-stage}
