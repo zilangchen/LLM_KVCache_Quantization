@@ -242,11 +242,11 @@ s_{l,j}^{\mathrm{dyn}}
 
 \subsection{对称 INT4 的局限与格式升级动因}
 
-直接把上述对称路径从 \texttt{INT8} 降到对称 \texttt{INT4} 后，变化首先发生在量化网格。对称 \texttt{INT8} 仍有较密的有效等级；对称 \texttt{INT4} 只留下少量离散表示，原先可由细粒度缩放参数吸收的分布差异，会被压到更粗的同一网格中。
+直接把上述对称路径从 \texttt{INT8} 降到对称 \texttt{INT4} 后，量化网格首先变粗。\texttt{INT8} 提供 255 级有效等级，而对称 \texttt{INT4} 只剩 15 级（等级密度差约 17 倍）；原先可由细粒度缩放参数吸收的分布差异被压到这个粗网格内。
 
-第 \ref{sec:ch3-problem} 节已经给出机制理由：Key 扰动先进入 logits 排序，再经 softmax 改写注意力分布。第 \ref{sec:ch3-motivation-kv} 节和第四章第 \ref{sec:exp-kv-sensitivity} 节的 Qwen 读数进一步提供经验锚点：\texttt{K4V8}/\texttt{K4V4} 的 cliff 更早暴露在 Key 侧，而 \texttt{K8V4} 没有同步表现出同强度失稳。这里引用这些读数只作为格式升级动机；完整跨模型判读仍由第四章的表~\ref{tab:ch4-kv-ppl}、表~\ref{tab:ch4-kv-multitask} 与图~\ref{fig:ch4-kv-ruler32} 承担。
+第~\ref{sec:ch3-problem}~节给出了机制理由：Key 扰动先进入 logits 排序，再经 softmax 改写注意力分布。第~\ref{sec:ch3-motivation-kv}~节与第~\ref{sec:exp-kv-sensitivity}~节的 Qwen 系列读数为此提供经验锚点：\texttt{K4V8} 在 Key 侧先暴露 cliff，\texttt{K8V4} 未出现同强度失稳；\texttt{K4V4} 同时压低 K 与 V，作为剂量-响应辅助观察一并列出，完整跨模型判读见第四章相关表与图。
 
-因此，本节把对称 \texttt{INT4} 视作一次低比特压力测试。继续细调同一对称参数，难以响应 Key 通道异质性和 Value 时序动态范围之间的角色差异。下一小节将低比特路径写成 \texttt{INT4-RoleAlign}：离线搜索纪律沿用第 \ref{sec:ch3-calibration} 节，K/V 两侧的量化轴和参数来源分开定义。
+因此对称 \texttt{INT4} 在本文中扮演格式选择的下界锚点：单一对称 scale 既要在 \texttt{INT4} 网格上覆盖 Key 通道间的幅值异质性，又要承担 Value 逐 token 的动态范围变化，两个维度被压在同一参数上互相妥协。下一节将低比特路径改写为 \texttt{INT4-RoleAlign}，把这两个维度分配到独立量化轴上。
 
 \subsection{INT4-RoleAlign：角色感知非对称量化}
 \label{subsec:ch3-rolealign}

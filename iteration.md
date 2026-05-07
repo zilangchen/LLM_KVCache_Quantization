@@ -36,6 +36,18 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 08:25 | Thesis Ch3 §3.5.2 对称 INT4 局限 1-Round 6-Agent Audit + v2 落地
+- Goal: §3.5.2 短节 (v0 7 行 3 段) 一轮整合落地, v0 (Round 1 7.41) → v2 直接整合
+- Scope:
+  - 6 agent 报告 (1 轮，短节加速)；D3 9.2 ✅ / D6 8.5 ✅ / D5 7.3 / D2 7.2 / D1 7.0 / D4 6.2
+  - **关键修订**: 加 "INT8 255 级 vs INT4 15 级，等级密度差约 17 倍" / 删除元叙述 "这里引用..." / "难以响应" 改正向机制 / "Qwen 系列" 限定 / "Value 逐 token 动态范围" / 章节过渡精简 / "K4V4 作剂量-响应" 与 §3.2 v3 证据分级对齐
+- Changed files:
+  - `thesis/chapters/ch3_method.tex` line 243-249 (§3.5.2 v0 → v2 重写, 删 7 行写 7 行)
+  - `docs/ch3_writing_quality_audit_20260508.md`
+- Commands: xelatex × 2, 96 pages, 0 undefined refs, 0 multiply defined
+- Validation: forward ref 全部解析 (D3 已 grep 验证 sec:exp-kv-sensitivity / tab:ch4-kv-ppl / tab:ch4-kv-multitask / fig:ch4-kv-ruler32 全部存在)
+- Risks: 无 (短节直接收敛)
+
 ### 2026-05-08 08:10 | Thesis Ch3 §3.5.1 INT8 基准路径 2-Round 6-Agent Audit + v2 落地
 - Goal: §3.5 父节+§3.5.1 INT8 基准路径节用工作流, v0 (Round 1 6.53 🔴) → v1 (Round 2 8.48 ✅) → v2 整合 4 处一致 P1 落地
 - Scope:
