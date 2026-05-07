@@ -3,19 +3,19 @@
 \section{注意力近似误差的代数分解与问题形式化}
 \label{sec:ch3-problem}
 
-在长上下文推理中，KV Cache 的量化误差不会被下游任务直接读取，而是先进入注意力打分、softmax 与 Value 聚合。本文因此不把 $K$ 与 $V$ 的逐元素重建误差作为唯一对象，而把量化前后的注意力分布与注意力输出一起作为需要保持的行为。本节只做两步：先固定单头 Decode 注意力的记号，再把输出误差拆成分布侧与聚合侧两项。
+KV Cache 的量化误差并非下游任务的直接观测量；它先经过注意力打分与 softmax 聚合，再以输出形式影响生成结果。因此本文不以 $K$ 与 $V$ 的逐元素重建距离作为唯一对象，而是把量化前后的注意力分布 $a$ 与注意力输出 $o$ 共同视作需保持的行为。下文先固定单头 Decode 注意力的记号，再对量化引起的输出误差作精确代数分解。
 
-设当前解码步的 Query 向量为 $q \in \mathbb{R}^{d_k}$，历史上下文长度为 $S$，对应的 Key 与 Value 分别记为 $K=[k_1,\dots,k_S]^\top$、$V=[v_1,\dots,v_S]^\top$。标准单头注意力可写为
+约定 $q$ 视作行向量 $q\in\mathbb{R}^{1\times d_k}$，历史上下文长度为 $S$，$K\in\mathbb{R}^{S\times d_k}$、$V\in\mathbb{R}^{S\times d_v}$ 由其行向量 $k_i, v_i$ 拼接而成；本文沿用第~\ref{sec:ch2-kv-memory}~节的 $d_v=d_k$ 约定。标准单头注意力可写为
 \begin{equation}
 a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 \end{equation}
-其中 $a\in\mathbb{R}^{S}$ 表示注意力分布，$o$ 表示注意力输出。基于此，本文将注意力行为形式化为如下联合对象：
+其中 $a\in\mathbb{R}^{1\times S}$ 表示注意力分布（按分量索引为 $a_i\in\mathbb{R}$），$o\in\mathbb{R}^{1\times d_v}$ 表示注意力输出。基于此，本文将注意力行为形式化为如下联合对象：
 \begin{equation}
 \mathcal{B}(q,K,V):=(a,o).
 \end{equation}
-在不引起歧义时，本文暂略层索引、头索引与时间步索引，以保持记号简洁；多层、多头情形可视为同一分析在不同层与不同头上的重复与聚合。
+本节默认在单头 MHA 设定下展开；多层、多头情形按层索引 $\ell$ 与头索引 $h$ 重复，记为 $q^{(\ell,h)}, K^{(\ell,h)}$ 等。GQA/MQA 下查询头到 KV 头的映射已在第~\ref{sec:ch2-kv-memory}~节给出。
 
-设 $Q_{\theta_K}(\cdot)$ 与 $Q_{\theta_V}(\cdot)$ 分别表示作用于 Key 与 Value 的量化映射，其参数由 $\theta_K$ 与 $\theta_V$ 表示。量化后的 Key 与 Value 记为
+设 $Q_{\theta_K}(\cdot)$ 与 $Q_{\theta_V}(\cdot)$ 分别表示作用于 Key 与 Value 的量化映射；参数 $\theta_K, \theta_V$ 的具体含义（scale、zero-point、bit-width 等）以及作用域（逐元素、逐通道或逐 token）由量化路径决定，详见第~\ref{sec:ch3-paths}~节。量化后的 Key 与 Value 记为
 \begin{equation}
 \hat K = Q_{\theta_K}(K), \qquad \hat V = Q_{\theta_V}(V),
 \end{equation}
@@ -27,9 +27,9 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 \begin{equation}
 \min_{\theta_K,\theta_V}\Delta_{\mathrm{beh}}\big((a,o),(\hat a,\hat o)\big),
 \end{equation}
-其中 $\Delta_{\mathrm{beh}}$ 表示量化前后注意力行为的联合偏移度量。式中对象是概念层目标，不要求后续每条路径共享同一个标量损失；实际执行时，对称路径使用注意力分布 KL，角色感知低比特路径则拆成 K-path 与 V-path 两个代理。
+其中 $\Delta_{\mathrm{beh}}: (\mathbb{R}^{1\times S}\times\mathbb{R}^{1\times d_v})^2 \to \mathbb{R}_{\ge 0}$ 满足 $\Delta_{\mathrm{beh}}(x,x)=0$，刻画量化前后注意力行为的联合偏移；其形式在概念层成立，不要求各量化路径共享同一标量损失。具体实例化由量化路径决定（第~\ref{sec:ch3-calibration}~节）。
 
-从量化输出与参考输出的定义出发，输出误差可作如下精确的代数展开：
+由 $\hat o=\hat a\hat V$ 与 $o=aV$ 的定义，输出误差可作如下精确代数展开：
 \begin{align}
 \hat o-o
 &=\sum_{i=1}^{S}\hat a_i\hat v_i-\sum_{i=1}^{S}a_i v_i \\
@@ -37,17 +37,14 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 &=\sum_{i=1}^{S}\hat a_i(\hat v_i-v_i)+\sum_{i=1}^{S}(\hat a_i-a_i)v_i.
 \label{eq:ch3-error-decomp}
 \end{align}
-式~\eqref{eq:ch3-error-decomp} 是在第二行加减同一中间项得到的恒等式，不是把 Key 与 Value 的影响假设为相互独立。右侧第一项描述 Value 侧内容被量化后如何进入聚合结果；右侧第二项描述 Key 侧扰动经 logits 和 softmax 改变注意力分布后如何传到输出。
+式~\eqref{eq:ch3-error-decomp} 系恒等代数变形。右侧第一项描述 Value 侧内容被量化后如何进入聚合结果；右侧第二项描述 Key 侧扰动经 logits 与 softmax 改变注意力分布后如何传到输出。其中第一项的权重为量化后分布 $\hat a_i$ 而非参考分布 $a_i$，因此聚合侧误差与 Key 侧扰动并非独立——若 Key 量化已经改变 $\hat a$，聚合项的有效权重也随之变化。
 
-这个写法同时给出一个边界：Value 项中的权重是量化后的 $\hat a_i$，不是参考路径的 $a_i$。因此，Value 误差并不是在固定注意力分布下单独发生；如果 Key 量化已经改变了分布，聚合侧误差也会继承这种变化。后续使用分布侧代理和输出侧代理时，本文只把它们当作可执行的近似读数，而不把两条传播路径解释为完全隔离的因果分量。
-
-% 图 3-1 建议置于此处
 % 图题：图 3-1 注意力误差的两条耦合传播路径及其精确代数分解
 \input{figures/fig1_error_decomposition}
 
-上述分解说明，下游任务感知到的是注意力行为偏移，而不是 $K$ 或 $V$ 的单独数值距离。Key 误差先改变 logits 的相对排序，再经 softmax 重分配概率质量；Value 误差改变被聚合的信息内容，并由量化后的分布 $\hat a$ 加权。只看张量重建误差，容易漏掉 softmax 非线性和加权聚合共同造成的功能失真。
+由式~\eqref{eq:ch3-error-decomp}，下游任务感知到的是注意力行为偏移而非 $K, V$ 的逐元素距离：Key 侧扰动通过 $q\hat K^\top$ 与 softmax 影响分布形态，Value 侧扰动则在已量化分布 $\hat a$ 加权下进入输出。仅以张量重建误差为度量，将忽略 softmax 非线性与加权聚合共同导致的行为层失真。
 
-本节由单头 Decode 注意力出发，将 KV Cache 量化形式化为注意力行为保持问题。第 \ref{sec:ch3-motivation-kv} 节据此诊断低比特场景下哪一侧更先触发失稳，第 \ref{sec:ch3-framework}--\ref{sec:ch3-allocator} 节再把这一目标落到离线校准产物、路径实例和预算分配机制中。
+由此，KV Cache 量化在本文中被形式化为注意力行为保持问题；第~\ref{sec:ch3-motivation-kv}~节进一步诊断低比特场景下的失稳侧。
 
 \section{动机诊断：K/V 敏感性不对称及其设计启示}
 \label{sec:ch3-motivation-kv}
@@ -56,7 +53,7 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 
 为突出低比特失稳的角色依赖性，本文从第 \ref{sec:exp-kv-sensitivity} 节的完整证据中抽取图~\ref{fig:ch3-kv-asymmetry}。图中 \texttt{FP16} 是未量化参考，\texttt{K8V8} 是高精度量化参考，\texttt{K8V4} 与 \texttt{K4V8} 构成同平均 bit 预算下的角色对照，\texttt{K4V4} 则提供对称低比特锚点。其中，\texttt{K8V4} 与第四章完整诊断中的恢复性配置 \texttt{MixedKV} 对应。这个压缩视图只回答一个方法问题：在受限位宽预算下，4-bit 应优先落在 Key 还是 Value；完整跨模型读数和统计口径仍以后文表~\ref{tab:ch4-kv-ppl}、表~\ref{tab:ch4-kv-multitask} 与图~\ref{fig:ch4-kv-ruler32} 为准。
 
-这组诊断把问题从“量化会不会带来误差”收窄到“4-bit 落在何侧”。在 Qwen2.5-1.5B 的单侧 PPL 诊断中，仅压低 Key 精度的 \texttt{K@INT4+V@FP16} 将 PPL 从 9.31 推到 1290.9，而仅压低 Value 精度的 \texttt{K@FP16+V@INT4} 为 9.35，见表~\ref{tab:ch4-kv-ppl}。在 32K 任务诊断中，\texttt{K4V8} 使 Qwen2.5-1.5B 与 Qwen2.5-7B 的 RULER 通过率降至 0\%；\texttt{MixedKV}（图中 \texttt{K8V4}）未出现这种归零式失稳，但其恢复强度仍随模型和任务变化，见表~\ref{tab:ch4-kv-multitask}。这些锚点说明，对当前低比特设定而言，Qwen 系列中首先越过功能临界点的是 Key 精度下降，而不是 Value 的同步压缩。
+这组诊断把问题从“量化会不会带来误差”收窄到“4-bit 时量化误差的主要影响落在K侧还是V侧”。在 Qwen2.5-1.5B 的单侧 PPL 诊断中，仅压低 Key 精度的 \texttt{K@INT4+V@FP16} 将 PPL 从 9.31 推到 1290.9，而仅压低 Value 精度的 \texttt{K@FP16+V@INT4} 为 9.35，见表~\ref{tab:ch4-kv-ppl}。在 32K 任务诊断中，\texttt{K4V8} 使 Qwen2.5-1.5B 与 Qwen2.5-7B 的 RULER 通过率降至 0\%；\texttt{MixedKV}（图中 \texttt{K8V4}）未出现这种归零式失稳，但其恢复强度仍随模型和任务变化，见表~\ref{tab:ch4-kv-multitask}。这些证据说明，对当前低比特设定而言，Qwen 系列中首先越过功能临界点的是 Key 精度下降，而不是 Value 的同步压缩。
 
 % 图 3-2 建议置于此处
 % 图题：图 3-2 K/V 量化敏感性不对称的压缩版诊断与设计启示
@@ -71,13 +68,13 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 \label{sec:ch3-framework}
 \label{sec:ch3-overview}
 
-前两节给出两个约束：量化质量应按注意力行为读，而低比特失稳又对 Key 与 Value 不对称。本节把这两个约束转成后续模块之间的接口。离线校准模块接收校准样本、候选量化路径和可行域约束，输出路径特定的量化产物；预算分配模块读取同一离线链路中的逐层行为读数，输出逐层或逐角色的 bit 决策。这样写的目的，是先说明每个模块消费什么、产出什么，再讨论具体路径如何实例化。
+前两节给出两个约束：量化质量应按注意力行为评判，而低比特失稳又对 Key 与 Value 不对称。本节把这两个约束转成后续模块之间的接口。离线校准模块接收校准样本、候选量化路径和可行域约束，输出路径特定的量化产物；预算分配模块读取同一离线链路中的逐层行为读数，输出逐层或逐角色的 bit 决策。
 
-形式上，本文将逐层行为敏感度画像记为
+本文将逐层行为敏感度画像记为
 \begin{equation}
 \mathcal{S}=\{s^{(l)}\}_{l=1}^{L},
 \end{equation}
-其中 $s^{(l)}$ 表示第 $l$ 层对量化扰动的行为敏感度读数。$\mathcal{S}$ 不预设唯一计算公式；它只规定一个接口语义：某层的读数越高，该层在预算受限时越应被谨慎压缩。校准层的行为偏移由路径相关代理计算，分配层则从同一离线校准链路中读取可聚合统计量，形成逐层敏感度画像。二者共享离线来源和行为读法，不要求数值表达式逐项相同。
+其中 $s^{(l)}$ 表示第 $l$ 层对量化扰动的行为敏感度读数。$\mathcal{S}$ 不预设唯一计算公式，只规定一个接口语义：某层的读数越高，该层在预算受限时越应被谨慎压缩。校准层的行为偏移由路径相关代理计算，分配层则从同一离线校准链路中读取可聚合统计量，形成逐层敏感度画像。二者共享离线来源和行为读法。
 
 在框架的第一层，即校准层，问题被组织为参数选择问题。设候选量化参数空间为 $\Theta$，则校准层的目标可抽象写为
 \begin{equation}
@@ -89,7 +86,7 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 \begin{equation}
 b^\star = \mathcal{A}(\mathcal{S};\bar b),
 \end{equation}
-其中 $b^\star$ 是逐层或逐角色预算向量。分配层不重新搜索量化参数，而是读取 $\mathcal{S}$ 并回答“哪里保留更高精度”。最基础的输出是逐层预算；进一步的输出可以包含 K/V 角色条件化预算和 \texttt{AutoK} 建议。本文把 allocation / \texttt{AutoK} 写成校准产物的下游消费者，而不是与校准层并列的另一套目标函数。
+其中 $b^\star$ 是逐层或逐角色预算向量。分配层不重新搜索量化参数，而是读取 $\mathcal{S}$ 并回答“哪里保留更高精度”。最基础的输出是逐层预算；进一步的输出可以包含 K/V 角色条件化预算和 \texttt{AutoK} 建议。
 
 执行时只有两个阶段。离线阶段提取参考行为、搜索路径参数、写出校准产物，并生成逐层敏感度读数；在线阶段读取这些固定产物，并按已冻结规则计算当前缓存写入所需的尺度或预算，不重新组织目标函数，也不在推理过程中重复离线搜索。这个分工保证后续系统实现面对的是冻结参数、规则和元数据，而不是一段需要在线重跑的分析过程。
 
