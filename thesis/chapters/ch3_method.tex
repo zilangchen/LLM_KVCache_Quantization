@@ -59,35 +59,30 @@ KV Cache 量化的目标即
 
 \section{行为引导量化框架总览}
 \label{sec:ch3-framework}
-\label{sec:ch3-overview}
 
-前两节给出两个约束：量化质量应按注意力行为评判，而低比特失稳又对 Key 与 Value 不对称。本节把这两个约束转成后续模块之间的接口。离线校准模块接收校准样本、候选量化路径和可行域约束，输出路径特定的量化产物；预算分配模块读取同一离线链路中的逐层行为读数，输出逐层或逐角色的 bit 决策。
+第~\ref{sec:ch3-problem}~节把量化质量评判从张量重建误差移至注意力行为差异 $\Delta_{\mathrm{beh}}$，第~\ref{sec:ch3-motivation-kv}~节把低比特退化定位为 Key 侧主导。框架以两个离线模块落实上述约束：校准模块按候选量化路径搜索行为代理最优的参数；预算分配模块在同一离线链路上读取逐层敏感度统计量，输出每层（或 Key/Value 角色）保留多少 bit。
 
-本文将逐层行为敏感度画像记为
+逐层行为敏感度画像
 \begin{equation}
-\mathcal{S}=\{s^{(l)}\}_{l=1}^{L},
+\mathcal{S}=\{s^{(l)}\}_{l=1}^{L},\quad s^{(l)}\in\mathbb{R}_{\geq 0},
 \end{equation}
-其中 $s^{(l)}$ 表示第 $l$ 层对量化扰动的行为敏感度读数。$\mathcal{S}$ 不预设唯一计算公式，只规定一个接口语义：某层的读数越高，该层在预算受限时越应被谨慎压缩。校准层的行为偏移由路径相关代理计算，分配层则从同一离线校准链路中读取可聚合统计量，形成逐层敏感度画像。二者共享离线来源和行为读法。
+是离线校准链路在处理校准样本时作为副产物输出的逐层标量统计量；分配模块以只读方式读取它，不发起新的校准搜索。$\mathcal{S}$ 不预设唯一计算公式，由具体量化路径对应的行为代理实例化（第~\ref{sec:ch3-calibration}~节详述）。本文取 $s^{(l)}$ 越大表示第 $l$ 层在量化扰动下注意力行为越不稳定，并归纳地采用单调假设——读数越高的层在预算受限时保留更高位宽的边际收益越大；该假设的实验支撑见第~\ref{sec:exp-cross-model}~节。
 
-在框架的第一层，即校准层，问题被组织为参数选择问题。设候选量化参数空间为 $\Theta$，则校准层的目标可抽象写为
+校准层把“如何量化”组织为参数选择问题。设候选量化参数空间 $\Theta$ 为离散候选集合，如 per-layer scale 候选格点，校准层求解
 \begin{equation}
 \theta^\star = \arg\min_{\theta\in\Theta}\Delta_{\mathrm{beh}}^{\mathrm{cal}}(\theta),
 \end{equation}
-其中 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 是校准层实际使用的行为代理。给定某条路径及其候选参数家族，校准层输出 $\theta^\star$，供在线缓存写入模块直接读取；不同位宽和格式的差异体现在候选参数家族与代理定义上。第 \ref{sec:ch3-calibration} 节先定义这一离线选择规则，第 \ref{sec:ch3-paths} 节再分别落到 \texttt{INT8} 基准路径与低比特角色感知路径。
+其中 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}(\theta)$ 是 $\Delta_{\mathrm{beh}}$ 在有限校准样本上的代理估计——把第~\ref{sec:ch3-problem}~节联合行为目标限制到离线校准集，转化为可执行计算。给定一条路径及其候选参数家族，校准层输出 $\theta^\star$ 供在线缓存写入直接读取；不同位宽与格式的差异由候选家族 $\Theta$ 与代理 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 的具体形式承担，框架不要求所有路径使用同一数值评分。
 
-在框架的第二层，即分配层，问题被组织为预算决策问题。设平均 KV bit 预算为 $\bar b$，则分配器可抽象写为
+分配层把“哪里保留更高精度”组织为预算决策问题。设平均 KV bit 预算为 $\bar b$，分配映射
 \begin{equation}
-b^\star = \mathcal{A}(\mathcal{S};\bar b),
+b^\star = \mathcal{A}(\mathcal{S};\bar b),\quad \tfrac{1}{L}\sum_{l=1}^{L} b^\star_l \le \bar b,
 \end{equation}
-其中 $b^\star$ 是逐层或逐角色预算向量。分配层不重新搜索量化参数，而是读取 $\mathcal{S}$ 并回答“哪里保留更高精度”。最基础的输出是逐层预算；进一步的输出可以包含 K/V 角色条件化预算和 \texttt{AutoK} 建议。
+为确定性、规则型映射，将共享画像 $\mathcal{S}$ 转换为整数位宽向量 $b^\star$，不发起在线优化也不重复参数搜索。最简形式下 $b^\star\in\{b_{\min},\dots,b_{\max}\}^L$ 是逐层预算（本文取 $b\in\{4,8,16\}$）；扩展到 K/V 角色条件化时 $b^\star\in\{b_{\min},\dots,b_{\max}\}^{L\times 2}$，对应第~\ref{sec:ch3-motivation-kv}~节识别的 Key/Value 双角色，$\mathcal{S}$ 同步扩展为按角色分量。具体规则见第~\ref{sec:ch3-allocator}~节。
 
-执行时只有两个阶段。离线阶段提取参考行为、搜索路径参数、写出校准产物，并生成逐层敏感度读数；在线阶段读取这些固定产物，并按已冻结规则计算当前缓存写入所需的尺度或预算，不重新组织目标函数，也不在推理过程中重复离线搜索。这个分工保证后续系统实现面对的是冻结参数、规则和元数据，而不是一段需要在线重跑的分析过程。
+这一组织把整条链路切分为可独立验证的两段。离线阶段提取参考行为、搜索路径参数、写出校准产物，同步生成 $\mathcal{S}$；在线阶段只读取冻结产物，按已固定规则计算当前缓存写入所需的尺度或预算。设计的核心约束是推理路径上不重复离线搜索，因此 $\theta^\star$ 与 $b^\star$ 都被视为框架的离线交付物，而非在线决策变量。
 
-% 图 3-3 建议置于此处
-% 图题：图 3-3 行为引导量化框架总览：校准与分配共享同一行为敏感度画像
 \input{figures/fig_ch3_framework_shared_profile}
-
-后续各节按这个接口展开：第 \ref{sec:ch3-calibration} 节定义校准层代理与选择准则；第 \ref{sec:ch3-paths} 节给出 \texttt{INT8} 基准路径、对称 \texttt{INT4} 的局限和 \texttt{INT4-RoleAlign}；第 \ref{sec:ch3-allocator} 节把同源敏感度画像转成逐层预算与 \texttt{AutoK} 建议；第 \ref{sec:ch3-deployment} 节说明离线产物如何被在线推理管线读取。
 
 \section{行为引导校准目标与参数搜索策略}
 \label{sec:ch3-calibration}

@@ -1022,3 +1022,159 @@ D5 4 处必改处理：
 4. D6 主动判"何时停止"：v4 round 5 D6 + D5 双双判 v4 已达答辩可提交标准
 
 ---
+
+
+## §3.3 行为引导量化框架总览 — 审改循环
+
+**目标行**: ch3_method.tex line 60-90 (v0)
+
+### Round 1 综合（v0 审）
+
+加权综合: **6.23 / 10** — 🔴 不通过，需 v1
+
+| Agent | 分数 | Verdict | 关键问题 |
+|-------|------|---------|---------|
+| D1 顶会 | 6.5 | 🟡 | 双 label / 章末路线图过密 / claim 边界提前暴露 §3.6/§3.7 |
+| D2 数学 | 5.2 | 🟡 | $s^{(l)}$ 类型未声明 / $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 与 §3.1 桥接缺 / $\mathcal{A}$ 守恒约束缺 / producer 责任不明 |
+| D3 复现 | 7.2 | 🟡 | $\mathcal{S}$ 存储格式 / 双 label / AutoK routing 悬挂 |
+| D4 中文 | 5.8 | 🔴 | line 72/78/84 PPT 式分层（§28）/ line 66 元叙述（§19）/ line 90 章末路线图 / line 64 教科书回指 |
+| D5 Skeptical | 5.8 | 🟡 | 单调性 axiom 化（应降级归纳假设）/ line 70 与 line 97 矛盾 / $\mathcal{A}$ 函数族未说明 |
+| D6 博士生 | 7.8 | 🟡 | $\Delta^{\mathrm{cal}}$ 上标未解释 / AutoK 无铺垫 / $s^{(l)}$ 类型不清 |
+
+### Round 1 必改清单（按一致性排序）
+
+**P0 — 多 agent 一致 (必改):**
+- **P0-1 删除章末路线图 line 90** (D1, D4, D5, D6 一致) — 与 §3.1 v4 / §3.2 v3 风格冲突
+- **P0-2 删除 PPT 式 "在框架的第一层/第二层" line 72/78/84** (D1, D4, D5) — codex prefs §28
+- **P0-3 删除 \label{sec:ch3-overview} line 62** (D1, D3) — multiply defined warning，且无外部 \ref 引用
+
+**P1 — 写作风格 (必改):**
+- **P1-1 line 64 "前两节给出两个约束"** (D1, D4, D6) — 教科书回指改为直接进入设计推导
+- **P1-2 line 66 "本文将...记为"** (D1, D4) — 元叙述包装去掉，直接定义符号
+- **P1-3 line 82 "最基础的输出是逐层预算；进一步的输出可以包含"** (D4) — 模板列举改为机制推导
+- **P1-4 line 84 "执行时只有两个阶段"** (D4) — PPT 式分阶段，先写动机再导出分工
+- **P1-5 删除 line 86-87 % 注释行** (D1) — figure file 已有 \caption，注释冗余
+
+**P1 — 数学严谨 (必改):**
+- **P1-6 $s^{(l)} \in \mathbb{R}_{\geq 0}$ 类型声明** (D2, D6) — 在 eq.(1) 旁
+- **P1-7 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 与 §3.1 $\Delta_{\mathrm{beh}}$ 显式桥接** (D1, D2, D6) — "在校准样本上的有限样本估计"
+- **P1-8 $\mathcal{A}$ 函数族说明** (D2, D5, D6) — "确定性、规则型映射"
+- **P1-9 $\mathcal{A}$ 预算守恒约束** (D2) — $\frac{1}{L}\sum b^\star_l \le \bar b$
+- **P1-10 $\mathcal{S}$ producer 责任** (D2, D5) — "由校准层在处理校准样本时作为副产物输出"
+- **P1-11 line 70 单调性 hedge 降级为归纳假设 + forward ref** (D5) — 不写为接口语义，改为"本文归纳采用 + §4 验证"
+- **P1-12 删除 line 70 "二者共享离线来源和行为读法"** (D5) — 与 line 97 路径相关代理矛盾
+- **P1-13 AutoK 推迟到 §3.6 引入** (D5, D6) — 当前段无铺垫
+
+**P2 — 可选 (单 agent):**
+- $\Theta$ "离散候选集" 性质说明 (D2)
+- $b^\star$ 维度二义性显式化 (D2)
+
+### v1 候选稿（应用 P0/P1 修订）
+
+```latex
+\section{行为引导量化框架总览}
+\label{sec:ch3-framework}
+
+§3.1 把量化质量评判从张量重建误差移至注意力行为差异 $\Delta_{\mathrm{beh}}$，§3.2 把低比特退化定位为 Key 侧主导。本节据此组织框架接口：离线校准模块按候选量化路径搜索行为代理最优的参数；预算分配模块在同一离线链路上读取逐层敏感度统计量，输出每层（或每个角色）保留多少 bit。
+
+逐层行为敏感度画像
+\begin{equation}
+\mathcal{S}=\{s^{(l)}\}_{l=1}^{L},\quad s^{(l)}\in\mathbb{R}_{\geq 0},
+\end{equation}
+是离线校准链路在处理校准样本时作为副产物输出的逐层标量统计量；分配模块以只读方式读取它，不发起新的校准搜索。$\mathcal{S}$ 不预设唯一计算公式，由路径相关代理实例化（第~\ref{sec:ch3-calibration}~节）。本文取 $s^{(l)}$ 越大表示第 $l$ 层在量化扰动下注意力行为越不稳定，并归纳地采用单调假设——读数越高的层在预算受限时保留更高位宽的边际收益越大；该假设的实验支撑见第~\ref{sec:exp-allocator}~节。
+
+校准层把"如何量化"组织为参数选择问题。设候选量化参数空间 $\Theta$ 是离散候选集合（如 per-layer scale 候选格点），校准层求解
+\begin{equation}
+\theta^\star = \arg\min_{\theta\in\Theta}\Delta_{\mathrm{beh}}^{\mathrm{cal}}(\theta),
+\end{equation}
+其中 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}(\theta)$ 是 §3.1 的 $\Delta_{\mathrm{beh}}$ 在有限校准样本上的代理估计——把 §3.1 联合行为目标限制到离线校准集，转化为可执行计算。给定一条路径及其候选参数家族，校准层输出 $\theta^\star$ 供在线缓存写入直接读取；不同位宽与格式的差异由候选家族 $\Theta$ 与代理 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 的具体形式承担，框架不要求所有路径使用同一数值评分。
+
+分配层把"哪里保留更高精度"组织为预算决策问题。设平均 KV bit 预算为 $\bar b$，分配映射
+\begin{equation}
+b^\star = \mathcal{A}(\mathcal{S};\bar b),\quad \tfrac{1}{L}\sum_{l=1}^{L} b^\star_l \le \bar b,
+\end{equation}
+为确定性、规则型映射（不发起在线优化也不重复参数搜索），将共享画像 $\mathcal{S}$ 转换为整数位宽向量 $b^\star$。最简形式下 $b^\star\in\{b_{\min},\dots,b_{\max}\}^L$ 是逐层预算；扩展到 K/V 角色条件化时 $b^\star\in\{b_{\min},\dots,b_{\max}\}^{L\times 2}$，对应 $\mathcal{S}$ 同步扩展为按角色分量。具体规则（含逐层、逐角色与上限自动建议）见第~\ref{sec:ch3-allocator}~节。
+
+这一组织把整条链路切分为可独立验证的两段：离线阶段提取参考行为、搜索路径参数、写出校准产物，同步生成 $\mathcal{S}$；在线阶段只读取冻结产物，按已固定规则计算当前缓存写入所需的尺度或预算。设计的核心约束是推理路径上不重复离线搜索，因此 $\theta^\star$ 与 $b^\star$ 都被视为框架的离线交付物，而非在线决策变量。
+
+\input{figures/fig_ch3_framework_shared_profile}
+```
+
+### v0 → v1 修订映射
+
+| 原 line | 问题 | v1 处理 |
+|---------|------|---------|
+| 62 | 双 label | 删除 \label{sec:ch3-overview} |
+| 64 | 教科书回指 + "本节把这两个约束转成接口" 元叙述 | 直接引用 §3.1 / §3.2 结论作为本节起点 |
+| 66 | "本文将...记为" 元叙述 | "逐层行为敏感度画像 $\mathcal{S}=...$ 是..." 直接定义 |
+| 68 | $s^{(l)}$ 类型未给 | $s^{(l)}\in\mathbb{R}_{\geq 0}$ 写在 eq |
+| 70 | 单调性 axiom 化 + 共享行为读法矛盾 | 降级为"本文归纳采用 + §4 验证"; 删除"共享离线来源和行为读法" |
+| 70 | $\mathcal{S}$ producer 不明 | "由离线校准链路作为副产物输出" |
+| 72/78 | "在框架的第一层/第二层" PPT 式 | "校准层把...组织为...问题" / "分配层把...组织为...问题" 去 PPT 标签 |
+| 74 | $\Delta^{\mathrm{cal}}$ 与 §3.1 桥接缺 | "是 §3.1 $\Delta_{\mathrm{beh}}$ 在有限校准样本上的代理估计" |
+| 80 | $\mathcal{A}$ 函数族 + 守恒约束缺 | eq.(3) 加 $\frac{1}{L}\sum b^\star_l \le \bar b$ + "确定性、规则型映射" |
+| 82 | 模板列举 + AutoK 无铺垫 | "最简形式下...扩展到...时..." 机制推导; AutoK 推后到 §3.6 |
+| 84 | "执行时只有两个阶段" PPT 式 | "这一组织把...切分为...两段" 先动机后分工 |
+| 86-87 | % 注释冗余 | 删除两行 |
+| 90 | 章末路线图 | 整段删除（与 §3.1 v4 / §3.2 v3 一致） |
+
+
+### Round 2 综合（v1 审）
+
+加权综合: **8.22 / 10** — ✅ PASS（阈值 8.0）
+
+| Agent | 分数 | Verdict | 关键残留 |
+|-------|------|---------|---------|
+| D1 顶会 | 8.3 | ✅ | P1-A: "上限自动建议" 残留 AutoK 概念 / P1-B: "本节据此组织" meta 自述 |
+| D2 数学 | 8.1 | ✅ | 全部 P1 形式 gap 修复，P2 残留 ($\Theta$ 基数 / cal 上标定义) 可接受 |
+| D3 复现 | 8.3 | ✅ | M1 残留: $\mathcal{S}$ 序列化格式 / M2: $b_{\min}/b_{\max}$ candidate set |
+| D4 中文 | 8.4 | ✅ | 7/7 v0 issues 全解决；§F 两处括号克制 |
+| D5 Skeptical | 7.8 | 🟡 | **P1 必改: `\ref{sec:exp-allocator}` 悬空 label**（实际不存在）|
+| D6 博士生 | 8.4 | ✅ | "路径相关代理" 锚定不足 / $L\times 2$ 缺 §3.2 桥接 |
+
+### Round 2 整合修订（v1 → v2，落地版）
+
+D5 唯一 P1 必改是事实性 label 错误，其他都是 minor 优化建议。整合为 v2 直接落地（不再 spawn Round 3）：
+
+1. **D5 P1 必改**: `\ref{sec:exp-allocator}` → `\ref{sec:exp-cross-model}` (实际存在 label，line 392)
+2. **D1 P1-A**: 删除 "（含逐层、逐角色与上限自动建议）" → "具体规则见..."（不带 AutoK 提示）
+3. **D1 P1-B**: "本节据此组织框架接口" → "框架以两个离线模块落实上述约束"
+4. **D4 §F**: "（如 per-layer scale 候选格点）" → "为离散候选集合，如 per-layer scale 候选格点"（破括号融入正文）
+5. **D6 P1**: "路径相关代理" → "具体量化路径对应的行为代理"
+6. **D6 P2**: $L\times 2$ 加 "对应 §3.2 识别的 Key/Value 双角色"
+7. **D3 M2**: 加 "（本文取 $b\in\{4,8,16\}$）" candidate set 明示
+8. **首段 minor**: "（或每个角色）" → "（或 Key/Value 角色）" 术语精确
+
+D3 M1（$\mathcal{S}$ 序列化）不采纳：序列化属于 §3.7.1 实现节内容，框架总览不应破抽象层。
+
+### v2 落地稿
+
+```latex
+\section{行为引导量化框架总览}
+\label{sec:ch3-framework}
+
+§3.1 把量化质量评判从张量重建误差移至注意力行为差异 $\Delta_{\mathrm{beh}}$，§3.2 把低比特退化定位为 Key 侧主导。框架以两个离线模块落实上述约束：校准模块按候选量化路径搜索行为代理最优的参数；预算分配模块在同一离线链路上读取逐层敏感度统计量，输出每层（或 Key/Value 角色）保留多少 bit。
+
+逐层行为敏感度画像
+\begin{equation}
+\mathcal{S}=\{s^{(l)}\}_{l=1}^{L},\quad s^{(l)}\in\mathbb{R}_{\geq 0},
+\end{equation}
+是离线校准链路在处理校准样本时作为副产物输出的逐层标量统计量；分配模块以只读方式读取它，不发起新的校准搜索。$\mathcal{S}$ 不预设唯一计算公式，由具体量化路径对应的行为代理实例化（第~\ref{sec:ch3-calibration}~节详述）。本文取 $s^{(l)}$ 越大表示第 $l$ 层在量化扰动下注意力行为越不稳定，并归纳地采用单调假设——读数越高的层在预算受限时保留更高位宽的边际收益越大；该假设的实验支撑见第~\ref{sec:exp-cross-model}~节。
+
+校准层把"如何量化"组织为参数选择问题。设候选量化参数空间 $\Theta$ 为离散候选集合，如 per-layer scale 候选格点，校准层求解
+\begin{equation}
+\theta^\star = \arg\min_{\theta\in\Theta}\Delta_{\mathrm{beh}}^{\mathrm{cal}}(\theta),
+\end{equation}
+其中 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}(\theta)$ 是 §3.1 的 $\Delta_{\mathrm{beh}}$ 在有限校准样本上的代理估计——把 §3.1 联合行为目标限制到离线校准集，转化为可执行计算。给定一条路径及其候选参数家族，校准层输出 $\theta^\star$ 供在线缓存写入直接读取；不同位宽与格式的差异由候选家族 $\Theta$ 与代理 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 的具体形式承担，框架不要求所有路径使用同一数值评分。
+
+分配层把"哪里保留更高精度"组织为预算决策问题。设平均 KV bit 预算为 $\bar b$，分配映射
+\begin{equation}
+b^\star = \mathcal{A}(\mathcal{S};\bar b),\quad \tfrac{1}{L}\sum_{l=1}^{L} b^\star_l \le \bar b,
+\end{equation}
+为确定性、规则型映射，将共享画像 $\mathcal{S}$ 转换为整数位宽向量 $b^\star$，不发起在线优化也不重复参数搜索。最简形式下 $b^\star\in\{b_{\min},\dots,b_{\max}\}^L$ 是逐层预算（本文取 $b\in\{4,8,16\}$）；扩展到 K/V 角色条件化时 $b^\star\in\{b_{\min},\dots,b_{\max}\}^{L\times 2}$，对应 §3.2 识别的 Key/Value 双角色，$\mathcal{S}$ 同步扩展为按角色分量。具体规则见第~\ref{sec:ch3-allocator}~节。
+
+这一组织把整条链路切分为可独立验证的两段。离线阶段提取参考行为、搜索路径参数、写出校准产物，同步生成 $\mathcal{S}$；在线阶段只读取冻结产物，按已固定规则计算当前缓存写入所需的尺度或预算。设计的核心约束是推理路径上不重复离线搜索，因此 $\theta^\star$ 与 $b^\star$ 都被视为框架的离线交付物，而非在线决策变量。
+
+\input{figures/fig_ch3_framework_shared_profile}
+```
+
