@@ -36,6 +36,26 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 00:01 | AIGC paragraph polish ch2 low-bit recovery boundary
+- Goal: Process report segment 10 in Chapter 2 while preserving the low-bit recovery related-work mapping and the boundary between content protection, instability diagnosis, and budget allocation.
+- Changed files:
+  - `thesis/chapters/ch2_related_work.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch2_related_work.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Rewrote the ZipCache/IntactKV/SKVQ and boundary-reference paragraph with more conservative method attributions.
+  - Replaced the negative compression-ratio-only closure with a positive link between offline behavior sensitivity profiles, instability diagnosis, and budget allocation.
+  - Changed the next heading from `正交路线` to `正交关系` after technical review rejected the stronger `可组合关系` title.
+- Validation:
+  - PASS: whitespace/error check and full LaTeX build completed; generated 100-page PDF.
+  - Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated.
+- Risks / follow-ups:
+  - Continue with report segment 11 after this commit.
+- Commit: see Git history for `docs: polish aigc ch2 low-bit recovery boundary`
+
 ### 2026-05-08 23:53 | AIGC paragraph polish ch2 asymmetric quantization axes
 - Goal: Process report segment 9 in Chapter 2 while preserving asymmetric-quantization motivation, K/V role-diagnosis parameters, quantization-axis semantics, and attention-path mechanism.
 - Changed files:
