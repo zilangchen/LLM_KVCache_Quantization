@@ -704,7 +704,7 @@ h_{kv}
 \subsection{复杂度、访存与存储开销分析}
 \label{subsec:ch3-system-overhead}
 
-离线阶段的额外代价来自候选参数扫描。设候选参数集合大小为 $|\Theta_{\mathrm{path}}|$，校准样本数为 $N$，模型层数为 $L$，Query 头数为 $H_q$，每个样本的校准长度为 $n$，头维度为 $d_k$，则离线搜索复杂度
+离线开销主要来自候选参数扫描。记候选集合规模为 $|\Theta_{\mathrm{path}}|$、校准样本数为 $N$、模型层数为 $L$、Query 头数为 $H_q$、每个样本的校准长度为 $n$，头维度为 $d_k$。路径级离线搜索复杂度可记为
 \begin{equation}
 T_{\mathrm{calib}}^{\mathrm{path}}
 =
@@ -712,7 +712,7 @@ T_{\mathrm{calib}}^{\mathrm{path}}
 |\Theta_{\mathrm{path}}|\,N\,L\,H_q\,n\,d_k
 \bigr),
 \end{equation}
-其中使用 $H_q$（而非 $H_{kv}$）是因为 KL 代理在 Query 头上比较注意力分布。INT8 基准路径、对称 \texttt{INT4} 与 \texttt{INT4-RoleAlign} 共享搜索入口，差别只体现在 $|\Theta_{\mathrm{path}}|$ 的规模上。
+式中采用 $H_q$ 而非 $H_{kv}$，是因为这一阶次描述注意力分布 KL 代理的主要计算；该代理逐 Query 头比较参考分布与量化分布。\texttt{INT8} 基准路径、对称 \texttt{INT4} 与 \texttt{INT4-RoleAlign} 使用同一搜索流程，但各路径的代理实例化并不完全相同。K 路径沿 KL 统计计算，V 路径按输出扰动代理统计；在主导阶次表示中，路径差异主要体现为候选集合规模差异，以及代理实现带来的常数项差异。
 
 KV Cache 显存按"数据载荷 + 元数据载荷"分解。设 $S$ 为当前缓存的序列长度，每元素数据字节为 $b_\mathrm{data}$（FP16 取 2，INT8 取 1，INT4 packed 取 $1/2$），每组 scale 占 $4$ 字节（FP32），group size 为 $g$（本文 \texttt{INT8} 路径取 $g=128$，对称 \texttt{INT4} 路径取 $g=32$，与第~\ref{subsec:ch3-int8-baseline}~节给出的实现默认一致）。FP16 参考开销
 \begin{equation}

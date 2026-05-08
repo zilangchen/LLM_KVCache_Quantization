@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 02:36 | AIGC 段落修订 32: 离线搜索复杂度引入
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理离线候选参数扫描与路径级搜索复杂度说明。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将机械的变量引入改为更自然的复杂度定义句。
+  - 保留 `\mathcal O(|\Theta_{\mathrm{path}}| N L H_q n d_k)` 公式和 `H_q` 粒度解释。
+  - 补充 K 路径 KL 统计与 V 路径输出扰动代理的边界，避免把三条路径差异写成只来自候选集合规模。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated.
+- Risks / follow-ups:
+  - 下一轮进入 Segment 33 的第三章小结段落。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 offline complexity intro`
+
 ### 2026-05-09 02:31 | AIGC 段落修订 31b: 系统路径三类职责
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理系统落地中 INT8-Canonical、INT4-RoleAlign 质量路径和 INT4 系统边界扩展的职责划分。
 - Changed files:

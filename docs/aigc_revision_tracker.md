@@ -939,6 +939,56 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 32
+
+- Report segment: 32
+- Source paragraph: `thesis/chapters/ch3_method.tex`, lines 707--715
+- Detector excerpt begins: `离线阶段的额外代价来自候选参数扫描...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: definition-heavy opening, explanatory parenthetical phrasing, and an over-compressed final sentence that implied all paths differ only by candidate-set size.
+- Rewrite goal: keep the same offline complexity formula while making the paragraph less mechanical and more careful about path-specific proxy costs.
+- Style constraints: avoid unnecessary parentheses, avoid English-style labels in Chinese prose where possible, avoid `xxxx 上` phrasing, and keep the complexity statement bounded to leading-order search cost.
+
+### Preserved Information
+
+- The offline-stage overhead still comes mainly from candidate parameter scanning.
+- The variables `|\Theta_{\mathrm{path}}|`, `N`, `L`, `H_q`, `n`, and `d_k` retain the same meanings.
+- The path-level offline search complexity remains `\mathcal O(|\Theta_{\mathrm{path}}| N L H_q n d_k)`.
+- The use of `H_q` rather than `H_{kv}` remains tied to attention-distribution comparison at the Query-head granularity.
+- `\texttt{INT8}` baseline, symmetric `\texttt{INT4}`, and `\texttt{INT4-RoleAlign}` still share the same search-flow abstraction.
+- The revision no longer claims that path differences only come from candidate-set size; it also preserves proxy-specific constant-factor differences.
+- The K path remains associated with KL statistics, while the V path remains associated with the output-perturbation proxy.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the complexity expression and proxy scope remain accurate.
+- Chinese academic writing reviewer: first two passes failed on mechanical wording and English-style labels; final version passed after replacing `attention-distribution KL`, `K-path`, `V-path`, and `落在...上`.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with the preceding calibration and RoleAlign path definitions.
+- Skeptical reviewer: first pass failed because the original rewrite overclaimed that differences only came from candidate size; final version passed after adding proxy-instantiation and constant-factor boundaries.
+
+### Applied Revision
+
+```tex
+离线开销主要来自候选参数扫描。记候选集合规模为 $|\Theta_{\mathrm{path}}|$、校准样本数为 $N$、模型层数为 $L$、Query 头数为 $H_q$、每个样本的校准长度为 $n$，头维度为 $d_k$。路径级离线搜索复杂度可记为
+\begin{equation}
+T_{\mathrm{calib}}^{\mathrm{path}}
+=
+\mathcal O\!\bigl(
+|\Theta_{\mathrm{path}}|\,N\,L\,H_q\,n\,d_k
+\bigr),
+\end{equation}
+式中采用 $H_q$ 而非 $H_{kv}$，是因为这一阶次描述注意力分布 KL 代理的主要计算；该代理逐 Query 头比较参考分布与量化分布。\texttt{INT8} 基准路径、对称 \texttt{INT4} 与 \texttt{INT4-RoleAlign} 使用同一搜索流程，但各路径的代理实例化并不完全相同。K 路径沿 KL 统计计算，V 路径按输出扰动代理统计；在主导阶次表示中，路径差异主要体现为候选集合规模差异，以及代理实现带来的常数项差异。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated to this segment.
+
 ## Segment 31b
 
 - Report segment: 31
