@@ -939,6 +939,47 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 20b
+
+- Report segment: 20
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 205
+- Detector excerpt begins: `在该路径中，Key与Value均采用对称、逐组...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: dense parenthetical `per-group` explanation and a long formula-introduction sentence.
+- Rewrite goal: split the quantization format, grouping rule, and variable definition while leaving the following equation unchanged.
+- Style constraints: avoid unnecessary parentheses and keep the formula lead-in precise.
+
+### Preserved Information
+
+- Key and Value still use the same static symmetric per-group quantization in this path.
+- Groups are still formed along the channel dimension.
+- Each group still contains `$g=128$` elements and shares one scale parameter.
+- `$x_{l,j}$` still denotes the tensor to quantize for layer `$l$` and group `$j$`.
+- `$p_c$` and `$g$` remain the inputs used to define the static scale parameter.
+- The following equation remains the definition of the static scale.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the format, grouping axis, group size, shared scale, notation, and equation handoff are preserved.
+- Chinese academic writing reviewer: PASS; no wording issue found.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with the runtime path table and the INT8 static-scale definition.
+- Skeptical reviewer: PASS; no omission or new claim found.
+
+### Applied Revision
+
+```tex
+该路径对 Key 和 Value 使用相同的静态对称逐组量化。分组沿通道维度划分，每组包含 $g=128$ 个元素并共享一个缩放参数。设第 $l$ 层第 $j$ 个分组的待量化张量为 $x_{l,j}$；给定校准百分位参数 $p_c$ 和分组大小 $g$ 后，静态缩放参数定义为
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 20a
 
 - Report segment: 20

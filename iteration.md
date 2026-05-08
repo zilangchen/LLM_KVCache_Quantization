@@ -1781,3 +1781,24 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - Segment 20 还包含下一段静态量化定义，后续按自然段单独处理。
 - Commit: pending at log-write time; committed as `docs: polish aigc ch3 int8 canonical role`
+
+### 2026-05-09 01:08 | AIGC 段落修订 20b: INT8 静态逐组量化定义
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理 `\texttt{INT8}` 静态量化公式入口段。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 拆分静态对称逐组量化、通道维度分组和公式变量定义。
+  - 保留 Key/Value 同格式、`$g=128$`、共享 scale、`$x_{l,j}$`、`$p_c$` 与后续公式入口。
+  - 技术、中文、跨章一致性和 skeptical 审查均返回 PASS。
+- Validation:
+  - `git diff --check`: PASS
+  - LaTeX: PASS，生成 100 页 PDF
+  - Residual: 仍有既存 Chapter 3 overfull hbox，与本段修订无关。
+- Risks / follow-ups:
+  - 下一轮进入 Segment 21 的候选网格筛选与自适应保护段。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 int8 static scale`
