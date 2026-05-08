@@ -275,7 +275,7 @@ m_{l,j}^{K}-q_{\min}s_{l,j}^{K}.
 \end{equation}
 这些分位数沿序列维度统计，因此每个通道各自得到一组 $(s,\zeta)$。这样做的目的不是改变 Key 的计算路径，而是在粗 \texttt{INT4} 网格下保留不同特征方向的取值范围，减少通道差异被同一尺度抹平后对 $qK^\top$ 排序造成的影响。该设计承接第~\ref{sec:ch3-motivation-kv}~节中关于 Key 侧低比特失稳的诊断。
 
-Value 侧使用逐 token 非对称量化。设第 $l$ 层 Value 矩阵为 $V^{(l)}\in\mathbb{R}^{S\times d_v}$，对第 $t$ 个 token，分位数裁剪边界
+Value 侧则按 token 建立非对称量化参数。设第 $l$ 层 Value 矩阵为 $V^{(l)}\in\mathbb{R}^{S\times d_v}$；对第 $t$ 个 token，分位数裁剪边界定义为
 \begin{equation}
 m_{l,t}^{V}
 =

@@ -939,6 +939,46 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 24b
+
+- Report segment: 24
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 278
+- Detector excerpt begins: `Value侧使用逐token非对称量化...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: compact formula lead-in, missing natural pause before the token-specific boundary, and mechanical `使用逐 token` phrasing.
+- Rewrite goal: make the Value-side per-token affine-parameter setup explicit while keeping the following percentile boundary formula unchanged.
+- Style constraints: avoid parenthetical explanation and keep the sentence as a clean formula handoff.
+
+### Preserved Information
+
+- Value side still uses per-token asymmetric quantization.
+- The text now states that Value-side asymmetric quantization parameters are established per token.
+- The Value matrix remains `$V^{(l)}\in\mathbb{R}^{S\times d_v}$`.
+- The boundary is still defined for the `$t$`-th token.
+- The following percentile-clipping boundary formula remains the continuation of this sentence.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the Value-side per-token asymmetric quantization, matrix shape, token index, and formula handoff are preserved.
+- Chinese academic writing reviewer: PASS; confirmed the wording is natural and not mechanically translated.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with the Key-side contrast and the `$[B,H_{kv},S]$` Value-scale shape.
+- Skeptical reviewer: PASS; no omitted information, claim narrowing, or formula-connection issue found.
+
+### Applied Revision
+
+```tex
+Value 侧则按 token 建立非对称量化参数。设第 $l$ 层 Value 矩阵为 $V^{(l)}\in\mathbb{R}^{S\times d_v}$；对第 $t$ 个 token，分位数裁剪边界定义为
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 24a
 
 - Report segment: 24

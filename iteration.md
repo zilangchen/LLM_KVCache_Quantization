@@ -36,6 +36,27 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 01:37 | AIGC 段落修订 24b: RoleAlign Value 侧公式引入
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理 Value 侧逐 token 非对称量化的公式引入句。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将 Value 侧“使用逐 token 非对称量化”改为“按 token 建立非对称量化参数”。
+  - 保留 $V^{(l)}\in\mathbb{R}^{S\times d_v}$、第 $t$ 个 token 和分位数裁剪边界定义。
+  - 技术、中文、跨章一致性和 skeptical 审查均返回 PASS。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated.
+- Risks / follow-ups:
+  - 下一轮继续处理 Segment 25 中 RoleAlign 与 KIVI-style 的比较段。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 rolealign value token`
+
 ### 2026-05-09 01:35 | AIGC 段落修订 24a: RoleAlign Key 侧统计解释
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理 Key 侧分位数统计后的解释句。
 - Changed files:
