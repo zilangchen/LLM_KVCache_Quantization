@@ -36,6 +36,26 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 00:41 | AIGC paragraph polish ch3 framework caption
+- Goal: Process report segment 16 in Figure 3-3 caption while preserving framework inputs, offline artifacts, shared profile, allocation output, and online read-only execution.
+- Changed files:
+  - `thesis/figures/fig_ch3_framework_shared_profile.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/figures/fig_ch3_framework_shared_profile.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Rewrote the figure caption into a responsibility-oriented summary.
+  - Preserved calibration inputs, `\\theta^\\star`, `\\mathcal S`, budget allocation under `\\bar b`, `b^\\star`, and online cache-write/decode execution.
+  - Added the no-online-search boundary without introducing figure nodes that are not drawn.
+- Validation:
+  - PASS: diff whitespace check.
+  - PASS: LaTeX build generated the PDF; log check found no undefined references or citation warnings. Existing overfull hboxes at Chapter 3 lines 369 and 644--646 are unrelated to this caption.
+- Risks / follow-ups:
+  - Continue with report segment 17 after this commit.
+- Commit: pending until this entry is committed.
+
 ### 2026-05-09 00:37 | AIGC paragraph polish ch3 offline online boundary
 - Goal: Process the second natural paragraph of report segment 15 in Chapter 3 while preserving the offline/online split and frozen-artifact execution boundary.
 - Changed files:

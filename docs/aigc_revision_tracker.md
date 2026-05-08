@@ -939,6 +939,51 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 16
+
+- Report segment: 16
+- Source paragraph: `thesis/figures/fig_ch3_framework_shared_profile.tex`, figure caption
+- Detector excerpt begins: `图3-3 行为引导量化框架总览...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: process-summary rhythm, repeated `随后/同一链路同步`, and a caption that did not explicitly state the online no-search boundary.
+- Rewrite goal: turn the caption into a responsibility-oriented description while preserving all figure relationships and avoiding graph/text mismatch.
+- Style constraints: avoid `在...下` where `依据...` is more natural, avoid engineering-heavy `只读方式`, and do not introduce a low-bit-recovery node that is not drawn in the figure.
+
+### Preserved Information
+
+- The figure remains the overview of the behavior-guided quantization framework.
+- Offline calibration still reads calibration samples, FP16 reference behavior, and candidate quantization paths.
+- Offline calibration still computes the behavioral proxy and performs robust selection.
+- The frozen calibration artifact remains `\(\theta^\star\)`.
+- The layer-wise behavioral sensitivity profile remains `\(\mathcal S\)` and is produced by the calibration link rather than serving as its input.
+- The allocation module still reads `\(\mathcal S\)`.
+- The allocation module still generates `\(b^\star\)` according to average bit-width budget `\(\bar b\)`.
+- Online inference still reads `\(\theta^\star\)` and `\(b^\star\)`.
+- The online phase now explicitly states that it does not re-search or update offline artifacts.
+- Cache write and decode remain the online execution actions.
+
+### Review Gate
+
+- Technical reviewer: first and final passes both approved; confirmed all original figure-caption relationships are preserved.
+- Chinese academic writing reviewer: first pass failed on `以只读方式` and `在平均位宽预算下`; final version passed after rewriting them as `读取该画像` and `依据平均位宽预算`.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with the figure nodes and Section 3.3 text.
+- Skeptical reviewer: first pass asked for no-search boundary and warned about possible `\mathcal S`/calibration-role ambiguity; final version passed after adding the online no-search statement and clarifying that `\mathcal S` is produced by the calibration link.
+
+### Applied Revision
+
+```tex
+\caption{行为引导量化框架总览。离线校准链路读取校准样本、FP16 参考行为和候选量化路径，计算行为代理并完成稳健选择，输出冻结校准产物 \(\theta^\star\)。校准链路同时沉淀逐层行为敏感度画像 \(\mathcal S\)，预算分配模块读取该画像，依据平均位宽预算 \(\bar b\) 生成位宽向量 \(b^\star\)。在线推理阶段只读取 \(\theta^\star\) 与 \(b^\star\)，不重新搜索或更新离线产物，并据此执行缓存写入与解码。}
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/figures/fig_ch3_framework_shared_profile.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 15b
 
 - Report segment: 15

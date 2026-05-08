@@ -98,6 +98,6 @@
     \draw[arrGold] (alloc.east) -- ++(0.52,0) |- node[pos=0.70, below, font=\tiny, text=goldTone!70!black] {预算配置} (online.west |- alloc.east);
   \end{tikzpicture}%
   }
-  \caption{行为引导量化框架总览。离线校准链路以校准样本、FP16 参考行为与候选量化路径为输入，计算行为代理并完成稳健选择，随后形成冻结校准产物 \(\theta^\star\)。同一链路同步生成逐层行为敏感度画像 \(\mathcal S\)，预算分配模块只读该画像，在平均位宽预算 \(\bar b\) 下生成位宽向量 \(b^\star\)。在线推理阶段读取 \(\theta^\star\) 与 \(b^\star\)，执行缓存写入与解码。}
+  \caption{行为引导量化框架总览。离线校准链路读取校准样本、FP16 参考行为和候选量化路径，计算行为代理并完成稳健选择，输出冻结校准产物 \(\theta^\star\)。校准链路同时沉淀逐层行为敏感度画像 \(\mathcal S\)，预算分配模块读取该画像，依据平均位宽预算 \(\bar b\) 生成位宽向量 \(b^\star\)。在线推理阶段只读取 \(\theta^\star\) 与 \(b^\star\)，不重新搜索或更新离线产物，并据此执行缓存写入与解码。}
   \label{fig:ch3-framework-shared-profile}
 \end{figure}
