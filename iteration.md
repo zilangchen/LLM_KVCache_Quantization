@@ -36,6 +36,26 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 22:56 | AIGC paragraph polish ch1 contribution 2
+- Goal: Process report segment 7's second Chapter 1 contribution paragraph while preserving the INT8 baseline, low-bit RoleAlign, AutoK, and bounded system-support claims.
+- Changed files:
+  - `thesis/chapters/ch1_introduction.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch1_introduction.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Rewrote contribution 2 to preserve the conservative INT8 fidelity reference, K/V role-aware low-bit recovery path, AutoK budget proposal role, and system execution/review interface.
+  - Multi-round review converged to a final candidate with PASS from technical accuracy, Chinese academic writing, cross-chapter consistency, and skeptical-review perspectives.
+- Validation:
+  - `git diff --check`: PASS
+  - LaTeX: PASS, generated 99-page PDF
+  - Residual: existing Chapter 3 overfull hboxes at lines 369 and 644--646; unrelated to this paragraph.
+- Risks / follow-ups:
+  - Continue with report segment 7's cross-model budget-regime contribution paragraph.
+- Commit: see Git history for message `docs: polish aigc ch1 instance-chain contribution`
+
 ### 2026-05-08 22:40 | AIGC paragraph polish ch1 contribution 1
 - Goal: Process report segment 6's first Chapter 1 contribution paragraph while preserving the attention-behavior object, three observables, and calibration/allocation uses.
 - Changed files:
