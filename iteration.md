@@ -36,6 +36,27 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 01:35 | AIGC 段落修订 24a: RoleAlign Key 侧统计解释
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理 Key 侧分位数统计后的解释句。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将分号压缩句改成三句，拆开分位数统计、逐通道参数作用和 §3.2 诊断承接关系。
+  - 保留序列维度统计、每通道一组 $(s,\zeta)$、不同特征方向范围、粗 \texttt{INT4} 网格与 $qK^\top$ 排序影响。
+  - 技术、中文、跨章一致性和 skeptical 审查均返回 PASS。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated.
+- Risks / follow-ups:
+  - Segment 24 还包含 Value 侧逐 token 非对称量化公式引入，下一轮单独处理。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 rolealign key stats`
+
 ### 2026-05-09 01:30 | AIGC 段落修订 23b: RoleAlign Key 侧形状说明
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理 `\texttt{INT4-RoleAlign}` Key 侧公式前的维度省略与实现形状说明。
 - Changed files:

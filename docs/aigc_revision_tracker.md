@@ -939,6 +939,47 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 24a
+
+- Report segment: 24
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 276
+- Detector excerpt begins: `分位数统计沿序列维度聚合...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: compact semicolon chain, English `K-cliff` label, and abstract `同质化压缩`.
+- Rewrite goal: explain the Key-side percentile statistics as a design consequence of per-channel parameters without changing the formula semantics.
+- Style constraints: avoid the English label in the sentence and keep the section handoff in natural Chinese.
+
+### Preserved Information
+
+- Percentile statistics are still collected along the sequence dimension.
+- Each channel still independently determines a parameter pair `$(s,\zeta)$`.
+- Per-channel parameters still preserve the range of different feature directions.
+- The coarse `\texttt{INT4}` grid remains the source of concern.
+- The effect still concerns `$qK^\top$` ranking structure.
+- The paragraph still connects the design to Section~`\ref{sec:ch3-motivation-kv}` and its Key-side low-bit instability diagnosis.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the sequence aggregation, per-channel parameters, `$(s,\zeta)$`, coarse-grid mechanism, and section handoff are preserved.
+- Chinese academic writing reviewer: PASS; confirmed the wording is more natural and removes the English `K-cliff` label in this local sentence.
+- Cross-chapter consistency reviewer: PASS; confirmed that replacing `K-cliff` with Key-side low-bit instability does not break the Section~`\ref{sec:ch3-motivation-kv}` anchor.
+- Skeptical reviewer: PASS; no omitted information, semantic drift, or over-strong causal claim found.
+
+### Applied Revision
+
+```tex
+这些分位数沿序列维度统计，因此每个通道各自得到一组 $(s,\zeta)$。这样做的目的不是改变 Key 的计算路径，而是在粗 \texttt{INT4} 网格下保留不同特征方向的取值范围，减少通道差异被同一尺度抹平后对 $qK^\top$ 排序造成的影响。该设计承接第~\ref{sec:ch3-motivation-kv}~节中关于 Key 侧低比特失稳的诊断。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 23b
 
 - Report segment: 23
