@@ -55,7 +55,7 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 
 这种不对称的强弱还随模型族和头共享结构改变。Qwen 系列的 $H_{kv}$ 为 2 或 4，重复因子 $N_{\mathrm{rep}}=H_q/H_{kv}$ 落在 $\{6,7\}$，在 \texttt{K4V8} 与 \texttt{K4V4} 下出现检索归零。LLaMA-3.1-8B 的 $H_{kv}=8$、$N_{\mathrm{rep}}=4$，在当前对照里失稳幅度较小。在 GQA 机制中，同一个 KV 头的量化误差会由映射到该头的一组 Query 头共同承受；在 $H_q$ 可比的对照中，较小的 $N_{\mathrm{rep}}$ 意味着共享同一 KV 头误差的 Query 头更少，相关读数见表~\ref{tab:ch4-kv-multitask}。更稳妥的解释还需要同时纳入模型规模、训练数据与 GQA 配置，$H_{kv}$ 在本文中只作为组间差异的代理变量，用于描述严重程度与触发位宽的边界变化。
 
-因此 Key 侧低比特退化被确立为低比特路径设计的核心约束。这一结论的核心论据是单侧 PPL 诊断的隔离证据（\texttt{K4V16} 单独触发数量级 PPL 退化）；\texttt{K4V8}/\texttt{K4V4} 的位宽对照作为剂量-响应（dose-response）验证与之同向，但因二者同时压低 K 与 V，单独不构成 K 主导的隔离推断。PPL 原始读数见表~\ref{tab:ch4-kv-ppl}；跨任务读数及统计协议（Bootstrap 95\% CI、sign-flip 置换检验与 BH-FDR 多重比较校正）见表~\ref{tab:ch4-kv-multitask} 与第~\ref{sec:exp-kv-sensitivity}~节。
+这些证据表明，Key 侧低比特退化是低比特路径设计中需要优先约束的风险点。主要隔离依据来自单侧 PPL 诊断，\texttt{K4V16} 单独使 PPL 出现数量级退化，\texttt{K16V4} 只带来小幅变化。任务读数提供外部一致性，\texttt{K4V8}/\texttt{K4V4} 在 Key 位宽降到 4 bit 后出现更强失稳，\texttt{K8V4} 未出现归零式失稳。由于 \texttt{K4V8} 与 \texttt{K4V4} 同时压低 K 与 V，它们仍只适合作为边界辅助证据，不能单独支撑 K 主导的隔离推断。PPL 原始读数见表~\ref{tab:ch4-kv-ppl}；跨任务读数及统计协议，包括 Bootstrap 95\% CI、sign-flip 置换检验与 BH-FDR 多重比较校正，见表~\ref{tab:ch4-kv-multitask} 与第~\ref{sec:exp-kv-sensitivity}~节。
 
 \section{行为引导量化框架总览}
 \label{sec:ch3-framework}

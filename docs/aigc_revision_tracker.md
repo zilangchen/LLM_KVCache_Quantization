@@ -939,6 +939,50 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 14
+
+- Report segment: 14
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 58
+- Detector excerpt begins: `因此Key侧低比特退化被确立为低比特路径设计的核心约束...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: formulaic `因此...被确立`, parenthetical evidence packing, English-style `dose-response`, and a compressed evidence hierarchy that did not restate the Value-side contrasts.
+- Rewrite goal: keep the Key-side risk conclusion while making the evidence hierarchy explicit: single-side PPL isolation is primary, task readouts are external consistency and boundary evidence.
+- Style constraints: avoid unnecessary parentheses, avoid English shorthand, avoid over-claiming `\texttt{K4V8}`/`\texttt{K4V4}` as isolated Key evidence, and keep statistical-protocol references correctly assigned.
+
+### Preserved Information
+
+- Key-side low-bit degradation remains a design constraint for the low-bit path, now phrased as a risk point that needs priority control.
+- The main isolation evidence still comes from single-side PPL diagnosis.
+- `\texttt{K4V16}` still independently causes order-level PPL degradation.
+- `\texttt{K16V4}` is now explicitly restated as only a small change.
+- `\texttt{K4V8}`/`\texttt{K4V4}` remain same-direction task evidence under lower Key bit-width.
+- `\texttt{K8V4}` remains the contrast without zero-collapse instability.
+- The boundary remains that `\texttt{K4V8}` and `\texttt{K4V4}` simultaneously lower K and V and therefore cannot alone isolate K dominance.
+- PPL raw readings remain assigned to Table~`\ref{tab:ch4-kv-ppl}`.
+- Cross-task readings and their statistical protocol remain assigned to Table~`\ref{tab:ch4-kv-multitask}` and Section~`\ref{sec:exp-kv-sensitivity}`.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed evidence hierarchy and statistical-protocol attribution.
+- Chinese academic writing reviewer: first pass failed on `核心约束位置`, `数量级 PPL 退化`, and `剂量响应式信号`; final version passed after replacing these with natural Chinese expressions.
+- Cross-chapter consistency reviewer: PASS; confirmed alignment with Chapter 4 Section~`\ref{sec:exp-kv-sensitivity}` and Tables~`\ref{tab:ch4-kv-ppl}`/`\ref{tab:ch4-kv-multitask}`.
+- Skeptical reviewer: first pass failed because Value-side contrast was omitted and `核心约束` was too strong; final version passed after restating `\texttt{K16V4}`/`\texttt{K8V4}` and narrowing the claim to a priority risk point.
+
+### Applied Revision
+
+```tex
+这些证据表明，Key 侧低比特退化是低比特路径设计中需要优先约束的风险点。主要隔离依据来自单侧 PPL 诊断，\texttt{K4V16} 单独使 PPL 出现数量级退化，\texttt{K16V4} 只带来小幅变化。任务读数提供外部一致性，\texttt{K4V8}/\texttt{K4V4} 在 Key 位宽降到 4 bit 后出现更强失稳，\texttt{K8V4} 未出现归零式失稳。由于 \texttt{K4V8} 与 \texttt{K4V4} 同时压低 K 与 V，它们仍只适合作为边界辅助证据，不能单独支撑 K 主导的隔离推断。PPL 原始读数见表~\ref{tab:ch4-kv-ppl}；跨任务读数及统计协议，包括 Bootstrap 95\% CI、sign-flip 置换检验与 BH-FDR 多重比较校正，见表~\ref{tab:ch4-kv-multitask} 与第~\ref{sec:exp-kv-sensitivity}~节。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 13b
 
 - Report segment: 13
