@@ -229,9 +229,9 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
     \toprule
     模型 & $H_{kv}$ & FP16 Needle & 对称 INT4 Needle & 诊断标签 \\
     \midrule
-    Qwen2.5-1.5B & 2 & 100\% & 0\%  & 阶跃崩塌；PPL 退化 $>15\%$ \\
-    Qwen2.5-7B   & 4 & 100\% & 0\%  & 阶跃崩塌；PPL 退化 $>15\%$ \\
-    LLaMA-3.1-8B & 8 & 100\% & 98\% & 架构例外；Needle 仍保持可用 \\
+    Qwen2.5-1.5B & 2 & 100\% & 0\%  & 阶跃崩塌；PPL $9.31 \rightarrow 19.5$ \\
+    Qwen2.5-7B   & 4 & 100\% & 0\%  & 阶跃崩塌；PPL $7.14 \rightarrow 85.5$ \\
+    LLaMA-3.1-8B & 8 & 100\% & 98\% & 架构例外；PPL $6.73 \rightarrow 6.97$ \\
     \bottomrule
   \end{tabular}
 
