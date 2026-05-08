@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 03:29 | AIGC 段落修订 46: 第四章 KL 与 MSE 趋同读数
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理 7B KL/MSE 校准目标趋同的表格解读。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 去掉 `7B 这块证据` 与冒号式关键结论。
+  - 保留 $k_{\mathrm{pct}}=100.0$、$v_{\mathrm{pct}}=99.9$、`\texttt{INT4-RoleAlign}` PPL 7.1121 和附录补充对照。
+  - 保持“模型规模与鲁棒性可能调节差异，但正文证据主要支持趋同已经出现”的边界。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check`: PASS。
+  - `latexmk`: PASS，生成 101 页 PDF。
+  - 日志仅保留既有 line 369 overfull hbox，无 undefined references 或 citation warnings。
+- Risks / follow-ups:
+  - 下一轮处理 KL/MSE 趋同的机制解释段落。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch4 kl mse convergence`
+
 ### 2026-05-09 03:26 | AIGC 段落修订 45: 第四章部署 Panel A 读数
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理表 4-13 Panel A 关于 Qwen2.5-14B 融合路径的长度扩展读数和最小部署结论。
 - Changed files:

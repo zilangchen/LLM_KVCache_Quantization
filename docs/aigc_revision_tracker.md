@@ -13,6 +13,50 @@ This file records paragraph-level AIGC-polish changes. Each entry maps one detec
 - Overall suspected AIGC ratio: 20.38%
 - Highest-risk chapters: Chinese abstract 72.0%, English abstract 72.0%, Chapter 3 32.0%, Chapter 1 24.0%, Conclusion 14.0%
 
+## Segment 46
+
+- Report segment: 46
+- Source paragraph: `thesis/chapters/ch4_experiments.tex`, line 782
+- Detector excerpt begins: `因此，7B这块证据的关键在于...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: `因此...关键在于` template, colon-style bold conclusion, `7B 这块证据`口语化表达, and `在...上` phrasing.
+- Rewrite goal: preserve the convergence evidence while making the paragraph read as a measured table interpretation.
+- Style constraints: avoid `xxxx 上`, avoid unnecessary colon usage, keep all calibration parameters and PPL values unchanged.
+
+### Preserved Information
+
+- Table~\ref{tab:ch4-kl-mse-convergence} is the minimal empirical support for the question.
+- Qwen2.5-7B-Instruct KL and MSE objectives search to the same parameter pair.
+- The shared parameter pair is $k_{\mathrm{pct}}=100.0$ and $v_{\mathrm{pct}}=99.9$.
+- The corresponding `\texttt{INT4-RoleAlign}` PPL values are identical at 7.1121.
+- The key reading is that KL and MSE have highly converged in the 7B setting.
+- Appendix~\ref{subsec:app-7b-kl-mse} provides supplementary comparisons.
+- The result suggests model scale and robustness may modulate KL/MSE differences.
+- The main-text evidence mainly supports the bounded claim that convergence has appeared.
+
+### Review Gate
+
+- Technical accuracy reviewer: PASS.
+- Chinese academic writing reviewer: PASS.
+- Cross-chapter consistency reviewer: PASS.
+- Skeptical reviewer: PASS.
+
+### Applied Revision
+
+```tex
+表~\ref{tab:ch4-kl-mse-convergence} 提供了这一问题的最小实证支撑。Qwen2.5-7B-Instruct 的 KL 与 MSE 目标最终搜索到同一组参数，即 $k_{\mathrm{pct}}=100.0$、$v_{\mathrm{pct}}=99.9$；对应的 \texttt{INT4-RoleAlign} PPL 完全一致，均为 7.1121。7B 结果的关键读数是，\textbf{该设定中 KL 与 MSE 已经高度趋同。} 结合附录第~\ref{subsec:app-7b-kl-mse}~节的补充对照，这一结果提示模型规模与鲁棒性可能调节二者差异；当前正文证据主要支持“趋同已经出现”这一判断。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing overfull hbox at line 369; no undefined references or citation warnings.
+- Commit: see Git history for message `docs: polish aigc ch4 kl mse convergence`
+
 ## Segment 45
 
 - Report segment: 45
