@@ -939,6 +939,45 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 27b
+
+- Report segment: 27
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 632
+- Detector excerpt begins: `在线推理阶段第t个新token...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: formula-introduction wording is rigid and close to an English-style technical manual.
+- Rewrite goal: keep the online write semantics while making the formula lead-in shorter and more natural.
+- Style constraints: avoid unnecessary punctuation expansion and avoid changing the following equation or branch definitions.
+
+### Preserved Information
+
+- The sentence still refers to online inference.
+- The write still concerns the $t$-th new token.
+- The target layer remains the $l$-th layer.
+- The following equation is still introduced as a unified notation for quantized cache writing.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed that the candidate preserves the write event and does not alter the formula semantics.
+- Chinese academic writing reviewer: PASS; confirmed the wording is more natural than `阶段...可写为`.
+- Cross-chapter consistency reviewer: PASS; found no conflict with the runtime artifact interface or later Chapter 4 use.
+- Skeptical reviewer: PASS; found no information loss or claim drift.
+
+### Applied Revision
+
+```tex
+在线推理接收第 $t$ 个新 token 时，第 $l$ 层的量化写入统一记作
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing Chapter 3 overfull hboxes at lines 369 and 644--646; no undefined references or citation warnings.
+
 ## Segment 27a
 
 - Report segment: 27

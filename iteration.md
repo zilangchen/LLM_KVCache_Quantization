@@ -36,6 +36,27 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 02:00 | AIGC 段落修订 27b: 在线写入公式引入句
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理在线推理阶段第 $t$ 个新 token 写入公式的引入句。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将机械的“在线推理阶段...可写为”改为更自然的公式引入句。
+  - 保留在线推理、第 $t$ 个新 token、第 $l$ 层写入和统一记号四个信息点，公式本身不变。
+  - 技术、中文、跨章一致性和 skeptical 审查均返回 PASS。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 are unrelated.
+- Risks / follow-ups:
+  - 下一轮继续处理公式后的参数解释段，重点清理冒号式说明和中英混排实现口吻。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 online write intro`
+
 ### 2026-05-09 01:56 | AIGC 段落修订 27a: Runtime artifact 字段与 K/V 参数生成
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理三条路径在 $\mathcal A_{\mathrm{path}}$ 中的字段差异和 K/V 仿射参数运行时生成语义。
 - Changed files:
