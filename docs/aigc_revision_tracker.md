@@ -939,6 +939,49 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 34
+
+- Report segment: 34
+- Source paragraph: `thesis/chapters/ch4_experiments.tex`, line 55
+- Detector excerpt begins: `PPL 检查语言建模概率质量是否整体漂移...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: repeated `检查` sentence pattern, list-like metric enumeration, and a hard negative boundary for official LongBench that could understate its role.
+- Rewrite goal: keep the failure-mode mapping while making each metric's role more concrete and keeping official LongBench as a bounded external-data sanity check.
+- Style constraints: avoid unnecessary colon or parenthetical explanation, avoid overusing `检查`, keep the official LongBench comparison outside the main matrix without dismissing its value, and keep system evaluation bounded to TPOT, KV Cache footprint, and peak memory.
+
+### Preserved Information
+
+- The chapter still organizes metrics by quantization failure modes.
+- PPL still tracks language-modeling probability-quality drift.
+- Needle-in-a-Haystack still evaluates long-distance retrieval through exact-match success.
+- LongBench-style synthetic tasks still provide task-level comparisons under one scoring pipeline.
+- RULER still evaluates higher-pressure long-context compositional ability.
+- TPOT, KV Cache footprint, and peak memory still cover deployment-side costs.
+- Official LongBench real-data comparison remains outside the main matrix and is still assigned to Section~`\ref{subsec:ch4-longbench-official}`.
+- The official LongBench comparison remains a protocol-consistency check, now also described as an external real-data directional check.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the metric roles remain accurate.
+- Chinese academic writing reviewer: PASS; confirmed the repeated `检查` pattern was reduced.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with Chapter 4 metric definitions and the official LongBench section.
+- Skeptical reviewer: first pass failed because Needle and LongBench-style roles were too abstract and `只承担` could undervalue official LongBench; final version passed after restoring exact-match language and using `主要承担`.
+
+### Applied Revision
+
+```tex
+本章的指标按失败模式组织。PPL 观察固定窗口内语言建模概率质量的整体漂移，Needle-in-a-Haystack~\cite{kamradt2023needle} 以精确匹配通过率检查长距离目标片段能否取回，LongBench 风格合成任务用于比较任务级输出在同一评分管线内的相对变化，RULER~\cite{hsieh2024ruler} 提供更高压力的长上下文组合能力检查；TPOT、KV Cache 占用与峰值显存则对应部署层代价。官方 LongBench 真实数据对照另置于第~\ref{subsec:ch4-longbench-official}~节，主要承担评测协议一致性检验与外部真实数据方向核验；本节主评测矩阵仍以 LongBench 风格合成任务为核心。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated to this segment.
+
 ## Segment 33.3
 
 - Report segment: 33

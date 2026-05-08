@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 02:54 | AIGC 段落修订 34: 第四章指标失败模式总览
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理评测任务、数据与指标小节的指标总览段。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 减少连续 `检查` 句式，将指标组织为失败模式到读数的映射。
+  - 明确 Needle 使用精确匹配通过率检查目标片段能否取回。
+  - 将官方 LongBench 真实数据对照定位为协议一致性检验与外部真实数据方向核验，保留其不进入主评测矩阵的边界。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated.
+- Risks / follow-ups:
+  - 下一轮继续处理 Segment 34 后续的 PPL 协议段。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch4 metric overview`
+
 ### 2026-05-09 02:50 | AIGC 段落修订 33.3: 第三章小结分配与系统承接
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理第三章小结中 BA-$k$、AutoK、系统接口与第四章承接段。
 - Changed files:

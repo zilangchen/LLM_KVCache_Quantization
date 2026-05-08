@@ -52,7 +52,7 @@
 \label{subsec:ch4-benchmarks}
 \label{subsec:exp-benchmarks}
 
-本章按量化可能造成的失败模式分配指标，避免把评测协议写成任务名称堆叠。PPL 检查语言建模概率质量是否整体漂移；Needle-in-a-Haystack~\cite{kamradt2023needle} 检查长距离精确检索是否跨过可用边界；LongBench 风格合成任务检查问答、摘要等任务级输出是否保持相对排序；RULER~\cite{hsieh2024ruler} 检查更高压力下的长上下文组合能力；TPOT、KV Cache 占用与峰值显存检查部署层代价。官方 LongBench 真实数据对照不属于本节主评测矩阵，而在第 4.2.2 节单独承担评测协议一致性检验。
+本章的指标按失败模式组织。PPL 观察固定窗口内语言建模概率质量的整体漂移，Needle-in-a-Haystack~\cite{kamradt2023needle} 以精确匹配通过率检查长距离目标片段能否取回，LongBench 风格合成任务用于比较任务级输出在同一评分管线内的相对变化，RULER~\cite{hsieh2024ruler} 提供更高压力的长上下文组合能力检查；TPOT、KV Cache 占用与峰值显存则对应部署层代价。官方 LongBench 真实数据对照另置于第~\ref{subsec:ch4-longbench-official}~节，主要承担评测协议一致性检验与外部真实数据方向核验；本节主评测矩阵仍以 LongBench 风格合成任务为核心。
 
 PPL 的失败信号是固定窗口内的整体 likelihood 退化。该指标统一使用 32K 上下文协议，并将 \texttt{chunk\_size} 固定为 128；这一设置决定交叉熵累计时每个位置可访问的历史窗口。对显存充足的模型，PPL 在完整测试集协议下报告；对 14B 模型，由于 H20 显存约束，仅在测试集固定前缀上评测，因此其绝对值不与其他模型做跨协议直接比较。
 
