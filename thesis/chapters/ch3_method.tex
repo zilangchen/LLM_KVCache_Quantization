@@ -200,7 +200,7 @@ q_{0.95}(\theta).
 \subsection{INT8 基准路径下的静态 Scale 与自适应保护}
 \label{subsec:ch3-int8-baseline}
 
-\texttt{INT8} 位宽提供 255 级离散网格，校准层输出的 scale 参数可逐组（per-group）精确追溯，本文以此作为行为引导校准闭环的第一性验证实例；该路径在第四章实验章节中以 \texttt{INT8-Canonical} 标注。\texttt{INT8} 同时为后续低比特路径提供压缩率对照基线。
+\texttt{INT8} 的有效整数等级为 255 级，量化网格相对细，校准层写出的 scale 参数也能按组追溯。本文先在这一设置下检查离线选择与在线执行是否形成闭环，并在第四章将该路径记为 \texttt{INT8-Canonical}。\texttt{INT8} 还提供后续低比特路径的压缩率参照。
 
 在该路径中，Key 与 Value 均采用对称、逐组（per-group，沿通道维度每 $g=128$ 个元素一组共享一个缩放参数）的静态量化。记第 $l$ 层第 $j$ 个分组内的待量化张量为 $x_{l,j}$，对给定校准百分位参数 $p_c$ 与分组大小 $g$，静态缩放参数为
 \begin{equation}

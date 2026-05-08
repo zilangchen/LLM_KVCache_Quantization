@@ -1760,3 +1760,24 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - 下一轮进入第~`\ref{sec:ch3-paths}`~节开头的跨位宽路径组织段。
 - Commit: pending at log-write time; committed as `docs: polish aigc ch3 artifact boundary`
+
+### 2026-05-09 01:06 | AIGC 段落修订 20a: INT8-Canonical 路径定位
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理 `\texttt{INT8}` 基准路径定位段。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将 `第一性验证实例` 改为可审计的离线选择与在线执行闭环检查。
+  - 保留 255 级有效整数等级、按组追溯 scale、第四章 `\texttt{INT8-Canonical}` 命名和低比特路径压缩率参照。
+  - 技术、中文、跨章一致性和 skeptical 审查均返回 PASS，失败建议已吸收。
+- Validation:
+  - `git diff --check`: PASS
+  - LaTeX: PASS，生成 100 页 PDF
+  - Residual: 仍有既存 Chapter 3 overfull hbox，与本段修订无关。
+- Risks / follow-ups:
+  - Segment 20 还包含下一段静态量化定义，后续按自然段单独处理。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 int8 canonical role`

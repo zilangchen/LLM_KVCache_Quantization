@@ -939,6 +939,47 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 20a
+
+- Report segment: 20
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 203
+- Detector excerpt begins: `INT8位宽提供255级离散网格...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: slogan-like `第一性验证实例`, parenthetical `per-group`, and a compressed semicolon chain.
+- Rewrite goal: make the INT8 role concrete as a check of the offline-selection to online-execution loop while preserving its baseline role.
+- Style constraints: avoid unnecessary parentheses and keep the claim as an auditable path role rather than a broad methodological label.
+
+### Preserved Information
+
+- `\texttt{INT8}` still has 255 effective integer levels.
+- The quantization grid is still described as relatively fine.
+- Calibration-layer scale parameters remain traceable by group.
+- The path still checks whether behavior-guided calibration forms a stable offline-to-online loop.
+- Chapter 4 still marks the path as `\texttt{INT8-Canonical}`.
+- `\texttt{INT8}` remains the compression-ratio reference for later low-bit paths.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the grid, grouped scale traceability, INT8-Canonical naming, and low-bit baseline role are preserved.
+- Chinese academic writing reviewer: first pass failed on `从离线选择闭合到在线执行` and `按逐组粒度追溯`; final version passed after rewriting these as `检查离线选择与在线执行是否形成闭环` and `按组追溯`.
+- Cross-chapter consistency reviewer: PASS; confirmed the Chapter 4 naming and low-bit reference role.
+- Skeptical reviewer: PASS; no overclaim or factual drift found.
+
+### Applied Revision
+
+```tex
+\texttt{INT8} 的有效整数等级为 255 级，量化网格相对细，校准层写出的 scale 参数也能按组追溯。本文先在这一设置下检查离线选择与在线执行是否形成闭环，并在第四章将该路径记为 \texttt{INT8-Canonical}。\texttt{INT8} 还提供后续低比特路径的压缩率参照。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 19b
 
 - Report segment: 19
