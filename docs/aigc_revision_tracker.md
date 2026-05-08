@@ -939,6 +939,52 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 30c-31a
+
+- Report segment: 30 and 31
+- Source paragraph: `thesis/chapters/ch3_method.tex`, lines 692--700
+- Detector excerpt begins: `为兼容 GQA...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: mechanical formula introduction, dense parenthetical condition, and mixed English `grid/query head/block` implementation phrasing.
+- Rewrite goal: preserve the GQA mapping and TPOT-cost explanation while making the paragraph less like an implementation note.
+- Style constraints: avoid unnecessary parentheses, prefer Chinese terms for `grid`, and keep all mathematical symbols unchanged.
+
+### Preserved Information
+
+- GQA compatibility still requires mapping Query heads to shared KV heads.
+- `$H_q$` and `$H_{kv}$` remain the Query-head and KV-head counts.
+- The divisibility condition `$H_{kv}\mid H_q$` remains, with the statement that the GQA models in this thesis satisfy it.
+- The repetition factor formula and `$h_{kv}` mapping formula remain unchanged.
+- The kernel is still organized in a `$(B,H_q)$` parallel grid.
+- Each Query head still directly accesses the corresponding `$h_{kv}$` slice.
+- The implementation still avoids explicitly copying KV heads into `$H_q$` replicas.
+- The addressing pattern still affects in-block memory-access coalescing, metadata broadcast, and register use.
+- These effects are still reported together with unpacking cost in TPOT.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed GQA mapping and formulas are preserved.
+- Chinese academic writing reviewer: first pass failed on long formula-introduction wording and mixed `grid/query head` phrasing; final version passed after splitting the sentence and using `网格`, `访问`, and `访存合并`.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with Chapter 2 GQA notation and Chapter 4 TPOT/Hkv discussion.
+- Skeptical reviewer: PASS; found no information loss or claim drift.
+
+### Applied Revision
+
+```tex
+为兼容 GQA~\cite{ainslie2023gqa}，融合核需要把 Query 头映射到共享的 KV 头。记 Query 头数为 $H_q$、KV 头数为 $H_{kv}$；本文涉及的 GQA 模型均满足 $H_{kv}\mid H_q$。重复因子定义为
+...
+核函数按 $(B,H_q)$ 网格组织并行。每个 Query 头直接访问对应的 $h_{kv}$ 切片，因此不需要把 KV 头显式复制成 $H_q$ 个副本。这个寻址方式会影响块内访存合并、元数据广播和寄存器占用，并与反打包开销一起反映到 TPOT 中。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing Chapter 3 overfull hbox at line 369; no undefined references or citation warnings.
+
 ## Segment 30b
 
 - Report segment: 30

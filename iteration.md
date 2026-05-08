@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 02:27 | AIGC 段落修订 30c-31a: GQA 头映射与并行网格
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理 GQA Query/KV 头映射、重复因子公式和 `(B,H_q)` 并行网格说明。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 拆开公式引入句，保留 `H_q`、`H_{kv}`、整除关系和重复因子公式。
+  - 将 `(B,H_q) grid` 改为并行网格表述，并保留直接访问 `h_{kv}` 切片、不复制 KV 头的语义。
+  - 保留块内访存合并、元数据广播、寄存器占用和反打包开销共同反映到 TPOT 的边界。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated.
+- Risks / follow-ups:
+  - 下一轮处理 Segment 31 的系统侧三路径分工段。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 gqa head mapping`
+
 ### 2026-05-09 02:24 | AIGC 段落修订 30b: INT4 nibble packing 与解包路径
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理 INT4 nibble packing、wrapper 反打包、RoleAlign 核内解包和 TPOT 边界。
 - Changed files:

@@ -689,7 +689,7 @@ o^{(r+1)}
 
 \texttt{INT4} 的表示形式减少了存储字节数，但解包开销也进入运行路径。nibble packing 将两个 4-bit 整数放入一个 8-bit 字节。写入 packed 缓存时，整数码值先平移到无符号 $[0,15]$ 域再存入 nibble；非对称 \texttt{INT4} 使用 $[-8,7]$ 的 16 级码本，对称诊断路径仍按前文 $q_{\max}=7$ 的 $[-7,7]$ 网格产生码值。读取时，核函数用位移和掩码拆出半字节，再还原为路径对应的有符号整数，并按对应参数反量化；对称路径使用 scale，\texttt{INT4-RoleAlign} 使用 $(s,\zeta)$。本文把执行路径分为两类。对称 \texttt{INT4} 诊断路径采用 wrapper 封装，先将 nibble 缓存批量反打包为 INT8 张量，再复用 \texttt{INT8} 融合核完成片上反量化、点积、online softmax 和输出累加。\texttt{INT4-RoleAlign} 的非对称融合扩展采用核内解包，核函数直接读取 K 侧逐通道与 V 侧逐 token 的 $(s,\zeta)$，在片上存储中完成 nibble 解包和非对称反量化，避免显式 INT8 中间张量物化。4-bit 载荷减少全局读取字节数，反打包和寄存器压力则会重新体现在每输出 token 的时间 TPOT 中。相关变体命名与角色见附录第~\ref{sec:app-triton-variants}~节，端到端 TPOT 数字见第四章第~\ref{subsec:ch4-tpot-4k}~节。
 
-为兼容 GQA~\cite{ainslie2023gqa}，融合核函数还需要把 query head 映射到共享的 KV head。设 query 头数为 $H_q$、KV 头数为 $H_{kv}$，并要求 $H_{kv}\mid H_q$（本文涉及的 GQA 模型均满足），则重复因子
+为兼容 GQA~\cite{ainslie2023gqa}，融合核需要把 Query 头映射到共享的 KV 头。记 Query 头数为 $H_q$、KV 头数为 $H_{kv}$；本文涉及的 GQA 模型均满足 $H_{kv}\mid H_q$。重复因子定义为
 \begin{equation}
 N_{\mathrm{rep}}=\frac{H_q}{H_{kv}},
 \qquad
@@ -697,7 +697,7 @@ h_{kv}
 =
 \bigl\lfloor h_q / N_{\mathrm{rep}} \bigr\rfloor.
 \end{equation}
-核函数按 $(B, H_q)$ grid 组织并行，每个 query head 直接寻址对应的 $h_{kv}$ 切片，无需把 KV head 显式复制为 $H_q$ 个副本；该寻址影响 block 内访问合并、元数据广播与寄存器占用，与反 pack 开销一并体现在 TPOT 中。
+核函数按 $(B,H_q)$ 网格组织并行。每个 Query 头直接访问对应的 $h_{kv}$ 切片，因此不需要把 KV 头显式复制成 $H_q$ 个副本。这个寻址方式会影响块内访存合并、元数据广播和寄存器占用，并与反打包开销一起反映到 TPOT 中。
 
 系统侧落地按三个分工组织。基准路径 \texttt{INT8-Canonical} 由 \texttt{INT8} 融合核支撑，用于验证行为引导校准在保守位宽下的稳定闭环。\texttt{INT4-RoleAlign} 质量主线使用参考解码实现（\texttt{torch\_ref}）保证语义核对，对应第四章 TPOT 表中"参考路径 (INT4)"列。\texttt{INT4} 融合扩展（含 KIVI 与 Triton 融合路径）则承担第四章的系统边界读数。下一节给出三条路径在访存、存储与算力维度上的开销分析。
 
