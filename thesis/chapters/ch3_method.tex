@@ -170,11 +170,11 @@ d_{\mathrm{KL}}^{(x,l,h,t)}(\theta),
 c_K(\theta) &= \frac{|\{x\in K^{\mathrm{cal}}: |x/s_\theta(x)| > q_{\max}\}|}{|K^{\mathrm{cal}}|}, \\
 c_V(\theta) &= \frac{|\{x\in V^{\mathrm{cal}}: |x/s_\theta(x)| > q_{\max}\}|}{|V^{\mathrm{cal}}|}.
 \end{align}
-其中 $\mu(\theta)$ 沿用第~\ref{subsec:ch3-kl-target}~节的均值代理逐候选化，$q_{0.95}(\theta)$ 是同一逐位置 KL 的 95\% 分位数；$c_K(\theta), c_V(\theta)$ 统计 $x$ 在候选 $\theta$ 对应分组尺度 $s_\theta(x)$ 下，缩放值 $|x/s_\theta(x)|$ 越过整数上界 $q_{\max}$（\texttt{INT8} 取 127、\texttt{INT4} 取 7）的元素比例，用于过滤靠过度裁剪换取低 KL 的候选。可行域定义为
+这里的 $\mu(\theta)$ 是第~\ref{subsec:ch3-kl-target}~节均值代理对每个候选的取值，$q_{0.95}(\theta)$ 是同一逐位置 KL 分布的 95\% 分位数。$c_K(\theta)$ 与 $c_V(\theta)$ 分别记录 Key 与 Value 张量的裁剪率。对元素 $x$ 以候选 $\theta$ 对应的分组尺度 $s_\theta(x)$ 缩放后，若 $|x/s_\theta(x)|$ 超过整数上界 $q_{\max}$，该元素计入对应裁剪率；\texttt{INT8} 取 $q_{\max}=127$，\texttt{INT4} 取 $q_{\max}=7$。可行域用裁剪率阈值 $\tau_K,\tau_V$ 硬过滤候选，定义为
 \begin{equation}
 \Theta_{\mathrm{feasible}}
 =
-\{\theta \in \Theta_{\mathrm{path}}: c_K(\theta)\le \tau_K,\; c_V(\theta)\le \tau_V\},
+\{\theta \in \Theta_{\mathrm{path}}\mid c_K(\theta)\le \tau_K,\; c_V(\theta)\le \tau_V\},
 \end{equation}
 本文取 $\tau_K = \tau_V = 0.01$。若 $\Theta_{\mathrm{feasible}}\neq\emptyset$，选择规则为
 \begin{equation}
@@ -183,7 +183,7 @@ c_V(\theta) &= \frac{|\{x\in V^{\mathrm{cal}}: |x/s_\theta(x)| > q_{\max}\}|}{|V
 \arg\min_{\theta \in \Theta_{\mathrm{feasible}}}
 q_{0.95}(\theta).
 \end{equation}
-以尾部统计 $q_{0.95}$ 为主序；$\mu$ 不参与主选 argmin，仅在并列或下文回退场景下作为次级排序键。
+以尾部统计 $q_{0.95}$ 为主序；$\mu$ 不参与主选择规则的最小化目标，仅在并列或下文的回退规则中作为次级排序键。
 
 若所有候选均违反裁剪率约束，回退规则按字典序选取：先最小化总裁剪负担 $c_K(\theta)+c_V(\theta)$；若总裁剪负担相同，再比较尾部统计 $q_{0.95}(\theta)$；若尾部统计仍相同，最后比较平均偏移 $\mu(\theta)$。排序第一的候选记为 $\theta^\star$，并在产物字段中标记触发回退及其原因。
 

@@ -36,6 +36,26 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 00:52 | AIGC paragraph polish ch3 feasible set
+- Goal: Process report segment 18 in Chapter 3 while preserving robust-selection statistics, clipping-rate feasible set, and tail-priority selection rule.
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Clarified `\\mu(\\theta)`, `q_{0.95}(\\theta)`, and K/V clipping-rate meanings.
+  - Preserved `q_{\\max}` values for INT8 and INT4, the feasible-set threshold rule, and `\\tau_K=\\tau_V=0.01`.
+  - Rewrote the `argmin` explanation in Chinese and changed the feasible-set separator from `:` to `\\mid`.
+- Validation:
+  - PASS: diff whitespace check.
+  - PASS: LaTeX build generated the PDF; log check found no undefined references or citation warnings. Existing overfull hboxes at Chapter 3 lines 369 and 644--646 are unrelated to this paragraph.
+- Risks / follow-ups:
+  - Continue with report segment 19 after this commit.
+- Commit: pending until this entry is committed.
+
 ### 2026-05-09 00:47 | AIGC paragraph polish ch3 forward kl
 - Goal: Process the second natural paragraph of report segment 17 in Chapter 3 while preserving forward-KL motivation, reverse-KL/JS diagnostic roles, and the Value-path proxy boundary.
 - Changed files:

@@ -939,6 +939,64 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 18
+
+- Report segment: 18
+- Source paragraph: `thesis/chapters/ch3_method.tex`, lines 173--186
+- Detector excerpt begins: `其中 µ(θ) 沿用第 3.4.1 节的均值代理逐候选化...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: dense packed definitions, parenthetical `INT8/INT4` bounds, unclear `元素比例` wording, and English-style `argmin` phrase in the prose.
+- Rewrite goal: preserve the robust-selection definitions while making the roles of mean proxy, P95 tail statistic, K/V clipping rates, hard filtering, and secondary key explicit.
+- Style constraints: avoid unnecessary parentheses, avoid colon-style set notation where `\mid` is clearer, and use natural Chinese for the `argmin` explanation.
+
+### Preserved Information
+
+- `$\mu(\theta)$` remains the candidate-wise value of the mean KL proxy from Section~`\ref{subsec:ch3-kl-target}`.
+- `$q_{0.95}(\theta)$` remains the 95th percentile of the same per-position KL distribution.
+- `$c_K(\theta)$` and `$c_V(\theta)$` remain Key/Value clipping-rate statistics.
+- The scale remains `$s_\theta(x)$`.
+- An element still counts toward the clipping rate when `$|x/s_\theta(x)| > q_{\max}$`.
+- `\texttt{INT8}` still uses `$q_{\max}=127$`; `\texttt{INT4}` still uses `$q_{\max}=7$`.
+- The feasible set still filters by `$c_K(\theta)\le\tau_K` and `$c_V(\theta)\le\tau_V`.
+- The paper still uses `$\tau_K=\tau_V=0.01$`.
+- When the feasible set is nonempty, the main selection rule still minimizes `$q_{0.95}(\theta)$`.
+- `$\mu$` remains outside the main minimization target and is only a secondary sorting key for ties or the fallback rule.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed definitions, thresholds, and selection rule are unchanged.
+- Chinese academic writing reviewer: first pass failed on vague `元素比例`, colon-style set notation, and `主选 argmin`; final version passed after clarifying K/V clipping rates, using `\mid`, and rewriting the prose.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with the KL proxy, feasible set, and fallback rule.
+- Skeptical reviewer: first pass required the complete feasible-set definition and explicit hard-filter logic; final version passed after the whole natural paragraph was reviewed with formulas included.
+
+### Applied Revision
+
+```tex
+这里的 $\mu(\theta)$ 是第~\ref{subsec:ch3-kl-target}~节均值代理对每个候选的取值，$q_{0.95}(\theta)$ 是同一逐位置 KL 分布的 95\% 分位数。$c_K(\theta)$ 与 $c_V(\theta)$ 分别记录 Key 与 Value 张量的裁剪率。对元素 $x$ 以候选 $\theta$ 对应的分组尺度 $s_\theta(x)$ 缩放后，若 $|x/s_\theta(x)|$ 超过整数上界 $q_{\max}$，该元素计入对应裁剪率；\texttt{INT8} 取 $q_{\max}=127$，\texttt{INT4} 取 $q_{\max}=7$。可行域用裁剪率阈值 $\tau_K,\tau_V$ 硬过滤候选，定义为
+\begin{equation}
+\Theta_{\mathrm{feasible}}
+=
+\{\theta \in \Theta_{\mathrm{path}}\mid c_K(\theta)\le \tau_K,\; c_V(\theta)\le \tau_V\},
+\end{equation}
+本文取 $\tau_K = \tau_V = 0.01$。若 $\Theta_{\mathrm{feasible}}\neq\emptyset$，选择规则为
+\begin{equation}
+\theta^\star
+=
+\arg\min_{\theta \in \Theta_{\mathrm{feasible}}}
+q_{0.95}(\theta).
+\end{equation}
+以尾部统计 $q_{0.95}$ 为主序；$\mu$ 不参与主选择规则的最小化目标，仅在并列或下文的回退规则中作为次级排序键。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 17b
 
 - Report segment: 17
