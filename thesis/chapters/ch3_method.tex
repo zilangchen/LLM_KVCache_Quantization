@@ -80,7 +80,7 @@ b^\star = \mathcal{A}(\mathcal{S};\bar b),\quad \tfrac{1}{L}\sum_{l=1}^{L} b^\st
 \end{equation}
 是一个确定性规则。它只读取共享画像 $\mathcal{S}$，把逐层敏感度转换为整数位宽向量 $b^\star$，在线推理时不重新优化，也不重复校准参数搜索。基础设置把 $b^\star$ 写成 $L$ 维逐层预算，$b^\star\in\{b_{\min},\dots,b_{\max}\}^L$，本文使用 $b\in\{4,8,16\}$。当预算表达进一步区分 K/V 角色时，$b^\star$ 变为 $\{b_{\min},\dots,b_{\max}\}^{L\times 2}$ 中的向量，对应第~\ref{sec:ch3-motivation-kv}~节识别的 Key/Value 双角色；此时 $\mathcal{S}$ 也拆分为角色分量。第~\ref{sec:ch3-allocator}~节给出具体规则。
 
-这一组织把整条链路切分为可独立验证的两段。离线阶段提取参考行为、搜索路径参数、写出校准产物，同步生成 $\mathcal{S}$；在线阶段只读取冻结产物，按已固定规则计算当前缓存写入所需的尺度或预算。设计的核心约束是推理路径上不重复离线搜索，因此 $\theta^\star$ 与 $b^\star$ 都被视为框架的离线交付物，而非在线决策变量。整体离线—在线协作与共享画像在校准、低比特恢复、预算分配三层之间的传递关系见图~\ref{fig:ch3-framework-shared-profile}。
+上述组织使校准链路和推理链路可以分开核验。离线阶段提取参考行为，完成路径参数搜索，写出冻结校准产物，并同步生成 $\mathcal{S}$。在线推理阶段只读取这些冻结产物，按照固定规则为当前缓存写入计算尺度或预算。推理阶段不重复离线搜索，这是框架的执行边界；$\theta^\star$ 与 $b^\star$ 也相应作为离线交付物保存，而不是在线决策变量。图~\ref{fig:ch3-framework-shared-profile} 给出离线—在线协作关系，以及共享画像在校准、低比特恢复和预算分配三层之间的传递方式。
 
 \input{figures/fig_ch3_framework_shared_profile}
 

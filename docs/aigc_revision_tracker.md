@@ -939,6 +939,48 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 15b
+
+- Report segment: 15
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 83
+- Detector excerpt begins: `这一组织把整条链路切分为可独立验证的两段...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: abstract `这一组织` opening, compressed semicolon-packed offline/online contrast, and the dispreferred phrase `推理路径上`.
+- Rewrite goal: preserve the independently verifiable offline/online split while making the execution boundary read as normal academic prose.
+- Style constraints: avoid `xxxx 上`, avoid overpacked semicolon structure, and keep `\theta^\star` / `b^\star` as offline deliverables rather than online decision variables.
+
+### Preserved Information
+
+- The full chain is still split into independently verifiable offline and online parts.
+- The offline phase still extracts reference behavior, searches path parameters, writes frozen calibration artifacts, and generates `$\mathcal{S}$`.
+- The online inference phase still only reads frozen artifacts.
+- The online phase still computes the scale or budget needed for current cache writes according to fixed rules.
+- The framework boundary remains that inference does not repeat offline search.
+- `$\theta^\star$` and `$b^\star$` remain offline deliverables, not online decision variables.
+- Figure~`\ref{fig:ch3-framework-shared-profile}` remains the reference for offline/online cooperation and shared-profile transfer across calibration, low-bit recovery, and budget allocation.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed frozen-artifact semantics and offline deliverable status are preserved.
+- Chinese academic writing reviewer: PASS; confirmed the revision removes the dispreferred `推理路径上` phrasing and reads naturally.
+- Cross-chapter consistency reviewer: PASS; confirmed alignment with Figure~`\ref{fig:ch3-framework-shared-profile}`, Section~`\ref{sec:ch3-allocator}`, and runtime-path boundaries.
+- Skeptical reviewer: PASS; no loss of independent verification, online/ offline split, or figure linkage.
+
+### Applied Revision
+
+```tex
+上述组织使校准链路和推理链路可以分开核验。离线阶段提取参考行为，完成路径参数搜索，写出冻结校准产物，并同步生成 $\mathcal{S}$。在线推理阶段只读取这些冻结产物，按照固定规则为当前缓存写入计算尺度或预算。推理阶段不重复离线搜索，这是框架的执行边界；$\theta^\star$ 与 $b^\star$ 也相应作为离线交付物保存，而不是在线决策变量。图~\ref{fig:ch3-framework-shared-profile} 给出离线—在线协作关系，以及共享画像在校准、低比特恢复和预算分配三层之间的传递方式。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 15a
 
 - Report segment: 15

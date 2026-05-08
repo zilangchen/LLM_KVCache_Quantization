@@ -36,6 +36,26 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 00:37 | AIGC paragraph polish ch3 offline online boundary
+- Goal: Process the second natural paragraph of report segment 15 in Chapter 3 while preserving the offline/online split and frozen-artifact execution boundary.
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Rewrote the offline/online paragraph to remove `推理路径上` and reduce semicolon-packed explanation.
+  - Preserved reference-behavior extraction, path-parameter search, frozen calibration artifacts, shared profile generation, and online read-only execution.
+  - Kept `\\theta^\\star` and `b^\\star` as offline deliverables rather than online decision variables.
+- Validation:
+  - PASS: diff whitespace check.
+  - PASS: LaTeX build generated the PDF; log check found no undefined references or citation warnings. Existing overfull hboxes at Chapter 3 lines 369 and 644--646 are unrelated to this paragraph.
+- Risks / follow-ups:
+  - Continue with report segment 16 after this commit.
+- Commit: pending until this entry is committed.
+
 ### 2026-05-09 00:35 | AIGC paragraph polish ch3 allocation mapping
 - Goal: Process the first natural paragraph of report segment 15 in Chapter 3 while preserving the allocation mapping, budget constraint, and K/V role extension.
 - Changed files:
