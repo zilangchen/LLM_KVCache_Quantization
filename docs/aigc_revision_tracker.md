@@ -290,3 +290,48 @@ Experiments across six open-source instruction models from the Qwen2.5, LLaMA-3.
 - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 99-page PDF
 - Residual log notes: existing Chapter 3 overfull hboxes at lines 369 and 644--646; unrelated to this paragraph.
 - Commit: see Git history for message `docs: polish aigc en abstract paragraph 3`
+
+## Segment 4.1
+
+- Report segment: 4
+- Source paragraph: `thesis/chapters/ch1_introduction.tex`, line 25
+- Detector excerpt begins: `进入注意力计算后，这个前提并不总稳固...`
+- Suspected segment size in report: 296 characters for segment 4; this entry covers the first source paragraph in that segment.
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: colon-style mechanism expansion, highly regular `前提--然而--因此` reasoning, and abstract connector density.
+- Rewrite goal: retain the motivation for behavior-based calibration while making the paragraph less template-like.
+- Style constraints: preserve MSE, percentile clipping, the tensor-closeness working premise, softmax nonlinearity, Key perturbation, possible normalization absorption, and the static-threshold limitation.
+
+### Preserved Information
+
+- Current KV Cache calibration often still targets numerical reconstruction error.
+- Typical examples include MSE loss and percentile-based clipping.
+- These methods rely on a working premise that closer tensors imply behavior closer to the full-precision path.
+- The premise is not always valid after entering attention computation.
+- Softmax nonlinearity can turn small Key perturbations into visible changes in attention probability.
+- Some numerically larger errors may be partially absorbed by normalization.
+- Tensor error magnitude and downstream functional deviation are difficult to map one-to-one.
+- Distributional differences across layers, heads, and context positions weaken static threshold explanations.
+
+### Review Gate
+
+- Technical accuracy reviewer: PASS; flagged `反而会` as too strong and suggested restoring `也可能`.
+- Chinese academic writing reviewer: PASS; suggested replacing unclear pronouns and avoiding casual connectors.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with Chapter 3 error decomposition and Chapter 4 boundary conditions.
+- Skeptical reviewer: initial FAIL on over-strong `反而会`, `继续削弱`, and `由此看`; final applied version uses `也可能`, `进一步削弱`, and a direct `因此`.
+
+### Applied Revision
+
+```tex
+当前 KV Cache 量化的校准目标仍多落在数值重建误差上，常见做法包括 MSE 损失和基于分位数的裁剪。这类方法通常沿用一个工作前提，即张量越接近原值，模型行为也越接近全精度路径。进入注意力计算后，这一前提并不总是成立：softmax 的非线性可能把较小的 Key 扰动转化为注意力概率的明显变化，而某些数值上更大的误差也可能在归一化中被部分吸收。因此，张量误差大小很难与下游功能偏移建立稳定的一一对应关系；层、头和上下文位置带来的分布差异，也会进一步削弱静态阈值的解释力。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch1_introduction.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 99-page PDF
+- Residual log notes: existing Chapter 3 overfull hboxes at lines 369 and 644--646; unrelated to this paragraph.
+- Commit: see Git history for message `docs: polish aigc ch1 motivation paragraph 1`

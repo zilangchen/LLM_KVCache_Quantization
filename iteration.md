@@ -36,6 +36,17 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 21:46 | AIGC paragraph polish ch1 motivation paragraph 1
+
+- Goal: Reduce AIGC-style regularity in the Chapter 1 calibration-premise paragraph while preserving all mechanism and boundary claims.
+- Scope: One source paragraph from `thesis/chapters/ch1_introduction.tex`, mapped to detector segment 4.
+- Changed files: `thesis/chapters/ch1_introduction.tex`, `docs/aigc_revision_tracker.md`.
+- Commands: four-angle reviewer agents; `git diff --check -- thesis/chapters/ch1_introduction.tex docs/aigc_revision_tracker.md iteration.md`; `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`.
+- Outputs: Rewrote the paragraph to reduce colon-style exposition and template connectors while preserving MSE, percentile clipping, softmax nonlinearity, Key perturbation, normalization absorption, and static-threshold limitations.
+- Validation: Reviewer gates PASS after adopting skeptical fixes; LaTeX compile PASS. Existing Chapter 3 overfull hboxes are unrelated to this paragraph.
+- Risks / follow-ups: Continue with the next Chapter 1 motivation paragraph from detector segment 4.
+- Commit: see Git history for message `docs: polish aigc ch1 motivation paragraph 1`
+
 ### 2026-05-08 21:42 | AIGC paragraph polish en abstract paragraph 3
 
 - Goal: Reduce formulaic result-list rhythm in the English abstract evidence paragraph while preserving all numerical claims and boundaries.
