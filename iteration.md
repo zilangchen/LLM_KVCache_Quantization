@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 03:34 | AIGC 段落修订 48: 第五章评测协议边界
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 5 的高嫌疑段落，本轮处理研究局限性中官方 LongBench 对照与真实应用分布覆盖边界。
+- Changed files:
+  - `thesis/chapters/ch5_conclusion.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch5_conclusion.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将 `从评测协议上看` 改为直接边界说明。
+  - 保留 Qwen2.5-1.5B、NarrativeQA/HotpotQA/GovReport、每任务最多 50 样本、单一随机种子和全部真实应用分布示例。
+  - 保持 PPL、Needle、RULER 与任务级指标降低单一度量偏差但仍需更多观察维度的边界。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check`: PASS。
+  - `latexmk`: PASS，生成 101 页 PDF。
+  - 日志仅保留既有 line 369 overfull hbox，无 undefined references 或 citation warnings。
+- Risks / follow-ups:
+  - 下一轮处理第五章比较口径与 matched-budget 边界段落。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch5 evaluation boundary`
+
 ### 2026-05-09 03:31 | AIGC 段落修订 47: 第四章 KL 与 MSE 机制解释
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理 KL/MSE 趋同的机制解释和解释性边界。
 - Changed files:

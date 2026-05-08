@@ -13,6 +13,51 @@ This file records paragraph-level AIGC-polish changes. Each entry maps one detec
 - Overall suspected AIGC ratio: 20.38%
 - Highest-risk chapters: Chinese abstract 72.0%, English abstract 72.0%, Chapter 3 32.0%, Chapter 1 24.0%, Conclusion 14.0%
 
+## Segment 48
+
+- Report segment: 48
+- Source paragraph: `thesis/chapters/ch5_conclusion.tex`, line 51
+- Detector excerpt begins: `和单一随机种子。这个设置足以检查...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: `从...上看` template, long boundary sentence with paired negative clauses, and list-like examples attached by `例如`.
+- Rewrite goal: preserve all evaluation-scope limits while making the paragraph read as a direct limitation statement.
+- Style constraints: avoid `xxxx 上`, keep the LongBench official-data boundary precise, and preserve every example of real application distribution.
+
+### Preserved Information
+
+- The main matrix uses LongBench-style synthetic benchmark tasks under unified generation rules.
+- The official LongBench real-data comparison only covers Qwen2.5-1.5B.
+- It covers NarrativeQA, HotpotQA, and GovReport.
+- Each task has at most 50 samples.
+- The comparison uses a single random seed.
+- This setup can check whether a small set of official tasks reverses the main-protocol direction.
+- It does not represent broader real application distributions such as multi-turn QA, tool use, repository-level code retrieval, long report summarization, or domain document QA.
+- PPL, Needle, RULER, and task-level metrics reduce single-metric bias.
+- Long-context quality still needs more observation dimensions.
+
+### Review Gate
+
+- Technical accuracy reviewer: PASS.
+- Chinese academic writing reviewer: PASS.
+- Cross-chapter consistency reviewer: PASS.
+- Skeptical reviewer: PASS.
+
+### Applied Revision
+
+```tex
+评测协议给出第一层边界。正文主矩阵使用统一生成规则下的 LongBench 风格合成基准任务；官方 LongBench 真实数据对照只覆盖 Qwen2.5-1.5B、NarrativeQA/HotpotQA/GovReport 三个任务、每任务最多 50 个样本和单一随机种子。这个设置可以检查少数官方任务是否反转主协议方向，但它还不能代表更开放的真实应用分布，包括多轮问答、工具调用、代码仓库级检索、超长报告摘要和领域文档问答。PPL、Needle、RULER 与任务级指标共同降低了单一度量偏差；长上下文质量仍需要更多观察维度继续补充。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch5_conclusion.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing overfull hbox at line 369; no undefined references or citation warnings.
+- Commit: see Git history for message `docs: polish aigc ch5 evaluation boundary`
+
 ## Segment 47
 
 - Report segment: 47
