@@ -1,78 +1,87 @@
 \begin{figure}[!htbp]
   \centering
-  \resizebox{0.97\linewidth}{!}{%
+  \resizebox{0.98\linewidth}{!}{%
   \begin{tikzpicture}[
     x=1cm, y=1cm,
     >=Stealth,
     every node/.style={font=\rmfamily\small, align=center, text=black},
+    band/.style={
+      rectangle, rounded corners=6pt,
+      draw=black!18, fill=black!1, line width=0.62pt
+    },
     card/.style={
       rectangle, rounded corners=5pt,
-      fill=black!1, line width=0.75pt,
-      minimum height=3.15cm
+      draw=black!28, fill=white, line width=0.72pt,
+      minimum height=3.18cm
     },
-    title/.style={font=\bfseries\small, text=black, anchor=west},
-    subtitle/.style={font=\scriptsize, text=black!62, anchor=west},
-    steplabel/.style={font=\bfseries\scriptsize},
-    tag/.style={
+    cardTitle/.style={font=\bfseries\scriptsize, text=black!76},
+    item/.style={
       rectangle, rounded corners=3pt,
-      minimum height=0.40cm, inner sep=2.5pt,
+      minimum height=0.44cm, inner sep=2.2pt,
       font=\scriptsize, line width=0.55pt
     },
-    line/.style={
-      rectangle, rounded corners=3pt,
-      minimum height=0.52cm, inner sep=2.5pt,
-      font=\scriptsize, line width=0.55pt
-    },
-    arr/.style={-Stealth, draw=black!52, line width=0.72pt},
-    faint/.style={draw=black!16, line width=0.55pt}
+    note/.style={font=\scriptsize, text=black!58},
+    arr/.style={-Stealth, draw=black!48, line width=0.72pt},
+    arrBlue/.style={-Stealth, draw=blueTone!72!black, line width=0.76pt},
+    arrGold/.style={-Stealth, draw=goldTone!78!black, line width=0.76pt},
+    arrGreen/.style={-Stealth, draw=greenTone!70!black, line width=0.76pt}
   ]
-    \definecolor{kBlue}{RGB}{58,104,173}
-    \definecolor{kBlueFill}{RGB}{224,235,249}
-    \definecolor{vTeal}{RGB}{66,139,133}
-    \definecolor{vTealFill}{RGB}{224,242,239}
-    \definecolor{safeGreen}{RGB}{73,135,96}
-    \definecolor{safeGreenFill}{RGB}{230,243,234}
-    \definecolor{anchorGold}{RGB}{178,130,26}
-    \definecolor{anchorGoldFill}{RGB}{250,239,202}
+    \definecolor{tealTone}{RGB}{66,139,133}
+    \definecolor{tealFill}{RGB}{228,243,240}
+    \definecolor{blueTone}{RGB}{62,103,167}
+    \definecolor{blueFill}{RGB}{230,238,250}
+    \definecolor{goldTone}{RGB}{178,132,37}
+    \definecolor{goldFill}{RGB}{251,240,211}
+    \definecolor{greenTone}{RGB}{66,134,108}
+    \definecolor{greenFill}{RGB}{229,243,236}
+    \definecolor{grayFill}{RGB}{245,246,248}
 
-    \node[title] at (0.15,4.18) {行为引导离线校准工作流};
-    \node[subtitle] at (0.15,3.82) {从参考行为到冻结产物，统一的是流程、接口与稳健选择纪律};
-    \draw[faint] (0.15,3.56) -- (14.05,3.56);
+    \node[band, minimum width=17.15cm, minimum height=4.72cm] at (8.78,2.62) {};
+    \node[font=\bfseries\small, anchor=west] at (0.52,4.78) {行为引导离线校准工作流};
+    \node[note, anchor=west] at (0.52,4.43) {每条量化路径共享同一选择纪律，差异落在候选网格、行为代理与产物字段};
+    \draw[draw=black!14, line width=0.52pt] (0.52,4.20) -- (17.02,4.20);
 
-    \node[card, draw=vTeal!70!black, minimum width=2.95cm] (ref) at (1.65,1.80) {};
-    \node[steplabel, text=vTeal!70!black] at (1.65,3.00) {1 \quad 参考行为};
-    \node[tag, draw=vTeal, fill=vTealFill, text width=1.95cm] at (1.65,2.36) {FP16 前向记录};
-    \node[line, draw=vTeal!60!black, fill=white, text width=1.95cm] at (1.65,1.68) {注意力分布};
-    \node[line, draw=vTeal!60!black, fill=white, text width=1.95cm] at (1.65,1.06) {输出响应};
+    \node[card, draw=tealTone!70!black, fill=white, minimum width=2.58cm] (ref) at (1.70,2.20) {};
+    \node[cardTitle, text=tealTone!64!black] at (1.70,3.46) {1 参考提取};
+    \node[item, draw=tealTone!55!black, fill=tealFill, minimum width=1.80cm] at (1.70,2.86) {校准样本};
+    \node[item, draw=tealTone!55!black, fill=white, minimum width=1.80cm] at (1.70,2.20) {FP16 前向};
+    \node[item, draw=tealTone!55!black, fill=white, minimum width=1.80cm] at (1.70,1.54) {$p_{\mathrm{ref}},\,o_{\mathrm{ref}}$};
+    \node[note] at (1.70,0.98) {参考行为};
 
-    \node[card, draw=kBlue, fill=kBlueFill, minimum width=3.55cm] (path) at (5.15,1.80) {};
-    \node[steplabel, text=kBlue!75!black] at (5.15,3.00) {2 \quad 路径候选};
-    \node[line, draw=kBlue, fill=white, text width=2.45cm] at (5.15,2.42) {INT8 基准路径};
-    \node[line, draw=kBlue, fill=white, text width=2.45cm] at (5.15,1.86) {对称 INT4 路径};
-    \node[line, draw=kBlue, fill=white, text width=2.45cm] at (5.15,1.30) {INT4-RoleAlign};
-    \node[tag, draw=kBlue!50!black, fill=white, text width=1.12cm, font=\tiny] at (4.40,0.72)
-      {K 分布 KL};
-    \node[tag, draw=kBlue!50!black, fill=white, text width=1.12cm, font=\tiny] at (5.90,0.72)
-      {V 输出扰动};
+    \node[card, draw=blueTone!62!black, fill=blueFill, minimum width=2.82cm] (grid) at (5.02,2.20) {};
+    \node[cardTitle, text=blueTone!64!black] at (5.02,3.46) {2 路径实例化};
+    \node[item, draw=blueTone!50!black, fill=white, minimum width=2.05cm] at (5.02,2.88) {$\Theta_{\mathrm{path}}$};
+    \node[item, draw=blueTone!50!black, fill=white, minimum width=2.05cm] at (5.02,2.24) {INT8 / 对称 INT4};
+    \node[item, draw=blueTone!50!black, fill=white, minimum width=2.05cm] at (5.02,1.60) {RoleAlign};
+    \node[note] at (5.02,0.98) {候选网格};
 
-    \node[card, draw=anchorGold, fill=anchorGoldFill, minimum width=3.10cm] (select) at (8.85,1.80) {};
-    \node[steplabel, text=anchorGold!76!black] at (8.85,3.00) {3 \quad 稳健选择};
-    \node[line, draw=anchorGold, fill=white, text width=2.05cm] at (8.85,2.32) {可行域约束};
-    \node[line, draw=anchorGold, fill=white, text width=2.05cm] at (8.85,1.66) {P95 尾部优先};
-    \node[line, draw=anchorGold, fill=white, text width=2.05cm] at (8.85,1.00) {裁剪率审计};
+    \node[card, draw=blueTone!62!black, fill=white, minimum width=2.88cm] (score) at (8.48,2.20) {};
+    \node[cardTitle, text=blueTone!64!black] at (8.48,3.46) {3 行为评分};
+    \node[item, draw=blueTone!50!black, fill=blueFill, minimum width=2.10cm] at (8.48,2.88) {$R_{\mathrm{path}}(\theta)$};
+    \node[item, draw=blueTone!50!black, fill=white, minimum width=2.10cm] at (8.48,2.24) {K 侧 KL};
+    \node[item, draw=blueTone!50!black, fill=white, minimum width=2.10cm] at (8.48,1.60) {V 侧输出扰动};
+    \node[note] at (8.48,0.98) {路径相关代理};
 
-    \node[card, draw=safeGreen!70!black, fill=safeGreenFill, minimum width=3.25cm] (out) at (12.55,1.80) {};
-    \node[steplabel, text=safeGreen!64!black] at (12.55,3.00) {4 \quad 冻结产物};
-    \node[line, draw=safeGreen!55!black, fill=white, text width=2.20cm] at (12.55,2.32) {路径参数};
-    \node[line, draw=safeGreen!55!black, fill=white, text width=2.20cm] at (12.55,1.66) {行为读数};
-    \node[line, draw=safeGreen!55!black, fill=white, text width=2.20cm] at (12.55,1.00) {在线只读接口};
+    \node[card, draw=goldTone!70!black, fill=goldFill, minimum width=2.82cm] (select) at (11.94,2.20) {};
+    \node[cardTitle, text=goldTone!75!black] at (11.94,3.46) {4 稳健选择};
+    \node[item, draw=goldTone!60!black, fill=white, minimum width=2.05cm] at (11.94,2.88) {$\Theta_{\mathrm{feasible}}$};
+    \node[item, draw=goldTone!60!black, fill=white, minimum width=2.05cm] at (11.94,2.24) {P95 尾部读数};
+    \node[item, draw=goldTone!60!black, fill=white, minimum width=2.05cm] at (11.94,1.60) {裁剪率审计};
+    \node[note] at (11.94,0.98) {选择纪律};
 
-    \draw[arr] (ref.east) -- node[above, font=\tiny, text=black!55] {提取} (path.west);
-    \draw[arr] (path.east) -- node[above, font=\tiny, text=black!55] {搜索} (select.west);
-    \draw[arr] (select.east) -- node[above, font=\tiny, text=black!55] {固化} (out.west);
+    \node[card, draw=greenTone!70!black, fill=greenFill, minimum width=2.72cm] (out) at (15.30,2.20) {};
+    \node[cardTitle, text=greenTone!62!black] at (15.30,3.46) {5 产物冻结};
+    \node[item, draw=greenTone!55!black, fill=white, minimum width=1.98cm] at (15.30,2.88) {$\theta_{\mathrm{path}}^\star$};
+    \node[item, draw=greenTone!55!black, fill=white, minimum width=1.98cm] at (15.30,2.24) {行为读数 $\mathcal S$};
+    \node[item, draw=greenTone!55!black, fill=white, minimum width=1.98cm] at (15.30,1.60) {在线接口};
+    \node[note] at (15.30,0.98) {固定产物};
 
+    \draw[arr] (ref.east) -- node[above, font=\tiny, text=black!55] {参考行为} (grid.west);
+    \draw[arrBlue] (grid.east) -- node[above, font=\tiny, text=blueTone!62!black] {逐候选计算} (score.west);
+    \draw[arrGold] (score.east) -- node[above, font=\tiny, text=goldTone!70!black] {风险统计} (select.west);
+    \draw[arrGreen] (select.east) -- node[above, font=\tiny, text=greenTone!62!black] {冻结} (out.west);
   \end{tikzpicture}%
   }
-  \caption{行为引导离线校准的统一工作流。输入侧提取 FP16 参考行为，候选侧按路径组织参数空间，选择侧执行可行域约束、P95 尾部优先与裁剪率审计，输出侧冻结为路径特定校准产物与共享行为读数。对于 \texttt{INT4-RoleAlign}，K 路径以注意力分布 KL 为主代理，V 路径以输出扰动代理为主代理。}
+  \caption{行为引导离线校准的统一工作流。校准样本先经过 FP16 前向得到参考行为；每条量化路径据此实例化候选网格 \(\Theta_{\mathrm{path}}\)，并计算路径相关风险 \(R_{\mathrm{path}}(\theta)\)。稳健选择阶段根据可行域、P95 尾部读数与裁剪率审计确定 \(\theta_{\mathrm{path}}^\star\)，同时保留行为读数 \(\mathcal S\) 与在线接口。RoleAlign 中，K 侧使用注意力分布 KL，V 侧使用输出扰动代理。}
   \label{fig:ch3-calibration-workflow}
 \end{figure}

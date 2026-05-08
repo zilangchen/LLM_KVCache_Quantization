@@ -137,7 +137,7 @@ MSE 工作在张量重建空间，仅比较 $K$ 或 $V$ 的逐元素差异；而
 \subsection{参数搜索空间与稳健选择准则}
 \label{subsec:ch3-two-stage}
 
-第~\ref{subsec:ch3-kl-target}~节给出均值代理 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 后，对一条具体路径还需要确定有限离散候选网格 $\Theta_{\mathrm{path}}$、该路径使用的行为代理 $R_{\mathrm{path}}$，以及写入在线推理系统的产物字段。图~\ref{fig:ch3-calibration-workflow} 给出参考行为提取、候选搜索、稳健选择与产物冻结四步离线流程，表~\ref{tab:ch3-calibration-interfaces} 列出 \texttt{INT8}、对称 \texttt{INT4} 与 \texttt{INT4-RoleAlign} 三条路径在这四步上各自的接口实例化。
+第~\ref{subsec:ch3-kl-target}~节给出均值代理 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 后，对一条具体路径还需要确定有限离散候选网格 $\Theta_{\mathrm{path}}$、该路径使用的行为代理 $R_{\mathrm{path}}$，以及写入在线推理系统的产物字段。图~\ref{fig:ch3-calibration-workflow} 给出参考行为提取、路径实例化、行为评分、稳健选择与产物冻结五步离线流程，表~\ref{tab:ch3-calibration-interfaces} 列出 \texttt{INT8}、对称 \texttt{INT4} 与 \texttt{INT4-RoleAlign} 三条路径在这五步上各自的接口实例化。
 
 \input{figures/fig_ch3_calibration_workflow}
 

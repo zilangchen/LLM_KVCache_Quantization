@@ -36,6 +36,18 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 18:29 | Thesis §3.4 body-figure 四步↔五步对齐
+
+- Goal: 修复图 3-4 重写后与 §3.4.2 body line 140 的 step 数不一致
+- Scope:
+  - **body line 140 (ch3_method.tex)**: "参考行为提取、候选搜索、稳健选择与产物冻结**四步**离线流程" → "参考行为提取、路径实例化、行为评分、稳健选择与产物冻结**五步**离线流程"；同句尾"在这**四步**上各自的接口实例化" → "在这**五步**上各自的接口实例化"
+  - **figure caption (fig_ch3_calibration_workflow.tex)**: 末句"K 侧读数来自注意力分布 KL，V 侧读数来自输出扰动代理" → "K 侧使用注意力分布 KL，V 侧使用输出扰动代理"，统一与 body line 191 「使用 attention-distribution KL」/「输出扰动代理」语词
+- Changed files: `thesis/chapters/ch3_method.tex`、`thesis/figures/fig_ch3_calibration_workflow.tex`
+- Commands: `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+- Outputs: 97 页（稳定）；0 undefined / 0 multiply-defined / 0 hard error
+- Validation: body 「四/五步」两处都已改；caption 末句"读数来自"→"使用"两处都已改；body line 140 拆分后的 5 个 step 名称与图 step cardTitle 1-1 对齐（"参考行为提取"≈图"1 参考提取"，余 4 项完全相同）
+- Risks / follow-ups: §3.4 body-figure 数字一致性已修复；可推进 §3.5 (跨位宽路径实例化) Codex 复审
+
 ### 2026-05-08 18:18 | Thesis §3.4 Codex 复审 4 必改 + 3 建议改
 
 - Goal: 解决 Codex §3.4「校准目标 + 参数搜索」复审 4 项必改 + 3 项建议改
