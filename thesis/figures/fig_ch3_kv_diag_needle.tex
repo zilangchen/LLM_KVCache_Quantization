@@ -97,6 +97,6 @@
     \draw[arr] (c3.south) -- (c4.north);
   \end{tikzpicture}%
   }
-  \caption{K/V 位宽落点诊断的压缩版方法动机。子图（a）将 \texttt{K8V8} 基准、同平均位宽预算下的 \texttt{K8V4}/\texttt{K4V8} 对照，以及 \texttt{K4V4} 对称低比特锚点合并为 $3\times4$ 诊断矩阵，只保留代表性 Needle 观察：\texttt{K8V8} 与 \texttt{K8V4} 未进入归零式失稳，Qwen 系列在 \texttt{K4V8}/\texttt{K4V4} 下出现 K 侧崩塌，而 LLaMA-3.1-8B 不呈现同幅度 cliff。子图（b）将该观察收束为设计启示链：高精度路径未触发 cliff，同预算落点暴露失效侧，4bit K 可能越过注意力排序临界点，因此低比特路径应优先保护 K，并进一步区分 K/V 角色。本图不承担完整实验比较；完整 Needle、RULER 与 LongBench 风格证据见第~\ref{subsec:ch4-kv-diagnosis}~节。}
+  \caption{K/V 位宽落点诊断与设计启示。左侧压缩展示 \texttt{K8V8}、\texttt{K8V4}/\texttt{K4V8} 与 \texttt{K4V4} 的代表性 Needle 观察，突出 Qwen 系列在 4bit K 下的崩塌风险及 LLaMA-3.1-8B 的不同表现；右侧将该观察收束为低比特路径约束。完整 Needle、RULER 与 LongBench 风格证据见第~\ref{subsec:ch4-kv-diagnosis}~节。}
   \label{fig:ch3-kv-asymmetry}
 \end{figure}

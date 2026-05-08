@@ -36,6 +36,48 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 20:09 | Thesis 第三章全文审查 Round 1（ch3 内部 + 跨章节一致性 + 外部回退修复）
+
+- Goal: 用户指令「进行第三章的全文审查，以及它相对于其他章节在整篇文章中的比对和审查」。Round 1 在 ch3 内部找出 14 项问题（A 必修 / B 精度 / C 文字），同时检测出外部修改（abstract / ch1 / ch2 / 两个 figure）的格式回退与跨章口径漂移，统一一并处理。
+- Scope:
+  - **ch3_method.tex 12 处编辑（A 必修 8 + C 文字 4）**:
+    - A1 line 8: `LLaMA-3` → `LLaMA-3.1`（与 §3.2 line 56 + ch4 表保持模型族写法一致）
+    - A2 line 90: 「Key-sensitive 路径下取注意力分布侧 KL」→ 显式说明 KL 是「对称路径与 INT4-RoleAlign 的 K-path 共用代理；V-path 使用独立的输出扰动代理」，避免读者误以为只有 K-sensitive 用 KL
+    - A3 line 153: `R_path(θ) = q_0.95(θ)` 直接等号 → 「以 q_0.95 为主序，叠加裁剪率过滤与字典序回退」，与下文五步流程描述一致
+    - A4 line 190: 「沿用上述四步流程」→「五步流程」（fig_ch3_calibration_workflow 是 5 步）
+    - A5 line 315: $A$ 的快照 → $a_{h,r,t}$ 的快照（与公式记号一致）
+    - A6 line 415: 「保留层索引而不去重」→「序列保留层索引位置 + TopK 在敏感度并列时按层索引升序打破平局」（更准确表达防止并列歧义的语义）
+    - A7 line 587: 「等量化区间」→「等离散采样点」（"等量化区间"是中文病句）
+    - A8 line 645: 「INT4-RoleAlign 退化为 $h^{K/V}$」→「INT4-RoleAlign 始终通过 $h^{K/V}$，与自适应保护机制无关」（不是退化关系）
+    - A9 line 56: Qwen H_kv=2 或 4 → 增加 N_rep 重复因子精确数值；LLaMA-3.1-8B H_kv=8 → 增加 N_rep=4
+    - A12 line 192: 「产物字段分为两类：路径特定...」→ em-dash 改写 + bridge sentence 接到下两节
+    - C1 line 98: 加 「其中 $\Delta^{N-1}$ 为 N 维概率单纯形」 解释 softmax 输出空间
+    - C2 line 343: 「负责」→「承担」（学术用词）
+  - **ch1_introduction.tex 7 处恢复 + 2 处措辞修订（外部回退）**:
+    - 4 个研究问题 RQ1-RQ4 恢复 `\noindent\textbf{}` 加粗（外部修改剥离了格式）
+    - 3 个贡献小标题（重新界定 / 实例链 / 适用区间）恢复 `\noindent\textbf{}` 加粗
+    - RQ2 措辞回滚: 「能否达到现有校准方式的效果」→「能否形成稳定的 INT8 基准路径」（与 ch5 line 21 答复 "在 INT8 基准路径上...给出一条基础保真路径" 对齐）
+    - RQ4 措辞回滚: 「能否根据模型的特质自动选择量化预算」→「固定预算选择是否需要画像驱动的自动建议」（与 ch5 line 25 答复 "画像驱动建议有助于组织固定预算选择" 对齐）
+  - **ch2_related_work.tex 3 处修订**:
+    - line 49 「在Decode-only Transformer」→「在 Decoder-only Transformer」（双修：术语错译 Decode→Decoder + 中英文之间补空格）
+    - line 91 「网格精度差异为17倍」→「离散等级数相差约 17 倍」（精度→等级数，更准确；补空格）
+    - line 71 「Nagel」/「Hubara」→「Nagel 等人」/「Hubara 等人」（恢复学术引用风格）
+- Cross-chapter audit findings:
+  - 73.4% KV-cache 容量压缩率宣称（abstract 新增）：与 ch4 line 722-725 表 7.4 完全一致 ✅
+  - 14.76 / 15.69 / 6.90 / 3.48 / 7.23 / 7.15 数字宣称：与 ch4 表对照 + ch5 line 23/25 答复一致 ✅
+  - $\mathcal{S}$ vs $S_{K,\alpha}$ vs $S_{V,\alpha}$ 记号链条：抽象（§3.3）→ 实例（§3.6），无重载，干净 ✅
+  - absmax 残留：line 229/241 仅出现在对称路径自适应保护机制，是合法用法（非对称路径用 min/max 已统一）✅
+- Changed files: `thesis/chapters/ch3_method.tex`, `thesis/chapters/ch1_introduction.tex`, `thesis/chapters/ch2_related_work.tex`
+- Commands: `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`（两遍）
+- Outputs: 98 页稳定；0 undefined / 0 multiply-defined / 0 hard error；仅 underfull hbox 警告（cosmetic）
+- Validation:
+  - `git diff --stat`: ch3 26+/-13、ch1 21+/-7、ch2 3+/-3
+  - 跨章 grep 一致性：73.4% / 14.76 / 6.90 / 7.23 数字三处对齐
+  - 记号链条 grep: `\mathcal{S}` 仅 §3.3 抽象层、`S_{K,\alpha}` 仅 §3.6 实例层
+- Risks / follow-ups:
+  - Round 1 已完成 ch3 内部 + ch1/ch2 外部回退 + 跨章一致性三层审查
+  - **Round 2 计划**: 检查 abstract 新增宣称在 ch1/ch5 是否充分支撑、§3.x 之间过渡句锚点是否对称、表/图 caption 与正文引用方向是否一致、附录引用是否还存在悬空 \ref
+
 ### 2026-05-08 19:52 | Thesis §3.8 chapter summary Codex 复审（P1 + P2 + P3 全部应用）
 
 - Goal: 解决 Codex §3.8 复审 1 P1 + 1 P2 + 1 P3，让 chapter summary 与 §3.2/§3.7/ch4 各自口径闭环
