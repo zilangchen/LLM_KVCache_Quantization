@@ -675,7 +675,7 @@ Qwen2.5-14B 提供的是第 4.4 节的边界剖面：并非每个模型都会给
 	    \midrule
 	    模型 & $H_{kv}$ & \makecell[c]{$\Delta T$\\4K} & \makecell[c]{$\Delta T$\\8K} & \makecell[c]{$\Delta T$\\16K} & \makecell[c]{$\Delta T$\\32K} & 备注 \\
     \midrule
-    Qwen2.5-1.5B & 2 & +1.67 & +4.23 & +9.78 & +15.92 & 始终更慢 \\
+    Qwen2.5-1.5B & 2 & \makecell[c]{+1.67\\n.s.} & +4.23 & +9.78 & +15.92 & 始终更慢 \\
     Qwen2.5-7B   & 4 & \makecell[c]{+1.03\\n.s.} & \makecell[c]{+1.56\\n.s.} & \makecell[c]{+0.55\\n.s.} & -4.90 & 32K 交叉 \\
     Qwen2.5-14B  & 8 & \makecell[c]{-0.44\\n.s.} & -14.54 & -33.26 & -77.08 & 8K 起加速 \\
     \bottomrule
@@ -684,7 +684,7 @@ Qwen2.5-14B 提供的是第 4.4 节的边界剖面：并非每个模型都会给
   \vspace{0.35em}
   \begin{minipage}{0.94\linewidth}
     \footnotesize
-    \emph{注} Panel A 与 Panel B 分别对应第 4.5.2 节与第 4.5.3 节。这里的“性能交叉边界”是经验读数，并非理论闭式模型；8B vs 14B 的同 $H_{kv}=8$ 控制对比不单独列成表，而在第 4.5.3 节正文作为补充段落报告。4K 处 $|\Delta T|<2$\,ms 的读数统一标记为 n.s.，不作为交叉点读取。
+    \emph{注} Panel A 与 Panel B 共享生成长度 64 协议（10 次运行），与表~\ref{tab:ch4-tpot-4k}~的入口层（生成长度 128）不同，因此同模型 4K 处的 $\Delta T$ 与从表~\ref{tab:ch4-tpot-4k}~推出的差值略有不同。Panel A 与 Panel B 分别对应第 4.5.2 节与第 4.5.3 节。这里的“性能交叉边界”是经验读数，并非理论闭式模型；8B vs 14B 的同 $H_{kv}=8$ 控制对比不单独列成表，而在第 4.5.3 节正文作为补充段落报告。4K 处 $|\Delta T|<2$\,ms 的读数统一标记为 n.s.，不作为交叉点读取。
   \end{minipage}
   }
 \end{table}
