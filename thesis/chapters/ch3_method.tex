@@ -642,7 +642,7 @@ g_t(\theta_{\mathrm{path}}^{(l)}, x_t^{(l)}), & \text{\texttt{INT8} 自适应保
 h^{K/V}(\theta_{\mathrm{path}}^{(l)}, x_t^{(l)}), & \text{\texttt{INT4-RoleAlign}}
 \end{cases}
 \end{equation}
-其中 $\theta_{\mathrm{path}}^{(l)}$ 表示离线冻结的路径规则：对称路径下即静态 scale；\texttt{INT4-RoleAlign} 下为冻结的 percentile $(p_K, p_V)$、量化轴标记与边界元数据。$g_t$ 仅依赖当前 token 在该层的待写入张量与离线参数，按第~\ref{subsec:ch3-int8-baseline}~节的逐 token max 触发规则刷新当前组的 scale。$h^{K/V}$ 是 \texttt{INT4-RoleAlign} 在 K/V 双轴上的运行时映射：K 侧在 prefill 阶段依冻结 percentile 一次性按 per-channel 数据计算 $(s_K, \zeta_K)$ 并冻结复用；V 侧的 $(s_V, \zeta_V)$ 随每个新 token 写入按 per-token 数据现场计算。
+这里，$\theta_{\mathrm{path}}^{(l)}$ 是离线冻结的路径参数集合。对称路径对应静态尺度 scale，\texttt{INT4-RoleAlign} 对应冻结的 percentile 参数 $(p_K,p_V)$、量化轴标记和边界元数据。$g_t$ 只读取当前 token 在该层待写入的张量与离线参数，并依据第~\ref{subsec:ch3-int8-baseline}~节的逐 token 最大值触发规则，通过自适应保护逻辑确定当前组 scale。$h^{K/V}$ 描述 \texttt{INT4-RoleAlign} 在 K 和 V 两侧的运行时映射。K 侧在预填充阶段依据冻结 percentile，用逐通道数据一次性计算 $(s_K,\zeta_K)$，之后保持不变并复用；V 侧在每个新 token 写入时，用逐 token 数据即时计算 $(s_V,\zeta_V)$。
 
 任意 $t'<t$ 的历史缓存项 $\hat x_{t'}^{(l)}$ 在第 $t$ 步保持不变，缓存写入是单调追加的；这一"写入确定、历史封闭"的语义在主线实验中由多 seed 复现的逐位一致结果间接验证（详见第四章第~\ref{subsec:ch4-int8-canonical}~节）。自适应保护在主线实验中只对 \texttt{INT8-Canonical} 路径开启；对称路径其余情形退化为常量 $\theta_{\mathrm{path}}^{(l)}$，\texttt{INT4-RoleAlign} 始终通过 $h^{K/V}$ 在 K/V 双轴上现场计算仿射参数，与自适应保护机制无关。
 

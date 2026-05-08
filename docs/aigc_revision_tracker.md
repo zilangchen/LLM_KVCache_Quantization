@@ -939,6 +939,50 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 28a
+
+- Report segment: 28
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 645
+- Detector excerpt begins: `其中θ(path)表示离线冻结的路径规则...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: colon-led definition lists, repeated semicolon partitioning, dense mixed English runtime terminology, and manual-like wording such as `现场计算`.
+- Rewrite goal: preserve the definitions of `$\theta_{\mathrm{path}}^{(l)}$`, `$g_t$`, and `$h^{K/V}$` while turning the paragraph into normal explanatory prose.
+- Style constraints: avoid unnecessary colon expansion, keep implementation terms where they are fixed field names, and avoid wording that implies online updates to frozen offline artifacts.
+
+### Preserved Information
+
+- `$\theta_{\mathrm{path}}^{(l)}$` remains the offline frozen path-parameter set.
+- Symmetric paths still correspond to static scale.
+- `\texttt{INT4-RoleAlign}` still corresponds to frozen percentile parameters `$(p_K,p_V)$`, quantization-axis markers, and boundary metadata.
+- `$g_t$` still depends only on the current token's write tensor at that layer and offline parameters.
+- `$g_t$` still follows the Section~`\ref{subsec:ch3-int8-baseline}` per-token maximum trigger rule.
+- The current group scale is still determined by the INT8 adaptive-protection logic rather than by changing historical cache or offline artifacts.
+- `$h^{K/V}$` still describes the runtime mapping for `\texttt{INT4-RoleAlign}` on K and V sides.
+- K-side affine parameters are still computed once during prefill from per-channel data according to the frozen percentile and then reused.
+- V-side affine parameters are still computed at each new-token write using per-token data.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the definitions and runtime dependencies are preserved.
+- Chinese academic writing reviewer: first two passes failed on mixed English terminology and the `g_t` sentence; final version passed after using `静态尺度 scale`, `percentile 参数`, and a smoother adaptive-protection clause.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with the INT8 adaptive rule, RoleAlign axes, runtime path table, and Chapter 4 usage.
+- Skeptical reviewer: first pass failed because `刷新当前组 scale` could be read as updating offline artifacts; final version passed after changing this to scale determination by adaptive-protection logic.
+
+### Applied Revision
+
+```tex
+这里，$\theta_{\mathrm{path}}^{(l)}$ 是离线冻结的路径参数集合。对称路径对应静态尺度 scale，\texttt{INT4-RoleAlign} 对应冻结的 percentile 参数 $(p_K,p_V)$、量化轴标记和边界元数据。$g_t$ 只读取当前 token 在该层待写入的张量与离线参数，并依据第~\ref{subsec:ch3-int8-baseline}~节的逐 token 最大值触发规则，通过自适应保护逻辑确定当前组 scale。$h^{K/V}$ 描述 \texttt{INT4-RoleAlign} 在 K 和 V 两侧的运行时映射。K 侧在预填充阶段依据冻结 percentile，用逐通道数据一次性计算 $(s_K,\zeta_K)$，之后保持不变并复用；V 侧在每个新 token 写入时，用逐 token 数据即时计算 $(s_V,\zeta_V)$。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing Chapter 3 overfull hbox at line 369; no undefined references or citation warnings. The previous overfull hbox at lines 644--646 no longer appears after this rewrite.
+
 ## Segment 27b
 
 - Report segment: 27

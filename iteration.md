@@ -36,6 +36,27 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 02:04 | AIGC 段落修订 28a: 路径参数与运行时映射解释
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理公式后对 $\theta_{\mathrm{path}}^{(l)}$、$g_t$ 与 $h^{K/V}$ 的参数解释。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将冒号式定义列表改写为连续说明，保留三类参数函数的全部语义。
+  - 明确 $g_t$ 由自适应保护逻辑确定当前组 scale，避免被误读为在线更新冻结产物。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated; the previous overfull hbox at lines 644--646 no longer appears after this rewrite.
+- Risks / follow-ups:
+  - Segment 28 还包含历史缓存闭包语义和 Prefill/Decode 数据流两段，后续分别处理。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 runtime parameter mapping`
+
 ### 2026-05-09 02:00 | AIGC 段落修订 27b: 在线写入公式引入句
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理在线推理阶段第 $t$ 个新 token 写入公式的引入句。
 - Changed files:
