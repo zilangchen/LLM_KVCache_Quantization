@@ -939,6 +939,48 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 38
+
+- Report segment: 38
+- Source paragraph: `thesis/chapters/ch4_experiments.tex`, line 63
+- Detector excerpt begins: `RULER 的失败信号是模型在组合式长上下文任务中是否维持宏平均通过率...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: `失败信号是` template, colon-led `前者/后者` explanation, and overly regular comparison between Needle and RULER.
+- Rewrite goal: preserve the complementary metric roles while removing the formulaic contrast structure.
+- Style constraints: avoid colon-style explanation, avoid `前者/后者`, keep macro-average pass rate and multi-subtask degradation, and avoid overstating either metric.
+
+### Preserved Information
+
+- RULER still uses macro-average pass rate.
+- RULER still evaluates compositional long-context tasks.
+- Needle still serves as a single-point retrieval probe.
+- RULER still serves as the higher-pressure task set.
+- The two metrics remain complementary in the main text.
+- Needle still exposes retrieval functional thresholds.
+- RULER still checks whether long-context ability degrades across multiple subtasks.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the metric roles are preserved.
+- Chinese academic writing reviewer: PASS; confirmed the rewrite avoids the previous template structure.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with Chapter 4 results.
+- Skeptical reviewer: PASS; confirmed neither metric's scope is overstated.
+
+### Applied Revision
+
+```tex
+RULER 用宏平均通过率观察模型在组合式长上下文任务中的稳定性。与 Needle 的单点检索探针不同，RULER 更接近高压任务组，两者在正文中承担互补角色。Needle 用于暴露检索功能临界点，RULER 则检查多个子任务中的长上下文能力是否同步退化。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated to this segment.
+
 ## Segment 37
 
 - Report segment: 37
