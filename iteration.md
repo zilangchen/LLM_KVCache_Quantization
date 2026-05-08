@@ -36,6 +36,35 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 20:56 | Thesis 第四章全文审查 Round 1（术语 / caption / 跨章一致性扫描）
+
+- Goal: 启动 ch4 全章审查。Round 1 聚焦快速发现的高密度问题：跨章节术语漂移（"Key 精度下降"）、figure caption 与表注矛盾、章内交叉引用。
+- Scope:
+  - **ch4 全章扫描结果（先查后修）**:
+    - **40 个 \\ref 全部解析** ✅
+    - **14 table + 5 figure 全部被正文 \\ref**（无悬空表/图）✅
+    - **路径名一致**：INT4-RoleAlign / INT8-Canonical / KIVI-style / MixedKV 横向稳定（无 snake_case 残留）✅
+    - **统计协议文档化完整**：Bootstrap CI / sign-flip / BH-FDR 在 §4.1.4 完整说明 ✅
+    - **关键数字内部一致**：73.4% / 14.76 / 6.90 / 7.23 / 7.15 / +0.02 全部与 ch4 表 + ch5 答复对齐 ✅
+    - **PPL 数字逐项校验**：tab:ch4-kv-ppl 四行（FP16=9.31, K4V16=1290.9 即 +13,774% 等）算术正确 ✅
+  - **修复的问题**：
+    - **ch4 line 347 "Key 精度下降"**: 与同段 line 388 "Key 侧低比特噪声"族术语不统一，且与 ch3 line 54 修复同一类别（Codex 已指出"精度"在量化论文中混淆 accuracy/precision/numerical precision 三义）。修复为"Key 侧低比特噪声"。
+    - **ch4 line 286 "Key 精度是否已经进入足以扰动 attention ranking 的区域"**: 同样的术语问题。修复为"Key 侧位宽是否已经低到..."（保留语义，更精确）。
+    - **ch4 line 456 fig 4-3 caption "同一 coverage 规则下"**: 与表注 446 明确说明的"AutoK 14B 阈值 90\\%，其余 80\\%"矛盾。修复 caption 为"覆盖率准则下各模型的保护层结构（覆盖阈值 14B 为 90\\%，其余模型为 80\\%）"+ 引用表注 anchor。
+    - **ch2 line 91 "Key 侧精度下降"**: 同 ch4 类别问题。修复为"Key 侧位宽降低"。
+- Cross-chapter audit findings:
+  - sec:ch4-rqN 标签命名（rq1/rq2/rq3）与 ch1 RQ1/RQ2/RQ3 不一一对应——这是 ch4 内部 anchor 命名约定。但实际正文用"第一章研究问题 X"明示对应关系（line 130, 204, 833 等），无歧义。保留为低优先级 P3 备查（不修）。
+  - 17 处 hardcoded "第 4.X.Y 节"（line 16/55/65/100/102/108/117/155/164/202 等）。结构稳定时不破坏，作为 P3 备查（不修）。
+  - "高精度 Key/Value/路径"（line 256/334/345）是"高位宽参考"的口语用法，与 "Key 精度下降"问题不同类别，可接受。
+- Changed files: `thesis/chapters/ch4_experiments.tex` (3 处), `thesis/chapters/ch2_related_work.tex` (1 处)
+- Commands: `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+- Outputs: 99 页（与 ch3 复审后稳定一致），0 hard error；overfull 状态：1.5pt + 7.9pt 两处 cosmetic 残留（继承自 ch3 复审）
+- Validation:
+  - grep "Key 精度" 在 ch1-ch5 全文清零 ✅
+  - grep "同一 coverage 规则" 仅 fig 4-3 caption 一处，已修正 ✅
+- Risks / follow-ups:
+  - **Round 2 计划**: 检查表/figure caption ↔ 正文宣称的细节对齐（caption claim ↔ body claim 逐项对照），公式利用率，机制辨析层（§4.6）的强声明是否都有数据锚点
+
 ### 2026-05-08 20:33 | Thesis 第三章 Codex 全章复审（2 P1 + 4 P2 + 1 跨章节）
 
 - Goal: 用户跑了 Codex 完整全章审查（latexmk -outdir=/tmp/ch3_full_review_build），返回 2 P1 + 4 P2 + 1 跨章节问题。逐项验证后全部应用修订。

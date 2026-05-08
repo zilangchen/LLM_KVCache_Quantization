@@ -283,7 +283,7 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
   }
 \end{table}
 
-表~\ref{tab:ch4-kv-ppl} 先从语言建模层面给出最直接的诊断证据。在 Qwen2.5-1.5B 上，仅将 Key 压到 \texttt{INT4}（\texttt{K4V16}）就会把 PPL 从 9.31 推高到 1290.9，相对 FP16 达到 $+13{,}774\%$；相比之下，仅将 Value 压到 \texttt{INT4}（\texttt{K16V4}）时，PPL 为 9.35，相对 FP16 仅增加 $0.4\%$，而 \texttt{K8V16} 也只增加 $0.2\%$。这说明对当前 low-bit path 而言，决定“是否越过功能临界点”的主要变量是 Key 精度是否已经进入足以扰动 attention ranking 的区域。\texttt{Key-first protection} 的依据来自这组单侧干预证据。
+表~\ref{tab:ch4-kv-ppl} 先从语言建模层面给出最直接的诊断证据。在 Qwen2.5-1.5B 上，仅将 Key 压到 \texttt{INT4}（\texttt{K4V16}）就会把 PPL 从 9.31 推高到 1290.9，相对 FP16 达到 $+13{,}774\%$；相比之下，仅将 Value 压到 \texttt{INT4}（\texttt{K16V4}）时，PPL 为 9.35，相对 FP16 仅增加 $0.4\%$，而 \texttt{K8V16} 也只增加 $0.2\%$。这说明对当前 low-bit path 而言，决定“是否越过功能临界点”的主要变量是 Key 侧位宽是否已经低到足以扰动 attention ranking 的区域。\texttt{Key-first protection} 的依据来自这组单侧干预证据。
 
 \begin{table}[H]
   \centering
@@ -344,7 +344,7 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
 
 14B 补充对比只承担外推边界的提示作用。在 Qwen2.5-14B 上，保持 Key 为高精度的 \texttt{K16V4} 可将 PPL 从 full \texttt{INT4} 的 5.040 恢复到 4.709，约恢复 93\% 的退化；保持 Value 为高精度的 \texttt{K4V16} 恢复到 4.813，约恢复 64\%。这条补充读数与表~\ref{tab:ch4-kv-ppl} 和表~\ref{tab:ch4-kv-multitask} 同向，但不替代前三个模型上的主诊断。
 
-本小节支持的最小结论是：在本文考察的 low-bit 场景中，首先越过功能临界点的是 Key 精度下降；\texttt{MixedKV} 的恢复说明低比特路径需要优先保护 Key，并在此基础上升级量化格式。
+本小节支持的最小结论是：在本文考察的 low-bit 场景中，首先越过功能临界点的是 Key 侧低比特噪声；\texttt{MixedKV} 的恢复说明低比特路径需要优先保护 Key，并在此基础上升级量化格式。
 
 \subsection{INT4-RoleAlign 与 KIVI-style 的跨模型对比}
 \label{subsec:ch4-rolealign-kivi}
@@ -453,7 +453,7 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{figures/ch4/fig_ch4_03_autok_protection_map.pdf}
-  \caption{Behavior-guided AutoK 的逐层保护决策。四个子图分别对应 Qwen2.5-3B、LLaMA-3.1-8B、Qwen2.5-14B 与 Mistral-7B，展示同一 coverage 规则下各模型的保护层结构。该图将跨模型主表背后的 sensitivity shape 直接可视化。}
+  \caption{Behavior-guided AutoK 的逐层保护决策。四个子图分别对应 Qwen2.5-3B、LLaMA-3.1-8B、Qwen2.5-14B 与 Mistral-7B，展示覆盖率准则下各模型的保护层结构（覆盖阈值 14B 为 90\%，其余模型为 80\%，与表~\ref{tab:ch4-regime-main}~注一致）。该图将跨模型主表背后的 sensitivity shape 直接可视化。}
   \label{fig:ch4-autok-protection}
   \label{fig:sensitivity-heatmap}
 \end{figure}
