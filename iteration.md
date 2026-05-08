@@ -36,6 +36,17 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 21:33 | AIGC paragraph polish en abstract paragraph 1
+
+- Goal: Reduce formulaic phrasing in the English abstract motivation paragraph while preserving the bottleneck claim, K/V propagation distinction, and framework scope.
+- Scope: One source paragraph from `thesis/chapters/abstract_en.tex`, mapped to detector segment 2.
+- Changed files: `thesis/chapters/abstract_en.tex`, `docs/aigc_revision_tracker.md`.
+- Commands: four-angle reviewer agents plus final four-angle re-approval after one skeptical FAIL; `git diff --check -- thesis/chapters/abstract_en.tex docs/aigc_revision_tracker.md iteration.md`; `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`.
+- Outputs: Rewrote the English motivation paragraph to remove generic abstract transitions, use `Key-side` and `Value-side` terminology, and compress the final connection so it preserves meaning without adding an abstract page.
+- Validation: Reviewer gates PASS after final re-approval; LaTeX compile PASS. Existing Chapter 3 overfull hboxes are unrelated to this paragraph.
+- Risks / follow-ups: Continue with English abstract paragraph 2 from detector segment 2, one paragraph per commit.
+- Commit: see Git history for message `docs: polish aigc en abstract paragraph 1`
+
 ### 2026-05-08 21:29 | AIGC paragraph polish zh abstract paragraph 3
 
 - Goal: Reduce AIGC-style regularity in the Chinese abstract evidence paragraph while preserving all experimental numbers and boundaries.

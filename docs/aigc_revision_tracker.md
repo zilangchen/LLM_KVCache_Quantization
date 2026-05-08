@@ -151,3 +151,48 @@ This file records paragraph-level AIGC-polish changes. Each entry maps one detec
 - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 99-page PDF
 - Residual log notes: existing Chapter 3 overfull hboxes at lines 369 and 644--646; unrelated to this paragraph.
 - Commit: see Git history for message `docs: polish aigc zh abstract paragraph 3`
+
+## Segment 2.1
+
+- Report segment: 2
+- Source paragraph: `thesis/chapters/abstract_en.tex`, English abstract paragraph 1
+- Detector excerpt begins: `Long-context inference in large language models increasingly moves...`
+- Suspected segment size in report: 281 words for the full English abstract segment; this entry covers paragraph 1 only.
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: generic abstract opening, formulaic `but tensor-level... once...` contrast, template transition `To address this problem`, and an under-specified final `connecting` clause.
+- Rewrite goal: keep the English abstract aligned with the revised Chinese abstract while making the motivation and mechanism flow less generic.
+- Style constraints: preserve the bottleneck claim, Key/Value propagation distinction, behavior-aligned framework, three shared targets, and three connected decision stages.
+
+### Preserved Information
+
+- Long-context decoding shifts the decoding bottleneck from computation toward KV-cache storage and memory bandwidth.
+- Reducing cache bit-width reduces memory footprint.
+- Tensor-level reconstruction error alone is insufficient once the quantized cache is used by attention.
+- Key-side perturbations affect logits and softmax attention distributions.
+- Value-side perturbations mainly propagate through weighted aggregation into output representations.
+- The thesis develops a behavior-aligned KV-cache quantization framework for efficient LLM inference.
+- Attention distributions, aggregation outputs, and task behavior remain shared calibration and auditing targets.
+- Quantization-parameter selection, low-bit recovery, and layer-wise budget allocation remain linked to observed functional effects.
+
+### Review Gate
+
+- Technical accuracy reviewer: PASS; confirmed no missing content or unsupported performance claim.
+- English academic writing reviewer: PASS; suggested replacing `Perturbations on the Key side` and tightening the final sentence.
+- Cross-chapter consistency reviewer: PASS; confirmed alignment with the Chinese abstract and Chapters 1, 3, 4, and 5.
+- Skeptical reviewer: initial FAIL on a weaker candidate; final candidate PASS after restoring the bottleneck claim, replacing vague `same behavioral evidence`, and using `Key-side` / `Value-side` terminology. A later compressed version was re-approved to avoid adding an English-abstract page.
+
+### Applied Revision
+
+```tex
+During long-context decoding, KV cache growth shifts the decoding bottleneck from computation toward cache storage and memory bandwidth. Lower cache bit-width reduces the dominant cache footprint, but tensor-level reconstruction error alone does not characterize the functional deviation that appears once attention consumes a quantized cache. Key-side perturbations can alter logits and reshape softmax attention distributions, while Value-side perturbations primarily affect output representations through weighted aggregation. This thesis develops a behavior-aligned KV-cache quantization framework for efficient LLM inference, using attention distributions, aggregation outputs, and task behavior as shared calibration and auditing targets that link quantization-parameter selection, low-bit recovery, and layer-wise budget allocation.
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/abstract_en.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 99-page PDF
+- Residual log notes: existing Chapter 3 overfull hboxes at lines 369 and 644--646; unrelated to this paragraph.
+- Commit: see Git history for message `docs: polish aigc en abstract paragraph 1`
