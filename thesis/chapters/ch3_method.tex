@@ -374,7 +374,7 @@ R_V(p_V) = \mathbb{E}_{\mathcal D_{\mathrm{calib}}}\sum_{h=1}^{H}\sum_{r=1}^{S}\
 \section{行为敏感度驱动的层间预算分配与 AutoK}
 \label{sec:ch3-allocator}
 
-第 \ref{sec:ch3-calibration} 节已经将行为引导原则落实为可执行的离线校准流程，第 \ref{sec:ch3-paths} 节则给出了 INT8 基准路径与 \texttt{INT4-RoleAlign} 的跨位宽实例。在这一基础上，本节把问题改写为预算选择：在给定位宽约束下，哪些层或哪些角色应被优先保护。校准层回答“如何量化”，分配层回答“哪里优先保护”；行为引导分配是校准产物的下游接口，不与校准路径竞争主轴。
+第 \ref{sec:ch3-calibration} 节已经将行为引导原则落实为可执行的离线校准流程，第 \ref{sec:ch3-paths} 节则给出了 INT8 基准路径与 \texttt{INT4-RoleAlign} 的跨位宽实例。在这一基础上，本节把问题改写为预算选择问题——给定位宽约束下，由分配器决定哪些层或角色应被优先保护。校准层回答“如何量化”，分配层回答“哪里优先保护”；行为引导分配是校准产物的下游接口，不与校准路径竞争主轴。
 
 为了统一记号，设共有 $L$ 层，第 $l$ 层的 Key 与 Value 位宽分别记为 $b_K^{(l)}$ 和 $b_V^{(l)}$，则平均 KV bit 预算可写为
 \begin{equation}
@@ -397,7 +397,7 @@ R_V(p_V) = \mathbb{E}_{\mathcal D_{\mathrm{calib}}}\sum_{h=1}^{H}\sum_{r=1}^{S}\
 \begin{equation}
 \sigma_K^{(l)}\in\mathbb{R}^{H_{kv}\times d_k},
 \end{equation}
-其中 $H_{kv}$ 为 KV head 数，$d_k$ 为 Key 通道数（沿用第~\ref{subsec:ch3-rolealign}~节 per-channel 非对称量化的通道分组）。该读数与第~\ref{sec:ch3-calibration}~节产出的角色尺度统计同源，与表~\ref{tab:ch3-rolealign-final-config}~"分配读数"列描述的接口一致；整个分配阶段以离线读数驱动，不再对样本逐 token / 逐 head 计算注意力 KL。校准产物同时存有 V 侧读数 $\sigma_V^{(l)}\in\mathbb{R}^{H_{kv}\times d_v}$，由 V 侧 per-token 范围沿校准集 token 方向聚合到 $d_v$ 个 V 侧特征维（与第~\ref{subsec:ch3-rolealign}~节 per-token 量化一致），将在第~\ref{subsec:ch3-budget-kv}~节角色感知扩展中使用。
+其中 $H_{kv}$ 为 KV head 数，$d_k$ 为 Key 通道数（沿用第~\ref{subsec:ch3-rolealign}~节 per-channel 非对称量化的通道分组）。该读数与第~\ref{sec:ch3-calibration}~节产出的角色尺度统计同源，与表~\ref{tab:ch3-rolealign-vs-kivi}~"分配读数"行描述的接口一致；整个分配阶段以离线读数驱动，不再对样本逐 token / 逐 head 计算注意力 KL。校准产物同时存有 V 侧读数 $\sigma_V^{(l)}\in\mathbb{R}^{H_{kv}\times S_{\mathrm{cal}}}$（$S_{\mathrm{cal}}$ 为校准集对齐后的 token 序列长度），由 V 侧 per-token 范围在校准 token 维上排列得到（与第~\ref{subsec:ch3-rolealign}~节 per-token 量化轴一致），将在第~\ref{subsec:ch3-budget-kv}~节角色感知扩展中使用。
 
 第~\ref{sec:ch3-motivation-kv}~节的 K-cliff 诊断给出本节代理的物理来源：在 Qwen 与 LLaMA 系列对称 \texttt{INT4} 场景中，K 位宽下降是触发分配崩塌的主导方向，因此本节以 K 侧角色尺度构建逐层画像，V 侧读数留作角色感知扩展使用。机制依据来自 Qwen 与 LLaMA 系列的单侧诊断；跨家族适用区间由第四章在 Qwen2.5、LLaMA-3.1 与 Mistral 三个模型族上分别读取。给定聚合模式 $\alpha$，第 $l$ 层的逐层敏感度记为
 \begin{equation}
@@ -510,7 +510,7 @@ s^{(l)}
 \displaystyle \frac{1}{|\mathcal U_l|}\sum_{u\in\mathcal U_l}\sigma^{(l)}_{K,u}, & \alpha=\mathrm{mean},
 \end{cases}
 \end{equation}
-其中 $\mathcal U_l=\{(h,g):h\in\{1,\dots,H_{kv}\},\,g\in\{1,\dots,d_k\}\}$。\texttt{INT4-RoleAlign} 校准产物中存储的 $\sigma_K^{(l)}$ 由非对称量化在 $p_K$ 下确定的百分位端点区间 $[m^K_{l,j}, M^K_{l,j}]$ 跨通道聚合得到，逐元素非负，因此 $s^{(l)}\ge 0$。BA-$k$ 主线固定 $\alpha=\max$，$\alpha=\mathrm{mean}$ 留作聚合敏感性的备用读数。
+其中 $\mathcal U_l=\{(h,j):h\in\{1,\dots,H_{kv}\},\,j\in\{1,\dots,d_k\}\}$。\texttt{INT4-RoleAlign} 校准产物中存储的 $\sigma_K^{(l)}$ 由非对称量化在 $p_K$ 下确定的百分位端点区间 $[m^K_{l,j}, M^K_{l,j}]$ 各通道独立计算得到（跨通道聚合发生在后续 $\operatorname{Agg}_\alpha$ 算子上），逐元素非负，因此 $s^{(l)}\ge 0$。BA-$k$ 主线固定 $\alpha=\max$，$\alpha=\mathrm{mean}$ 留作聚合敏感性的备用读数。
 
 将 $\{s^{(l)}\}_{l=1}^L$ 归一化为概率分布
 \begin{equation}
@@ -543,7 +543,7 @@ s^{(l)}
 \subsection{AutoK 的预算自动建议机制}
 \label{sec:ch3-autok}
 
-BA-$k$ 把人工选定的整数 $k$ 作为保护层数，但不同模型的敏感度画像形状不一致，相同的 $k$ 在画像集中模型与画像弥散模型上对应的行为覆盖差异显著。\texttt{AutoK} 直接读取第~\ref{subsec:ch3-aggregation-robust}~节给出的覆盖度函数 $\Gamma(k)$，把"覆盖阈值"作为外部超参数取代逐 $k$ 网格扫描，从而把人工选 $k$ 的环节折叠到画像曲线本身。\texttt{AutoK} 不是完全无超参的自动决策，而是把整数 $k$ sweep 转换为覆盖率阈值 $\rho$ 下的候选生成器：决策粒度从「逐模型逐 $k$ 跑实验」转移到「按画像曲线一次写入 $\rho$」，但 $\rho$ 仍由设计者按部署目标在 $(0,1)$ 内取值。
+BA-$k$ 把人工选定的整数 $k$ 作为保护层数，但不同模型的敏感度画像形状不一致，相同的 $k$ 在画像集中模型与画像弥散模型上对应的行为覆盖差异显著。\texttt{AutoK} 直接读取第~\ref{subsec:ch3-aggregation-robust}~节给出的覆盖度函数 $\Gamma(k)$，把"覆盖阈值"作为外部超参数取代逐 $k$ 网格扫描，从而把人工选 $k$ 的环节折叠到画像曲线本身。\texttt{AutoK} 不是完全无超参的自动决策，而是把整数 $k$ sweep 转换为覆盖率阈值 $\rho$ 下的候选生成器——决策粒度从「逐模型逐 $k$ 跑实验」转移到「按画像曲线一次写入 $\rho$」，但 $\rho$ 仍由设计者按部署目标在 $(0,1)$ 内取值。
 
 给定覆盖阈值 $\rho\in(0,1)$，定义满足覆盖的最小保护层数
 \begin{equation}
@@ -557,7 +557,7 @@ k^\star(\rho)
 =
 \operatorname{TopK}\!\bigl(S_{K,\alpha},\,k^\star(\rho)\bigr),
 \end{equation}
-即在 BA-$k$ 主线的 $S_{K,\alpha}$ 上把 $k$ 替换为 $k^\star(\rho)$。两级位宽向量延用 $(b_\mathrm{lo}, b_\mathrm{hi})=(4,8)$
+即在 BA-$k$ 主线的 $S_{K,\alpha}$ 上把 $k$ 替换为 $k^\star(\rho)$。两级位宽向量沿用 $(b_\mathrm{lo}, b_\mathrm{hi})=(4,8)$
 \begin{equation}
 b_{\mathrm{AutoK}}^{(l)}
 =
@@ -576,10 +576,10 @@ b_\mathrm{lo}+\bigl(b_\mathrm{hi}-b_\mathrm{lo}\bigr)\,\mathbf 1\!\left[l\in \ma
     \toprule
     \textbf{策略} & \textbf{输入} & \textbf{保护规则} & \textbf{需扫整数 $k$?} & \textbf{输出} & \textbf{实验记号} & \textbf{方法定位} \\
     \midrule
-    Uniform & 无 & 所有层统一默认低 bit & 否 & 统一预算向量 & Uniform & 低预算参考 \\
-    BA-$k$ & $(S_{K,\alpha}, k)$ & 保护敏感度最高的 $k$ 层 & 是 & 分层 bit 向量 & BA-k & 分层分配器主体 \\
-    Heuristic-$k$ & $(L, k)$ & 固定位置规则保护 $k$ 层 & 是 & 分层 bit 向量 & Heuristic-k & 位置先验基线 \\
-    BA-AutoK & $(S_{K,\alpha}, \rho)$ & 取满足 $\Gamma(k)\ge\rho$ 的最小 $k^\star$ & 否（仅 $\rho$ 一次设定） & 分层 bit 向量 & BA-AutoK & 覆盖度预算建议 \\
+    Uniform & 无 & 所有层统一默认低位宽 & 否 & 统一位宽向量 & Uniform & 低预算参考 \\
+    BA-$k$ & $(S_{K,\alpha}, k)$ & 保护敏感度最高的 $k$ 层 & 是 & 分层位宽向量 & BA-k & 分层分配器主体 \\
+    Heuristic-$k$ & $(L, k)$ & 固定位置规则保护 $k$ 层 & 是 & 分层位宽向量 & Heuristic-k & 位置先验基线 \\
+    BA-AutoK & $(S_{K,\alpha}, \rho)$ & 取满足 $\Gamma(k)\ge\rho$ 的最小 $k^\star$ & 否（仅 $\rho$ 一次设定） & 分层位宽向量 & BA-AutoK & 覆盖度预算建议 \\
     \bottomrule
   \end{tabularx}
 \end{table}

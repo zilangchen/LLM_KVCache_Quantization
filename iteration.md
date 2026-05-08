@@ -36,6 +36,22 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 19:33 | Thesis §3.6 Codex 复审 round-2（V 侧形状 + 表引用 + 索引 + 错字 + 文风）
+
+- Goal: 解决 Codex §3.6 round-2 复审的 1 P1 + 3 P2 + P3 文风
+- Scope:
+  - **P1 (line 400 V 侧画像形状)**: 上轮 σ_V 形状 $\mathbb R^{H_{kv}\times d_v}$ + "聚合到 $d_v$ 个特征维"与 §3.5.3 line 256「Value scale 形状 [B, H_kv, S]」per-token 量化轴冲突。改为 $\sigma_V^{(l)}\in\mathbb R^{H_{kv}\times S_{\mathrm{cal}}}$（$S_{\mathrm{cal}}$ 为校准集对齐后的 token 序列长度），与 per-token 量化轴一致
+  - **P2 #1 (line 400 表引用错配)**: 旧引用 tab:ch3-rolealign-final-config "分配读数"列——但该表只有 4 列（量化轴/参数/离线选择读数/运行时载荷），无此列。真正有「分配读数」**行**的是 tab:ch3-rolealign-vs-kivi。改为「与表~\ref{tab:ch3-rolealign-vs-kivi}~『分配读数』行描述的接口一致」
+  - **P2 #2 (line 513 g→j + 表述精确)**: $g\in\{1,...,d_k\}$ 视觉上像 group 索引；§3.5.3 已用 j 作通道索引。改 g→j 统一记号。同句"跨通道聚合得到"误：σ_K 本身保留通道维，聚合在后续 Agg 才发生；改为「各通道独立计算得到（跨通道聚合发生在后续 Agg_α 算子上）」
+  - **P2 #3 (line 560 错字)**: 「两级位宽向量延用」→「沿用」（其它 5 处都已是「沿用」）
+  - **P3 (line 377/546 冒号式)**: line 377「本节把问题改写为预算选择：在给定位宽约束下...」→「预算选择问题——给定位宽约束下，由分配器决定...」；line 546「候选生成器：决策粒度从...」→「候选生成器——决策粒度从...」
+  - **P3 (表 3-? 位宽措辞)**: Uniform/BA-k/Heuristic-k/BA-AutoK 4 行的「低 bit」/「分层 bit 向量」/「统一预算向量」→「低位宽」/「分层位宽向量」/「统一位宽向量」（4 行 8 处统一为「位宽」框架）
+- Changed files: `thesis/chapters/ch3_method.tex`
+- Commands: `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex` (2-pass 收敛)
+- Outputs: 98 页（+1 页 due to V 侧形状解释新增 $S_{\mathrm{cal}}$ 定义）；0 undefined / 0 multiply-defined / 0 hard error
+- Validation: §3.6 范围内 grep 确认无残留: `tab:ch3-rolealign-final-config.*分配读数` / `延用` / `(h,g)` / `低 bit` / `分层 bit`
+- Risks / follow-ups: §3.6 round-2 全部落地；可推进 §3.7 (系统级部署 + Triton kernel) 或 §3.8 (chapter summary) Codex 复审
+
 ### 2026-05-08 18:53 | Thesis §3.6 Codex 复审 2 P1 + 1 P2 + P3 文风
 
 - Goal: 解决 Codex §3.6「行为引导预算分配 + AutoK」复审的 2 项 P1 必改 + 1 项 P2 必改 + P3 文风
