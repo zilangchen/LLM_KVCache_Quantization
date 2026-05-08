@@ -781,6 +781,6 @@ AI_{\mathrm{INT4}}
 
 第~\ref{sec:ch3-problem}~节把注意力近似误差代数分解为分布侧扰动和聚合侧扰动，第~\ref{sec:ch3-motivation-kv}~节用 K-cliff 诊断将这两条扰动分别绑定到 Key 与 Value 的低比特敏感性差异；这两节为后续校准与分配框架提供了机制依据。
 
-第~\ref{sec:ch3-calibration}~节把行为对齐落到注意力分布 KL 代理上，给出候选参数搜索、稳健选择规则与回退路径。第~\ref{sec:ch3-paths}~节将该校准纪律实例化为三条跨位宽路径：\texttt{INT8} 基准路径承担可信参考，对称 \texttt{INT4} 暴露低比特崩塌的失败方向，\texttt{INT4-RoleAlign} 通过 per-channel Key 与 per-token Value 非对称量化实现低比特恢复，参数冻结在路径相关的离线产物中且退化幅度依模型规模调制（详见第~\ref{sec:exp-rolealign}~节）；与 \texttt{KIVI-style} 的差异通过同格式比较加以分离，把"参数来源与冻结时刻"作为唯一变量，避免与格式优势混合。
+第~\ref{sec:ch3-calibration}~节把行为对齐落到注意力分布 KL 代理上，给出候选参数搜索、稳健选择规则与回退路径。第~\ref{sec:ch3-paths}~节将该校准纪律实例化为三条跨位宽路径：\texttt{INT8} 基准路径承担可信参考，对称 \texttt{INT4} 暴露低比特崩塌的失败方向，\texttt{INT4-RoleAlign} 通过 per-channel Key 与 per-token Value 非对称量化实现低比特恢复；其离线 percentile 与轴元数据写入路径产物，运行时按 K/V 轴生成仿射参数，退化幅度受模型族、规模与 GQA 配置共同调制（详见第~\ref{sec:exp-rolealign}~节）。与 \texttt{KIVI-style} 的差异通过同格式比较加以分离，把"参数来源与冻结时刻"作为唯一变量，避免与格式优势混合。
 
-第~\ref{sec:ch3-allocator}~节把校准产物中的逐层 K 侧角色尺度转写为敏感度画像 $S_{K,\alpha}$，定义 BA-$k$ 主线分配器；归一化覆盖度函数 $\Gamma(k)$ 进一步把"画像形状"折叠为单一阈值 $\rho$，由 \texttt{AutoK} 反推最小保护层数。第~\ref{sec:ch3-deployment}~节给出离线校准产物字段、\texttt{INT8} 路径上的 Triton 融合解码核以及三条路径的访存与算术强度分解。第四章将沿这些固定接口报告质量保真、低比特恢复证据、跨模型策略适用区间，以及 \texttt{INT8} 融合路径相对参考解码的部署效率对比。
+第~\ref{sec:ch3-allocator}~节把校准产物中的逐层 K 侧角色尺度转写为敏感度画像 $S_{K,\alpha}$，定义 BA-$k$ 主线分配器；归一化覆盖度函数 $\Gamma(k)$ 进一步把"画像形状"折叠为单一阈值 $\rho$，由 \texttt{AutoK} 反推最小保护层数。第~\ref{sec:ch3-deployment}~节给出离线校准产物字段、融合解码核接口以及三条路径的访存与算术强度分解。第四章将沿这些固定接口报告质量保真、低比特恢复证据、跨模型策略适用区间，以及融合解码路径相对参考解码的部署效率对比。

@@ -36,6 +36,20 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 19:52 | Thesis §3.8 chapter summary Codex 复审（P1 + P2 + P3 全部应用）
+
+- Goal: 解决 Codex §3.8 复审 1 P1 + 1 P2 + 1 P3，让 chapter summary 与 §3.2/§3.7/ch4 各自口径闭环
+- Scope:
+  - **P1 (line 786 部署对比对象错配)**: §3.8 写「INT8 融合路径相对参考解码的部署效率对比」，但 ch4 line 625 的 deployment efficiency 表（tab:ch4-tpot-4k）实际是「Triton 融合路径 (INT4) vs 参考路径 (INT4)」，ch4 的 INT8 表（tab:ch4-int8-canonical）只做 INT8 vs FP16 保真度检查，无 INT8 融合 vs 参考对照。改为「融合解码路径相对参考解码的部署效率对比」；同句早段「INT8 路径上的 Triton 融合解码核」→「融合解码核接口」（path-agnostic 抽象）
+  - **P2 (line 784 RoleAlign 参数冻结表述变宽)**: 旧文「参数冻结在路径相关的离线产物中」与 §3.7 line 632 修订的「θ_path = 冻结 percentile + 量化轴 + 边界元数据；运行时按 K/V 轴生成仿射参数」冲突。改为「其离线 percentile 与轴元数据写入路径产物，运行时按 K/V 轴生成仿射参数」，与 §3.7 闭环
+  - **P3 (line 784 调制因素)**: 「退化幅度依模型规模调制」窄于 §3.2 line 56 已建立的「受模型规模、训练数据与 GQA 配置共同调制」+ ch4 实证（族 + 规模 + GQA）。改为「受模型族、规模与 GQA 配置共同调制」
+  - 顺手把 §3.8 第 2 段（line 784）末尾 "（详见...）；与 KIVI-style..." 的分号断句改为句号 + 新句，提升可读性
+- Changed files: `thesis/chapters/ch3_method.tex`
+- Commands: `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+- Outputs: 98 页（稳定）；0 undefined / 0 multiply-defined / 0 hard error
+- Validation: §3.8 范围 grep 确认无残留: `INT8 融合路径` / `参数冻结在路径相关` / `依模型规模调制` / `INT8 路径上的 Triton 融合`
+- Risks / follow-ups: §3.8 chapter summary 与 §3.2/§3.7/ch4 三处实证表口径全面闭环；**第三章 §3.1-§3.8 全部 Codex 复审通过**
+
 ### 2026-05-08 19:45 | Thesis §3.7 Codex 复审 5 P1 + 1 P2（系统实现口径修订）
 
 - Goal: 解决 Codex §3.7「系统级部署 + Triton kernel」复审 5 项 P1 + 1 项 P2，全部聚焦系统实现口径
