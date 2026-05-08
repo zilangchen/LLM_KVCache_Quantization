@@ -53,7 +53,7 @@ KV Cache 量化的目标即
 
 Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16} 将 PPL 相对 FP16 基线推高约两个数量级，\texttt{K16V4} 只带来基线邻域内的小幅变化，原始读数见表~\ref{tab:ch4-kv-ppl}。同一方向也出现在 32K 任务诊断中。\texttt{K4V8} 下，Qwen2.5-1.5B 与 Qwen2.5-7B 的 RULER 通过率降为零；\texttt{K8V4} 没有出现归零式失稳。两组读数共同支持一个较窄判断，即在本文这些 Qwen2.5 低比特对照中，Key 侧低比特噪声是更直接的任务级失稳触发源；Value 侧压缩并非没有影响，但在 \texttt{K16V4} 与 \texttt{K8V4} 对照中没有触发同等强度的失稳。这个判断与式~\eqref{eq:ch3-error-decomp} 对 Key/Value 两条误差路径的机制区分一致。
 
-该不对称在不同模型族上强度不同：Qwen 系列（$H_{kv}=2$ 或 $4$，重复因子 $N_{\mathrm{rep}}=H_q/H_{kv}\in\{6,7\}$）在 \texttt{K4V8} 与 \texttt{K4V4} 下出现完全的检索归零，而具有更高 $H_{kv}$ 或不同头共享结构的模型（如 LLaMA-3.1-8B，$H_{kv}=8$、$N_{\mathrm{rep}}=4$）失稳幅度较小，单 KV 头量化误差被其对应的 $N_{\mathrm{rep}}$ 个查询头共享，使每个 KV 头影响的查询头数减少（详见表~\ref{tab:ch4-kv-multitask}）。其严重性与触发位宽的具体边界仍受模型规模、训练数据与 GQA 配置共同调制；$H_{kv}$ 在此充当组间差异的代理变量。
+这种不对称的强弱还随模型族和头共享结构改变。Qwen 系列的 $H_{kv}$ 为 2 或 4，重复因子 $N_{\mathrm{rep}}=H_q/H_{kv}$ 落在 $\{6,7\}$，在 \texttt{K4V8} 与 \texttt{K4V4} 下出现检索归零。LLaMA-3.1-8B 的 $H_{kv}=8$、$N_{\mathrm{rep}}=4$，在当前对照里失稳幅度较小。在 GQA 机制中，同一个 KV 头的量化误差会由映射到该头的一组 Query 头共同承受；在 $H_q$ 可比的对照中，较小的 $N_{\mathrm{rep}}$ 意味着共享同一 KV 头误差的 Query 头更少，相关读数见表~\ref{tab:ch4-kv-multitask}。更稳妥的解释还需要同时纳入模型规模、训练数据与 GQA 配置，$H_{kv}$ 在本文中只作为组间差异的代理变量，用于描述严重程度与触发位宽的边界变化。
 
 因此 Key 侧低比特退化被确立为低比特路径设计的核心约束。这一结论的核心论据是单侧 PPL 诊断的隔离证据（\texttt{K4V16} 单独触发数量级 PPL 退化）；\texttt{K4V8}/\texttt{K4V4} 的位宽对照作为剂量-响应（dose-response）验证与之同向，但因二者同时压低 K 与 V，单独不构成 K 主导的隔离推断。PPL 原始读数见表~\ref{tab:ch4-kv-ppl}；跨任务读数及统计协议（Bootstrap 95\% CI、sign-flip 置换检验与 BH-FDR 多重比较校正）见表~\ref{tab:ch4-kv-multitask} 与第~\ref{sec:exp-kv-sensitivity}~节。
 

@@ -36,6 +36,26 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 00:26 | AIGC paragraph polish ch3 model family modulation
+- Goal: Process the second natural paragraph of report segment 13 in Chapter 3 while preserving Qwen/LLaMA GQA metadata and the `$H_{kv}` proxy boundary.
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Rewrote the model-family modulation paragraph without colon-led packing or unnecessary parentheses.
+  - Preserved Qwen `$H_{kv}` / `$N_{\mathrm{rep}}` values, LLaMA-3.1-8B comparison metadata, and Table 4-7 evidence attribution.
+  - Reframed `$H_{kv}$` as a proxy variable with model scale, training data, and GQA configuration as co-modulating factors.
+- Validation:
+  - PASS: diff whitespace check.
+  - PASS: LaTeX build generated the PDF; log check found no undefined references or citation warnings. Existing overfull hboxes at Chapter 3 lines 369 and 644--646 are unrelated to this paragraph.
+- Risks / follow-ups:
+  - Continue with the next natural paragraph in detector segment 14 after this commit.
+- Commit: pending until this entry is committed.
+
 ### 2026-05-09 00:22 | AIGC paragraph polish ch3 qwen kv diagnosis
 - Goal: Process the first natural paragraph of report segment 13 in Chapter 3 while preserving PPL isolation, 32K task diagnostics, and the Key-side trigger interpretation.
 - Changed files:

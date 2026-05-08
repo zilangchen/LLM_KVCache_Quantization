@@ -938,3 +938,47 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
+## Segment 13b
+
+- Report segment: 13
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 56
+- Detector excerpt begins: `该不对称在不同模型族上强度不同...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: colon-led compressed explanation, unnecessary parenthetical packing of model metadata, English-style `在不同模型族上`, and an overly direct reading of `$H_{kv}$` as a causal variable.
+- Rewrite goal: preserve the Qwen/LLaMA numerical configuration and diagnostic contrast while spelling out the GQA sharing mechanism and keeping `$H_{kv}$` as a proxy variable.
+- Style constraints: avoid `xxxx 上`, avoid unnecessary parentheses, avoid treating `$H_{kv}$` as a single cause, and keep the paragraph scoped to the cited contrast.
+
+### Preserved Information
+
+- Qwen-series `$H_{kv}$` remains 2 or 4.
+- The repetition factor remains `$N_{\mathrm{rep}}=H_q/H_{kv}` and falls in `$\{6,7\}$` for the Qwen cases.
+- Qwen still shows retrieval zero under `\texttt{K4V8}` and `\texttt{K4V4}`.
+- LLaMA-3.1-8B remains the comparison case with `$H_{kv}=8` and `$N_{\mathrm{rep}}=4`.
+- LLaMA-3.1-8B still has a smaller instability magnitude in the cited comparison.
+- The GQA interpretation still states that a KV-head quantization error is shared by its mapped Query heads.
+- Table~`\ref{tab:ch4-kv-multitask}` remains the evidence source.
+- The boundary statement still includes model scale, training data, and GQA configuration as co-modulating factors.
+- `$H_{kv}$` remains a proxy for between-group differences rather than a single causal explanation.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the `$H_q`-comparable condition and `$N_{\mathrm{rep}}` wording avoid single-variable `$H_{kv}$` causality.
+- Chinese academic writing reviewer: first pass failed on `GQA 语义下` and an unnatural Query-head sharing phrase; final version passed after rewriting as `在 GQA 机制中` and `共同承受`.
+- Cross-chapter consistency reviewer: PASS; confirmed alignment with Chapter 4 Table~`\ref{tab:ch4-kv-multitask}` and the architecture-modulated reading.
+- Skeptical reviewer: PASS; no over-claiming or missing original information found.
+
+### Applied Revision
+
+```tex
+这种不对称的强弱还随模型族和头共享结构改变。Qwen 系列的 $H_{kv}$ 为 2 或 4，重复因子 $N_{\mathrm{rep}}=H_q/H_{kv}$ 落在 $\{6,7\}$，在 \texttt{K4V8} 与 \texttt{K4V4} 下出现检索归零。LLaMA-3.1-8B 的 $H_{kv}=8$、$N_{\mathrm{rep}}=4$，在当前对照里失稳幅度较小。在 GQA 机制中，同一个 KV 头的量化误差会由映射到该头的一组 Query 头共同承受；在 $H_q$ 可比的对照中，较小的 $N_{\mathrm{rep}}$ 意味着共享同一 KV 头误差的 Query 头更少，相关读数见表~\ref{tab:ch4-kv-multitask}。更稳妥的解释还需要同时纳入模型规模、训练数据与 GQA 配置，$H_{kv}$ 在本文中只作为组间差异的代理变量，用于描述严重程度与触发位宽的边界变化。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
