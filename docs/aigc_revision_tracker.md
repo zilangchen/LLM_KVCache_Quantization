@@ -939,6 +939,52 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 33.2
+
+- Report segment: 33
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 786
+- Detector excerpt begins: `第3.4 节把行为对齐落到注意力分布 KL代理上...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: a long outline-style sentence, colon-led enumeration of three paths, mixed English technical phrases without enough Chinese syntactic integration, and an over-compressed `unique variable` statement for the KIVI-style comparison.
+- Rewrite goal: split the paragraph into the calibration rule, the three path roles, the RoleAlign artifact/runtime boundary, and the KIVI-style comparison boundary.
+- Style constraints: avoid unnecessary colon and parenthetical explanation, avoid `per-channel` / `per-token` where Chinese equivalents are natural, avoid overclaiming RoleAlign as fully restoring all low-bit behavior, and spell out the KIVI-style comparison without implying identical backend details.
+
+### Preserved Information
+
+- Section~`\ref{sec:ch3-calibration}` still defines behavior alignment through the attention-distribution KL proxy.
+- Candidate parameter search, robust selection, and fallback rules are still preserved.
+- Section~`\ref{sec:ch3-paths}` still instantiates the calibration rule into three cross-bit-width paths.
+- `\texttt{INT8}` remains the trusted baseline path.
+- Symmetric `\texttt{INT4}` still exposes the low-bit collapse direction.
+- `\texttt{INT4-RoleAlign}` still uses per-channel Key and per-token Value asymmetric quantization, rewritten as `逐通道 Key` and `逐 token Value`.
+- Offline percentile parameters and axis metadata still enter the path artifact.
+- Runtime still generates affine parameters according to K/V-side rules.
+- Degradation remains jointly modulated by model family, scale, and GQA configuration, with the boundary delegated to Section~`\ref{sec:exp-rolealign}`.
+- The KIVI-style comparison remains a same-format comparison, now bounded to K/V axis layout and asymmetric affine quantization.
+- The core comparison variable remains endpoint statistics, with KIVI-style using runtime min/max and RoleAlign using evaluation-time frozen percentile parameters while still computing affine parameters from current tensors at runtime.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed all method roles and runtime boundaries are preserved.
+- Chinese academic writing reviewer: first pass failed on mixed English expressions and hard phrasing; final version passed after replacing `per-channel`, `per-token`, `离线 percentile`, and `按 K/V 轴`.
+- Cross-chapter consistency reviewer: PASS; confirmed the RoleAlign/KIVI-style comparison matches Chapter 3 and Chapter 4.
+- Skeptical reviewer: first pass failed on over-strong `恢复低比特可用性` and an imprecise `only variable` statement; final version passed after narrowing to `缓解低比特失稳` and spelling out endpoint statistics.
+
+### Applied Revision
+
+```tex
+第~\ref{sec:ch3-calibration}~节把行为对齐具体化为注意力分布 KL 代理，并在候选参数搜索中加入稳健选择与回退规则。第~\ref{sec:ch3-paths}~节继续把同一校准规则落实到三条跨位宽路径中。\texttt{INT8} 基准路径提供可信参考，对称 \texttt{INT4} 用来暴露低比特崩塌方向，\texttt{INT4-RoleAlign} 则以逐通道 Key 与逐 token Value 的非对称量化缓解低比特失稳。该路径把离线百分位参数与轴元数据写入产物，运行时再按 K/V 两侧规则生成仿射参数；其退化幅度受模型族、规模与 GQA 配置共同调制，相关边界见第~\ref{sec:exp-rolealign}~节。与 \texttt{KIVI-style} 的对比限定在相同 K/V 轴布局与非对称仿射口径内，核心差异是端点统计规则。\texttt{KIVI-style} 在运行时用 min/max 统计确定端点，\texttt{INT4-RoleAlign} 使用离线选定并在评测前冻结的百分位参数，运行时仍按当前张量计算仿射参数，从而把校准来源差异与格式差异分开。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated to this segment.
+
 ## Segment 33.1
 
 - Report segment: 33

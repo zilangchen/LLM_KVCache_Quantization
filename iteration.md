@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 02:46 | AIGC 段落修订 33.2: 第三章小结路径实例链
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理第三章小结中 §3.4、§3.5 与 KIVI-style 对照的路径实例链段。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将长句拆成校准代理、三条路径职责、RoleAlign 产物边界和 KIVI-style 对照边界四层。
+  - 将 `per-channel` / `per-token` 改为更自然的中文混排表达。
+  - 把 RoleAlign 的效果收窄为缓解低比特失稳，并明确同格式比较只限定 K/V 轴布局与非对称仿射口径。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated.
+- Risks / follow-ups:
+  - 下一轮继续处理 Segment 33 中第三章小结的第三段。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 summary path chain`
+
 ### 2026-05-09 02:41 | AIGC 段落修订 33.1: 第三章小结机制入口
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理第三章小结中 §3.1 与 §3.2 的机制回顾段。
 - Changed files:
