@@ -36,6 +36,33 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 05:30 | Ch4 第十轮 Codex 外审 fixup（表 4-4/4-5 协议一致 + n.s. 范围）
+- Goal: 落地用户提交的 Codex 外审三项 finding。两个 P1 都属数据正确性（表 4-4 协议+数字混用、表 4-5 跨协议 PPL 拼接），P2 属表内/表外标注口径偏差，必须先用 CSV 证据定 ground truth 再动笔，避免再生新错误。
+- Scope:
+  - P1#1: 表 4-4 协议从 "32K" 修正为 "4K + gen_len=64"，INT8 数字 6.64/5.21/9.29 改为 7.13/5.27/9.25（与权威表 \texttt{table\_official\_longbench\_1p5b.tex} 及 \texttt{phase1\_summary.csv} 一致）；重算 $\Delta$ 列，宏平均由 -0.01 改为 +0.16；正文解读段落重写为"三任务方向均为正、绝对幅度落在噪声带"；表注新增 \texttt{phase1\_summary.csv} 来源标记 + 与表 4-3 不可绝对值并列读取的提示。
+  - P1#2: 表 4-5 的 PPL 列原本拼接了两个不同协议（FP16=9.31/7.14/6.73 来自 \texttt{emnlp\_rolealign\_v1} hf 模式 seq=301828；sym INT4=19.5/85.5/6.97 来自 phase5v2 \texttt{kv\_cache} 模式 seq=32K）。统一到 phase5v2 主线协议：1.5B 8.93→19.54 / 7B 6.71→85.49 / 8B 6.92→6.97；表注显式声明 phase5v2 协议（WikiText-2, kv\_cache, seq=32K, n≥20 runs）并禁止与表 4-7 hf-mode 协议做跨表绝对值比较。
+  - P2: line 687 + 697 的 "4K 处 |ΔT|<2\,ms" 修正为 "所有长度点上 |ΔT|<2\,ms"，与表 4-13 中 7B 8K/16K 实际标注的 n.s. 范围对齐。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`（13 行净变化）
+  - `thesis/main.pdf`（102 页 → 102 页，文件大小 1,497,561 → 1,498,988 bytes）
+- Commands:
+  - 证据定位：grep `85.5` / `9.31` / `7.14` / `6.73` 跨 `results/archive/round*/` 与 `thesis/`，比对 phase5v2 vs emnlp_rolealign_v1 ppl_summary.csv
+  - 协议核对：`cat results/phase1_summary.csv | grep 1.5B` 确认 4K + gen_len=64；`cat phase5v2/tables/ppl_summary.csv` 确认 sym INT4 三模型完整数据
+  - 编译：`latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/codex_round10_build* main.tex`（两次：第一次主修复，第二次表 4-4 注引用修正）
+  - 写回：`cp /tmp/codex_round10_build_v2/main.pdf thesis/main.pdf`
+- Outputs:
+  - 表 4-4 数字与 \texttt{phase1\_summary.csv} 完全一致；表 4-5 PPL 与 \texttt{phase5v2/tables/ppl_summary.csv} 完全一致；表 4-13 标注口径与正文表述对齐。
+  - Codex 外审 P1#2 的"85.5 可能来自 RULER/Needle"怀疑被反证（85.5 确实是 PPL，phase5v2 archive `int4_baseline mean=85.485` 直接对应），但暴露出比 Codex 怀疑更深的 cross-protocol contamination 问题。
+  - PDF 102 页，无新增 undefined references 或 citation warnings；line 369 既有 overfull hbox 与本轮无关。
+- Validation:
+  - `latexmk`: PASS（两次均通过）
+  - `git diff --stat`: 13 insertions, 13 deletions (1:1 干净替换)
+  - 跨章节核查：appendix 表 \texttt{tab:app-scale-precision}（line 517-520）的 19.65 / 86.56 来自 int4_t2_float32_v1 archive (n=3) 不同实验子集，与本轮 phase5v2 主线 (n≥20) 数字属"同量级一致"已在 appendix 表注内 acknowledge，无需联动改。
+- Risks / follow-ups:
+  - Round 10 已闭环；后续如需进入 Phase D 终审，建议用户复核表 4-5 协议脚注是否过长（4 行 footnote 是否影响版式）。
+  - Codex 外审表明：跨章节 PPL 数字共用时必须锚定 CSV provenance，未来加 Findings 写作时可按"先指 CSV 再写数字"流程。
+- Commit: `29c9c69`
+
 ### 2026-05-09 05:17 | 摘要 option-3 精修与中英文对齐
 - Goal: 在结论化首版（commit 2712f63）基础上，按用户确认的 option 3 进一步精修中文摘要，再把同一思路平移到英文摘要，使两版的证据链表述、AutoK 预算接口提升和框架三段式收尾保持一致。
 - Scope:
