@@ -36,6 +36,22 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 19:45 | Thesis §3.7 Codex 复审 5 P1 + 1 P2（系统实现口径修订）
+
+- Goal: 解决 Codex §3.7「系统级部署 + Triton kernel」复审 5 项 P1 + 1 项 P2，全部聚焦系统实现口径
+- Scope:
+  - **P1 #1 (line 623/630/773 zero-point 时机 K/V 拆分)**: 旧文把 RoleAlign 的 zero-point 全部写成 prefill 阶段计算并冻结复用，与 V 侧 per-token 量化轴冲突。统一三处改为「K 侧 per-channel scale/zero-point 在 prefill 一次性按数据现场计算后冻结复用；V 侧 per-token scale/zero-point 随每个新 token 写入按 per-token 数据现场计算」
+  - **P1 #2 (line 632-644 θ_t 拆分冻结规则与运行时仿射参数)**: 旧式把 RoleAlign 写成 $\theta_t = \theta_{\mathrm{path}}$ 单常量，混淆「冻结规则」（percentile + 量化轴 + 元数据）与「运行时仿射参数」(s, ζ)。重写 cases 表加入第三分支 $h^{K/V}(\theta_{\mathrm{path}}, x_t)$；prose 显式区分 θ_path = 冻结规则、g_t = INT8 自适应触发、$h^{K/V}$ = RoleAlign K/V 双轴运行时映射（K 在 prefill 一次性、V 随追加 token 现场计算）
+  - **P1 #3 (line 687 INT4 融合核拆两条实现路径)**: 旧文「先反 pack 为 INT8 张量，再复用 INT8 融合核」是对称 INT4 wrapper 实现，不是 RoleAlign Triton kernel（后者 in-kernel unpack）。拆分写法：对称 INT4 用 wrapper（反 pack→复用 INT8 融合核）；INT4-RoleAlign 非对称融合扩展用 in-kernel unpack（核函数直接读 K 侧 per-channel + V 侧 per-token 的 (s, ζ)，对 nibble 在片上完成解包与非对称反量化）
+  - **P1 #4 (line 738-745 RoleAlign 存储公式)**: 旧式 $M_{\mathrm{RoleAlign}} = 2 L H_{kv} S d_k (\frac{1}{2} + \frac{8}{g})$ 用 8/g 摊销不适用——RoleAlign K 侧元数据形状为 $[L, H_{kv}, d_k]$（与 S 无关），V 侧为 $[L, H_{kv}, S]$（与 d_k 无关）。重写为 $M \approx L H_{kv} S d_k + 8 L H_{kv} d_k + 8 L H_{kv} S$（packed payload + K per-channel scale/zp + V per-token scale/zp 三段拆分）
+  - **P1 #5 (line 767 算术强度方向)**: AI 1.94→3.20 = arithmetic intensity 上升 = 缓解访存压力（不是「向访存受限偏移」，方向反了）。改为「缓解 decode 阶段的访存压力、提升 arithmetic intensity；与此同时，nibble 反 pack、调度与寄存器占用成为新的条件性开销」
+  - **P2 #6 (line 687/689 记号 + GQA 模型族扩展)**: 「按存储的 $(s, o)$ 反量化」→ $(s, \zeta)$ 与 §3.5.3 ζ 命名闭环；「Qwen2.5 与 LLaMA-3.1 系列均满足」→「本文涉及的 GQA 模型均满足」（涵盖 Mistral-7B）
+- Changed files: `thesis/chapters/ch3_method.tex`
+- Commands: `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+- Outputs: 98 页（稳定）；0 undefined / 0 multiply-defined / 0 hard error
+- Validation: §3.7 范围内 grep 确认无残留: `(s, o)` / `延用` / `向访存受限偏移` / `每组额外存储` / `tfrac{8}{g}` / `Qwen2.5 与 LLaMA-3.1 系列均满足`
+- Risks / follow-ups: §3.7 系统实现口径全部对齐到 K/V 双轴 + RoleAlign vs 对称 INT4 wrapper 区分；可推进 §3.8 (chapter summary) Codex 复审
+
 ### 2026-05-08 19:33 | Thesis §3.6 Codex 复审 round-2（V 侧形状 + 表引用 + 索引 + 错字 + 文风）
 
 - Goal: 解决 Codex §3.6 round-2 复审的 1 P1 + 3 P2 + P3 文风

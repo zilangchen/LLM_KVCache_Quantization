@@ -620,14 +620,14 @@ m_{\mathrm{path}}^{(l)}
     字段组 & 典型字段 & 读取模块 & 边界说明 \\
     \midrule
     路径索引 & model id、layer id、K/V role & 路径选择 & 决定缓存写入与解码路径的路由 \\
-    量化参数 & 逐组 scale、percentile 选择记录（保护裕度由运行时配置提供） & 缓存写入 & 评测前冻结；非对称路径的 zero-point 在 prefill 时按数据现场计算并冻结复用 \\
+    量化参数 & 逐组 scale、percentile 选择记录（保护裕度由运行时配置提供） & 缓存写入 & 评测前冻结离线规则；\texttt{INT4-RoleAlign} 的 K 侧 per-channel scale/zero-point 在 prefill 阶段一次性按数据现场计算后冻结复用，V 侧 per-token scale/zero-point 随每个新 token 写入时按 per-token 数据现场计算并入缓存 \\
     轴元数据 & group size、per-channel/per-token 标记、KV head 数 & 参考/融合后端 & 定义布局与 GQA 头数关系，作为接口契约存在 \\
     诊断记录 & 候选网格、保护触发标记、画像读数 $\sigma_K^{(l)}/\sigma_V^{(l)}$ & 复核脚本、第~\ref{sec:ch3-allocator}~节分配器 & 分配器仅读敏感度统计行；其余字段供溯源使用 \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-三条路径在 $\mathcal A_{\mathrm{path}}$ 中占用的字段不同（详见表~\ref{tab:ch3-runtime-paths}）：\texttt{INT8} 基准路径写入逐组静态 scale 与分组元数据，inv\_tau 字段在产物中存在但主线运行时以 \texttt{use\_attn\_temperature: false} 关闭；对称 \texttt{INT4} 路径共享同一字段格式，量化网格降为 4-bit；\texttt{INT4-RoleAlign} 在量化参数字段中加入 K/V 各侧 percentile 选择记录与轴元数据，运行时再由 prefill 阶段用候选 percentile 反推 K-side per-channel 与 V-side per-token 的 zero-point。
+三条路径在 $\mathcal A_{\mathrm{path}}$ 中占用的字段不同（详见表~\ref{tab:ch3-runtime-paths}）：\texttt{INT8} 基准路径写入逐组静态 scale 与分组元数据，inv\_tau 字段在产物中存在但主线运行时以 \texttt{use\_attn\_temperature: false} 关闭；对称 \texttt{INT4} 路径共享同一字段格式，量化网格降为 4-bit；\texttt{INT4-RoleAlign} 在量化参数字段中加入 K/V 各侧 percentile 选择记录与轴元数据。运行时按角色分两侧计算具体仿射参数：K 侧在 prefill 阶段依冻结 percentile 一次性按 per-channel 数据计算 $(s_K, \zeta_K)$ 并冻结复用，V 侧的 $(s_V, \zeta_V)$ 在每个新 token 写入时按 per-token 数据现场计算。
 
 在线推理阶段第 $t$ 个新 token 在第 $l$ 层的写入可写为
 \begin{equation}
@@ -637,11 +637,12 @@ Q_{\theta_t^{(l)}}\!\bigl(x_t^{(l)}\bigr),
 \qquad
 \theta_t^{(l)} =
 \begin{cases}
-\theta_{\mathrm{path}}^{(l)}, & \text{对称 \texttt{INT4} / \texttt{INT4-RoleAlign} / \texttt{INT8} 不启用自适应保护时,}\\
-g_t\!\bigl(\theta_{\mathrm{path}}^{(l)}, x_t^{(l)}\bigr), & \text{\texttt{INT8} 启用自适应保护时,}
+\theta_{\mathrm{path}}^{(l)}, & \text{对称 \texttt{INT4} / \texttt{INT8} 不启用自适应保护时,}\\
+g_t\!\bigl(\theta_{\mathrm{path}}^{(l)}, x_t^{(l)}\bigr), & \text{\texttt{INT8} 启用自适应保护时,}\\
+h^{K/V}\!\bigl(\theta_{\mathrm{path}}^{(l)}, x_t^{(l)}\bigr), & \text{\texttt{INT4-RoleAlign},}
 \end{cases}
 \end{equation}
-其中 $g_t$ 仅依赖当前 token 在该层的待写入张量与离线参数，按第~\ref{subsec:ch3-int8-baseline}~节的逐 token max 触发规则刷新当前组的 scale。任意 $t'<t$ 的历史缓存项 $\hat x_{t'}^{(l)}$ 在第 $t$ 步保持不变，缓存写入是单调追加的；这一"写入确定、历史封闭"的语义在主线实验中由多 seed 复现的逐位一致结果间接验证（详见第四章第~\ref{subsec:ch4-int8-canonical}~节）。自适应保护在主线实验中只对 \texttt{int8\_ours} 路径开启，其余路径退化为常量 $\theta_{\mathrm{path}}^{(l)}$。
+其中 $\theta_{\mathrm{path}}^{(l)}$ 表示离线冻结的路径规则——对称路径下即静态 scale，\texttt{INT4-RoleAlign} 下为冻结的 percentile $(p_K, p_V)$、量化轴标记与边界元数据。$g_t$ 仅依赖当前 token 在该层的待写入张量与离线参数，按第~\ref{subsec:ch3-int8-baseline}~节的逐 token max 触发规则刷新当前组的 scale。$h^{K/V}$ 是 \texttt{INT4-RoleAlign} 在 K/V 双轴上的运行时映射：K 侧在 prefill 阶段依冻结 percentile 一次性按 per-channel 数据计算 $(s_K, \zeta_K)$ 并冻结复用；V 侧的 $(s_V, \zeta_V)$ 随每个新 token 写入按 per-token 数据现场计算。任意 $t'<t$ 的历史缓存项 $\hat x_{t'}^{(l)}$ 在第 $t$ 步保持不变，缓存写入是单调追加的；这一"写入确定、历史封闭"的语义在主线实验中由多 seed 复现的逐位一致结果间接验证（详见第四章第~\ref{subsec:ch4-int8-canonical}~节）。自适应保护在主线实验中只对 \texttt{int8\_ours} 路径开启，对称路径退化为常量 $\theta_{\mathrm{path}}^{(l)}$，\texttt{INT4-RoleAlign} 退化为 $h^{K/V}$ 现场计算的仿射参数。
 
 Prefill 阶段按路径规则把当前块的 K/V 量化写入缓存，Decode 阶段从历史量化缓存中读取并路由到对应的注意力后端。该数据流约束 Decode 路径只读固定产物与已写入的历史缓存，使后续融合解码核能避免低比特缓存的中间物化。
 
@@ -684,9 +685,9 @@ o^{(r+1)}
 \end{equation}
 其中 $v_i$ 为反量化后的第 $i$ 个 Value 行向量。该递推与 FlashAttention 的 online softmax 在数学上等价；具体实现采用非归一化累加器 $\tilde o^{(r+1)} = \ell^{(r+1)}\,o^{(r+1)}$，循环结束时再统一除以 $\ell^{(\mathrm{final})}$，避免每步重复除法。
 
-\texttt{INT4} 路径在数据表示上引入额外解包成本。\texttt{INT4} 采用 nibble packing，把两个 4-bit 整数打包进一个 8-bit 字节；写入时把有符号 $[-8,7]$ 加上 +8 偏移映射到无符号 $[0,15]$ 域存入 nibble，读取时先按位移与掩码拆出半字节，再减 8 还原至有符号网格，并按存储的 $(s, o)$ 反量化。本文 \texttt{INT4} 实现先把 nibble 缓存批量反 pack 为 INT8 张量，再复用 \texttt{INT8} 融合核完成片上反量化、点积、online softmax 与输出累加；4-bit 载荷减少了全局读字节数，但反 pack 步骤与寄存器压力会以每输出 token 时间（TPOT）形式重新出现，相关变体的命名与角色见附录第~\ref{sec:app-triton-variants}~节，端到端 TPOT 数字见第四章第~\ref{subsec:ch4-tpot-4k}~节。
+\texttt{INT4} 路径在数据表示上引入额外解包成本。\texttt{INT4} 采用 nibble packing，把两个 4-bit 整数打包进一个 8-bit 字节；写入时把有符号 $[-8,7]$ 加上 +8 偏移映射到无符号 $[0,15]$ 域存入 nibble，读取时先按位移与掩码拆出半字节，再减 8 还原至有符号网格，并按存储的 $(s, \zeta)$ 反量化。本文实现按路径分两类：对称 \texttt{INT4} 诊断路径采用 wrapper 实现，先把 nibble 缓存批量反 pack 为 INT8 张量，再复用 \texttt{INT8} 融合核完成片上反量化、点积、online softmax 与输出累加；\texttt{INT4-RoleAlign} 的非对称融合扩展则采用 in-kernel unpack，核函数直接读取 K 侧 per-channel 与 V 侧 per-token 的 $(s, \zeta)$，对 nibble 在片上完成解包与非对称反量化，避免显式中间 INT8 张量物化。4-bit 载荷减少了全局读字节数，但反 pack 步骤与寄存器压力会以每输出 token 时间（TPOT）形式重新出现，相关变体的命名与角色见附录第~\ref{sec:app-triton-variants}~节，端到端 TPOT 数字见第四章第~\ref{subsec:ch4-tpot-4k}~节。
 
-为兼容 GQA~\cite{ainslie2023gqa}，融合核函数还需要把 query head 映射到共享的 KV head。设 query 头数为 $H_q$、KV 头数为 $H_{kv}$，并要求 $H_{kv}\mid H_q$（本文涉及的 Qwen2.5 与 LLaMA-3.1 系列均满足），则重复因子
+为兼容 GQA~\cite{ainslie2023gqa}，融合核函数还需要把 query head 映射到共享的 KV head。设 query 头数为 $H_q$、KV 头数为 $H_{kv}$，并要求 $H_{kv}\mid H_q$（本文涉及的 GQA 模型均满足），则重复因子
 \begin{equation}
 N_{\mathrm{rep}}=\frac{H_q}{H_{kv}},
 \qquad
@@ -735,14 +736,17 @@ M_{\mathrm{INT4}}
 2L H_{kv} S d_k
 \Bigl(\tfrac{1}{2}+\tfrac{4}{g}\Bigr).
 \end{equation}
-\texttt{INT4-RoleAlign} 在对称 INT4 的基础上每组额外存储 zero-point（FP32，$4$ 字节）
+\texttt{INT4-RoleAlign} 不采用 per-group 元数据，K 侧 scale/zero-point 形状为 $[L, H_{kv}, d_k]$，V 侧 scale/zero-point 形状为 $[L, H_{kv}, S]$，因此其显存口径写为
 \begin{equation}
 M_{\mathrm{RoleAlign}}
-=
-2L H_{kv} S d_k
-\Bigl(\tfrac{1}{2}+\tfrac{8}{g}\Bigr),
+\approx
+\underbrace{L H_{kv} S d_k}_{\text{packed K{+}V payload}}
++
+\underbrace{8\,L H_{kv} d_k}_{\text{K per-channel scale/zp}}
++
+\underbrace{8\,L H_{kv} S}_{\text{V per-token scale/zp}},
 \end{equation}
-其中 $4/g$ 来自 scale，$4/g$ 来自 zero-point；本路径在主线实验中 K 侧采用 per-channel 元数据（不随 $S$ 线性增长），V 侧采用 per-token 元数据（随 $S$ 线性增长），上式给出与对称 INT4 同口径的上界估计，第四章表~\ref{tab:ch4-kvcache-memory}~给出端到端实测显存读数。
+其中 packed payload 由 K 与 V 各一份的 nibble 化字节构成（每元素 0.5 字节、合计 $L H_{kv} S d_k$ 字节）；K 侧 scale 与 zero-point 各占 4 字节、独立于 $S$；V 侧 scale 与 zero-point 各占 4 字节、随 $S$ 线性增长。该公式按实现口径给出方法层面的近似估计，第四章表~\ref{tab:ch4-kvcache-memory}~给出端到端实测显存读数。
 
 decode 阶段的访存收益按 block 级字节量解释。设 block 大小为 $B_s$，每个 block 的访存量在对称 \texttt{INT8} 与 \texttt{INT4} 路径下分别近似为
 \begin{equation}
@@ -764,13 +768,13 @@ AI_{\mathrm{INT4}}
 \approx
 \frac{2}{1/2+4/g}.
 \end{equation}
-代入 $g=128$ 时 $AI_{\mathrm{INT8}}\approx 1.94$，$g=32$ 时 $AI_{\mathrm{INT4}}\approx 3.20$，低比特融合路径在相同浮点计算下减少全局内存传输，把 decode 从计算受限向访存受限偏移；端到端 TPOT 边界由第四章第~\ref{subsec:ch4-tpot-4k}~节实测给出。
+代入 $g=128$ 时 $AI_{\mathrm{INT8}}\approx 1.94$，$g=32$ 时 $AI_{\mathrm{INT4}}\approx 3.20$，低比特融合路径在相同浮点计算下减少全局内存传输，从而缓解 decode 阶段的访存压力、提升 arithmetic intensity；与此同时，nibble 反 pack、调度与寄存器占用成为新的条件性开销，端到端 TPOT 边界由第四章第~\ref{subsec:ch4-tpot-4k}~节实测给出。
 
 离线校准产物的存储相对运行时 KV Cache 与模型权重可忽略。对称 INT8 基准路径的产物规模为
 \begin{equation}
 \mathcal O\!\bigl(L d_k/g\bigr),
 \end{equation}
-\texttt{INT4-RoleAlign} 产物由层级分位数参数与量化轴元数据构成，per-channel zero-point 在 prefill 时由数据现场计算，不持久化到校准文件，因此产物规模量级与对称 INT8 同阶。第四章在上述公式基础上给出部署效率边界与跨硬件读数。
+\texttt{INT4-RoleAlign} 产物由层级分位数参数与量化轴元数据构成；K 侧 per-channel scale/zero-point 在 prefill 阶段由数据现场计算后冻结复用，V 侧 per-token scale/zero-point 随追加 token 现场计算后入缓存，二者均不持久化到校准文件，因此离线产物规模量级与对称 INT8 同阶。第四章在上述公式基础上给出部署效率边界与跨硬件读数。
 
 \section{本章小结}
 \label{sec:ch3-summary}
