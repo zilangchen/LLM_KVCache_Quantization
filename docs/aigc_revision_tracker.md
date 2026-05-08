@@ -984,6 +984,52 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 17a
+
+- Report segment: 17
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 131
+- Detector excerpt begins: `式 (3-8) 把误差分解为分布侧...`
+- Processing scope: first natural paragraph only. The detector also spans the forward/reverse KL paragraph, which will be handled in the next commit.
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: dense formula prose, semicolon-packed explanation, `偏移再经...进入聚合侧` ambiguity, and `在分布侧误差路径上` against the user's writing preference.
+- Rewrite goal: preserve the MSE boundary, Key-side attention path, error-decomposition terms, variable definitions, and KL/distribution-path correspondence while improving readability.
+- Style constraints: avoid `xxxx 上`, avoid implying KL covers the Value aggregation path, and keep the KL claim scoped to the distribution-side error path.
+
+### Preserved Information
+
+- MSE remains positioned as tensor-reconstruction comparison over elementwise K/V differences.
+- Key-side error still passes through `$qK^\top$`, softmax ranking, and probability-mass allocation before affecting output.
+- A low-MSE candidate can still move probability mass away from key tokens.
+- Equation~`\eqref{eq:ch3-error-decomp}` still provides the two output-error paths.
+- The distribution term remains `$\sum_i(\hat a_i-a_i)v_i$`.
+- The aggregation term remains `$\sum_i \hat a_i(\hat v_i-v_i)$`.
+- `$a_i\equiv p_{\mathrm{ref},i}^{(l,h,t)}` and `$\hat a_i\equiv p_{\theta,i}^{(l,h,t)}` are preserved.
+- `$v_i$` and `$\hat v_i$` remain reference and quantized Value.
+- KL still compares the distribution shift between `$a$` and `$\hat a$`.
+- The final claim remains that KL is closer than elementwise reconstruction error to output-level attention behavior along the distribution-side error path.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed formulas, definitions, and KL/MSE boundary are preserved.
+- Chinese academic writing reviewer: first pass failed on `注意力质量移走`, `在量化后权重下`, and `在分布侧误差路径上`; final version passed after replacing them with natural Chinese expressions.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with the Chapter 3 error decomposition and V-path output perturbation boundary.
+- Skeptical reviewer: PASS; confirmed the paragraph does not overstate KL as covering the Value aggregation path.
+
+### Applied Revision
+
+```tex
+MSE 仍停留在张量重建空间，只比较 $K$ 或 $V$ 的逐元素差异。Key 侧误差进入输出前，还要经过 $qK^\top$、softmax 排序和概率质量分配；因此，即便某个候选的 MSE 较小，关键 token 的注意力概率质量仍可能发生转移。式~\eqref{eq:ch3-error-decomp} 给出对应的两条输出误差路径。分布项为 $\sum_i(\hat a_i-a_i)v_i$，聚合项为 $\sum_i \hat a_i(\hat v_i-v_i)$。这里 $a_i\equiv p_{\mathrm{ref},i}^{(l,h,t)}$、$\hat a_i\equiv p_{\theta,i}^{(l,h,t)}$，$v_i$ 与 $\hat v_i$ 分别表示参考 Value 和量化 Value。KL 直接比较 $a$ 与 $\hat a$ 的分布偏移，与分布项对应；聚合项则保留 Value 扰动经由量化后权重 $\hat a_i$ 进入输出的作用。这个分工使 KL 沿分布侧误差路径，比逐元素重建误差更贴近输出层面的注意力行为。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 15b
 
 - Report segment: 15
