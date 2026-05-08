@@ -939,6 +939,48 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 26a
+
+- Report segment: 26
+- Source paragraph: `thesis/figures/fig_ch3_coverage_curves.tex`, line 81
+- Detector excerpt begins: `图3-7  敏感度覆盖度曲线示意...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: dash-led caption structure, slogan-like `核心直觉`, and mixed `profile` wording.
+- Rewrite goal: make the figure caption self-contained by naming the axes and preserving the concentrated/diffuse profile budget contrast.
+- Style constraints: avoid instruction-manual tone while keeping the caption bounded as a schematic figure.
+
+### Preserved Information
+
+- The figure remains a schematic sensitivity coverage curve.
+- The caption still compares concentrated and diffuse sensitivity profiles.
+- The horizontal axis is protection layer count `$k$`.
+- The vertical axis is sorted cumulative sensitivity `$\Gamma(k)$` over the first `$k$` layers.
+- Given the same coverage threshold, concentrated profiles still reach the target with smaller `$k$`.
+- Diffuse profiles still require covering more layers.
+- The caption still explains how `\texttt{AutoK}` uses profile shape to generate a budget suggestion.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed coverage-threshold semantics and AutoK budget meaning are preserved.
+- Chinese academic writing reviewer: first pass failed on `转写` and `保护更多层`; second pass failed on mechanical `可以如何依据`; final version passed after changing to `生成预算建议的方式`.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with `$\Gamma(k)$`, Chapter 3 AutoK, and Chapter 4 AutoK figure interpretations.
+- Skeptical reviewer: first pass failed because the AutoK causal wording was too strong and the curve axes were implicit; final version passed after adding axis semantics and preserving the schematic boundary.
+
+### Applied Revision
+
+```tex
+\caption{敏感度覆盖度曲线示意，图中以保护层数 $k$ 为横轴，以排序后前 $k$ 层累计敏感度 $\Gamma(k)$ 为纵轴。给定相同覆盖阈值，集中型画像用较小的 $k$ 即可达到目标覆盖度；弥散型画像则需要覆盖更多层。该示意说明 \texttt{AutoK} 依据画像形态生成预算建议的方式。}
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/figures/fig_ch3_coverage_curves.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 25
 
 - Report segment: 25

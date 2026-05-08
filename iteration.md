@@ -36,6 +36,27 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 01:48 | AIGC 段落修订 26a: AutoK 覆盖度图注
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理图~`\ref{fig:ch3-coverage-curve}` 的 caption。
+- Changed files:
+  - `thesis/figures/fig_ch3_coverage_curves.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/figures/fig_ch3_coverage_curves.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将 dash-led 图注改为自包含 caption，补明 $k$ 与 $\Gamma(k)$ 两个轴。
+  - 保留集中型画像较小 $k$ 达标、弥散型画像覆盖更多层、AutoK 依据画像形态生成预算建议的含义。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS，失败建议已吸收。
+- Validation:
+  - `git diff --check -- thesis/figures/fig_ch3_coverage_curves.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated.
+- Risks / follow-ups:
+  - Segment 26 还包含正文中 \texttt{AutoK} 读取 $\Gamma(k)$ 的句子，下一轮单独处理。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 autok coverage caption`
+
 ### 2026-05-09 01:42 | AIGC 段落修订 25: RoleAlign 与 KIVI-style 端点对照
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理 RoleAlign 与 KIVI-style 的端点参数来源对照段。
 - Changed files:
