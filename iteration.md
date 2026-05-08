@@ -36,6 +36,27 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 23:32 | AIGC paragraph polish ch1 contribution 3
+- Goal: Process report segment 7's third Chapter 1 contribution paragraph while preserving cross-model budget-regime claims and all named phenomena.
+- Changed files:
+  - `thesis/chapters/ch1_introduction.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch1_introduction.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Rewrote contribution 3 to keep `\texttt{heuristic}` strong-baseline behavior, key-layer deviation, `\texttt{AutoK}` model-level budget candidates, early-layer protection, and high-performance cluster coexistence.
+  - Added explicit Chapter 4 audit anchors for the same-order `\texttt{INT4}` budget-band comparison, three-task mean, 97\% near-cluster rule, and profile tables.
+  - Multi-round review converged to a final candidate with PASS from technical accuracy, Chinese academic writing, cross-chapter consistency, and skeptical-review perspectives.
+- Validation:
+  - `git diff --check`: PASS
+  - LaTeX: PASS, generated 99-page PDF
+  - Residual: existing Chapter 3 overfull hboxes at lines 369 and 644--646; unrelated to this paragraph.
+- Risks / follow-ups:
+  - Continue with report segment 8 after this commit.
+- Commit: see Git history for message `docs: polish aigc ch1 budget-regime contribution`
+
 ### 2026-05-08 22:56 | AIGC paragraph polish ch1 contribution 2
 - Goal: Process report segment 7's second Chapter 1 contribution paragraph while preserving the INT8 baseline, low-bit RoleAlign, AutoK, and bounded system-support claims.
 - Changed files:
