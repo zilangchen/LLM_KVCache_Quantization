@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 03:31 | AIGC 段落修订 47: 第四章 KL 与 MSE 机制解释
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理 KL/MSE 趋同的机制解释和解释性边界。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将 `setting`、`attention`、`quantization noise`、`ranking` 改为中文表述。
+  - 保留小模型或激进低比特设置中 KL 分布代理更有诊断价值的机制读法。
+  - 保留较大模型、较高位宽或更平滑架构中 KL/MSE 参数趋同的解释。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check`: PASS。
+  - `latexmk`: PASS，生成 101 页 PDF。
+  - 日志仅保留既有 line 369 overfull hbox，无 undefined references 或 citation warnings。
+- Risks / follow-ups:
+  - 下一轮处理第 4.6 节效度边界段落。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch4 kl mse mechanism`
+
 ### 2026-05-09 03:29 | AIGC 段落修订 46: 第四章 KL 与 MSE 趋同读数
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理 7B KL/MSE 校准目标趋同的表格解读。
 - Changed files:

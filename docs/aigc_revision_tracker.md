@@ -13,6 +13,49 @@ This file records paragraph-level AIGC-polish changes. Each entry maps one detec
 - Overall suspected AIGC ratio: 20.38%
 - Highest-risk chapters: Chinese abstract 72.0%, English abstract 72.0%, Chapter 3 32.0%, Chapter 1 24.0%, Conclusion 14.0%
 
+## Segment 47
+
+- Report segment: 47
+- Source paragraph: `thesis/chapters/ch4_experiments.tex`, line 784
+- Detector excerpt begins: `从机制上看，这一解释是合理的...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: formulaic mechanism opener, repeated `在...下/上` structures, and English-style terms `setting`, `attention`, `quantization noise`, and `ranking`.
+- Rewrite goal: keep the mechanism intuition while reducing English-style Chinese and preserving the interpretive boundary.
+- Style constraints: translate nonessential English terms, avoid `xxxx 上/下`, and keep `解释性推断` rather than a proven mechanism.
+
+### Preserved Information
+
+- The paragraph gives a mechanism-level interpretation, not a theorem.
+- Smaller or more sensitive models and more aggressive low-bit settings make softmax ranking more fragile to Key error.
+- Attention-distribution misalignment can appear before tensor-norm degradation.
+- KL-like distribution proxies can be more diagnostic in such cases.
+- Larger models, higher bit-width, or smoother architectures may keep quantization noise within a stable ranking region.
+- KL and MSE parameter choices may converge in those settings.
+- The claim remains an interpretive inference rather than a mechanism theorem.
+
+### Review Gate
+
+- Technical accuracy reviewer: PASS.
+- Chinese academic writing reviewer: PASS.
+- Cross-chapter consistency reviewer: PASS.
+- Skeptical reviewer: PASS.
+
+### Applied Revision
+
+```tex
+这种解释可以作为机制层面的读法。较敏感的小模型或更激进的低比特设置中，softmax 排序对 Key 误差更脆弱，注意力分布错位可能先于张量范数恶化出现，KL 这类分布代理因而更有诊断价值；模型更大、位宽更高或架构更平滑时，量化噪声未必足以把排序推离原本稳定区域，KL 与 MSE 搜索到的参数也就更容易收敛。上述判断仍属于\emph{解释性推断}，尚未构成机制定理。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing overfull hbox at line 369; no undefined references or citation warnings.
+- Commit: see Git history for message `docs: polish aigc ch4 kl mse mechanism`
+
 ## Segment 46
 
 - Report segment: 46
