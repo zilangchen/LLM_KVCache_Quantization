@@ -197,7 +197,7 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
   }
 \end{table}
 
-表~\ref{tab:ch4-longbench-official} 表明，官方真实数据上的单任务差异均控制在 $0.4$ pp 以内：NarrativeQA 为 $+0.06$ pp，HotpotQA 为 $+0.37$ pp，GovReport 为 $+0.04$ pp，宏平均相差 $+0.16$ pp。三者方向均为正，但绝对幅度仍处于 task-core 协议中观察到的量化噪声范围内。\texttt{INT8-Canonical} 在三个官方任务上未出现相对 \texttt{FP16} 的显著性退化；这一结果与第~\ref{subsec:ch4-int8-canonical}~节方向一致，更适合作为评测协议一致性检验，而不是官方真实分布上的显著性结论。
+表~\ref{tab:ch4-longbench-official} 表明，官方真实数据上的单任务差异均控制在 $0.4$ pp 以内：NarrativeQA 为 $+0.06$ pp，HotpotQA 为 $+0.37$ pp，GovReport 为 $+0.04$ pp，宏平均相差 $+0.16$ pp。三者方向均为正，但绝对幅度仍处于 task-core 协议中观察到的量化噪声范围内。\texttt{INT8-Canonical} 在三个官方任务上未出现相对 \texttt{FP16} 的系统性退化；这一结果与第~\ref{subsec:ch4-int8-canonical}~节方向一致，更适合作为评测协议一致性检验，而不是官方真实分布上的显著性结论。
 
 表~\ref{tab:ch4-longbench-official} 的作用是排除一个具体风险：主文合成协议没有在这三个官方任务上把 \texttt{INT8-Canonical} 的方向性结论反转。它不证明真实数据分布上的全面泛化，也不替代跨模型主矩阵。关于为何校准层采用 KL 而非 MSE，以及该选择在不同规模上的必要性差异，将在第 4.6.1 节中讨论。
 

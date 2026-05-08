@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 05:37 | Ch4 官方 LongBench 解读措辞收窄
+- Goal: 修正第 4 章官方 LongBench 对照段中“显著性退化”的统计含义偏强问题，使正文解读与表注“不构成全面统计检验”的边界一致。
+- Scope:
+  - 将表~\ref{tab:ch4-longbench-official} 后的“显著性退化”改为“系统性退化”。
+  - 保留原有数值、协议边界和评测一致性结论，不改变实验 claim。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `thesis/main.pdf`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex iteration.md`
+  - `latexmk -xelatex -halt-on-error -interaction=nonstopmode main.tex`
+- Outputs:
+  - 官方 LongBench 小样本对照段不再使用容易被读成 formal significance 的“显著性”表述。
+  - 表 4-4 的作用仍限定为评测协议一致性检验。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex iteration.md`: PASS.
+  - `latexmk -xelatex -halt-on-error -interaction=nonstopmode main.tex`: PASS, generated 102-page PDF.
+- Risks / follow-ups:
+  - 仅为措辞收窄，无数据、表格或引用变更。
+- Commit: pending at log-write time; intended `docs: narrow ch4 longbench degradation wording`
+
 ### 2026-05-09 05:30 | Ch4 第十轮 Codex 外审 fixup（表 4-4/4-5 协议一致 + n.s. 范围）
 - Goal: 落地用户提交的 Codex 外审三项 finding。两个 P1 都属数据正确性（表 4-4 协议+数字混用、表 4-5 跨协议 PPL 拼接），P2 属表内/表外标注口径偏差，必须先用 CSV 证据定 ground truth 再动笔，避免再生新错误。
 - Scope:
