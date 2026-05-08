@@ -36,6 +36,24 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 18:18 | Thesis §3.4 Codex 复审 4 必改 + 3 建议改
+
+- Goal: 解决 Codex §3.4「校准目标 + 参数搜索」复审 4 项必改 + 3 项建议改
+- Scope（必改）:
+  - **#1 (line 170 公式严谨性)**: 裁剪率 $c_K, c_V$ 旧公式 `|x| > q_max^int(θ)` 量纲错配（FP16 张量值 < 1 而 q_max=127/7），改为 `|x/s_θ(x)| > q_max`，即先按候选 θ 在 x 所属分组的尺度 $s_θ(x)$ 缩放再判断越界
+  - **#2 (line 186 μ 语义)**: 旧文「$\mu$ 不参与主选...仅作为下文回退场景下次级排序键」与代码 robust-feasible P95 tie 时 mean 是次级键不一致 → 改为「以 $q_{0.95}$ 为主序；$\mu$ 不参与主选 argmin，仅在并列或回退时作为次级键」
+  - **#3 (line 191 K/V 可行域)**: 「与对称路径共享相同的可行域约束 $\Theta_{\mathrm{feasible}}$」过强 → K-path 与 V-path 候选空间和代理目标都不同，不能共用同一集合。改为「两路径沿用上述可行域审计口径——裁剪率过滤、尾部主序、次级键回退——具体阈值与代理形式由 K/V 分路径代理分别实例化」
+  - **#4 (line 193 「收入」硬伤)**: 「逐头温度校正作为补充诊断收入附录」→「仅作为附录诊断保留」（"收入"误用）
+- Scope（建议改）:
+  - **#5 (line 131 KL 直接约束弱化)**: 「KL 直接约束 $(\hat a-a)$」→「KL 度量分布侧偏移 $(\hat a-a)$，并与误差分解的分布通路对应」（KL 是分布偏移代理，不直接约束输出）
+  - **#6 (line 159/167 索引一致性)**: 引入 $T_{\mathrm{cal}} = \{(x,l,h,t): x\in\mathcal D_{\mathrm{calib}}\}$，统一 $\mu$ / $q_{0.95}$ / $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 三处求和索引为 $T_{\mathrm{cal}}$，并把 $d_{\mathrm{KL}}^{(l,h,t)}$ 一律加上 $x$ 上标为 $d_{\mathrm{KL}}^{(x,l,h,t)}$
+  - **#7 (figure/table 冒号式)**: workflow 图 line 54 `K：分布 KL` / line 56 `V：输出扰动` 删除冒号 → `K 分布 KL` / `V 输出扰动`；interfaces 表 line 19 `\parbox{... 注：...}` 删除「注：」前缀
+- Changed files: `thesis/chapters/ch3_method.tex`、`thesis/figures/fig_ch3_calibration_workflow.tex`、`thesis/tables/table_ch3_calibration_interfaces.tex`
+- Commands: `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+- Outputs: 97 页（稳定）；0 undefined / 0 multiply-defined / 0 hard error
+- Validation: ch3 diff 边界精确锁定 7 处（公式 4 + 散文 3）；图 / 表 diff 各 1 处冒号清理
+- Risks / follow-ups: §3.4 必改 4 项已落地，建议改 3 项已落地；可进入 §3.5 (跨位宽路径实例化) 复审
+
 ### 2026-05-08 18:00 | Thesis §3.3 Codex 复审 P1+P2 修订（图 3-3 因果方向 + 图注精简 + 位宽措辞）
 
 - Goal: 解决 Codex §3.3 复审 2 项 P1 + 2 项 P2 → §3.2/§3.3 同步关闭
