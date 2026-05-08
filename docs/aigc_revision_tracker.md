@@ -154,7 +154,7 @@ This file records paragraph-level AIGC-polish changes. Each entry maps one detec
 
 ## Segment 2.1
 
-- Report segment: 2
+- Report segment: 2; also covers report segment 3 because that sentence is inside the same source paragraph.
 - Source paragraph: `thesis/chapters/abstract_en.tex`, English abstract paragraph 1
 - Detector excerpt begins: `Long-context inference in large language models increasingly moves...`
 - Suspected segment size in report: 281 words for the full English abstract segment; this entry covers paragraph 1 only.
@@ -242,3 +242,51 @@ An INT8 canonical path uses the attention-distribution KL proxy to establish a r
 - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 99-page PDF
 - Residual log notes: existing Chapter 3 overfull hboxes at lines 369 and 644--646; unrelated to this paragraph.
 - Commit: see Git history for message `docs: polish aigc en abstract paragraph 2`
+
+## Segment 2.3
+
+- Report segment: 2
+- Source paragraph: `thesis/chapters/abstract_en.tex`, English abstract paragraph 3
+- Detector excerpt begins: `Experiments across six open-source instruction models...`; report segment 3 excerpt begins `Overall, this thesis formulates...`
+- Suspected segment size in report: 281 words for the full English abstract segment; this entry covers paragraph 3 only.
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: dense result inventory, long semicolon chain, repeated `with...` constructions, and a generic final thesis-summary sentence.
+- Rewrite goal: keep every numerical result and boundary while reducing detector-friendly list rhythm.
+- Style constraints: preserve model scope, all reported numbers, the Qwen-only INT4 collapse boundary, the Mistral-7B `\texttt{AutoK}` support claim, the Qwen2.5-3B early-layer result, the Qwen2.5-14B no-stable-winner result, and the conditional nature of system speedups.
+
+### Preserved Information
+
+- Experiments cover six open-source instruction models from Qwen2.5, LLaMA-3.1, and Mistral families.
+- KV-cache quantization and allocation are strongly family-, scale-, and task-dependent.
+- Qwen2.5-1.5B INT8 canonical path differs from FP16 by about `$+0.02$` in the three-task mean.
+- Symmetric INT4 causes stepwise retrieval collapse on Qwen models.
+- K/V diagnostics identify low-bit Key noise as the more direct source of instability.
+- Mistral-7B gives the clearest single-model support for `\texttt{AutoK}` with core mean 14.76 and extend mean 15.69.
+- Qwen2.5-3B shows an early-layer protection regime, with behavior-guided `$k=1$` core mean 6.90 versus 3.48 for the middle-layer heuristic.
+- Qwen2.5-14B shows no stable winner, with Uniform INT4 and AutoK-cov90 core means 7.23 and 7.15.
+- System measurements show about 73.4\% KV-cache capacity reduction for INT4 on four representative models.
+- Fused-decode speedups remain conditioned by `$H_{kv}$`, sequence length, and backend implementation.
+- The thesis-level conclusion remains a structured formulation of behavior preservation, K/V role asymmetry, and bit-width allocation under model- and task-dependent regimes.
+
+### Review Gate
+
+- Technical accuracy reviewer: PASS; suggested restoring formal `provides the clearest single-model support` and avoiding interpretive `close`.
+- English academic writing reviewer: PASS; suggested `provides`, `depend on`, and keeping terminology coherent.
+- Cross-chapter consistency reviewer: PASS; checked every key number and boundary against the Chinese abstract and Chapters 3--5.
+- Skeptical reviewer: initial FAIL because the first candidate weakened `strongly`, changed `role` to `use`, and used a generic `Taken together` ending. The applied version restores the stronger claim and thesis-level formulation.
+
+### Applied Revision
+
+```tex
+Experiments across six open-source instruction models from the Qwen2.5, LLaMA-3.1, and Mistral families show that KV-cache quantization and allocation are strongly family-, scale-, and task-dependent. On Qwen2.5-1.5B, the INT8 canonical path differs from FP16 by about $+0.02$ in the three-task mean, supporting its role as a conservative fidelity case. Symmetric INT4 causes stepwise retrieval collapse on Qwen models, and K/V role diagnostics identify low-bit Key noise as the more direct source of instability. In cross-model allocation, Mistral-7B provides the clearest single-model support for \texttt{AutoK}, with a core mean of 14.76 and an extend mean of 15.69. Qwen2.5-3B reveals an early-layer protection regime, where behavior-guided $k=1$ reaches a core mean of 6.90 compared with 3.48 for the middle-layer heuristic; Qwen2.5-14B shows no stable winner, with Uniform INT4 and AutoK-cov90 reaching core means of 7.23 and 7.15. System measurements show about 73.4\% KV-cache capacity reduction for the INT4 path on four representative models, while fused-decode speedups remain conditioned by $H_{kv}$, sequence length, and backend implementation. Overall, this thesis formulates KV-cache quantization as a structured problem of preserving attention behavior, respecting K/V role asymmetry, and allocating bit-width under model- and task-dependent regimes.
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/abstract_en.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 99-page PDF
+- Residual log notes: existing Chapter 3 overfull hboxes at lines 369 and 644--646; unrelated to this paragraph.
+- Commit: see Git history for message `docs: polish aigc en abstract paragraph 3`

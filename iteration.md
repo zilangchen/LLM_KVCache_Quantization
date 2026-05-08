@@ -36,6 +36,17 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 21:42 | AIGC paragraph polish en abstract paragraph 3
+
+- Goal: Reduce formulaic result-list rhythm in the English abstract evidence paragraph while preserving all numerical claims and boundaries.
+- Scope: One source paragraph from `thesis/chapters/abstract_en.tex`, mapped to detector segment 2.
+- Changed files: `thesis/chapters/abstract_en.tex`, `docs/aigc_revision_tracker.md`.
+- Commands: four-angle reviewer agents; `git diff --check -- thesis/chapters/abstract_en.tex docs/aigc_revision_tracker.md iteration.md`; `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`.
+- Outputs: Rewrote the English evidence paragraph, retained all model-family, INT8, INT4, AutoK, early-layer, 14B, capacity, and fused-decode boundary numbers, and restored stronger wording after skeptical review.
+- Validation: Reviewer gates PASS after adopting required skeptical fixes; LaTeX compile PASS. Existing Chapter 3 overfull hboxes are unrelated to this paragraph.
+- Risks / follow-ups: Detector segment 3 is the final sentence of this same English abstract paragraph and is covered here. Continue with detector segment 4.
+- Commit: see Git history for message `docs: polish aigc en abstract paragraph 3`
+
 ### 2026-05-08 21:38 | AIGC paragraph polish en abstract paragraph 2
 
 - Goal: Reduce formulaic method sequencing in the English abstract method paragraph while preserving all calibration, RoleAlign, and allocation claims.
