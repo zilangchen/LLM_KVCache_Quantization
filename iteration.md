@@ -36,6 +36,31 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 05:17 | 摘要 option-3 精修与中英文对齐
+- Goal: 在结论化首版（commit 2712f63）基础上，按用户确认的 option 3 进一步精修中文摘要，再把同一思路平移到英文摘要，使两版的证据链表述、AutoK 预算接口提升和框架三段式收尾保持一致。
+- Scope:
+  - 中文摘要：第二段把"由此连接量化参数选择和层间预算建议"改为显式证据链表述（"组织成一条连续证据链，使同一组行为读数既能解释量化参数选择，也能转化为层间预算建议"）。
+  - 中文摘要：第三段把 AutoK 提升为单独子句并补 boundary 声明（"预算分配应被理解为模型族、规模和任务条件共同约束下的候选选择问题，而不是脱离条件的固定规则"）；总结句改写为"以注意力行为保持为核心、以 K/V 角色差异恢复为低比特路径、以 \texttt{AutoK} 和行为敏感度画像为预算接口"的三段式。
+  - 英文摘要：对齐三处改动（evidence chain 显式化 / AutoK separated clause + boundary phrase / framework hierarchical triple）；机制句（"the issue is not merely the reduction in bit-width..."）原版已具备 em-dash 等价表达，未改写。
+- Changed files:
+  - `thesis/chapters/abstract_zh.tex`（4 行）
+  - `thesis/chapters/abstract_en.tex`（4 行）
+- Commands:
+  - `git diff --check -- thesis/chapters/abstract_zh.tex thesis/chapters/abstract_en.tex`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/abstract_optn3_build main.tex`
+  - `pdfinfo thesis/main.pdf | rg 'Pages|File size|PDF version'`
+- Outputs:
+  - 中文摘要在 commit `70c6ab5` 落地。
+  - 英文摘要在 commit `ef2a9ef` 落地，与中文版语义对齐。
+  - 正式 PDF 维持 102 页，无新增 undefined references 或 citation warnings。
+- Validation:
+  - `latexmk`: PASS。
+  - 仅保留既有 line 369 overfull hbox（与本轮无关）。
+- Risks / follow-ups:
+  - Round 10（用户自办 Codex 外审）尚未触发；外审反馈后再决定是否进入 Phase D 终审。
+  - §4.2 FP16 数据完整性遗留项（表 4-3/4-4 同号但协议不同）已记入 Round 10 待办。
+- Commits: `70c6ab5`（zh option 3）, `ef2a9ef`（en align）
+
 ### 2026-05-09 04:58 | 摘要结论化改写与中英文对齐
 - Goal: 按用户确认的中文摘要版本替换正文，并对照中文逻辑重写英文摘要，使实验结论更结论化、减少跨模型数字堆叠。
 - Scope:
@@ -705,46 +730,3 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - Segment 28 已按三个自然段处理完成，下一轮进入报告 Segment 29。
 - Commit: pending at log-write time; committed as `docs: polish aigc ch3 prefill decode boundary`
-
-### 2026-05-09 02:09 | AIGC 段落修订 28b: 历史缓存闭包与自适应保护边界
-- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理历史缓存不改写、单调追加、自适应保护开启范围和 RoleAlign 参数生成边界。
-- Changed files:
-  - `thesis/chapters/ch3_method.tex`
-  - `docs/aigc_revision_tracker.md`
-  - `iteration.md`
-- Commands:
-  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
-  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
-- Outputs:
-  - 将半说明书式长句改为三句，保留历史缓存闭包、逐位一致间接核验和 INT8-Canonical 开启范围。
-  - 将第四章引用收窄为固定协议主线读数，避免把其写成逐位一致的直接证明。
-  - 明确 RoleAlign 的 K 侧预填充后复用与 V 侧随新 token 即时计算，避免 K 侧每步重算误读。
-  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
-- Validation:
-  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
-  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF.
-  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated.
-- Risks / follow-ups:
-  - Segment 28 还剩 Prefill/Decode 数据流段，下一轮单独处理。
-- Commit: pending at log-write time; committed as `docs: polish aigc ch3 cache closure semantics`
-
-### 2026-05-09 02:04 | AIGC 段落修订 28a: 路径参数与运行时映射解释
-- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理公式后对 $\theta_{\mathrm{path}}^{(l)}$、$g_t$ 与 $h^{K/V}$ 的参数解释。
-- Changed files:
-  - `thesis/chapters/ch3_method.tex`
-  - `docs/aigc_revision_tracker.md`
-  - `iteration.md`
-- Commands:
-  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
-  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
-- Outputs:
-  - 将冒号式定义列表改写为连续说明，保留三类参数函数的全部语义。
-  - 明确 $g_t$ 由自适应保护逻辑确定当前组 scale，避免被误读为在线更新冻结产物。
-  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
-- Validation:
-  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
-  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF.
-  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated; the previous overfull hbox at lines 644--646 no longer appears after this rewrite.
-- Risks / follow-ups:
-  - Segment 28 还包含历史缓存闭包语义和 Prefill/Decode 数据流两段，后续分别处理。
-- Commit: pending at log-write time; committed as `docs: polish aigc ch3 runtime parameter mapping`
