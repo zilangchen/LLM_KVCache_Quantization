@@ -939,6 +939,50 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 29a
+
+- Report segment: 29
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 656
+- Detector excerpt begins: `自回归解码阶段每步只引入一个新的query token...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: template-like bottleneck statement, rigid `朴素路径...过程功能正确` sequence, and translated engineering phrasing such as `压入同一片上流水线`.
+- Rewrite goal: preserve the systems motivation for the Triton fused decode kernel while making the paragraph read like normal technical exposition.
+- Style constraints: reduce English-style Chinese, keep the Triton citation, and preserve the linear-growth memory cost claim.
+
+### Preserved Information
+
+- Autoregressive decode still adds only one new query token at each step.
+- Attention still needs to access the full historical KV Cache.
+- The bottleneck is still memory access.
+- The naive path still reads K/V from low-bit cache, fully dequantizes them into FP16 intermediate tensors, and sends them to standard attention.
+- The naive path remains functionally correct.
+- Intermediate tensor materialization and memory traffic still grow linearly with sequence length.
+- The `\texttt{INT8}` path still uses a Triton-based fused decode kernel.
+- Dequantization, dot product, online softmax, and output accumulation are still placed in one on-chip pipeline.
+- The goal remains reducing global-memory traffic.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the decode access pattern, naive path, linear cost, and fusion components are preserved.
+- Chinese academic writing reviewer: first pass failed on `query token`, `压力落在访存`, and translated engineering phrasing; final version passed after using `查询 token`, `主要瓶颈来自访存`, and `放入同一条片上流水线`.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with the following online-softmax derivation and Chapter 4 system evaluation.
+- Skeptical reviewer: PASS; found no information loss or overclaim.
+
+### Applied Revision
+
+```tex
+自回归解码每前进一步只新增一个查询 token，但注意力仍需访问全部历史 KV Cache，主要瓶颈来自访存。朴素实现会先从低比特缓存取出 K/V，将其完整反量化为 FP16 中间张量，再交给标准注意力计算；这条路径功能正确，代价是中间张量物化和显存读写会随序列长度线性增长。\texttt{INT8} 路径采用基于 Triton~\cite{tillet2019triton} 的融合解码核，把反量化、点积、online softmax 和输出累加放入同一条片上流水线，减少往返全局内存的数据量。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing Chapter 3 overfull hbox at line 369; no undefined references or citation warnings.
+
 ## Segment 28c
 
 - Report segment: 28
