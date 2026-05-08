@@ -74,7 +74,7 @@ KV Cache 量化的目标即
 \end{equation}
 其中 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}(\theta)$ 是 $\Delta_{\mathrm{beh}}$ 在有限校准样本上的代理估计——把第~\ref{sec:ch3-problem}~节联合行为目标限制到离线校准集，转化为可执行计算。给定一条路径及其候选参数家族，校准层输出 $\theta^\star$ 供在线缓存写入直接读取；不同位宽与格式的差异由候选家族 $\Theta$ 与代理 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 的具体形式承担，框架不要求所有路径使用同一数值评分。
 
-分配层把“哪里保留更高精度”组织为预算决策问题。设平均 KV bit 预算为 $\bar b$，分配映射
+分配层把“哪里保留更高位宽”组织为预算决策问题。设平均 KV bit 预算为 $\bar b$，分配映射
 \begin{equation}
 b^\star = \mathcal{A}(\mathcal{S};\bar b),\quad \tfrac{1}{L}\sum_{l=1}^{L} b^\star_l \le \bar b,
 \end{equation}

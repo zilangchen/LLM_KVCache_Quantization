@@ -36,6 +36,20 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 18:00 | Thesis §3.3 Codex 复审 P1+P2 修订（图 3-3 因果方向 + 图注精简 + 位宽措辞）
+
+- Goal: 解决 Codex §3.3 复审 2 项 P1 + 2 项 P2 → §3.2/§3.3 同步关闭
+- Scope:
+  - **P1 (figure caption, fig_ch3_framework_shared_profile.tex line 73)**: 旧 caption「校准决策 θ⋆ 与预算分配 b⋆ 均由同一 𝒮 驱动」与正文 line 69 的「𝒮 是校准副产物，分配模块只读」不一致——存在因果回环。改为「同一离线链路产出校准产物（θ⋆）与共享画像（𝒮）」+「b⋆ 由分配模块只读 𝒮 推得」
+  - **P1 (Card 2 sub-text, line 53)**: 「组织校准与预算分配」改成「供预算分配读取」（精确反映 𝒮 = 校准副产物 + 分配只读 dataflow）
+  - **P2 (caption 长度)**: 删除误差传播公式 / K-path / V-path / KL / 输出扰动代理等本应在 §3.4 展开的内容；新 caption 仅保留三卡片职责 + 数据流方向 + forward pointer 到 §3.4/§3.5
+  - **P2 (ch3_method.tex line 77)**: 「哪里保留更高精度」→「哪里保留更高位宽」（writing prefs §35：量化语境下 precision 易混淆 store-bit 与 attention 数值精度）
+- Changed files: `thesis/chapters/ch3_method.tex` + `thesis/figures/fig_ch3_framework_shared_profile.tex`
+- Commands: `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`（2-pass 收敛 cross-refs）
+- Outputs: 97 页（稳定）；0 undefined / 0 multiply-defined / 0 hard error / 0 label-changed-warning
+- Validation: figure diff scope = Card 2 文字 + caption；ch3 diff scope = line 77 单字
+- Risks / follow-ups: §3.3 视为通过候选；下一节可推进 §3.4 (KL 校准目标) 复审
+
 ### 2026-05-08 17:52 | Thesis §3.2 Codex Round-2 P1 修订（统计协议归属 + line 48 顺滑度）
 
 - Goal: 解决 Codex §3.2 复审 P1 + 非阻塞建议

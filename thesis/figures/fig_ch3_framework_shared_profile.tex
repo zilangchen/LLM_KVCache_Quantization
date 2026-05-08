@@ -50,7 +50,7 @@
     \node[font=\bfseries\scriptsize, text=safeGreen!64!black] at (6.10,2.98) {2 \quad 共享画像};
     \node[font=\bfseries\small] at (6.10,2.36) {行为敏感度画像 $\mathcal S$};
     \node[font=\scriptsize, text=black!64] at (6.10,1.94) {逐层读数};
-    \node[font=\scriptsize, text=black!64] at (6.10,1.58) {组织校准与预算分配};
+    \node[font=\scriptsize, text=black!64] at (6.10,1.58) {供预算分配读取};
     \node[tag, draw=safeGreen!45!black, fill=white, text width=0.95cm] at (5.02,0.86) {来源};
     \node[tag, draw=safeGreen!45!black, fill=white, text width=0.95cm] at (6.10,0.86) {接口};
     \node[tag, draw=safeGreen!45!black, fill=white, text width=0.95cm] at (7.18,0.86) {稳健};
@@ -70,6 +70,6 @@
 
   \end{tikzpicture}%
   }
-  \caption{行为引导量化框架总览：校准与分配共享同一行为敏感度画像。校准层回答“如何量化”，分配层回答“哪里优先保护”；两者共享离线来源、产物接口与稳健选择纪律，但不要求所有路径使用同一个数值评分函数。}
+  \caption{行为引导量化框架总览。\textbf{Card 1} 提供 FP16 注意力分布与聚合输出两类离线参考行为；\textbf{Card 2} 汇聚为校准链路的副产物——逐层共享画像 \(\mathcal{S}=\{s^{(l)}\}_{l=1}^{L}\)；\textbf{Card 3} 中的校准决策 \(\theta^\star\) 由同一离线链路直接产出，预算分配决策 \(b^\star\) 由分配模块只读 \(\mathcal{S}\) 推得。代理实例与稳健性细节分见第~\ref{sec:ch3-calibration}~节与第~\ref{sec:ch3-allocator}~节。}
   \label{fig:ch3-framework-shared-profile}
 \end{figure}
