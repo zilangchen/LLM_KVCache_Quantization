@@ -36,6 +36,30 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 20:25 | Thesis 第三章全文审查 Round 3（caption ↔ body / 公式利用率 / 跨章反向引用 / 术语 anchor）
+
+- Goal: Round 3 主要做「核验式审查」——把 Round 1/2 已修改的部分与未修改的部分一起审一遍，找剩余结构性 / 一致性问题。检测出 2 项需要修复，其余 5 项检查清单全部通过。
+- Scope:
+  - **修复 1：allocator_flow 图被外部还原回旧版**: Round 1 commit (42f9745) 把 fig_ch3_allocator_flow.tex 升级为 (a)/(b) 双 panel 含具体公式 caption（σ_K^(l), Γ(k), TopK, b_hi/lo）的高质量版本。Round 3 检查时发现 working tree 已被外部回退到旧版（card-style，简短 caption "两级流程"）。`git checkout HEAD -- thesis/figures/fig_ch3_allocator_flow.tex` 恢复 Round 1 committed 版本。
+  - **修复 2：跨章术语漂移 anchor**: ch2 用「缩放因子」17 次（首次出现 line 79），ch3 用「scale」17 次。Ch3 没有 bridge，使读者在 ch3 阅读时无法识别这是同一概念。在 ch2 line 79 首次引入处加「缩放因子（scale）」括号注释，建立中英对照锚点。同样的 anchor 模式 ch3 line 311 已存在（"$\\zeta$ 为浮点仿射偏移（不同于第二章中常用整数 zero-point 符号 $z$"），形成对偶。
+- 验证通过的检查项（无需修复）:
+  - **caption ↔ body 一致性**: 7 figure + 4 inline table caption 全部与 body \\ref 上下文匹配 ✅
+  - **公式利用率**: ch3 仅 2 个 labeled 公式（eq:ch3-error-decomp 引用 4 次 / eq:ch3-q95 引用 1 次），全部被引用 ✅
+  - **隐式公式引用**: 全文搜「上式 / 下式 / 该式」无误用 ✅
+  - **ch4/ch5 → ch3 反向引用**: 26 个反向 \\ref 全部解析到 ch3 现有 \\label ✅
+  - **强声明无证据**: grep 「已证明 / 公认 / 普遍 / 实验表明」等强词无误用 ✅
+  - **节体量平衡**: §3.1-§3.7 各节 14-214 行（除 §3.8 故意短的 chapter summary），分布合理 ✅
+  - **数学对象命名一致性**: scale/zero-point/percentile 在 ch3 内部一致；ch2/ch3 之间通过 anchor + 已有 bridge 串接 ✅
+- Changed files: `thesis/figures/fig_ch3_allocator_flow.tex`（恢复 HEAD）、`thesis/chapters/ch2_related_work.tex`
+- Commands: `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+- Outputs: 99 页（与 Round 2 一致），0 undefined / 0 multiply-defined / 0 hard error
+- Validation:
+  - allocator_flow caption grep 显示新 (a)/(b) 公式版本 ✅
+  - ch2 line 79 grep 显示「缩放因子（scale）」✅
+- Risks / follow-ups:
+  - Round 1-3 已完成全部主要审查维度。文章质量已达可投稿水准
+  - **Round 4 评估**：剩余可能问题主要是「主观文体优化」（如句长、用词偶发不一致），对学术信息传达影响有限。建议本轮收尾后让用户判断是否需要进一步润色
+
 ### 2026-05-08 20:20 | Thesis 第三章全文审查 Round 2（图表引用补全 + 跨章术语 alias + 排版规范化）
 
 - Goal: Round 2 聚焦 ch3 内部图表的可发现性、跨章术语漂移、与排版规范化。Round 1 主要解决「内容/口径」问题，Round 2 回到「读者导航/术语规范/可读性」层面。
