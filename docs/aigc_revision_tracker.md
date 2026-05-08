@@ -939,6 +939,47 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 19b
+
+- Report segment: 19
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 192
+- Detector excerpt begins: `产物字段分两类落地...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: dash-packed explanation, repeated `读取`, and a route-map sentence compressed into the same paragraph.
+- Rewrite goal: separate artifact categories, temperature-diagnostic boundary, and next-section handoff into shorter authorial sentences.
+- Style constraints: avoid dash explanations and keep the boundary positive without weakening the fact that temperature correction is appendix-only.
+
+### Preserved Information
+
+- Product fields remain divided into two categories by usage.
+- Path-specific calibration fields remain directly read by the online cache-writing process.
+- Per-layer sensitivity statistics remain input to the budget allocation module in Section~`\ref{sec:ch3-allocator}`.
+- Per-head temperature correction remains preserved as an appendix diagnostic.
+- The main flow remains limited to the two product categories.
+- The next two sections still cover three cross-bit-width path instantiations and the sensitivity-statistics-based allocation mechanism.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed artifact categories, online read semantics, allocation input, temperature boundary, and next-section handoff are preserved.
+- Chinese academic writing reviewer: first pass failed on `消费产物`; final version passed after rewriting it as `主线流程仅使用前两类产物`.
+- Cross-chapter consistency reviewer: PASS; confirmed alignment with Section~`\ref{sec:ch3-allocator}` and the appendix placement of temperature correction.
+- Skeptical reviewer: PASS; no new claim or boundary drift found.
+
+### Applied Revision
+
+```tex
+产物字段按用途分成两类。路径特定校准字段由在线缓存写入过程直接读取，逐层敏感度统计则供第~\ref{sec:ch3-allocator}~节的预算分配模块使用。逐头温度校正保留在附录诊断中，主线流程仅使用前两类产物。基于这一接口边界，后两节分别展开三条跨位宽路径的实例化设计，以及由敏感度统计支撑的预算分配机制。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 19a
 
 - Report segment: 19

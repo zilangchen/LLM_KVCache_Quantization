@@ -1739,3 +1739,24 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - 同一检测片段还包含产物字段段落，下一轮单独处理。
 - Commit: pending at log-write time; committed as `docs: polish aigc ch3 rolealign paths`
+
+### 2026-05-09 01:02 | AIGC 段落修订 19b: 离线产物字段与主线边界
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理离线产物字段与后续章节承接段。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将破折号压缩句拆为四句，分别说明两类产物、附录温度诊断边界和后续两节职责。
+  - 保留路径特定校准字段、逐层敏感度统计、第~`\ref{sec:ch3-allocator}`~节预算分配、逐头温度校正附录定位和三条跨位宽路径承接。
+  - 技术、中文、跨章一致性和 skeptical 审查均返回 PASS，失败建议已吸收。
+- Validation:
+  - `git diff --check`: PASS
+  - LaTeX: PASS，生成 100 页 PDF
+  - Residual: 仍有既存 Chapter 3 overfull hbox，与本段修订无关。
+- Risks / follow-ups:
+  - 下一轮进入第~`\ref{sec:ch3-paths}`~节开头的跨位宽路径组织段。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 artifact boundary`
