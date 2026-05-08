@@ -1,0 +1,112 @@
+\documentclass[tikz,border=5pt]{standalone}
+
+\usepackage{fontspec}
+\usepackage{xeCJK}
+\usepackage{amsmath}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,calc,positioning}
+
+\IfFontExistsTF{Times New Roman}{\setmainfont{Times New Roman}}{\setmainfont{TeX Gyre Termes}}
+\IfFontExistsTF{Songti SC}{\setCJKmainfont{Songti SC}}{\setCJKmainfont{STSong}}
+
+\begin{document}
+\begin{tikzpicture}[
+  x=1cm,
+  y=1cm,
+  >=Stealth,
+  every node/.style={font=\small, align=center, text=ink},
+  title/.style={font=\bfseries\large, anchor=west, text=ink},
+  note/.style={font=\scriptsize, anchor=west, text=muted},
+  stage/.style={
+    rectangle,
+    rounded corners=2.2pt,
+    draw=rule,
+    fill=white,
+    line width=0.55pt,
+    inner xsep=7pt,
+    inner ysep=5pt,
+    minimum height=0.78cm
+  },
+  mainstage/.style={
+    stage,
+    draw=blue,
+    fill=blueFill
+  },
+  softstage/.style={
+    stage,
+    draw=softRule,
+    fill=softFill
+  },
+  tag/.style={
+    rectangle,
+    rounded corners=1.7pt,
+    draw=rule,
+    fill=white,
+    line width=0.45pt,
+    inner xsep=4pt,
+    inner ysep=2pt,
+    font=\scriptsize
+  },
+  flow/.style={-Stealth, draw=blue, line width=0.82pt},
+  auxflow/.style={-Stealth, draw=muted, line width=0.55pt},
+  hairline/.style={draw=softRule, line width=0.45pt}
+]
+  \definecolor{ink}{RGB}{30,34,40}
+  \definecolor{muted}{RGB}{103,111,122}
+  \definecolor{rule}{RGB}{142,151,163}
+  \definecolor{softRule}{RGB}{202,208,216}
+  \definecolor{softFill}{RGB}{248,249,250}
+  \definecolor{blue}{RGB}{54,91,151}
+  \definecolor{blueFill}{RGB}{241,245,251}
+  \definecolor{gold}{RGB}{171,126,42}
+  \definecolor{goldFill}{RGB}{252,248,236}
+  \definecolor{teal}{RGB}{67,132,126}
+  \definecolor{tealFill}{RGB}{241,248,247}
+
+  \node[title] at (0,4.70) {行为敏感度画像驱动的预算分配};
+  \node[note] at (0,4.36) {离线校准产物提供行为读数，分配器只读画像并输出位宽决策};
+  \draw[hairline] (0,4.13) -- (14.85,4.13);
+
+  % Main allocation path.
+  \node[mainstage, text width=2.34cm] (artifact) at (1.28,3.05)
+    {离线校准产物\\[-1pt] $\sigma_K^{(l)},\,\sigma_V^{(l)}$};
+  \node[mainstage, text width=2.48cm] (profile) at (4.42,3.05)
+    {K 侧逐层画像\\[-1pt] $S_{K,\alpha}=(s_K^{(l)})_{l=1}^{L}$};
+  \node[mainstage, text width=2.38cm] (allocator) at (7.55,3.05)
+    {BA-$k$ 分配器\\[-1pt] $\operatorname{TopK}(S_{K,\alpha},k)$};
+  \node[mainstage, text width=2.22cm] (protected) at (10.62,3.05)
+    {保护层集合\\[-1pt] $\mathcal P_k^{(\alpha)}$};
+  \node[mainstage, text width=2.06cm] (bits) at (13.46,3.05)
+    {逐层位宽\\[-1pt] $b^{(1:L)}$};
+
+  \draw[flow] (artifact.east) -- (profile.west);
+  \draw[flow] (profile.east) -- (allocator.west);
+  \draw[flow] (allocator.east) -- (protected.west);
+  \draw[flow] (protected.east) -- (bits.west);
+
+  % Heuristic baseline.
+  \node[softstage, text width=2.24cm] (heur) at (7.64,1.30)
+    {Heuristic-$k$\\[-1pt] 位置启发式基线};
+  \node[tag, draw=softRule, text=muted, fill=white, text width=2.42cm] (compare) at (10.34,1.10)
+    {同一 $k$ 的预算对照};
+  \draw[auxflow] (heur.east) -- (compare.west);
+  \draw[auxflow] (compare.north) .. controls +(0,0.66) and +(0,-0.46) .. (protected.south);
+
+  % Role-aware extension.
+  \draw[hairline] (0,0.47) -- (14.85,0.47);
+  \node[note] at (0,0.20) {角色预算接口};
+  \node[softstage, draw=teal, fill=tealFill, text width=2.48cm] (roleRead) at (3.32,-0.40)
+    {双侧角色画像\\[-1pt] $S_{K,\alpha},\,S_{V,\alpha}$};
+  \node[softstage, draw=teal, fill=white, text width=2.10cm] (roleK) at (6.34,0.02)
+    {K 侧保护集合\\[-1pt] $\mathcal P_K$};
+  \node[softstage, draw=teal, fill=white, text width=2.10cm] (roleV) at (6.34,-0.90)
+    {V 侧保护集合\\[-1pt] $\mathcal P_V$};
+  \node[softstage, draw=teal, fill=tealFill, text width=2.86cm] (roleBits) at (9.78,-0.40)
+    {角色位宽接口\\[-1pt] $\mathbf b^{(l)}=(b_K^{(l)},b_V^{(l)})$};
+  \draw[auxflow, draw=teal] (roleRead.east) -- (roleK.west);
+  \draw[auxflow, draw=teal] (roleRead.east) -- (roleV.west);
+  \draw[auxflow, draw=teal] (roleK.east) -- ([yshift=0.13cm]roleBits.west);
+  \draw[auxflow, draw=teal] (roleV.east) -- ([yshift=-0.13cm]roleBits.west);
+  \draw[auxflow, draw=teal] ([xshift=-0.28cm]artifact.south) .. controls +(0,-1.10) and +(-1.15,0.40) .. (roleRead.west);
+\end{tikzpicture}
+\end{document}

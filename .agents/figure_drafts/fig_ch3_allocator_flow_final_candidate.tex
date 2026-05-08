@@ -1,0 +1,130 @@
+\documentclass[tikz,border=6pt]{standalone}
+\usepackage[UTF8]{ctex}
+\usepackage{amsmath}
+\usepackage{newtxtext,newtxmath}
+\usetikzlibrary{arrows.meta,positioning,calc}
+
+\begin{document}
+\begin{tikzpicture}[
+  x=1cm,y=1cm,
+  >=Stealth,
+  every node/.style={font=\rmfamily\small, text=black, align=center},
+  title/.style={font=\bfseries\large, anchor=west, align=left},
+  note/.style={font=\scriptsize, text=black!58, anchor=west, align=left},
+  colhead/.style={font=\bfseries\scriptsize, text=black!68},
+  rowhead/.style={font=\bfseries\small, align=left, anchor=west, text width=2.80cm},
+  cell/.style={
+    rectangle,
+    rounded corners=2pt,
+    draw=black!20,
+    fill=white,
+    line width=0.45pt,
+    minimum height=1.04cm,
+    inner xsep=4pt,
+    inner ysep=3pt,
+    font=\scriptsize,
+    align=center
+  },
+  maincell/.style={
+    cell,
+    draw=mainBlue!62,
+    fill=mainBlueFill,
+    line width=0.70pt
+  },
+  weakcell/.style={
+    cell,
+    draw=black!18,
+    fill=black!2,
+    text=black!72
+  },
+  extcell/.style={
+    cell,
+    draw=tealLine!34,
+    fill=tealFill,
+    text=black!76
+  },
+  arrow/.style={-Stealth, line width=0.55pt, draw=black!38, shorten >=2pt, shorten <=2pt},
+  mainarrow/.style={-Stealth, line width=0.82pt, draw=mainBlue!74, shorten >=2pt, shorten <=2pt},
+  gridline/.style={line width=0.38pt, draw=black!14}
+]
+\definecolor{mainBlue}{RGB}{54,92,143}
+\definecolor{mainBlueFill}{RGB}{235,241,249}
+\definecolor{tealLine}{RGB}{68,126,122}
+\definecolor{tealFill}{RGB}{237,246,244}
+
+\def\xLabel{0.18}
+\def\xA{3.76}
+\def\xB{6.56}
+\def\xC{9.36}
+\def\xD{12.16}
+\def\w{2.34}
+
+\node[title] at (0.00,4.78) {校准画像到预算分配接口};
+\node[note] at (0.00,4.39) {同一离线产物进入三类分配口径，主线由 K 侧逐层画像决定保护集合};
+
+\draw[gridline] (0.00,4.06) -- (13.40,4.06);
+
+\node[colhead] at (\xA,3.74) {输入};
+\node[colhead] at (\xB,3.74) {画像或规则};
+\node[colhead] at (\xC,3.74) {保护集合};
+\node[colhead] at (\xD,3.74) {位宽输出};
+
+\foreach \yy in {2.39,1.05,-0.29} {
+  \draw[gridline] (0.00,\yy) -- (13.40,\yy);
+}
+
+\node[rowhead, text=mainBlue!85!black] at (\xLabel,3.02) {主线分配};
+\node[maincell, text width=\w cm] (m1) at (\xA,3.02)
+  {校准产物读数\\[-1pt]$\sigma_K^{(l)}$};
+\node[maincell, text width=\w cm] (m2) at (\xB,3.02)
+  {K 侧逐层画像\\[-1pt]$S_{K,\alpha}$};
+\node[maincell, text width=\w cm] (m3) at (\xC,3.02)
+  {保护最高 $k$ 层\\[-1pt]$\mathcal P_k$};
+\node[maincell, text width=\w cm] (m4) at (\xD,3.02)
+  {逐层预算 BA-$k$\\[-1pt]$b^{(l)}\in\{4,8\}$};
+
+\draw[mainarrow] (m1.east) -- (m2.west);
+\draw[mainarrow] (m2.east) -- (m3.west);
+\draw[mainarrow] (m3.east) -- (m4.west);
+
+\begin{scope}[shift={(4.72,2.52)}]
+  \draw[mainBlue!24, line width=0.42pt] (0,0) -- (1.00,0);
+  \foreach \x/\hh in {0.08/0.18,0.22/0.34,0.36/0.24,0.50/0.46,0.64/0.28,0.78/0.14,0.92/0.39} {
+    \fill[mainBlue!24] (\x,0) rectangle ++(0.055,\hh);
+  }
+\end{scope}
+
+\node[rowhead, text=black!62] at (\xLabel,1.68) {位置基线};
+\node[weakcell, text width=\w cm] (p1) at (\xA,1.68)
+  {层数与预算\\[-1pt]$(L,k)$};
+\node[weakcell, text width=\w cm] (p2) at (\xB,1.68)
+  {固定位置规则\\[-1pt]Heuristic-$k$};
+\node[weakcell, text width=\w cm] (p3) at (\xC,1.68)
+  {位置保护集合\\[-1pt]$\mathcal H_k$};
+\node[weakcell, text width=\w cm] (p4) at (\xD,1.68)
+  {同预算对照\\[-1pt]$b_{\mathrm{pos}}^{(l)}$};
+
+\draw[arrow] (p1.east) -- (p2.west);
+\draw[arrow] (p2.east) -- (p3.west);
+\draw[arrow] (p3.east) -- (p4.west);
+
+\node[rowhead, text=tealLine!82!black] at (\xLabel,0.34) {角色扩展};
+\node[extcell, text width=\w cm] (r1) at (\xA,0.34)
+  {K/V 角色读数\\[-1pt]$\sigma_K^{(l)},\sigma_V^{(l)}$};
+\node[extcell, text width=\w cm] (r2) at (\xB,0.34)
+  {并行角色画像\\[-1pt]$S_{K,\alpha},S_{V,\alpha}$};
+\node[extcell, text width=\w cm] (r3) at (\xC,0.34)
+  {角色保护集合\\[-1pt]$\mathcal P_K,\mathcal P_V$};
+\node[extcell, text width=\w cm] (r4) at (\xD,0.34)
+  {角色位宽接口\\[-1pt]$(b_K^{(l)},b_V^{(l)})$};
+
+\draw[arrow, draw=tealLine!50] (r1.east) -- (r2.west);
+\draw[arrow, draw=tealLine!50] (r2.east) -- (r3.west);
+\draw[arrow, draw=tealLine!50] (r3.east) -- (r4.west);
+
+\draw[mainBlue!70, line width=1.1pt] (2.76,2.47) -- (2.76,3.57);
+\draw[black!30, line width=0.72pt] (2.76,1.13) -- (2.76,2.23);
+\draw[tealLine!46, line width=0.72pt] (2.76,-0.21) -- (2.76,0.89);
+
+\end{tikzpicture}
+\end{document}

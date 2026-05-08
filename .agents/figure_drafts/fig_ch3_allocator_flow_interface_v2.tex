@@ -1,0 +1,104 @@
+\documentclass[tikz,border=7pt]{standalone}
+\usepackage{ctex}
+\usepackage{amsmath}
+\usetikzlibrary{arrows.meta,positioning,calc}
+
+\begin{document}
+\begin{tikzpicture}[
+  x=1cm,y=1cm,
+  >=Stealth,
+  every node/.style={font=\rmfamily\footnotesize, align=center, text=black},
+  title/.style={font=\bfseries\small, anchor=west},
+  subtitle/.style={font=\scriptsize, text=black!58, anchor=west},
+  lane/.style={font=\bfseries\scriptsize, anchor=west},
+  source/.style={
+    rectangle, rounded corners=2pt,
+    draw=black!40, fill=white, line width=0.58pt,
+    minimum width=2.15cm, minimum height=0.60cm,
+    inner sep=2.5pt
+  },
+  mainnode/.style={
+    rectangle, rounded corners=2pt,
+    draw=mainGold, fill=white, line width=0.70pt,
+    minimum width=2.35cm, minimum height=0.74cm,
+    inner sep=3pt
+  },
+  rolenode/.style={
+    rectangle, rounded corners=2pt,
+    draw=black!45, fill=white, line width=0.58pt,
+    minimum width=2.35cm, minimum height=0.72cm,
+    inner sep=3pt
+  },
+  basenode/.style={
+    rectangle, rounded corners=2pt,
+    draw=black!38, fill=black!3, line width=0.50pt,
+    minimum width=2.10cm, minimum height=0.56cm,
+    inner sep=2.5pt
+  },
+  arr/.style={-Stealth, draw=black!52, line width=0.68pt, shorten >=2pt, shorten <=2pt},
+  mainarr/.style={-Stealth, draw=mainGold!78!black, line width=0.80pt, shorten >=2pt, shorten <=2pt},
+  rolearr/.style={-Stealth, draw=black!45, line width=0.62pt, shorten >=2pt, shorten <=2pt},
+  basearr/.style={-Stealth, draw=black!42, line width=0.55pt, dashed, shorten >=2pt, shorten <=2pt},
+  guide/.style={draw=black!16, line width=0.45pt}
+]
+  \definecolor{mainGold}{RGB}{177,129,33}
+  \definecolor{kBlue}{RGB}{55,100,170}
+  \definecolor{kBlueFill}{RGB}{228,237,251}
+  \definecolor{vTeal}{RGB}{62,133,128}
+  \definecolor{vTealFill}{RGB}{227,243,241}
+
+  \node[title] at (0,5.16) {行为敏感度画像到预算分配};
+  \node[subtitle] at (0,4.80) {主线读取 K 侧逐层画像，K/V 双侧画像用于角色预算扩展};
+  \draw[guide] (0,4.56) -- (14.10,4.56);
+
+  \node[lane, text=black!70] at (0.12,4.18) {离线校准产物};
+  \node[source, draw=kBlue, fill=kBlueFill] (sigk) at (1.18,3.55)
+    {K 侧读数\\$\sigma_K^{(l)}$};
+  \node[source, draw=vTeal, fill=vTealFill] (sigv) at (1.18,2.55)
+    {V 侧读数\\$\sigma_V^{(l)}$};
+
+  \node[lane, text=mainGold!78!black] at (3.18,4.38) {逐层预算主线};
+  \node[mainnode] (profile) at (4.20,3.55)
+    {K 侧画像\\$S_{K,\alpha}$\\[-1pt]\scriptsize $\operatorname{Agg}_{\alpha}(\sigma_K^{(l)})$};
+  \node[mainnode] (topk) at (7.05,3.55)
+    {保护集合\\$\mathcal P_k$\\[-1pt]\scriptsize $\operatorname{TopK}(S_{K,\alpha},k)$};
+  \node[mainnode] (bits) at (9.85,3.55)
+    {逐层位宽\\$b^{(l)}$\\[-1pt]\scriptsize INT4 / INT8};
+
+  \draw[mainarr] (sigk.east) -- (profile.west);
+  \draw[mainarr] (profile.east) -- (topk.west);
+  \draw[mainarr] (topk.east) -- (bits.west);
+
+  \node[basenode] (heur) at (4.20,1.56)
+    {Heuristic-$k$\\位置基线};
+  \node[basenode] (hset) at (7.05,1.56)
+    {同预算\\对照集合};
+  \node[basenode] (hbits) at (9.85,1.56)
+    {对照位宽\\$b_{\mathrm{pos}}^{(l)}$};
+  \draw[basearr] (heur.east) -- (hset.west);
+  \draw[basearr] (hset.east) -- (hbits.west);
+
+  \node[lane, text=black!68] at (3.18,2.44) {位置启发式对照};
+  \draw[guide] (3.18,2.20) -- (11.00,2.20);
+
+  \node[lane, text=black!68] at (3.18,0.74) {K/V 角色预算扩展接口};
+  \node[rolenode] (roleprofile) at (4.20,-0.02)
+    {双侧画像\\$S_{K,\alpha},\,S_{V,\alpha}$};
+  \node[rolenode] (roleset) at (7.05,-0.02)
+    {角色保护集合\\$\mathcal P_K,\mathcal P_V$};
+  \node[rolenode] (rolebits) at (9.85,-0.02)
+    {角色位宽接口\\$\mathbf b^{(l)}=(b_K^{(l)},b_V^{(l)})$};
+
+  \coordinate (sourcepair) at ($(sigk.east)!0.50!(sigv.east)+(0.24,0)$);
+  \draw[rolearr] (sourcepair) to[out=-72,in=176] (roleprofile.west);
+  \draw[rolearr] (roleprofile.east) -- node[above, font=\scriptsize, text=black!55] {$k_K,k_V$} (roleset.west);
+  \draw[rolearr] (roleset.east) -- (rolebits.west);
+
+  \node[font=\scriptsize, text=black!55, anchor=west] at (11.18,3.55)
+    {主线实验入口};
+  \draw[mainarr] (bits.east) -- (11.08,3.55);
+  \node[font=\scriptsize, text=black!55, anchor=west] at (11.18,-0.02)
+    {接口预留};
+  \draw[rolearr] (rolebits.east) -- (11.08,-0.02);
+\end{tikzpicture}
+\end{document}

@@ -1,0 +1,83 @@
+\documentclass[tikz,border=7pt]{standalone}
+\usepackage{ctex}
+\usepackage{amsmath}
+\usetikzlibrary{arrows.meta,positioning,calc}
+
+\begin{document}
+\begin{tikzpicture}[
+  x=1cm,y=1cm,
+  >=Stealth,
+  every node/.style={font=\rmfamily\footnotesize, align=center, text=black},
+  title/.style={font=\bfseries\small, anchor=west},
+  subtitle/.style={font=\scriptsize, text=black!58, anchor=west},
+  rowlabel/.style={font=\bfseries\scriptsize, anchor=east},
+  cell/.style={
+    rectangle, rounded corners=1.8pt,
+    line width=0.58pt,
+    minimum height=0.80cm,
+    text width=2.10cm,
+    inner sep=2.6pt
+  },
+  source/.style={
+    rectangle, rounded corners=1.8pt,
+    line width=0.62pt,
+    minimum height=0.72cm,
+    text width=1.72cm,
+    inner sep=2.6pt
+  },
+  arr/.style={-Stealth, line width=0.66pt, shorten >=2pt, shorten <=2pt},
+  guide/.style={draw=black!14, line width=0.42pt}
+]
+  \definecolor{main}{RGB}{154,107,24}
+  \definecolor{mainfill}{RGB}{255,250,236}
+  \definecolor{kblue}{RGB}{55,101,169}
+  \definecolor{kfill}{RGB}{230,237,249}
+  \definecolor{vteal}{RGB}{60,132,127}
+  \definecolor{vfill}{RGB}{229,243,240}
+  \definecolor{grayline}{RGB}{126,126,126}
+  \definecolor{grayfill}{RGB}{247,247,247}
+
+  \node[title] at (0.00,4.90) {行为敏感度画像到预算分配};
+  \node[subtitle] at (0.00,4.54) {校准产物生成逐层画像，分配器在预算约束下输出位宽决策};
+  \draw[guide] (0.00,4.29) -- (13.25,4.29);
+
+  \node[font=\bfseries\scriptsize, anchor=west] at (0.05,3.88) {离线校准产物};
+  \node[source, draw=kblue, fill=kfill] (kread) at (0.95,3.18) {K 侧读数\\$\sigma_K^{(l)}$};
+  \node[source, draw=vteal, fill=vfill] (vread) at (0.95,1.18) {V 侧读数\\$\sigma_V^{(l)}$};
+
+  \draw[guide] (2.20,3.82) -- (12.95,3.82);
+  \draw[guide] (2.20,2.49) -- (12.95,2.49);
+  \draw[guide] (2.20,1.15) -- (12.95,1.15);
+
+  \node[rowlabel, text=main!82!black] at (2.03,3.18) {BA-$k$ 主线};
+  \node[cell, draw=main, fill=mainfill] (m1) at (3.35,3.18) {K 侧画像\\$S_{K,\alpha}$};
+  \node[cell, draw=main, fill=white] (m2) at (5.80,3.18) {敏感层选择\\$\operatorname{TopK}$};
+  \node[cell, draw=main, fill=white] (m3) at (8.25,3.18) {保护集合\\$\mathcal P_k$};
+  \node[cell, draw=main, fill=white] (m4) at (10.70,3.18) {逐层位宽\\$b^{(l)}$};
+
+  \draw[arr, draw=main!78!black] (kread.east) -- node[above, font=\scriptsize, text=black!54] {$\operatorname{Agg}_{\alpha}$} (m1.west);
+  \draw[arr, draw=main!78!black] (m1.east) -- (m2.west);
+  \draw[arr, draw=main!78!black] (m2.east) -- (m3.west);
+  \draw[arr, draw=main!78!black] (m3.east) -- node[above, font=\scriptsize, text=black!54] {INT4 / INT8} (m4.west);
+  \draw[arr, draw=main!78!black] (m4.east) -- (12.18,3.18);
+  \node[font=\scriptsize, text=black!56, anchor=west] at (12.22,3.18) {主实验};
+
+  \node[rowlabel, text=black!58] at (2.03,2.03) {位置基线};
+  \node[cell, draw=grayline, fill=grayfill] (b1) at (3.35,2.03) {Heuristic-$k$\\层位置规则};
+  \node[cell, draw=grayline, fill=grayfill] (b2) at (5.80,2.03) {同预算集合\\$\mathcal P_{\mathrm{pos}}$};
+  \node[cell, draw=grayline, fill=grayfill] (b3) at (8.25,2.03) {对照位宽\\$b_{\mathrm{pos}}^{(l)}$};
+  \draw[arr, draw=grayline, dashed] (b1.east) -- (b2.west);
+  \draw[arr, draw=grayline, dashed] (b2.east) -- (b3.west);
+
+  \node[rowlabel, text=black!62] at (2.03,0.68) {角色扩展};
+  \node[cell, draw=black!44, fill=white] (r1) at (3.35,0.68) {双侧画像\\$S_{K,\alpha},\,S_{V,\alpha}$};
+  \node[cell, draw=black!44, fill=white] (r2) at (5.80,0.68) {角色保护集合\\$\mathcal P_K,\,\mathcal P_V$};
+  \node[cell, draw=black!44, fill=white, text width=2.45cm] (r3) at (8.35,0.68) {角色位宽接口\\$\mathbf b^{(l)}=(b_K^{(l)},b_V^{(l)})$};
+  \draw[arr, draw=black!45] ($(kread.east)+(0.10,-0.16)$) to[out=-35,in=172] (r1.west);
+  \draw[arr, draw=black!45] (vread.east) to[out=0,in=188] (r1.west);
+  \draw[arr, draw=black!45] (r1.east) -- node[above, font=\scriptsize, text=black!54] {$k_K,k_V$} (r2.west);
+  \draw[arr, draw=black!45] (r2.east) -- (r3.west);
+  \draw[arr, draw=black!45] (r3.east) -- (10.40,0.68);
+  \node[font=\scriptsize, text=black!56, anchor=west] at (10.44,0.68) {接口预留};
+\end{tikzpicture}
+\end{document}

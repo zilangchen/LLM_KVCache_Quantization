@@ -5,148 +5,105 @@
     x=1cm, y=1cm,
     >=Stealth,
     every node/.style={font=\rmfamily\small, align=center, text=black},
-    stage/.style={
-      rectangle, rounded corners=6pt,
-      draw=goldTone!42!black, fill=black!1, line width=0.65pt
-    },
-    extStage/.style={
-      rectangle, rounded corners=6pt,
-      draw=black!32, dashed, fill=black!2, line width=0.62pt
-    },
-    stageLabel/.style={font=\bfseries\scriptsize, text=goldTone!64!black, anchor=west},
-    extLabel/.style={font=\bfseries\scriptsize, text=black!58, anchor=west},
-    profCard/.style={
+    card/.style={
       rectangle, rounded corners=5pt,
-      draw=greenTone!58!black, fill=greenFill, line width=0.72pt
+      fill=black!1, line width=0.75pt,
+      minimum height=5.55cm
     },
-    profCardSoft/.style={
-      rectangle, rounded corners=5pt,
-      draw=greenTone!50!black, fill=white, line width=0.68pt
+    title/.style={font=\bfseries\small, text=black, anchor=west},
+    subtitle/.style={font=\scriptsize, text=black, anchor=west},
+    head/.style={font=\bfseries\scriptsize},
+    box/.style={
+      rectangle, rounded corners=3pt,
+      minimum height=0.50cm, inner sep=2.7pt,
+      font=\scriptsize, line width=0.58pt
     },
-    goldCard/.style={
-      rectangle, rounded corners=5pt,
-      draw=goldTone!58!black, fill=goldFill, line width=0.72pt
+    pill/.style={
+      rectangle, rounded corners=3pt,
+      minimum height=0.40cm, inner sep=2.4pt,
+      font=\scriptsize, line width=0.55pt
     },
-    cardTitleGold/.style={font=\bfseries\scriptsize, text=goldTone!58!black},
-    cardTitleGreen/.style={font=\bfseries\scriptsize, text=greenTone!54!black},
-    note/.style={font=\scriptsize, text=black!56},
-    noteSmall/.style={font=\tiny, text=black!58},
-    arr/.style={-Stealth, draw=goldTone!58!black, line width=0.80pt}
+    arr/.style={-Stealth, draw=black!52, line width=0.72pt},
+    faintarr/.style={-Stealth, draw=black!36, line width=0.62pt},
+    faint/.style={draw=black!16, line width=0.55pt}
   ]
-    \definecolor{goldTone}{RGB}{178,132,37}
-    \definecolor{goldFill}{RGB}{251,240,211}
-    \definecolor{greenTone}{RGB}{66,134,108}
-    \definecolor{greenFill}{RGB}{229,243,236}
-    \definecolor{blueTone}{RGB}{62,103,167}
+    \definecolor{kBlue}{RGB}{58,104,173}
+    \definecolor{kBlueFill}{RGB}{224,235,249}
+    \definecolor{vTeal}{RGB}{66,139,133}
+    \definecolor{vTealFill}{RGB}{224,242,239}
+    \definecolor{anchorGold}{RGB}{178,130,26}
+    \definecolor{anchorGoldFill}{RGB}{250,239,202}
 
-    % ==========================================
-    % 左 panel：BA-k 与 AutoK 主线分配机制
-    % ==========================================
-    \node[stage, minimum width=11.20cm, minimum height=5.30cm] (mainStage) at (5.75,2.70) {};
-    \node[stageLabel] at (0.30,5.15) {（a）BA-$k$ 与 AutoK 主线分配机制};
+    \node[title] at (0.20,6.55) {行为敏感度画像到预算分配};
+    \node[subtitle] at (0.20,6.18) {逐层分配给出主线，K/V 角色预算保留为接口扩展};
+    \draw[faint] (0.20,5.90) -- (15.00,5.90);
 
-    % --- Card 1：校准产物输入（绿，与图 3-3 画像同色）
-    \node[profCardSoft, minimum width=2.10cm, minimum height=3.10cm] (input) at (1.45,2.50) {};
-    \node[cardTitleGreen] at (1.45,3.85) {校准产物输入};
-    \node[font=\scriptsize] at (1.45,3.30) {$\sigma_K^{(l)}$};
-    \node[note] at (1.45,2.85) {K-path};
-    \node[note] at (1.45,2.50) {per-channel};
-    \node[note] at (1.45,2.05) {scale 范围};
-    \node[noteSmall] at (1.45,1.30) {离线副产物};
+    \node[card, draw=anchorGold, fill=black!1, minimum width=7.70cm] (main) at (4.05,2.85) {};
+    \node[head] at (4.05,5.20) {（a）逐层预算主线};
 
-    % --- Card 2：画像聚合 𝒮（绿，主体）
-    \node[profCard, minimum width=2.50cm, minimum height=3.10cm] (profile) at (4.40,2.50) {};
-    \node[cardTitleGreen] at (4.40,3.85) {层级敏感度画像 $\mathcal S$};
-    \node[font=\scriptsize] at (4.40,3.36) {$s^{(l)}=\mathrm{Agg}_\alpha(\sigma_K^{(l)})$};
-    % σ_K 画像 bar chart（8 层示意）
-    \begin{scope}[shift={(3.55,1.55)}]
-      \foreach \x/\h in {0/0.42, 1/0.66, 2/0.30, 3/0.88, 4/0.55, 5/0.26, 6/0.78, 7/0.40} {
-        \filldraw[fill=greenFill!40!greenTone, draw=greenTone!72!black, line width=0.32pt]
-          ({0.20*\x},0) rectangle ++(0.16,\h);
-      }
-    \end{scope}
-    \node[noteSmall] at (4.40,1.30) {层 $1\,\dots\,L$};
-    \node[note] at (4.40,1.95) {$\alpha=\max$};
+    \node[box, draw=anchorGold, fill=white, text width=2.28cm] (read) at (1.78,4.52)
+      {离线读数\\$\sigma_K^{(l)},\sigma_V^{(l)}$};
+    \node[box, draw=anchorGold, fill=white, text width=2.28cm] (agg) at (1.78,3.25)
+      {聚合为层级画像\\$s^{(l)}=\operatorname{Agg}_\alpha$};
+    \node[font=\scriptsize] (policylabel) at (1.88,2.22) {预算策略};
+    \node[pill, draw=anchorGold, fill=white, inner xsep=2pt] (ba) at (0.72,1.60)
+      {BA-$k$};
+    \node[pill, draw=anchorGold, fill=white, inner xsep=2pt] (heur) at (1.92,1.60)
+      {Heuristic-$k$};
+    \node[pill, draw=anchorGold, fill=white, inner xsep=2pt] (auto) at (3.10,1.60)
+      {AutoK};
+    \node[box, draw=anchorGold, fill=white, text width=2.40cm] (bits) at (1.88,0.52)
+      {逐层位宽向量\\$[b^{(1)},\ldots,b^{(L)}]$};
 
-    % --- Card 3：Γ(k) + AutoK（金色，视觉焦点）
-    \node[goldCard, minimum width=3.10cm, minimum height=3.10cm] (gamma) at (8.05,2.50) {};
-    \node[cardTitleGold] at (8.05,3.85) {覆盖度 $\Gamma(k)$ 与 AutoK};
-    % Γ(k) 阶梯曲线 + ρ + k* 反推
-    \begin{scope}[shift={(6.85,1.40)}]
-      % 坐标轴
-      \draw[black!50, line width=0.40pt] (0,0) -- (2.30,0);
-      \draw[black!50, line width=0.40pt] (0,0) -- (0,1.20);
-      % 阶梯曲线 Γ(k)：单调上升至 1
-      \draw[goldTone, line width=1.0pt]
-        (0,0) -- (0.20,0.32) -- (0.40,0.32) -- (0.40,0.55)
-        -- (0.60,0.55) -- (0.60,0.72) -- (0.80,0.72)
-        -- (0.80,0.88) -- (1.00,0.88) -- (1.00,0.96)
-        -- (1.20,0.96) -- (1.20,1.00) -- (2.30,1.00);
-      % ρ 阈值水平虚线
-      \draw[blueTone, dashed, line width=0.55pt] (-0.05,0.85) -- (2.30,0.85);
-      \node[font=\tiny, text=blueTone!72!black, anchor=west] at (2.05,0.93) {$\rho$};
-      % k* 反推垂直虚线
-      \draw[goldTone!75!black, dashed, line width=0.55pt] (0.85,0) -- (0.85,0.88);
-      \node[font=\tiny, text=goldTone!72!black, anchor=north] at (0.85,-0.05) {$k^\star\!(\rho)$};
-      % 轴标签
-      \node[font=\tiny, text=black!58, anchor=east] at (-0.04,1.10) {$1$};
-      \node[font=\tiny, text=black!58, anchor=north east] at (-0.04,0.85) {};
-      \node[font=\tiny, text=black!58, anchor=east] at (-0.04,0.40) {$\Gamma$};
-      \node[font=\tiny, text=black!58, anchor=north] at (2.30,-0.05) {$k$};
-    \end{scope}
-    \node[noteSmall] at (8.05,1.10) {$k^\star\!=\!\min\{k:\Gamma(k)\!\ge\!\rho\}$};
+    \draw[arr] (read.south) -- (agg.north);
+    \draw[arr] (agg.south) -- (policylabel.north);
+    \draw[arr] (ba.south) -- ([xshift=-0.72cm]bits.north);
+    \draw[arr] (heur.south) -- (bits.north);
+    \draw[arr] (auto.south) -- ([xshift=0.72cm]bits.north);
 
-    % --- Card 4：两级阶梯位宽 b^(l)（金色）
-    \node[goldCard, minimum width=2.40cm, minimum height=3.10cm] (out) at (10.85,2.50) {};
-    \node[cardTitleGold] at (10.85,3.85) {两级位宽 $b^{(l)}$};
-    % 8 层位宽阶梯：未保护层 b_lo=4（短），保护层 b_hi=8（长）
-    \begin{scope}[shift={(10.05,1.40)}]
-      % 低 bit 层（4 bit）
-      \foreach \x in {0, 1, 3, 5, 6} {
-        \filldraw[fill=white, draw=goldTone!50, line width=0.42pt]
-          ({0.20*\x},0) rectangle ++(0.16,0.36);
-      }
-      % 高 bit 层（8 bit）— 第 2、4、7 层是保护集合 P_k
-      \foreach \x in {2, 4, 7} {
-        \filldraw[fill=goldTone!45, draw=goldTone!82!black, line width=0.48pt]
-          ({0.20*\x},0) rectangle ++(0.16,0.78);
-      }
-      % 4/8 标签（右侧）
-      \node[font=\tiny, text=black!56, anchor=west] at (1.65,0.78) {$8$};
-      \node[font=\tiny, text=black!56, anchor=west] at (1.65,0.36) {$4$};
-    \end{scope}
-    \node[noteSmall] at (10.85,1.10) {$b\!\in\!\{4,8\}$};
-    \node[noteSmall] at (10.85,0.78) {$\mathcal P_k=\mathrm{TopK}(\mathcal S,k)$};
+    \node[font=\scriptsize] at (5.38,4.02) {层级画像 $s^{(l)}$};
+    \node[font=\tiny] at (5.38,3.72) {每根柱表示一层的行为敏感度读数};
+    \draw[black!30, line width=0.55pt, -Stealth] (4.08,1.55) -- (4.08,3.12);
+    \draw[black!30, line width=0.55pt, -Stealth] (4.08,1.55) -- (6.78,1.55);
+    \node[font=\tiny] at (3.78,3.04) {$s^{(l)}$};
+    \foreach \x/\h/\c in {
+      4.36/0.42/anchorGoldFill,
+      4.66/0.80/anchorGoldFill,
+      4.96/0.50/anchorGoldFill,
+      5.26/1.18/anchorGold,
+      5.56/0.64/anchorGoldFill,
+      5.86/0.34/anchorGoldFill,
+      6.16/1.00/anchorGold,
+      6.46/0.56/anchorGoldFill} {
+      \fill[\c] (\x,1.55) rectangle ++(0.16,\h);
+      \draw[anchorGold, line width=0.35pt] (\x,1.55) rectangle ++(0.16,\h);
+    }
+    \node[pill, draw=anchorGold, fill=white, text width=2.12cm] at (5.38,0.66)
+      {保护集合 $\mathcal P_k$};
 
-    % --- 主线箭头
-    \draw[arr] (input.east) -- node[above, font=\tiny, text=goldTone!64!black] {聚合} (profile.west);
-    \draw[arr] (profile.east) -- node[above, font=\tiny, text=goldTone!64!black] {归一/累积} (gamma.west);
-    \draw[arr] (gamma.east) -- node[above, font=\tiny, text=goldTone!64!black] {$\mathrm{TopK}$} (out.west);
+    \draw[faintarr] (agg.east) -- (4.08,2.78);
+    \draw[faintarr] (5.38,1.55) -- (5.38,0.94);
+    \node[font=\tiny] at (6.03,1.08) {选入保护集合};
 
-    % ==========================================
-    % 右 panel：K/V 角色接口预留（虚线小框）
-    % ==========================================
-    \node[extStage, minimum width=2.85cm, minimum height=5.30cm] (extP) at (12.95,2.70) {};
-    \node[extLabel] at (11.55,5.15) {（b）K/V 角色接口};
+    \node[card, draw=black!34, fill=black!1, minimum width=6.20cm] (role) at (11.55,2.85) {};
+    \node[head] at (11.55,5.20) {（b）K/V 角色预算接口};
+    \node[font=\scriptsize] at (11.55,4.76) {扩展口径，定义角色位宽接口};
 
-    \node[font=\bfseries\scriptsize, text=black!58] at (12.95,4.45) {扩展预留\,（\S\,\ref{subsec:ch3-budget-kv}）};
+    \node[box, draw=vTeal, fill=vTealFill, text width=3.48cm] (rread) at (11.55,3.78)
+      {角色读数 $(s_K^{(l)},\,s_V^{(l)})$};
+    \node[box, draw=kBlue, fill=kBlueFill, text width=1.78cm] (sk) at (10.32,2.48)
+      {K 保护集合\\$\mathcal P_K$};
+    \node[box, draw=vTeal, fill=white, text width=1.78cm] (sv) at (12.78,2.48)
+      {V 保护集合\\$\mathcal P_V$};
+    \node[box, draw=black!42, fill=black!5, text width=3.48cm] (pair) at (11.55,1.02)
+      {角色位宽接口\\$\mathbf b^{(l)}=(b_K^{(l)},\,b_V^{(l)})$};
 
-    \node[font=\scriptsize] at (12.95,3.85) {$\mathbf b^{(l)}\!=\!(b_K^{(l)},b_V^{(l)})$};
-    \node[note] at (12.95,3.30) {独立 $k_K$、$k_V$};
-
-    \draw[black!22, line width=0.50pt] (11.60,2.92) -- (14.30,2.92);
-
-    \node[note, text=black!58] at (12.95,2.62) {主线设置};
-    \node[font=\scriptsize, text=black!62] at (12.95,2.20) {$k_K\!=\!k_V\!=\!k$};
-    \node[note, text=black!54, font=\scriptsize\itshape] at (12.95,1.78) {退化为左侧 BA-$k$};
-
-    \draw[black!22, line width=0.50pt] (11.60,1.45) -- (14.30,1.45);
-
-    \node[note, text=black!54, font=\scriptsize\itshape] at (12.95,1.12) {$k_K\!\neq\!k_V$};
-    \node[note, text=black!54, font=\scriptsize\itshape] at (12.95,0.78) {留待后续工作};
-
+    \draw[faintarr] (rread.south) -- (sk.north);
+    \draw[faintarr] (rread.south) -- (sv.north);
+    \draw[faintarr] (sk.south) -- ([xshift=-0.80cm]pair.north);
+    \draw[faintarr] (sv.south) -- ([xshift=0.80cm]pair.north);
   \end{tikzpicture}%
   }
-  \caption{行为敏感度画像到预算分配的两级机制。\textbf{(a) 主线}：从校准产物 \(\sigma_K^{(l)}\)（K 侧 per-channel scale 范围）出发，按 \(\alpha=\max\) 聚合得到层级敏感度画像 \(\mathcal S=\{s^{(l)}\}_{l=1}^{L}\)；归一化与累积后形成覆盖度阶梯函数 \(\Gamma(k)\)，AutoK 由覆盖率阈值 \(\rho\) 反推满足 \(\Gamma(k)\!\ge\!\rho\) 的最小保护层数 \(k^\star\)（BA-\(k\) 则按人工指定整数 \(k\)）；以 \(\mathrm{TopK}\) 选出保护集合 \(\mathcal P_k\) 后，按两级映射写出位宽向量 \(b^{(l)}\!\in\!\{4,8\}\)，保护层取 \(b_\mathrm{hi}\!=\!8\)，其余取 \(b_\mathrm{lo}\!=\!4\)。\textbf{(b) 接口预留}：第~\ref{subsec:ch3-budget-kv}~节定义角色感知接口 \(\mathbf b^{(l)}=(b_K^{(l)},b_V^{(l)})\)；本文主线固定 \(k_K\!=\!k_V\!=\!k\) 退化为 BA-\(k\)，\(k_K\!\neq\!k_V\) 的实证比较留待后续工作。}
+  \caption{行为敏感度画像到预算分配的图示。左侧主线从离线读数出发，经层级聚合得到逐层敏感度画像，并由 BA-\(k\)、Heuristic-\(k\) 与 AutoK 三类策略写入逐层位宽向量。右侧给出 K/V 角色预算接口，后续扩展可分别读取 \(s_K^{(l)}\) 与 \(s_V^{(l)}\)，形成角色保护集合与角色位宽对。}
   \label{fig:ch3-allocation-flow}
 \end{figure}

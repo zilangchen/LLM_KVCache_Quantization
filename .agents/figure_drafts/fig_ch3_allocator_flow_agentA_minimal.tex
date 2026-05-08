@@ -1,0 +1,129 @@
+\documentclass[tikz,border=6pt]{standalone}
+\usepackage[UTF8]{ctex}
+\usepackage{amsmath}
+\usepackage{newtxtext,newtxmath}
+\usetikzlibrary{arrows.meta,calc,positioning}
+
+\begin{document}
+\begin{tikzpicture}[
+  x=1cm,
+  y=1cm,
+  >=Stealth,
+  every node/.style={font=\small, align=center, text=black},
+  title/.style={font=\bfseries\small, align=left, anchor=west},
+  note/.style={font=\scriptsize, text=black!58, align=center},
+  nodebox/.style={
+    rectangle,
+    draw=black!48,
+    line width=0.45pt,
+    fill=white,
+    minimum height=0.62cm,
+    minimum width=1.92cm,
+    inner xsep=5pt,
+    inner ysep=3pt
+  },
+  slimbox/.style={
+    rectangle,
+    draw=black!38,
+    line width=0.42pt,
+    fill=white,
+    minimum height=0.48cm,
+    minimum width=1.82cm,
+    inner xsep=4pt,
+    inner ysep=2pt,
+    font=\scriptsize
+  },
+  mainarr/.style={-Stealth, draw=black!70, line width=0.78pt},
+  subarr/.style={-Stealth, draw=black!44, line width=0.55pt},
+  rule/.style={draw=black!22, line width=0.42pt}
+]
+\definecolor{accent}{RGB}{39,96,150}
+\definecolor{accentLight}{RGB}{223,235,247}
+\definecolor{baseGray}{RGB}{118,128,136}
+\definecolor{baseLight}{RGB}{239,241,243}
+\definecolor{warm}{RGB}{171,108,42}
+\definecolor{warmLight}{RGB}{249,237,219}
+
+% Heading and lane guides.
+\node[title] at (0,4.40) {敏感度画像进入预算分配};
+\node[font=\scriptsize, text=black!58, anchor=west] at (0,4.03)
+  {图 3-6 仅展示 BA-$k$ 主线与预算接口；AutoK 由后续图展开};
+\draw[rule] (0,3.78) -- (13.60,3.78);
+\draw[rule] (0,0.72) -- (13.60,0.72);
+
+% Main path.
+\node[nodebox] (artifact) at (1.05,2.68)
+  {\mbox{校准产物}\\[-1pt] $\sigma_K^{(l)}$};
+\node[nodebox, minimum width=2.16cm] (profile) at (4.00,2.68)
+  {\mbox{K 侧逐层画像}\\[-1pt] $S_{K,\alpha}$};
+\node[nodebox] (topk) at (6.78,2.68)
+  {Top-$k$\\[-1pt] \mbox{保护层}};
+\node[nodebox] (bak) at (9.58,2.68)
+  {BA-$k$\\[-1pt] \mbox{逐层预算}};
+\node[nodebox, draw=accent] (bits) at (12.28,2.68)
+  {\mbox{位宽向量}\\[-1pt] $b^{(1:L)}$};
+
+\draw[mainarr] (artifact) -- (profile);
+\draw[mainarr] (profile) -- (topk);
+\draw[mainarr] (topk) -- (bak);
+\draw[mainarr] (bak) -- (bits);
+
+% Profile glyph.
+\begin{scope}[shift={(3.08,1.40)}]
+  \draw[black!35, line width=0.36pt] (0,0) -- (1.84,0);
+  \fill[baseLight] (0.10,0) rectangle ++(0.12,0.34);
+  \fill[baseLight] (0.34,0) rectangle ++(0.12,0.54);
+  \fill[baseLight] (0.58,0) rectangle ++(0.12,0.26);
+  \fill[accentLight] (0.82,0) rectangle ++(0.12,0.86);
+  \fill[baseLight] (1.06,0) rectangle ++(0.12,0.42);
+  \fill[accentLight] (1.30,0) rectangle ++(0.12,0.70);
+  \fill[baseLight] (1.54,0) rectangle ++(0.12,0.30);
+  \foreach \x/\h in {0.10/0.34,0.34/0.54,0.58/0.26,0.82/0.86,1.06/0.42,1.30/0.70,1.54/0.30} {
+    \draw[black!42, line width=0.28pt] (\x,0) rectangle ++(0.12,\h);
+  }
+  \node[note, anchor=north] at (0.92,-0.18) {画像排序};
+\end{scope}
+\draw[subarr] (profile.south) -- ++(0,-0.42) -| (4.00,1.92);
+\draw[subarr] (4.92,1.72) -- (topk.south);
+
+% Budget glyph.
+\begin{scope}[shift={(8.55,1.28)}]
+  \fill[baseLight] (0.00,0) rectangle ++(0.28,0.46);
+  \fill[accentLight] (0.38,0) rectangle ++(0.28,0.46);
+  \fill[baseLight] (0.76,0) rectangle ++(0.28,0.46);
+  \fill[accentLight] (1.14,0) rectangle ++(0.28,0.46);
+  \fill[baseLight] (1.52,0) rectangle ++(0.28,0.46);
+  \fill[baseLight] (1.90,0) rectangle ++(0.28,0.46);
+  \foreach \x/\lab in {0.00/4,0.38/8,0.76/4,1.14/8,1.52/4,1.90/4} {
+    \draw[black!44, line width=0.28pt] (\x,0) rectangle ++(0.28,0.46);
+    \node[font=\tiny] at (\x+0.14,0.23) {\lab};
+  }
+  \node[note, anchor=north] at (0.98,-0.16) {$4/8$ 两级保护};
+\end{scope}
+\draw[subarr] (bak.south) -- ++(0,-0.46);
+
+% Heuristic baseline.
+\node[slimbox, minimum width=2.12cm] (heur) at (6.78,0.05)
+  {Heuristic-$k$\\[-1pt]\mbox{位置基线}};
+\draw[subarr] (heur.east) -- ++(1.30,0) |- ([xshift=0.28cm]bak.south);
+\node[note, anchor=east] at (5.48,0.05)
+  {同一预算约束下的对照};
+
+% Role-aware interface, intentionally kept as a side interface.
+\node[slimbox, draw=warm, minimum width=2.28cm] (kvread) at (1.25,0.05)
+  {\mbox{K/V 角色读数}\\[-1pt] $S_{K,\alpha},\,S_{V,\alpha}$};
+\node[slimbox, draw=warm, minimum width=2.58cm] (kvbits) at (4.10,0.05)
+  {\mbox{角色预算接口}\\[-1pt] $\mathbf b^{(l)}=(b_K^{(l)},b_V^{(l)})$};
+\draw[subarr, draw=warm!70!black] (kvread) -- (kvbits);
+\node[note, anchor=west, text=warm!70!black] at (0,0.58)
+  {扩展接口};
+
+% Small labels above stages.
+\node[note] at (1.05,3.34) {只读输入};
+\node[note] at (4.00,3.34) {行为代理};
+\node[note] at (6.78,3.34) {确定性选择};
+\node[note] at (9.58,3.34) {主线策略};
+\node[note] at (12.28,3.34) {离线交付};
+
+\end{tikzpicture}
+\end{document}

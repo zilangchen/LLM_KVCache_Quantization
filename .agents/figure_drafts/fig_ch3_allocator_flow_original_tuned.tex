@@ -1,0 +1,111 @@
+\documentclass[tikz,border=6pt]{standalone}
+\usepackage{ctex}
+\usepackage{amsmath}
+\usetikzlibrary{arrows.meta,positioning,calc}
+
+\begin{document}
+\begin{tikzpicture}[
+  x=1cm, y=1cm,
+  >=Stealth,
+  every node/.style={font=\rmfamily\small, align=center, text=black},
+  card/.style={
+    rectangle, rounded corners=5pt,
+    fill=black!1, line width=0.75pt,
+    minimum height=5.55cm
+  },
+  title/.style={font=\bfseries\small, text=black, anchor=west},
+  subtitle/.style={font=\scriptsize, text=black, anchor=west},
+  head/.style={font=\bfseries\scriptsize},
+  box/.style={
+    rectangle, rounded corners=3pt,
+    minimum height=0.50cm, inner sep=2.7pt,
+    font=\scriptsize, line width=0.58pt
+  },
+  pill/.style={
+    rectangle, rounded corners=3pt,
+    minimum height=0.40cm, inner sep=2.4pt,
+    font=\scriptsize, line width=0.55pt
+  },
+  arr/.style={-Stealth, draw=black!52, line width=0.72pt},
+  faintarr/.style={-Stealth, draw=black!36, line width=0.62pt},
+  faint/.style={draw=black!16, line width=0.55pt}
+]
+  \definecolor{kBlue}{RGB}{58,104,173}
+  \definecolor{kBlueFill}{RGB}{224,235,249}
+  \definecolor{vTeal}{RGB}{66,139,133}
+  \definecolor{vTealFill}{RGB}{224,242,239}
+  \definecolor{anchorGold}{RGB}{178,130,26}
+  \definecolor{anchorGoldFill}{RGB}{250,239,202}
+
+  \node[title] at (0.20,6.55) {行为敏感度画像到预算分配};
+  \node[subtitle] at (0.20,6.18) {逐层分配给出主线，K/V 角色预算保留为接口扩展};
+  \draw[faint] (0.20,5.90) -- (15.00,5.90);
+
+  % Left card: main allocator
+  \node[card, draw=anchorGold, fill=black!1, minimum width=7.70cm] (main) at (4.05,2.85) {};
+  \node[head] at (4.05,5.20) {（a）逐层预算主线};
+
+  \node[box, draw=anchorGold, fill=white, text width=2.28cm] (read) at (1.78,4.52)
+    {离线读数\\$\sigma_K^{(l)},\sigma_V^{(l)}$};
+  \node[box, draw=anchorGold, fill=white, text width=2.28cm] (agg) at (1.78,3.25)
+    {聚合为层级画像\\$s^{(l)}=\operatorname{Agg}_\alpha$};
+  \node[font=\scriptsize] (policylabel) at (1.88,2.22) {预算策略};
+  \node[pill, draw=anchorGold, fill=white, inner xsep=2pt] (ba) at (0.72,1.60)
+    {BA-$k$};
+  \node[pill, draw=anchorGold, fill=white, inner xsep=2pt] (heur) at (1.92,1.60)
+    {Heuristic-$k$};
+  \node[pill, draw=anchorGold, fill=white, inner xsep=2pt] (auto) at (3.10,1.60)
+    {AutoK};
+  \node[box, draw=anchorGold, fill=white, text width=2.40cm] (bits) at (1.88,0.52)
+    {逐层位宽向量\\$[b^{(1)},\ldots,b^{(L)}]$};
+
+  \draw[arr] (read.south) -- (agg.north);
+  \draw[arr] (agg.south) -- (policylabel.north);
+  \draw[arr] (ba.south) -- ([xshift=-0.72cm]bits.north);
+  \draw[arr] (heur.south) -- (bits.north);
+  \draw[arr] (auto.south) -- ([xshift=0.72cm]bits.north);
+
+  \node[font=\scriptsize] at (5.38,4.02) {层级画像 $s^{(l)}$};
+  \node[font=\tiny] at (5.38,3.72) {每根柱表示一层的行为敏感度读数};
+  \draw[black!30, line width=0.55pt, -Stealth] (4.08,1.55) -- (4.08,3.12);
+  \draw[black!30, line width=0.55pt, -Stealth] (4.08,1.55) -- (6.78,1.55);
+  \node[font=\tiny] at (3.78,3.04) {$s^{(l)}$};
+  \foreach \x/\h/\c in {
+    4.36/0.42/anchorGoldFill,
+    4.66/0.80/anchorGoldFill,
+    4.96/0.50/anchorGoldFill,
+    5.26/1.18/anchorGold,
+    5.56/0.64/anchorGoldFill,
+    5.86/0.34/anchorGoldFill,
+    6.16/1.00/anchorGold,
+    6.46/0.56/anchorGoldFill} {
+    \fill[\c] (\x,1.55) rectangle ++(0.16,\h);
+    \draw[anchorGold, line width=0.35pt] (\x,1.55) rectangle ++(0.16,\h);
+  }
+  \node[pill, draw=anchorGold, fill=white, text width=2.12cm] at (5.38,0.66)
+    {保护集合 $\mathcal P_k$};
+
+  \draw[faintarr] (agg.east) -- (4.08,2.78);
+  \draw[faintarr] (5.38,1.55) -- (5.38,0.94);
+  \node[font=\tiny] at (6.03,1.08) {选入保护集合};
+
+  % Right card: role-aware interface extension
+  \node[card, draw=black!34, fill=black!1, minimum width=6.20cm] (role) at (11.55,2.85) {};
+  \node[head] at (11.55,5.20) {（b）K/V 角色预算接口};
+  \node[font=\scriptsize] at (11.55,4.76) {扩展口径，定义角色位宽接口};
+
+  \node[box, draw=vTeal, fill=vTealFill, text width=3.48cm] (rread) at (11.55,3.78)
+    {角色读数 $(s_K^{(l)},\,s_V^{(l)})$};
+  \node[box, draw=kBlue, fill=kBlueFill, text width=1.78cm] (sk) at (10.32,2.48)
+    {K 保护集合\\$\mathcal P_K$};
+  \node[box, draw=vTeal, fill=white, text width=1.78cm] (sv) at (12.78,2.48)
+    {V 保护集合\\$\mathcal P_V$};
+  \node[box, draw=black!42, fill=black!5, text width=3.48cm] (pair) at (11.55,1.02)
+    {角色位宽接口\\$\mathbf b^{(l)}=(b_K^{(l)},\,b_V^{(l)})$};
+
+  \draw[faintarr] (rread.south) -- (sk.north);
+  \draw[faintarr] (rread.south) -- (sv.north);
+  \draw[faintarr] (sk.south) -- ([xshift=-0.80cm]pair.north);
+  \draw[faintarr] (sv.south) -- ([xshift=0.80cm]pair.north);
+\end{tikzpicture}
+\end{document}

@@ -1,0 +1,95 @@
+\documentclass[tikz,border=7pt]{standalone}
+\usepackage{ctex}
+\usepackage{amsmath}
+\usetikzlibrary{arrows.meta,positioning,calc}
+
+\begin{document}
+\begin{tikzpicture}[
+  x=1cm,y=1cm,
+  >=Stealth,
+  every node/.style={font=\rmfamily\footnotesize, align=center, text=black},
+  title/.style={font=\bfseries\small, anchor=west},
+  subtitle/.style={font=\scriptsize, text=black!58, anchor=west},
+  row/.style={font=\bfseries\scriptsize, anchor=east},
+  header/.style={font=\bfseries\scriptsize, text=black!58},
+  cell/.style={
+    rectangle,
+    rounded corners=1.5pt,
+    minimum width=2.22cm,
+    minimum height=0.76cm,
+    inner sep=2.5pt,
+    line width=0.56pt
+  },
+  slim/.style={
+    rectangle,
+    rounded corners=1.5pt,
+    minimum width=1.82cm,
+    minimum height=0.70cm,
+    inner sep=2.4pt,
+    line width=0.52pt
+  },
+  arrow/.style={-Stealth, line width=0.60pt, shorten >=2pt, shorten <=2pt},
+  guide/.style={draw=black!16, line width=0.42pt}
+]
+  \definecolor{gold}{RGB}{156,109,30}
+  \definecolor{goldfill}{RGB}{255,251,240}
+  \definecolor{blue}{RGB}{58,103,170}
+  \definecolor{bluefill}{RGB}{230,237,250}
+  \definecolor{teal}{RGB}{63,133,128}
+  \definecolor{tealfill}{RGB}{229,243,241}
+  \definecolor{gline}{RGB}{130,130,130}
+  \definecolor{gfill}{RGB}{248,248,248}
+
+  \node[title] at (0,4.75) {行为敏感度画像到预算分配};
+  \node[subtitle] at (0,4.40) {主线由 K 侧画像生成逐层预算，位置规则作为同预算基线，K/V 双侧画像进入角色扩展接口};
+  \draw[guide] (0,4.14) -- (13.30,4.14);
+
+  \node[header] at (1.15,3.75) {离线读数};
+  \node[header] at (3.70,3.75) {画像或规则};
+  \node[header] at (6.25,3.75) {保护集合};
+  \node[header] at (8.80,3.75) {位宽决策};
+  \node[header] at (11.18,3.75) {方法位置};
+
+  \draw[guide] (0,3.54) -- (12.35,3.54);
+  \draw[guide] (0,2.52) -- (12.35,2.52);
+  \draw[guide] (0,1.50) -- (12.35,1.50);
+  \draw[guide] (0,0.48) -- (12.35,0.48);
+
+  \node[row, text=gold!80!black] at (-0.10,3.02) {BA-$k$ 主线};
+  \node[cell, draw=blue, fill=bluefill] (a1) at (1.15,3.02) {K 侧读数\\$\sigma_K^{(l)}$};
+  \node[cell, draw=gold, fill=goldfill] (a2) at (3.70,3.02) {K 侧画像\\$S_{K,\alpha}$};
+  \node[cell, draw=gold, fill=white] (a3) at (6.25,3.02) {$\mathcal P_k$\\$\operatorname{TopK}(S_{K,\alpha},k)$};
+  \node[cell, draw=gold, fill=white] (a4) at (8.80,3.02) {逐层位宽\\$b^{(l)}$};
+  \node[slim, draw=gold, fill=goldfill] (a5) at (11.18,3.02) {主实验\\入口};
+
+  \draw[arrow, draw=gold!78!black] (a1.east) -- (a2.west);
+  \draw[arrow, draw=gold!78!black] (a2.east) -- (a3.west);
+  \draw[arrow, draw=gold!78!black] (a3.east) -- (a4.west);
+  \draw[arrow, draw=gold!78!black] (a4.east) -- (a5.west);
+
+  \node[row, text=black!58] at (-0.10,2.00) {位置基线};
+  \node[cell, draw=gline, fill=gfill] (b1) at (1.15,2.00) {模型层数\\$L$ 与 $k$};
+  \node[cell, draw=gline, fill=gfill] (b2) at (3.70,2.00) {层位置规则\\Heuristic-$k$};
+  \node[cell, draw=gline, fill=gfill] (b3) at (6.25,2.00) {同预算集合\\$\mathcal P_{\mathrm{pos}}$};
+  \node[cell, draw=gline, fill=gfill] (b4) at (8.80,2.00) {对照位宽\\$b_{\mathrm{pos}}^{(l)}$};
+  \node[slim, draw=gline, fill=gfill] (b5) at (11.18,2.00) {基线\\对照};
+
+  \draw[arrow, draw=gline, dashed] (b1.east) -- (b2.west);
+  \draw[arrow, draw=gline, dashed] (b2.east) -- (b3.west);
+  \draw[arrow, draw=gline, dashed] (b3.east) -- (b4.west);
+  \draw[arrow, draw=gline, dashed] (b4.east) -- (b5.west);
+
+  \node[row, text=black!62] at (-0.10,0.98) {角色扩展};
+  \node[cell, draw=teal, fill=tealfill] (c1) at (1.15,0.98) {K/V 读数\\$\sigma_K^{(l)},\sigma_V^{(l)}$};
+  \node[cell, draw=black!46, fill=white] (c2) at (3.70,0.98) {双侧画像\\$S_{K,\alpha},S_{V,\alpha}$};
+  \node[cell, draw=black!46, fill=white] (c3) at (6.25,0.98) {角色集合\\$\mathcal P_K,\mathcal P_V$};
+  \node[cell, draw=black!46, fill=white] (c4) at (8.80,0.98) {角色位宽\\$\mathbf b^{(l)}$};
+  \node[slim, draw=black!46, fill=white] (c5) at (11.18,0.98) {接口\\预留};
+
+  \draw[arrow, draw=black!48] (c1.east) -- (c2.west);
+  \draw[arrow, draw=black!48] (c2.east) -- (c3.west);
+  \draw[arrow, draw=black!48] (c3.east) -- (c4.west);
+  \draw[arrow, draw=black!48] (c4.east) -- (c5.west);
+
+\end{tikzpicture}
+\end{document}
