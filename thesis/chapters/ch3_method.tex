@@ -699,7 +699,7 @@ h_{kv}
 \end{equation}
 核函数按 $(B,H_q)$ 网格组织并行。每个 Query 头直接访问对应的 $h_{kv}$ 切片，因此不需要把 KV 头显式复制成 $H_q$ 个副本。这个寻址方式会影响块内访存合并、元数据广播和寄存器占用，并与反打包开销一起反映到 TPOT 中。
 
-系统侧落地按三个分工组织。基准路径 \texttt{INT8-Canonical} 由 \texttt{INT8} 融合核支撑，用于验证行为引导校准在保守位宽下的稳定闭环。\texttt{INT4-RoleAlign} 质量主线使用参考解码实现（\texttt{torch\_ref}）保证语义核对，对应第四章 TPOT 表中"参考路径 (INT4)"列。\texttt{INT4} 融合扩展（含 KIVI 与 Triton 融合路径）则承担第四章的系统边界读数。下一节给出三条路径在访存、存储与算力维度上的开销分析。
+系统落地保留三类路径，各自承担不同验证目标。\texttt{INT8-Canonical} 基准路径由 \texttt{INT8} 融合核支撑，用来检验行为引导校准能否在保守位宽设置中形成稳定闭环。\texttt{INT4-RoleAlign} 的质量评估主线采用参考解码实现进行语义一致性核验；第四章 TPOT 表中的参考路径 \texttt{INT4} 列对应该类参考后端的时间口径。用于系统边界测量的 \texttt{INT4} 扩展区分格式对照和后端实现，并覆盖 KIVI-style 对照以及 Triton 融合后端读数。下一节转向三条路径在访存、存储和算力维度的开销分析。
 
 \subsection{复杂度、访存与存储开销分析}
 \label{subsec:ch3-system-overhead}

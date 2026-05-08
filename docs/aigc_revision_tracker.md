@@ -939,6 +939,49 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 31b
+
+- Report segment: 31
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 702
+- Detector excerpt begins: `系统侧落地按三个分工组织...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: template-like three-way organization, exposed internal implementation naming, and blurred distinction between quality reference path, format comparison, and backend system readings.
+- Rewrite goal: preserve the three system roles while clarifying their external paper-facing meanings.
+- Style constraints: avoid unnecessary parentheses and quotes, avoid internal backend labels in paper-facing prose, and keep the Chapter 4 TPOT column relation bounded.
+
+### Preserved Information
+
+- The system implementation still keeps three categories of paths.
+- `\texttt{INT8-Canonical}` remains supported by the `\texttt{INT8}` fused kernel.
+- `\texttt{INT8-Canonical}` still validates stable closure of behavior-guided calibration under a conservative bit-width setting.
+- `\texttt{INT4-RoleAlign}` still uses a reference decode path for quality and semantic-consistency checking.
+- The Chapter 4 TPOT table reference path remains the timing counterpart for the reference backend.
+- The `\texttt{INT4}` extension still covers system-boundary measurement.
+- KIVI-style comparison and Triton fused-backend readings are both preserved.
+- The next section still analyzes the three paths by memory access, storage, and compute cost.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the three-role system decomposition remains intact.
+- Chinese academic writing reviewer: first pass failed on template wording, `xxxx 下`, and table-column punctuation; final version passed after rewriting the paragraph and removing unnecessary quotes/parentheses.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with Chapter 4 TPOT table and Chapter 3 deployment scope.
+- Skeptical reviewer: first pass failed because `torch_ref`, RoleAlign-to-table relation, and KIVI/Triton wording could confuse internal implementation with paper-facing roles; final version passed after removing the internal name and separating reference backend, KIVI-style comparison, and Triton backend readings.
+
+### Applied Revision
+
+```tex
+系统落地保留三类路径，各自承担不同验证目标。\texttt{INT8-Canonical} 基准路径由 \texttt{INT8} 融合核支撑，用来检验行为引导校准能否在保守位宽设置中形成稳定闭环。\texttt{INT4-RoleAlign} 的质量评估主线采用参考解码实现进行语义一致性核验；第四章 TPOT 表中的参考路径 \texttt{INT4} 列对应该类参考后端的时间口径。用于系统边界测量的 \texttt{INT4} 扩展区分格式对照和后端实现，并覆盖 KIVI-style 对照以及 Triton 融合后端读数。下一节转向三条路径在访存、存储和算力维度的开销分析。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing Chapter 3 overfull hbox at line 369; no undefined references or citation warnings.
+
 ## Segment 30c-31a
 
 - Report segment: 30 and 31
