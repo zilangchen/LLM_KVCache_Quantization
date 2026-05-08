@@ -36,6 +36,26 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 23:45 | AIGC paragraph polish ch2 symmetric quantization roles
+- Goal: Process report segment 8 in Chapter 2 while preserving the INT8/symmetric INT4 role split, integer-grid facts, bit-packing storage estimate, and behavior-usability boundary.
+- Changed files:
+  - `thesis/chapters/ch2_related_work.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch2_related_work.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Rewrote the symmetric-quantization role paragraph to keep INT8 as the conservative stability-closure check and symmetric INT4 as the low-bit pressure point.
+  - Preserved the 255 vs 15 level counts, approximate 17x discrete-level difference, two-nibble packing, and approximate FP16-to-INT4 payload storage ratio.
+  - Added the payload-scope caveat for scale, metadata, and alignment overhead after skeptical review.
+- Validation:
+  - PASS: whitespace/error check and full LaTeX build completed; generated 99-page PDF.
+  - Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated.
+- Risks / follow-ups:
+  - Continue with report segment 9 after this commit.
+- Commit: see Git history for `docs: polish aigc ch2 symmetric quantization roles`
+
 ### 2026-05-08 23:32 | AIGC paragraph polish ch1 contribution 3
 - Goal: Process report segment 7's third Chapter 1 contribution paragraph while preserving cross-model budget-regime claims and all named phenomena.
 - Changed files:
