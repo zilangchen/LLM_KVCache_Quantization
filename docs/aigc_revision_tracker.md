@@ -13,6 +13,51 @@ This file records paragraph-level AIGC-polish changes. Each entry maps one detec
 - Overall suspected AIGC ratio: 20.38%
 - Highest-risk chapters: Chinese abstract 72.0%, English abstract 72.0%, Chapter 3 32.0%, Chapter 1 24.0%, Conclusion 14.0%
 
+## Segment 45
+
+- Report segment: 45
+- Source paragraph: `thesis/chapters/ch4_experiments.tex`, line 692
+- Detector excerpt begins: `表4-13 的 Panel A说明...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: template-like `具体而言`, colon-style conclusion, `Qwen2.5-14B 上` phrasing, and mixed English `memory traffic`.
+- Rewrite goal: preserve every deployment number while turning the paragraph into a bounded reading of Panel A.
+- Style constraints: avoid `xxxx 上`, avoid unnecessary colon expansion, translate `memory traffic` to `访存流量`, and keep the H20/batch/backend boundary explicit.
+
+### Preserved Information
+
+- Panel A supports the deployment reading.
+- 4K is treated as a noise-range reference rather than evidence for deployment value.
+- Qwen2.5-14B with Triton fused path has a -0.44 ms difference at 4K.
+- Differences at 8K, 16K, and 32K are -14.54 ms, -33.26 ms, and -77.08 ms.
+- Relative reductions are about -17\%, -28\%, and -40\%.
+- The trend is monotonic over the reported length points.
+- After 8K, longer historical KV increases the fused path's time advantage over the reference path.
+- The conclusion is limited to Qwen2.5-14B, H20, `\texttt{batch=1}`, and the current backend combination.
+- As memory traffic rises, fused-path bandwidth savings can gradually outweigh fixed scheduling overhead.
+
+### Review Gate
+
+- Technical accuracy reviewer: PASS.
+- Chinese academic writing reviewer: PASS after changing `memory traffic` to `访存流量`, smoothing `Panel A` wording, and merging the bounded conclusion.
+- Cross-chapter consistency reviewer: PASS.
+- Skeptical reviewer: PASS.
+
+### Applied Revision
+
+```tex
+表~\ref{tab:ch4-deployment-boundary} 中 Panel A 的读数表明，融合路径的部署价值主要随序列长度拉长显现，4K 单点仅能作为噪声范围内的参照。Qwen2.5-14B 采用 Triton 融合路径时，相对参考路径的时间差在 4K 仅为 -0.44\,ms；序列长度增至 8K 后，时间差扩大为 -14.54\,ms，16K 为 -33.26\,ms，32K 为 -77.08\,ms，对应约 -17\%、-28\% 和 -40\% 的相对降幅。这个趋势在本组长度点保持单调。8K 之后，历史 KV 越长，融合路径相对参考路径的时间优势越明显。据此，第 4.5.2 节只支持一个有边界的最小结论，即在 Qwen2.5-14B、H20、\texttt{batch=1} 与当前后端组合这一适用条件内，访存流量上升后，融合路径的带宽节省能够逐步压过固定调度开销。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing overfull hbox at line 369; no undefined references or citation warnings.
+- Commit: see Git history for message `docs: polish aigc ch4 deployment panel a`
+
 ## Segment 44
 
 - Report segment: 44
