@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 03:02 | AIGC 段落修订 37: 第四章 LongBench 风格合成任务协议
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理 LongBench 风格合成任务、task-core、任务指标和官方榜单边界。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 保留 task-core、单文档问答、多文档问答和摘要三类功能。
+  - 保留 F1、Rouge-L 与 Edit Similarity 等指标。
+  - 将绝对分数边界写成按本文协议解释，不与社区官方榜单直接对齐。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated.
+- Risks / follow-ups:
+  - 下一轮继续处理 Segment 38 的 RULER 与 Needle 互补关系段。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch4 longbench style protocol`
+
 ### 2026-05-09 02:59 | AIGC 段落修订 36: 第四章 Needle 协议边界
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理 Needle-in-a-Haystack 的上下文长度、深度扫描和精确匹配读数段。
 - Changed files:

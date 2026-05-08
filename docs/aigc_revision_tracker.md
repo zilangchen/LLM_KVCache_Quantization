@@ -939,6 +939,49 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 37
+
+- Report segment: 37
+- Source paragraph: `thesis/chapters/ch4_experiments.tex`, line 61
+- Detector excerpt begins: `任务级主矩阵采用 LongBench 风格合成任务...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: protocol-definition rhythm, repeated `使用` / `采用` pattern, and a stiff final caveat about official leaderboard alignment.
+- Rewrite goal: keep the synthetic LongBench-style protocol boundary while making the paragraph read as a natural description of the task matrix.
+- Style constraints: avoid implying official LongBench scores, keep `task-core`, keep metrics explicit, and preserve the non-alignment with community leaderboards.
+
+### Preserved Information
+
+- The task-level main matrix still uses LongBench-style synthetic tasks.
+- The main tables still focus on the `task-core` subset.
+- The covered functional categories remain single-document QA, multi-document QA, and summarization.
+- QA tasks still use F1.
+- Summarization tasks still use Rouge-L.
+- Some extension tasks still use Edit Similarity or other text-similarity metrics.
+- The protocol still supports method comparison within the same data-generation and scoring pipeline.
+- Absolute scores remain protocol-local and are not directly aligned with community official leaderboards.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed all metric and protocol details remain intact.
+- Chinese academic writing reviewer: PASS; confirmed the rewrite is more natural.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with official LongBench boundaries and appendix aggregation.
+- Skeptical reviewer: PASS; confirmed the synthetic-task boundary and non-leaderboard comparison boundary remain clear.
+
+### Applied Revision
+
+```tex
+任务级主矩阵使用 LongBench 风格合成任务。正文主表聚焦 task-core 子集，覆盖单文档问答、多文档问答和摘要三类功能；问答任务采用 F1，摘要任务采用 Rouge-L，少量扩展任务采用 Edit Similarity 等文本相似度指标。这个协议用于在同一数据生成与评分管线内比较方法差异，绝对分数只按本文协议解释，不与社区官方榜单做直接对齐。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated to this segment.
+
 ## Segment 36
 
 - Report segment: 36
