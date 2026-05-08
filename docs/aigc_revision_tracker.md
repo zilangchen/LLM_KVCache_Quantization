@@ -939,6 +939,54 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 25
+
+- Report segment: 25
+- Source paragraph: `thesis/chapters/ch3_method.tex`, lines 317--321
+- Detector excerpt begins: `INT4-RoleAlign与KIVI-style共享per-channel Key...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: English-heavy path labels, markdown-style emphasis inside LaTeX, bracketed contrast phrasing, and a dense one-paragraph comparison.
+- Rewrite goal: clarify that `\texttt{KIVI-style}` and `\texttt{INT4-RoleAlign}` share the same low-bit K/V format but differ in endpoint-parameter source.
+- Style constraints: avoid English-style Chinese, avoid overclaiming that the searched percentile is always better than min/max, and make runtime recomputation explicit.
+
+### Preserved Information
+
+- `$\operatorname{Percentile}(\cdot;100)=\max$` and `$\operatorname{Percentile}(\cdot;0)=\min$` remain the endpoint identities.
+- `$(p_K,p_V)=(100,100)$` remains the min-max endpoint case for K and V paths.
+- `\texttt{KIVI-style}` still determines endpoints at runtime using min/max statistics.
+- `\texttt{INT4-RoleAlign}` still selects percentiles `$(p_K,p_V)` through offline search.
+- Runtime still computes `$(s,\zeta)` from current tensors according to the selected percentile rather than using a frozen actual range.
+- The core comparison remains endpoint-parameter source, not runtime range determination versus offline frozen actual range.
+- `\texttt{INT4-RoleAlign}` still searches within `$(50,100]`.
+- The controlled comparison remains assigned to Section~`\ref{subsec:ch3-rolealign-vs-kivi}`.
+- The K/V double-axis asymmetric layout remains linked to Figure~`\ref{fig:ch3-rolealign-axis}`.
+
+### Review Gate
+
+- Technical reviewer: initial and final passes approved the endpoint identities, runtime recomputation semantics, comparison target, and figure/section references.
+- Chinese academic writing reviewer: first pass failed on `K-path/V-path`, mixed `channel` wording, and mechanical `真正不同的是`; final version passed after switching to `K 路径/V 路径`, `通道`, and a bounded comparison sentence.
+- Cross-chapter consistency reviewer: PASS; confirmed alignment with Chapter 4 Section~`\ref{subsec:ch3-rolealign-vs-kivi}` and the shared-format/different-parameter-source reading.
+- Skeptical reviewer: first pass failed because `比 min-max 更稳定` sounded proven and runtime recomputation could be misread; final version passed after narrowing this to a search objective and stating current-tensor percentile statistics explicitly.
+
+### Applied Revision
+
+```tex
+由于 $\operatorname{Percentile}(\cdot; 100) = \max$ 且 $\operatorname{Percentile}(\cdot; 0) = \min$，端点
+\begin{equation}
+(p_K, p_V) = (100, 100)
+\end{equation}
+正好对应 K 路径与 V 路径各自的 min-max 仿射端点。这也给出与 \texttt{KIVI-style} 对照的基准情形。\texttt{KIVI-style} 在运行时用 min/max 统计确定逐通道端点和逐 token 端点；\texttt{INT4-RoleAlign} 则先通过离线搜索选定百分位 $(p_K, p_V)$，运行时仍针对当前张量统计对应百分位，并分别逐通道、逐 token 计算 $(s, \zeta)$。在该对照口径下，核心差异是端点参数来自运行时 min/max 统计，还是来自离线搜索得到的百分位；并不是一方运行时确定实际范围、另一方离线冻结实际范围。\texttt{INT4-RoleAlign} 在 $(50, 100]$ 内搜索可能相对 min-max 更稳健的百分位端点，受控比较见第~\ref{subsec:ch3-rolealign-vs-kivi}~节。K 侧沿 token 维度聚合后按通道独立确定 $(s_K,\zeta_K)$，V 侧沿通道维度聚合后按 token 独立确定 $(s_V,\zeta_V)$；双轴非对称布局见图~\ref{fig:ch3-rolealign-axis}。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 24b
 
 - Report segment: 24

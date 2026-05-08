@@ -314,11 +314,11 @@ R_V(p_V) = \mathbb{E}_{\mathcal D_{\mathrm{calib}}}\sum_{h=1}^{H}\sum_{r=1}^{S}\
 \end{equation}
 其中 $a_{h,r,t}$ 是第 $h$ 个注意力头从 query 位置 $r$ 到 key 位置 $t$ 的注意力权重，由 FP16 参考路径在校准样本上单独前向得到；$\tilde V_{p_V}$ 为按候选 $p_V$ 反量化后的 Value。内层求和把 V 量化误差按 attention 加权聚合得到 query $r$ 在头 $h$ 上的输出扰动向量，外层在头与 query 位置上累加，期望在校准集 $\mathcal D_{\mathrm{calib}}$ 与各层上取均值。该代理把 V 量化误差经注意力权重加权后聚合再取二范数平方，与第~\ref{sec:ch3-paths}~节扰动分解中的 V 主导路径形式一致；$a_{h,r,t}$ 的快照来自 FP16 参考路径的独立前向，不与量化路径共享中间状态，保证代理的独立性。$(p_K, p_V)$ 候选网格为 $\{95.0, 97.0, 99.0, 99.5, 99.9, 100.0\}$，由第~\ref{subsec:ch3-two-stage}~节的稳健选择规则筛选；K 侧以注意力分布 KL 为目标，V 侧以 $R_V$ 为目标，两侧目标函数独立，仅在网格采样上保持一致。
 
-由于 $\operatorname{Percentile}(\cdot; 100) = \max$ 与 $\operatorname{Percentile}(\cdot; 0) = \min$，端点
+由于 $\operatorname{Percentile}(\cdot; 100) = \max$ 且 $\operatorname{Percentile}(\cdot; 0) = \min$，端点
 \begin{equation}
 (p_K, p_V) = (100, 100)
 \end{equation}
-对应 K-path 与 V-path 各自取 min-max 仿射端点。\texttt{KIVI-style} 在运行时按 min/max 统计直接确定每通道与每 token 的端点，相当于上述端点情形；\texttt{INT4-RoleAlign} 把端点的*参数来源*改为离线选定的百分位 $(p_K, p_V)$，运行时仍按这组百分位逐通道、逐 token 重算 $(s, \zeta)$，在 $(50, 100]$ 内寻找比 min-max 更稳定的端点取值。两条路径的差异因此落在端点的参数来源——『运行时 min/max 统计』对『离线搜索的百分位』，而非『运行时确定』对『离线冻结实际范围』；两者的受控比较留待第~\ref{subsec:ch3-rolealign-vs-kivi}~节进行。\texttt{INT4-RoleAlign} 在 K 侧沿 token 聚合按 channel 独立确定 $(s_K,\zeta_K)$、V 侧沿 channel 聚合按 token 独立确定 $(s_V,\zeta_V)$ 的双轴非对称布局见图~\ref{fig:ch3-rolealign-axis}。
+正好对应 K 路径与 V 路径各自的 min-max 仿射端点。这也给出与 \texttt{KIVI-style} 对照的基准情形。\texttt{KIVI-style} 在运行时用 min/max 统计确定逐通道端点和逐 token 端点；\texttt{INT4-RoleAlign} 则先通过离线搜索选定百分位 $(p_K, p_V)$，运行时仍针对当前张量统计对应百分位，并分别逐通道、逐 token 计算 $(s, \zeta)$。在该对照口径下，核心差异是端点参数来自运行时 min/max 统计，还是来自离线搜索得到的百分位；并不是一方运行时确定实际范围、另一方离线冻结实际范围。\texttt{INT4-RoleAlign} 在 $(50, 100]$ 内搜索可能相对 min-max 更稳健的百分位端点，受控比较见第~\ref{subsec:ch3-rolealign-vs-kivi}~节。K 侧沿 token 维度聚合后按通道独立确定 $(s_K,\zeta_K)$，V 侧沿通道维度聚合后按 token 独立确定 $(s_V,\zeta_V)$；双轴非对称布局见图~\ref{fig:ch3-rolealign-axis}。
 
 \input{figures/fig_ch3_rolealign_axes}
 

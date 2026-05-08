@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 01:42 | AIGC 段落修订 25: RoleAlign 与 KIVI-style 端点对照
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理 RoleAlign 与 KIVI-style 的端点参数来源对照段。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 重构 KIVI-style 与 RoleAlign 的端点来源比较，删除 LaTeX 中的 markdown 式强调。
+  - 明确 RoleAlign 运行时仍针对当前张量统计对应百分位并计算 $(s,\zeta)$。
+  - 将“更稳定”收窄为搜索目标，保留受控比较章节与双轴布局图引用。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS，失败建议已吸收。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated.
+- Risks / follow-ups:
+  - 下一轮继续处理 Segment 26 中 AutoK coverage curve 相关高嫌疑句。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 rolealign kivi endpoints`
+
 ### 2026-05-09 01:37 | AIGC 段落修订 24b: RoleAlign Value 侧公式引入
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理 Value 侧逐 token 非对称量化的公式引入句。
 - Changed files:
