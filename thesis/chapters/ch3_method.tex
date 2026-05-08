@@ -45,9 +45,9 @@ KV Cache 量化的目标即
 \section{动机诊断：K/V 敏感性不对称及其设计启示}
 \label{sec:ch3-motivation-kv}
 
-式~\eqref{eq:ch3-error-decomp} 显示，Key 侧扰动先经 logits 改变注意力分布，再通过分布差异进入输出；Value 侧则以 $\hat a_i(\hat v_i-v_i)$ 形式线性进入聚合。两条路径上扰动的放大或衰减由分布形态与 logit 间隔共同决定，因此低比特预算下的脆弱程度可能不对称。后文以 K/V 单侧诊断与对称低比特锚点验证这种不对称，为低比特路径的格式选择提供依据。
+式~\eqref{eq:ch3-error-decomp} 区分了两类误差作用于输出的路径。Key 侧扰动先改变注意力 logits，经 softmax 归一化后表现为注意力分布差异，并由分布项传到输出；Value 侧误差则以 $\hat a_i(\hat v_i-v_i)$ 的形式，在量化后权重下进入聚合。扰动对输出的影响大小取决于分布形态、logit 间隔以及权重集中程度，因此在低比特预算下，Key 与 Value 量化误差对输出的敏感性可能不同。后文通过 K/V 单侧诊断，并以对称低比特配置作为参照，检验这种不对称是否在实验中出现，为低比特路径的格式选择提供依据。
 
-本节用统一记号 \texttt{KxVy} 表示 K/V 双侧位宽组合，\texttt{K4V8} 即 4-bit Key 与 8-bit Value，\texttt{K4V16} 与 \texttt{K16V4} 表示在 FP16 上隔离单侧的诊断配置；为与第四章实验记号一致，\texttt{MixedKV} $\equiv$ \texttt{K8V4}。图~\ref{fig:ch3-kv-asymmetry} 呈现压缩诊断视图：\texttt{FP16} 为未量化参考，\texttt{K8V8} 为高精度量化参考，\texttt{K8V4}/\texttt{K4V8} 构成同平均位宽预算下的角色对照，\texttt{K4V4} 提供对称低比特锚点。
+为统一后续图表记号，本节采用 \texttt{KxVy} 表示 K/V 两侧位宽组合。\texttt{K4V8} 表示 4-bit Key 与 8-bit Value。单侧隔离配置中，\texttt{K4V16} 表示 Key 为 4-bit、Value 保持 FP16，\texttt{K16V4} 表示 Key 保持 FP16、Value 为 4-bit。在本文实验记号中，\texttt{MixedKV} 对应 \texttt{K8V4}。图~\ref{fig:ch3-kv-asymmetry} 呈现压缩诊断视图，并按三组配置组织：\texttt{K8V8} 是高位宽量化参考，\texttt{K8V4}/\texttt{K4V8} 在相同 K/V 平均位宽设置下对照 K/V 角色，\texttt{K4V4} 作为对称低比特锚点。未量化 \texttt{FP16} 参考和单侧 PPL 隔离实验结果分别由第四章表~\ref{tab:ch4-kv-multitask} 与表~\ref{tab:ch4-kv-ppl} 给出。
 
 \input{figures/fig_ch3_kv_diag_needle}
 

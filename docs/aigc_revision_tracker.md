@@ -847,3 +847,50 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 100-page PDF
 - Residual log notes: existing Chapter 3 overfull hboxes at lines 369 and 644--646; unrelated to this paragraph.
 - Commit: see Git history for message `docs: polish aigc ch3 problem formalization`
+
+## Segment 12
+
+- Report segment: 12
+- Source paragraph: `thesis/chapters/ch3_method.tex`, lines 48--50
+- Detector excerpt begins: `式(3-8)显示，Key侧扰动先经 logits 改变注意力分布...`
+- Suspected segment size in report: 265 characters.
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: compressed mechanism summary, `放大或衰减` phrasing, dense configuration enumeration, and ambiguous evidence-source boundaries between Figure~`\ref{fig:ch3-kv-asymmetry}` and Chapter 4 tables.
+- Rewrite goal: keep the K/V path interpretation and `KxVy` notation while separating mechanism explanation, diagnostic notation, figure roles, and Chapter 4 evidence sources.
+- Style constraints: avoid overclaiming from the algebra alone, avoid implying Figure~`\ref{fig:ch3-kv-asymmetry}` contains FP16, and write the notation paragraph as prose rather than a configuration list.
+
+### Preserved Information
+
+- Equation~`\eqref{eq:ch3-error-decomp}` still separates Key-side and Value-side routes into output.
+- Key-side perturbation still enters through attention logits, softmax, attention-distribution difference, and output.
+- Value-side error still enters aggregation as `$\hat a_i(\hat v_i-v_i)$`.
+- The possibility of K/V sensitivity asymmetry under low-bit budgets is preserved.
+- K/V single-side diagnosis and symmetric low-bit references remain the experimental checks.
+- `\texttt{KxVy}` remains the notation for K/V side bit-width combinations.
+- `\texttt{K4V8}`, `\texttt{K4V16}`, `\texttt{K16V4}`, and `\texttt{MixedKV}` keep their original meanings.
+- Figure~`\ref{fig:ch3-kv-asymmetry}` remains the compression-diagnostic view over `\texttt{K8V8}`, `\texttt{K8V4}/\texttt{K4V8}`, and `\texttt{K4V4}`.
+- `\texttt{FP16}` reference and single-side PPL isolation evidence are now explicitly attributed to Chapter 4 tables.
+
+### Review Gate
+
+- Mathematical reviewer: initial pass; after an apparent figure-scope concern, passed again once the actual figure source was checked and confirmed that Figure~`\ref{fig:ch3-kv-asymmetry}` does not display `\texttt{FP16}`.
+- Chinese academic writing reviewer: first candidate failed for English-style phrasing, `放大还是被吸收`, and dense notation listing; final candidate passed after switching to `作用于输出的路径`, `影响大小`, and clearer configuration prose.
+- Cross-chapter consistency reviewer: first candidate failed because it implied Figure~`\ref{fig:ch3-kv-asymmetry}` includes `\texttt{FP16}` and blurred Table 4-6/4-7 roles; final candidate passed after separating the figure from Chapter 4 table evidence.
+- Skeptical reviewer: first candidate failed for causal-strength and notation risks; final candidate passed after weakening `约束` to `提供依据`, changing `MixedKV ≡ K8V4` to `对应 \texttt{K8V4}`, and clarifying the average-bit comparison.
+
+### Applied Revision
+
+```tex
+式~\eqref{eq:ch3-error-decomp} 区分了两类误差作用于输出的路径。Key 侧扰动先改变注意力 logits，经 softmax 归一化后表现为注意力分布差异，并由分布项传到输出；Value 侧误差则以 $\hat a_i(\hat v_i-v_i)$ 的形式，在量化后权重下进入聚合。扰动对输出的影响大小取决于分布形态、logit 间隔以及权重集中程度，因此在低比特预算下，Key 与 Value 量化误差对输出的敏感性可能不同。后文通过 K/V 单侧诊断，并以对称低比特配置作为参照，检验这种不对称是否在实验中出现，为低比特路径的格式选择提供依据。
+
+为统一后续图表记号，本节采用 \texttt{KxVy} 表示 K/V 两侧位宽组合。\texttt{K4V8} 表示 4-bit Key 与 8-bit Value。单侧隔离配置中，\texttt{K4V16} 表示 Key 为 4-bit、Value 保持 FP16，\texttt{K16V4} 表示 Key 保持 FP16、Value 为 4-bit。在本文实验记号中，\texttt{MixedKV} 对应 \texttt{K8V4}。图~\ref{fig:ch3-kv-asymmetry} 呈现压缩诊断视图，并按三组配置组织：\texttt{K8V8} 是高位宽量化参考，\texttt{K8V4}/\texttt{K4V8} 在相同 K/V 平均位宽设置下对照 K/V 角色，\texttt{K4V4} 作为对称低比特锚点。未量化 \texttt{FP16} 参考和单侧 PPL 隔离实验结果分别由第四章表~\ref{tab:ch4-kv-multitask} 与表~\ref{tab:ch4-kv-ppl} 给出。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.

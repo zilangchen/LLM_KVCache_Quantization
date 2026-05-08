@@ -36,6 +36,26 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 00:14 | AIGC paragraph polish ch3 kv diagnosis notation
+- Goal: Process report segment 12 in Chapter 3 while preserving the equation-based K/V mechanism explanation and the KxVy diagnostic notation.
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Rewrote the K/V path explanation to avoid undefined `吸收` language and keep sensitivity claims conditional.
+  - Made `K4V16` and `K16V4` directions explicit and changed `MixedKV` wording to an experimental-notation correspondence.
+  - Separated Figure 3-2 configuration roles from Chapter 4 table evidence for `FP16` and single-side PPL isolation.
+- Validation:
+  - PASS: diff whitespace check.
+  - PASS: LaTeX build generated the PDF; existing overfull hboxes at Chapter 3 lines 369 and 644--646 are unrelated to this paragraph.
+- Risks / follow-ups:
+  - Continue with report segment 13 after this commit.
+- Commit: pending until this entry is committed.
+
 ### 2026-05-09 00:07 | AIGC paragraph polish ch3 problem formalization
 - Goal: Process report segment 11 in Chapter 3 while preserving the attention-behavior object, tensor shapes, single-head equation, model-scope boundary, and GQA/MQA applicability.
 - Changed files:
