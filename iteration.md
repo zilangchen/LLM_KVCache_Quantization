@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 22:25 | AIGC paragraph polish ch1 efficient inference paragraph
+- Goal: Process report segment 5's high-efficiency inference systems paragraph while preserving system boundary claims.
+- Scope: One paragraph in Chapter 1 plus audit logs.
+- Changed files:
+  - `thesis/chapters/ch1_introduction.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch1_introduction.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Removed defensive replacement-vs-complement framing and colon-style explanation.
+  - Kept FlashAttention, PagedAttention, complementary system/quantization roles, and decode-time usability question.
+  - Added bounded decode overhead wording without claiming production scheduler integration or stable speedup.
+- Validation:
+  - `git diff --check`: PASS
+  - LaTeX: PASS, generated 99-page PDF
+  - Residual: existing Chapter 3 overfull hboxes at lines 369 and 644--646, unrelated to this paragraph.
+- Risks / follow-ups:
+  - Continue with report segment 6 after commit.
+  - Unrelated dirty items remain outside this paragraph scope.
+
 ### 2026-05-08 22:14 | AIGC paragraph polish ch1 related work kv paragraph
 - Goal: Process report segment 5's KV Cache quantization related-work paragraph while preserving literature positioning.
 - Scope: One paragraph in Chapter 1 plus audit logs.
