@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 03:14 | AIGC 段落修订 41: 第四章 softmax 阶跃机制解释
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理对称 INT4 阶跃崩塌的 softmax 机制解释和 K/V 诊断过渡。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将 Key 侧机制改为条件式表述，避免提前写死 Key 先触发。
+  - 保留 top-$k$、softmax 概率质量转移、100\% 到 0\% 跳变和 50\%/30\%/10\% 线性衰减对照。
+  - 将 LLaMA-3.1-8B 的 98\% Needle 解释限定为与 $H_{kv}=8$ 和较小 $H_q/H_{kv}$ 重复因子相符，并补充模型族、规模和训练数据混杂边界。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check`: PASS。
+  - `latexmk`: PASS，生成 101 页 PDF。
+  - 日志仅保留既有 line 369 overfull hbox，无 undefined references 或 citation warnings。
+- Risks / follow-ups:
+  - 下一轮进入检测报告中 RoleAlign/KIVI-style 或后续系统段落的高嫌疑项。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch4 softmax cliff mechanism`
+
 ### 2026-05-09 03:11 | AIGC 段落修订 40: 第四章对称 INT4 阶跃崩塌证据
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理对称 INT4 阶跃崩塌的表格解读与边界结论。
 - Changed files:

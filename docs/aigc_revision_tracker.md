@@ -13,6 +13,48 @@ This file records paragraph-level AIGC-polish changes. Each entry maps one detec
 - Overall suspected AIGC ratio: 20.38%
 - Highest-risk chapters: Chinese abstract 72.0%, English abstract 72.0%, Chapter 3 32.0%, Chapter 1 24.0%, Conclusion 14.0%
 
+## Segment 41
+
+- Report segment: 41
+- Source paragraph: `thesis/chapters/ch4_experiments.tex`, line 248
+- Detector excerpt begins: `造成这种阶跃而非平滑退化的原因...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: explanatory template beginning, colon-style handoff, strong single-cause language around softmax and `H_{kv}=8`, and repeated `会` clauses.
+- Rewrite goal: preserve the mechanism intuition while making it conditional and bounded enough for a skeptical reviewer.
+- Style constraints: avoid unnecessary colon usage, avoid `xxxx 上/下`, keep the Key/Value trigger question open for the next diagnostic subsection.
+
+### Preserved Information
+
+- Stepwise rather than smooth degradation is interpreted through softmax sensitivity to $QK^\top$ scores.
+- If Key-side noise pushes the target token out of the top-$k$ score region, probability mass can move quickly to the wrong position.
+- This mechanism can produce a 100\% to 0\% retrieval jump instead of a 50\%/30\%/10\% linear decay.
+- LLaMA-3.1-8B retains 98\% Needle.
+- The LLaMA-3.1-8B case is read against its $H_{kv}=8$ and smaller $H_q/H_{kv}$ repetition factor, with architecture and training confounders kept explicit.
+- The next question remains whether Key or Value is the first trigger.
+
+### Review Gate
+
+- Technical accuracy reviewer: PASS.
+- Chinese academic writing reviewer: PASS after smoothing `阶跃式` and removing口语化 `本文对照里的`.
+- Cross-chapter consistency reviewer: PASS.
+- Skeptical reviewer: PASS after making the Key-side mechanism conditional, weakening the $H_{kv}=8$ causal reading, and replacing `崩塌阈值` with `经验触发边界`.
+
+### Applied Revision
+
+```tex
+阶跃退化而非平滑退化，可以从 softmax 对 $QK^\top$ 分数的指数敏感性理解。在 Key 侧路径中，若量化噪声把目标 token 的分数推出 top-$k$ 区域，softmax 会把概率质量快速转移到错误位置，检索结果便更容易形成从 100\% 到 0\% 的临界跳变，而不是 50\%/30\%/10\% 这类线性衰减。LLaMA-3.1-8B 保留 98\% Needle，这一读数与 $H_{kv}=8$ 和较小 $H_q/H_{kv}$ 重复因子对应的 GQA 噪声稀释条件相符；同时，模型族、规模和训练数据差异仍可能共同影响结果。更稳妥的读法是，LLaMA-3.1-8B 作为架构例外，极低比特 Key 噪声尚未完全越过经验触发边界。接下来需要区分的是，这一崩塌首先由 Key 侧还是 Value 侧触发。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing overfull hbox at line 369; no undefined references or citation warnings.
+- Commit: see Git history for message `docs: polish aigc ch4 softmax cliff mechanism`
+
 ## Segment 40
 
 - Report segment: 40
