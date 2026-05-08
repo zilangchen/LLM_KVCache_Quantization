@@ -13,6 +13,47 @@ This file records paragraph-level AIGC-polish changes. Each entry maps one detec
 - Overall suspected AIGC ratio: 20.38%
 - Highest-risk chapters: Chinese abstract 72.0%, English abstract 72.0%, Chapter 3 32.0%, Chapter 1 24.0%, Conclusion 14.0%
 
+## Segment 39
+
+- Report segment: 39
+- Source paragraph: `thesis/chapters/ch4_experiments.tex`, line 65
+- Detector excerpt begins: `系统效率只读三项...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: clipped metric list, colon-style explanation, repeated `对应` chain with a mechanical ending.
+- Rewrite goal: keep the three efficiency metrics and the H20-environment boundary while making the paragraph read as part of the protocol rather than a checklist.
+- Style constraints: avoid unnecessary colon usage, use a formal cross-reference to the deployment section, and keep the conclusion bounded to the stated metrics and hardware environment.
+
+### Preserved Information
+
+- The system efficiency part uses three readings: TPOT, KV Cache usage, and peak memory.
+- TPOT measures time per generated token during decoding.
+- KV Cache usage measures cache compression benefit.
+- Peak memory reflects overall runtime pressure.
+- The deployment conclusion in Section~4.5 is only interpreted under these metrics and the current H20 environment.
+
+### Review Gate
+
+- Technical accuracy reviewer: PASS.
+- Chinese academic writing reviewer: PASS after replacing `decode 阶段` with `解码阶段` and tightening `整体运行压力`.
+- Cross-chapter consistency reviewer: PASS.
+- Skeptical reviewer: PASS.
+
+### Applied Revision
+
+```tex
+系统效率部分保留三项读数。TPOT 对应解码阶段生成单个 token 的时间，KV Cache 占用对应缓存压缩收益，峰值显存对应整体运行压力。第~\ref{sec:ch4-deployment}~节的部署结论限定在这三项指标与当前 H20 环境内解释。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing overfull hbox at line 369; no undefined references or citation warnings.
+- Commit: see Git history for message `docs: polish aigc ch4 system metric boundary`
+
 ## Segment 1.1
 
 - Report segment: 1
