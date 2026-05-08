@@ -36,6 +36,17 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 21:23 | AIGC paragraph polish zh abstract paragraph 2
+
+- Goal: Reduce AIGC-style regularity in the second Chinese abstract paragraph while preserving all method claims and boundaries.
+- Scope: One source paragraph from `thesis/chapters/abstract_zh.tex`, mapped to detector segment 1.
+- Changed files: `thesis/chapters/abstract_zh.tex`, `docs/aigc_revision_tracker.md`.
+- Commands: four-angle reviewer agents; `git diff --check -- thesis/chapters/abstract_zh.tex docs/aigc_revision_tracker.md iteration.md`; `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`.
+- Outputs: Rewrote the method paragraph to improve rhythm and remove template-like sequencing while preserving INT8, `\texttt{INT4-RoleAlign}`, K/V role split, behavioral sensitivity profiles, fixed-$k$, heuristic baseline, and `\texttt{AutoK}` claims.
+- Validation: Reviewer gates PASS; LaTeX compile PASS. Existing Chapter 3 overfull hboxes are unrelated to this paragraph.
+- Risks / follow-ups: Continue processing the remaining high-suspicion abstract paragraph one paragraph per commit.
+- Commit: see Git history for message `docs: polish aigc zh abstract paragraph 2`
+
 ### 2026-05-08 21:01 | Thesis 第四章全文审查 Round 2（caption ↔ body / 数字算术 / 协议一致性）
 
 - Goal: Round 2 做核验式审查——检查所有 figure caption ↔ body 文字描述对齐、数字内部算术、跨表/跨节协议一致性。Round 1 已修主要术语漂移，Round 2 主要做深度核验。

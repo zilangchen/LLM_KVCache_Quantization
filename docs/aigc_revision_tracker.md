@@ -57,3 +57,49 @@ This file records paragraph-level AIGC-polish changes. Each entry maps one detec
 - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 99-page PDF
 - Residual log notes: existing Chapter 3 overfull hboxes at lines 369 and 644--646; unrelated to this paragraph.
 - Commit: see Git history for message `docs: polish aigc zh abstract paragraph 1`
+
+## Segment 1.2
+
+- Report segment: 1
+- Source paragraph: `thesis/chapters/abstract_zh.tex`, Chinese abstract paragraph 2
+- Detector excerpt begins: `方法上，本文首先构建以 attention-distribution KL...`
+- Suspected segment size in report: 781 characters for the full Chinese abstract segment; this entry covers paragraph 2 only.
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: list-like method sequencing, repeated abstract verbs such as `构建`, `提出`, `用于`, `从而形成`, and a long sentence chain that compresses three method stages into two highly regular clauses.
+- Rewrite goal: keep all method objects and decision links while reducing template-like transitions and improving paragraph rhythm.
+- Style constraints: keep `attention-distribution KL`, `INT8`, `INT4`, `\texttt{INT4-RoleAlign}`, `behavior-guided fixed-$k$`, and `\texttt{AutoK}` unchanged; avoid overclaiming that the allocation rule is globally optimal.
+
+### Preserved Information
+
+- The method starts from an INT8 baseline path calibrated with attention-distribution KL as a proxy target.
+- The INT8 path establishes a reproducible behavior-fidelity anchor under a conservative bit-width.
+- The thesis proposes `\texttt{INT4-RoleAlign}` for the INT4 setting.
+- `\texttt{INT4-RoleAlign}` uses per-channel Key and per-token Value asymmetric formats.
+- Key-side attention-ranking shift and Value-side output perturbation are treated separately.
+- The rewrite keeps the boundary that the two propagation mechanisms should not be collapsed into a single reconstruction target.
+- Offline calibration artifacts are summarized into layer-wise behavioral sensitivity profiles.
+- The same profile supports behavior-guided fixed-$k$ allocation, comparison with positional heuristic baselines, and `\texttt{AutoK}` coverage-based budget proposals.
+- The paragraph links calibration results to budget allocation without claiming cross-model universal optimality.
+
+### Review Gate
+
+- Technical accuracy reviewer: PASS; suggested preserving `KL as proxy target`, avoiding new `parameter entry` wording, and keeping the single-reconstruction-target boundary explicit.
+- Chinese academic writing reviewer: PASS; suggested replacing the instruction-like opening and removing engineering phrases such as `供...读取`.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with Chapters 1, 3, 4, and 5, including the INT8 anchor, RoleAlign format, and allocation terminology.
+- Skeptical reviewer: PASS; suggested replacing `进入 INT4 后` and replacing the abstract `evidence chain remains consistent` ending with a more concrete calibration-to-allocation link.
+
+### Applied Revision
+
+```tex
+方法路径上，本文先在保守位宽下以 attention-distribution KL 作为代理目标构建 INT8 基准路径，建立可复核的行为保真锚点。随后在 INT4 设置下，\texttt{INT4-RoleAlign} 采用 per-channel Key 与 per-token Value 的非对称格式，分别刻画 Key 侧注意力排序偏移和 Value 侧输出扰动，避免把两类传播机制压缩为单一重建目标。离线校准产物再汇总为逐层行为敏感度画像，用于 behavior-guided fixed-$k$ 分配、位置启发式基线比较和 \texttt{AutoK} 覆盖率预算建议，由此衔接校准结果与预算分配。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/abstract_zh.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 99-page PDF
+- Residual log notes: existing Chapter 3 overfull hboxes at lines 369 and 644--646; unrelated to this paragraph.
+- Commit: see Git history for message `docs: polish aigc zh abstract paragraph 2`
