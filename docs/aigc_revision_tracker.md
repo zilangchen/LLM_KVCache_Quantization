@@ -939,6 +939,47 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 33.1
+
+- Report segment: 33
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 784
+- Detector excerpt begins: `第 3.1 节把注意力近似误差代数分解为分布侧扰动...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: table-of-contents style summary, regular verb chain such as `分解`, `绑定`, and `提供依据`, and the English shorthand `K-cliff` appearing without enough local explanation.
+- Rewrite goal: preserve the chapter-summary function while making the paragraph read as a mechanism recap rather than a compressed outline.
+- Style constraints: avoid unnecessary colon or parenthetical phrasing, avoid `xxxx 下`, replace bare `K-cliff` with a clearer Chinese diagnostic description, and keep the Key-side claim bounded by the paragraph's evidence.
+
+### Preserved Information
+
+- Section~`\ref{sec:ch3-problem}` still provides the algebraic decomposition of attention approximation error.
+- The decomposition still separates distribution-side perturbation and aggregation-side perturbation.
+- Section~`\ref{sec:ch3-motivation-kv}` still provides the diagnostic link between those two paths and K/V low-bit sensitivity.
+- The Key side is still identified as more likely to trigger cliff-style instability in the cited comparisons.
+- The Value-side boundary is preserved by stating that it does not show degradation of the same strength in the thesis comparisons.
+- The paragraph still explains why the later calibration targets and allocation rules have a mechanism basis.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the revised paragraph preserves the decomposition and K/V diagnostic meaning.
+- Chinese academic writing reviewer: first pass failed on bare `K-cliff`, `低比特条件下`, and hard `机制入口`; final version passed after switching to K/V diagnostic wording and `机制线索`.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with Chapter 3 and Chapter 4 evidence.
+- Skeptical reviewer: first pass failed because `K-cliff 诊断说明` was too strong and omitted the Value-side contrast; final version passed after narrowing the claim to a bounded empirical judgment.
+
+### Applied Revision
+
+```tex
+本章先说明注意力误差怎样进入输出。第~\ref{sec:ch3-problem}~节通过代数分解，把注意力近似误差写成分布侧扰动与聚合侧扰动；第~\ref{sec:ch3-motivation-kv}~节再借助 K/V 对照诊断给出较窄的经验判断，Key 侧低比特扰动更容易触发断崖式失稳，Value 侧在本文对照中没有出现同等强度的退化。后续校准目标与分配规则，主要围绕这两条机制线索展开。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated to this segment.
+
 ## Segment 32
 
 - Report segment: 32

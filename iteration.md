@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 02:41 | AIGC 段落修订 33.1: 第三章小结机制入口
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理第三章小结中 §3.1 与 §3.2 的机制回顾段。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将目录式摘要改为从注意力误差进入输出的机制问题切入。
+  - 保留 §3.1 代数分解、§3.2 K/V 对照诊断和 Key 侧低比特失稳判断。
+  - 补充 Value 侧没有同等强度退化的边界，避免把诊断结论写得过强。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated.
+- Risks / follow-ups:
+  - 下一轮继续处理 Segment 33 中第三章小结的第二段。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 summary mechanism intro`
+
 ### 2026-05-09 02:36 | AIGC 段落修订 32: 离线搜索复杂度引入
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理离线候选参数扫描与路径级搜索复杂度说明。
 - Changed files:
