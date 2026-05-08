@@ -172,7 +172,7 @@ x_q = \operatorname{clamp}\!\left(\operatorname{round}\!\left(\frac{x}{s}\right)
 若只看压缩率，容易漏掉量化误差进入注意力计算后的形态变化。本文的锚点有两个：Key 误差可能经 logits 与 softmax 改写概率质量，输出侧误差则要回到聚合结果中评价。KVTuner~\cite{xu2025kvtuner} 分析了 Key 量化误差在注意力得分中的放大，并观察到高误差注意力头往往不再保持稀疏结构；Softmax Bias Correction~\cite{bondarenko2023softmax} 从 softmax 量化角度指出 SQNR 劣化和近零概率问题。QeRL~\cite{agarwal2025qerl}、Softmax-Not-Enough~\cite{velickovic2024softmax} 与 AhaKV~\cite{gu2025ahakv} 提供了概率平坦化、温度和缓存重要性的相邻证据。
 
 \textbf{高效注意力与系统协同。}
-量化格式成立之后，还要经过系统路径检查。FlashAttention~\cite{dao2022flashattention} 及 FlashAttention-2~\cite{dao2024flashattention2} 通过分块计算、在线 softmax 与更高效的并行组织降低注意力计算 IO；vLLM~\cite{kwon2023vllm} 的 PagedAttention 通过分页式 KV Cache 管理减少显存碎片；Triton~\cite{tillet2019triton} 则为反量化与注意力计算融合提供 kernel 编写载体。这些工作提供启示我们 bit-width 降低后，若 nibble unpack、GQA head mapping 和 kernel 调度开销没有被 Decode 阶段的访存节省抵消，低比特缓存未必会转化为更低 TPOT。因此，第四章会把系统收益写成 $H_{kv}$、序列长度和后端路径共同决定的经验边界。
+量化格式成立之后，还要经过系统路径检查。FlashAttention~\cite{dao2022flashattention} 及 FlashAttention-2~\cite{dao2024flashattention2} 通过分块计算、在线 softmax 与更高效的并行组织降低注意力计算 IO；vLLM~\cite{kwon2023vllm} 的 PagedAttention 通过分页式 KV Cache 管理减少显存碎片；Triton~\cite{tillet2019triton} 则为反量化与注意力计算融合提供 kernel 编写载体。这些工作共同说明，bit-width 降低后，若 nibble unpack、GQA head mapping 和 kernel 调度开销没有被 Decode 阶段的访存节省抵消，低比特缓存未必会转化为更低 TPOT。因此，第四章会把系统收益写成 $H_{kv}$、序列长度和后端路径共同决定的经验边界。
 
 上述文献已经分别覆盖格式设计、低比特恢复、缓存选择与系统执行。本文沿三件事继续推进：用行为代理选择参数，用 K/V 角色差异解释低比特断点，用行为敏感度画像驱动预算分配和部署路径判断。
 

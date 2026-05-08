@@ -36,6 +36,42 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 20:33 | Thesis 第三章 Codex 全章复审（2 P1 + 4 P2 + 1 跨章节）
+
+- Goal: 用户跑了 Codex 完整全章审查（latexmk -outdir=/tmp/ch3_full_review_build），返回 2 P1 + 4 P2 + 1 跨章节问题。逐项验证后全部应用修订。
+- Verification process（先验证再修）:
+  - **P1 #1 line 700 系统路径口径**: 验证 ch4 line 625 TPOT 表标题为「参考路径 (INT4) / KIVI(INT4) / Triton 融合路径 (INT4) / FlashInfer(INT4)」+ line 670-672 的实际数字以 INT4 为主 → ch3「主系统落地路径是 INT8 融合核」误导。Codex 正确 ✅
+  - **P1 #2 line 54「Key 精度下降」**: 同段 line 58 已用「Key 侧低比特退化」，「精度」与 accuracy/precision/数值精度三义混淆。Codex 正确 ✅
+  - **P2 #1 line 135「KL...不同模型规模与 bit-width 下的收益强弱」**: 验证 ch4 §4.6.1 line 751 标题为「KL 与 MSE 校准目标的规模依赖性机制辨析」+ line 756 实际写「KL 的必要性会随位宽压缩强度与模型鲁棒性而变化」+「KL 与数值代理趋同」，确实是必要性边界讨论而非「不同模型规模 × bit-width 收益强弱」全覆盖。Codex 正确 ✅
+  - **P2 #2 line 415/423 重复 TopK 平局**: 两处文字几乎逐字重复「在敏感度并列时按层索引升序打破平局，使保护集合在复现中唯一确定」。Codex 正确 ✅
+  - **P2 #3 line 441「见本节后续小节」**: 该 \\ref 指向 sec:ch3-allocator，正是当前所在节，自指；且「跨模型 best-$k$ 行为」实际由 ch4 报告。Codex 正确 ✅
+  - **P2 #4 overfull hbox**: log 确认 line 172 (50pt) / 369 (1.5pt 极小) / 644 (73.8pt 最严重)。Codex 正确 ✅
+  - **跨章节 ch2 line 175「这些工作提供启示我们」**: 验证为不通顺中文（动词「提供 + 启示」复合后接代词不合习惯）。Codex 正确 ✅
+- 应用的修订:
+  - **P1 #1 修订**: line 700 改为三分口径——\\texttt{INT8} 融合核支撑基准路径；\\texttt{INT4-RoleAlign} 主线用 \\texttt{torch_ref} 保证语义核对；\\texttt{INT4} 融合扩展（KIVI / Triton 融合路径）承担 ch4 系统边界读数。
+  - **P1 #2 修订**: 「Key 精度下降」→「Key 侧低比特噪声」（与同段 line 58「Key 侧低比特退化」族系统一）。
+  - **P2 #1 修订**: 「KL 在不同模型规模与 bit-width 下的收益强弱」→「KL 与数值代理（如 MSE）的必要性边界——在哪些条件下 KL 更必要、在哪些条件下二者会趋同」（精确对齐 ch4 §4.6.1）。
+  - **P2 #2 修订**: 删除 line 415 的 TopK 平局重复说明，仅保留 line 423 在 \\operatorname{TopK} 公式后的描述（更紧贴算子定义）。
+  - **P2 #3 修订**: line 441 改为「固定 $k$ 网格由本节定义，跨模型 best-$k$ 读数由第四章第~\\ref{subsec:exp-int4-cross-model}~节报告」（消除自指 + 明确 ch4 锚点）。
+  - **P2 #4 修订**:
+    - line 172 ($c_K, c_V$ 公式) `equation` 环境改 `align`，两式分行 → 50pt overfull 消除
+    - line 644 cases 标签精简（「不启用自适应保护时」→「无自适应保护」等），并删除 `\\bigl/\\bigr` → 73.8pt 改善至 7.9pt
+    - line 702 (新 P1 #1 引入) 句首改写避免长英文标识聚集 → 11.2pt 消除
+    - line 644 prose 长段拆为两段 + `——` 改为「：；」组合 → 28.9pt 大幅改善
+  - **跨章节 ch2 line 175 修订**: 「这些工作提供启示我们」→「这些工作共同说明，」
+- Changed files: `thesis/chapters/ch3_method.tex` (28 行变更), `thesis/chapters/ch2_related_work.tex` (1 行)
+- Commands: `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`（多次迭代）
+- Outputs: 99 页稳定；overfull 从 4 处（73.8 + 50 + 28.9 + 11.2 = 163.8pt）减少到 2 处（1.5 + 7.9 = 9.4pt，cosmetic 范畴 <10pt）。0 hard error。
+- Validation:
+  - P1 #1: grep ch3 line 700 无残留「主系统落地路径是 INT8 融合核」✅
+  - P1 #2: grep ch3「Key 精度下降」无残留 ✅
+  - P2 #2: line 415 「在敏感度并列时」grep 仅 line 423 一处 ✅
+  - P2 #3: line 441 grep 无「见...本节后续小节」自指 ✅
+  - 跨章节: ch2 line 175 grep「提供启示我们」无残留 ✅
+- Risks / follow-ups:
+  - 残留 overfull 9.4pt 总和（line 369 表格边界 1.5pt + line 644 prose 7.9pt）属于学术排版可接受范围
+  - Codex 全章复审已通过 P1 全部 + P2 全部 + 跨章节，第三章质量在四轮审查后基本稳定
+
 ### 2026-05-08 20:25 | Thesis 第三章全文审查 Round 3（caption ↔ body / 公式利用率 / 跨章反向引用 / 术语 anchor）
 
 - Goal: Round 3 主要做「核验式审查」——把 Round 1/2 已修改的部分与未修改的部分一起审一遍，找剩余结构性 / 一致性问题。检测出 2 项需要修复，其余 5 项检查清单全部通过。

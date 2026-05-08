@@ -51,7 +51,7 @@ KV Cache 量化的目标即
 
 \input{figures/fig_ch3_kv_diag_needle}
 
-对 Qwen2.5-1.5B 的单侧 PPL 诊断表明：\texttt{K4V16} 使 PPL 相对 FP16 基线放大约两个数量级（原始读数与统计协议见表~\ref{tab:ch4-kv-ppl}），而 \texttt{K16V4} 仅引起基线邻域内的微小变化。32K 任务诊断中，\texttt{K4V8} 使 Qwen2.5-1.5B 与 Qwen2.5-7B 的 RULER 通过率完全归零，\texttt{K8V4} 未出现归零式失稳。两类诊断（语言建模与任务）共同显示：在 Qwen 系列当前低比特设定下，最先触发任务级失稳的是 Key 精度下降，而非 Value 的对称压缩；这一诊断结果与首段基于式~\eqref{eq:ch3-error-decomp} 的机制预测一致。
+对 Qwen2.5-1.5B 的单侧 PPL 诊断表明：\texttt{K4V16} 使 PPL 相对 FP16 基线放大约两个数量级（原始读数与统计协议见表~\ref{tab:ch4-kv-ppl}），而 \texttt{K16V4} 仅引起基线邻域内的微小变化。32K 任务诊断中，\texttt{K4V8} 使 Qwen2.5-1.5B 与 Qwen2.5-7B 的 RULER 通过率完全归零，\texttt{K8V4} 未出现归零式失稳。两类诊断（语言建模与任务）共同显示：在 Qwen 系列当前低比特设定下，最先触发任务级失稳的是 Key 侧低比特噪声，而非 Value 的对称压缩；这一诊断结果与首段基于式~\eqref{eq:ch3-error-decomp} 的机制预测一致。
 
 该不对称在不同模型族上强度不同：Qwen 系列（$H_{kv}=2$ 或 $4$，重复因子 $N_{\mathrm{rep}}=H_q/H_{kv}\in\{6,7\}$）在 \texttt{K4V8} 与 \texttt{K4V4} 下出现完全的检索归零，而具有更高 $H_{kv}$ 或不同头共享结构的模型（如 LLaMA-3.1-8B，$H_{kv}=8$、$N_{\mathrm{rep}}=4$）失稳幅度较小，单 KV 头量化误差被其对应的 $N_{\mathrm{rep}}$ 个查询头共享，使每个 KV 头影响的查询头数减少（详见表~\ref{tab:ch4-kv-multitask}）。其严重性与触发位宽的具体边界仍受模型规模、训练数据与 GQA 配置共同调制；$H_{kv}$ 在此充当组间差异的代理变量。
 
@@ -132,7 +132,7 @@ MSE 工作在张量重建空间，仅比较 $K$ 或 $V$ 的逐元素差异；而
 
 前向 KL $D_{\mathrm{KL}}(p_{\mathrm{ref}}\|p_\theta)$ 对参考高概率位置在量化路径下被低估的情况惩罚更强，对应长上下文检索“不漏关键 token”的设计需求；反向 KL 偏向量化分布自身的高概率区域，JS 散度更对称，二者作为补充诊断保留。Value 路径使用独立的输出扰动代理，详见第~\ref{sec:ch3-paths}~节。
 
-数值上对 $p_{\mathrm{ref}}$ 与 $p_\theta$ 均在 $[\varepsilon, 1]$ 上做 clamp 截断（取 $\varepsilon=10^{-6}$）以避免极端尾部概率引起的不稳定。KL 在不同模型规模与 bit-width 下的收益强弱见第~\ref{chap:experiments}~章。
+数值上对 $p_{\mathrm{ref}}$ 与 $p_\theta$ 均在 $[\varepsilon, 1]$ 上做 clamp 截断（取 $\varepsilon=10^{-6}$）以避免极端尾部概率引起的不稳定。KL 与数值代理（如 MSE）的必要性边界——在哪些条件下 KL 更必要、在哪些条件下二者会趋同——见第~\ref{chap:experiments}~章。
 
 \subsection{参数搜索空间与稳健选择准则}
 \label{subsec:ch3-two-stage}
@@ -166,10 +166,10 @@ q_{0.95}(\theta)
 \operatorname{P95}_{(x,l,h,t)\in T_{\mathrm{cal}}}
 d_{\mathrm{KL}}^{(x,l,h,t)}(\theta),
 \end{equation}
-\begin{equation}
-c_K(\theta) = \frac{|\{x\in K^{\mathrm{cal}}: |x/s_\theta(x)| > q_{\max}\}|}{|K^{\mathrm{cal}}|}, \qquad
-c_V(\theta) = \frac{|\{x\in V^{\mathrm{cal}}: |x/s_\theta(x)| > q_{\max}\}|}{|V^{\mathrm{cal}}|}.
-\end{equation}
+\begin{align}
+c_K(\theta) &= \frac{|\{x\in K^{\mathrm{cal}}: |x/s_\theta(x)| > q_{\max}\}|}{|K^{\mathrm{cal}}|}, \\
+c_V(\theta) &= \frac{|\{x\in V^{\mathrm{cal}}: |x/s_\theta(x)| > q_{\max}\}|}{|V^{\mathrm{cal}}|}.
+\end{align}
 其中 $\mu(\theta)$ 沿用第~\ref{subsec:ch3-kl-target}~节的均值代理逐候选化，$q_{0.95}(\theta)$ 是同一逐位置 KL 的 95\% 分位数；$c_K(\theta), c_V(\theta)$ 统计 $x$ 在候选 $\theta$ 对应分组尺度 $s_\theta(x)$ 下，缩放值 $|x/s_\theta(x)|$ 越过整数上界 $q_{\max}$（\texttt{INT8} 取 127、\texttt{INT4} 取 7）的元素比例，用于过滤靠过度裁剪换取低 KL 的候选。可行域定义为
 \begin{equation}
 \Theta_{\mathrm{feasible}}
@@ -412,7 +412,7 @@ S_{\alpha}
 =
 \bigl(s_{\alpha}^{(1)},\,s_{\alpha}^{(2)},\dots,s_{\alpha}^{(L)}\bigr),
 \end{equation}
-序列保留层索引位置，配合下文 $\operatorname{TopK}$ 在敏感度并列时按层索引升序打破平局，使保护集合在复现中唯一确定。
+序列保留层索引位置，使下文 $\operatorname{TopK}$ 可以稳定返回层索引集合。
 
 给定固定保护层数 $k$，BA-$k$ 分配器先选出保护层集合
 \begin{equation}
@@ -438,7 +438,7 @@ b_{\mathrm{lo}}
 =
 b_{\mathrm{lo}}+\frac{k}{L}\bigl(b_{\mathrm{hi}}-b_{\mathrm{lo}}\bigr),
 \end{equation}
-$k$ 直接控制平均位宽 $\bar b$ 在 $[b_{\mathrm{lo}},b_{\mathrm{hi}}]$ 上的位置。BA-$k$ 在预算受限时保护行为代理最高的若干层；具体的 $k$ 选择策略与跨模型 best-$k$ 行为见第~\ref{sec:ch3-allocator}~节后续小节。从离线读数 $\sigma_K^{(l)}$ 经聚合、覆盖度与 \texttt{TopK} 写入逐层位宽向量的整体流程，以及 K/V 角色接口的预留位置见图~\ref{fig:ch3-allocation-flow}。
+$k$ 直接控制平均位宽 $\bar b$ 在 $[b_{\mathrm{lo}},b_{\mathrm{hi}}]$ 上的位置。BA-$k$ 在预算受限时保护行为代理最高的若干层；固定 $k$ 网格由本节定义，跨模型 best-$k$ 读数由第四章第~\ref{subsec:exp-int4-cross-model}~节报告。从离线读数 $\sigma_K^{(l)}$ 经聚合、覆盖度与 \texttt{TopK} 写入逐层位宽向量的整体流程，以及 K/V 角色接口的预留位置见图~\ref{fig:ch3-allocation-flow}。
 
 \input{figures/fig_ch3_allocator_flow}
 
@@ -637,12 +637,14 @@ Q_{\theta_t^{(l)}}\!\bigl(x_t^{(l)}\bigr),
 \qquad
 \theta_t^{(l)} =
 \begin{cases}
-\theta_{\mathrm{path}}^{(l)}, & \text{对称 \texttt{INT4} / \texttt{INT8} 不启用自适应保护时,}\\
-g_t\!\bigl(\theta_{\mathrm{path}}^{(l)}, x_t^{(l)}\bigr), & \text{\texttt{INT8} 启用自适应保护时,}\\
-h^{K/V}\!\bigl(\theta_{\mathrm{path}}^{(l)}, x_t^{(l)}\bigr), & \text{\texttt{INT4-RoleAlign},}
+\theta_{\mathrm{path}}^{(l)}, & \text{对称路径，无自适应保护}\\
+g_t(\theta_{\mathrm{path}}^{(l)}, x_t^{(l)}), & \text{\texttt{INT8} 自适应保护}\\
+h^{K/V}(\theta_{\mathrm{path}}^{(l)}, x_t^{(l)}), & \text{\texttt{INT4-RoleAlign}}
 \end{cases}
 \end{equation}
-其中 $\theta_{\mathrm{path}}^{(l)}$ 表示离线冻结的路径规则——对称路径下即静态 scale，\texttt{INT4-RoleAlign} 下为冻结的 percentile $(p_K, p_V)$、量化轴标记与边界元数据。$g_t$ 仅依赖当前 token 在该层的待写入张量与离线参数，按第~\ref{subsec:ch3-int8-baseline}~节的逐 token max 触发规则刷新当前组的 scale。$h^{K/V}$ 是 \texttt{INT4-RoleAlign} 在 K/V 双轴上的运行时映射：K 侧在 prefill 阶段依冻结 percentile 一次性按 per-channel 数据计算 $(s_K, \zeta_K)$ 并冻结复用；V 侧的 $(s_V, \zeta_V)$ 随每个新 token 写入按 per-token 数据现场计算。任意 $t'<t$ 的历史缓存项 $\hat x_{t'}^{(l)}$ 在第 $t$ 步保持不变，缓存写入是单调追加的；这一"写入确定、历史封闭"的语义在主线实验中由多 seed 复现的逐位一致结果间接验证（详见第四章第~\ref{subsec:ch4-int8-canonical}~节）。自适应保护在主线实验中只对 \texttt{int8\_ours} 路径开启；对称路径其余情形退化为常量 $\theta_{\mathrm{path}}^{(l)}$，\texttt{INT4-RoleAlign} 始终通过 $h^{K/V}$ 在 K/V 双轴上现场计算仿射参数，与自适应保护机制无关。
+其中 $\theta_{\mathrm{path}}^{(l)}$ 表示离线冻结的路径规则：对称路径下即静态 scale；\texttt{INT4-RoleAlign} 下为冻结的 percentile $(p_K, p_V)$、量化轴标记与边界元数据。$g_t$ 仅依赖当前 token 在该层的待写入张量与离线参数，按第~\ref{subsec:ch3-int8-baseline}~节的逐 token max 触发规则刷新当前组的 scale。$h^{K/V}$ 是 \texttt{INT4-RoleAlign} 在 K/V 双轴上的运行时映射：K 侧在 prefill 阶段依冻结 percentile 一次性按 per-channel 数据计算 $(s_K, \zeta_K)$ 并冻结复用；V 侧的 $(s_V, \zeta_V)$ 随每个新 token 写入按 per-token 数据现场计算。
+
+任意 $t'<t$ 的历史缓存项 $\hat x_{t'}^{(l)}$ 在第 $t$ 步保持不变，缓存写入是单调追加的；这一"写入确定、历史封闭"的语义在主线实验中由多 seed 复现的逐位一致结果间接验证（详见第四章第~\ref{subsec:ch4-int8-canonical}~节）。自适应保护在主线实验中只对 \texttt{INT8-Canonical} 路径开启；对称路径其余情形退化为常量 $\theta_{\mathrm{path}}^{(l)}$，\texttt{INT4-RoleAlign} 始终通过 $h^{K/V}$ 在 K/V 双轴上现场计算仿射参数，与自适应保护机制无关。
 
 Prefill 阶段按路径规则把当前块的 K/V 量化写入缓存，Decode 阶段从历史量化缓存中读取并路由到对应的注意力后端。该数据流约束 Decode 路径只读固定产物与已写入的历史缓存，使后续融合解码核能避免低比特缓存的中间物化。
 
@@ -697,7 +699,7 @@ h_{kv}
 \end{equation}
 核函数按 $(B, H_q)$ grid 组织并行，每个 query head 直接寻址对应的 $h_{kv}$ 切片，无需把 KV head 显式复制为 $H_q$ 个副本；该寻址影响 block 内访问合并、元数据广播与寄存器占用，与反 pack 开销一并体现在 TPOT 中。
 
-主系统落地路径是 \texttt{INT8} 融合核。\texttt{INT4-RoleAlign} 主线评测使用参考解码实现（\texttt{torch\_ref}）以保证语义核对，对应第四章 TPOT 表中"参考路径 (INT4)"列；融合后端与外部推理库适配作为实现扩展并行保留。下一节给出三条路径在访存、存储与算力维度上的开销分析。
+系统侧落地按三个分工组织。基准路径 \texttt{INT8-Canonical} 由 \texttt{INT8} 融合核支撑，用于验证行为引导校准在保守位宽下的稳定闭环。\texttt{INT4-RoleAlign} 质量主线使用参考解码实现（\texttt{torch\_ref}）保证语义核对，对应第四章 TPOT 表中"参考路径 (INT4)"列。\texttt{INT4} 融合扩展（含 KIVI 与 Triton 融合路径）则承担第四章的系统边界读数。下一节给出三条路径在访存、存储与算力维度上的开销分析。
 
 \subsection{复杂度、访存与存储开销分析}
 \label{subsec:ch3-system-overhead}
