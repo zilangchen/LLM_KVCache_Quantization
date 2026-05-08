@@ -36,6 +36,24 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 18:53 | Thesis §3.6 Codex 复审 2 P1 + 1 P2 + P3 文风
+
+- Goal: 解决 Codex §3.6「行为引导预算分配 + AutoK」复审的 2 项 P1 必改 + 1 项 P2 必改 + P3 文风
+- Scope（P1）:
+  - **#1 (line 396 σ_K/σ_V 形状对齐)**: 旧 $\sigma_K^{(l)} \in \mathbb{R}^{H_{kv}\times G}$ 与「$G$ 为 K 侧 per-channel 量化的 group 数」自相矛盾——per-channel 意味着每通道独立 scale，应有 $G = d_k$。重命名 $G \to d_k$（"Key 通道数，沿用 §3.5.3 per-channel 非对称量化的通道分组"）；σ_V 维度 $d_v$ 解释更明确为「V 侧 per-token 范围沿校准集 token 方向聚合到 $d_v$ 个特征维」。同步更新 §3.6.3 line 502 与 line 513 的 $\operatorname{Agg}$ 签名 + $\mathcal U_l$ 中的索引集 G→$d_k$
+  - **#2 (line 402 实验范围拆分)**: 旧文「本文的实验范围限于 Qwen 与 LLaMA 两个研究族」与第四章 Mistral 实验冲突。改为「机制依据来自 Qwen 与 LLaMA 系列的单侧诊断；跨家族适用区间由第四章在 Qwen2.5、LLaMA-3.1 与 Mistral 三个模型族上分别读取」
+- Scope（P2）:
+  - **#3 (line 546/587 AutoK 自动性边界)**: line 546 加一句「\texttt{AutoK} 不是完全无超参的自动决策，而是把整数 $k$ sweep 转换为覆盖率阈值 $\rho$ 下的候选生成器」，line 587 末尾补「该粒度差异不等同于完全无超参；\texttt{AutoK} 仍以 $\rho$ 作为部署侧外部超参，整体定位为画像驱动的候选生成器」，与第五章对 AutoK「模型级候选生成器」定位一致
+- Scope（P3 文风）:
+  - line 402 「K 精度下降」→「K 位宽下降」（写作 prefs §35）
+  - fig_ch3_allocator_flow.tex line 75 删冒号: 「扩展口径：定义角色位宽接口」→「扩展口径 — 定义角色位宽接口」；caption line 93 「两级流程：」→「两级流程——」
+  - fig_ch3_coverage_curves.tex caption 「曲线示意：」→「曲线示意——」
+- Changed files: `thesis/chapters/ch3_method.tex`、`thesis/figures/fig_ch3_allocator_flow.tex`、`thesis/figures/fig_ch3_coverage_curves.tex`
+- Commands: `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+- Outputs: 97 页（稳定）；0 undefined / 0 multiply-defined / 0 hard error
+- Validation: §3.6 范围内 grep 确认无残留 `H_{kv}\times G` / 「精度」/ 冒号式；§3.6.1, §3.6.2, §3.6.3, §3.6.4 (AutoK) 跨节口径连通
+- Risks / follow-ups: §3.6 P1+P2+P3 全部落地；可推进 §3.7 (系统级部署 + Triton kernel) 或 §3.8 (chapter summary) 的 Codex 复审
+
 ### 2026-05-08 18:40 | Thesis §3.5 Codex 复审 2 必改 + 3 建议改 + 文风清理
 
 - Goal: 解决 Codex §3.5「跨位宽路径实例化」复审的全部 2 项必改 + 3 项建议改 + 4 项文风小修，端点表述跨 §3.5/§3.6/ch4/3 个 table 一致化

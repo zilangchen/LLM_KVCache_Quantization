@@ -393,20 +393,20 @@ R_V(p_V) = \mathbb{E}_{\mathcal D_{\mathrm{calib}}}\sum_{h=1}^{H}\sum_{r=1}^{S}\
 \subsection{逐层敏感度构建与分配策略}
 \label{subsec:ch3-baseline-bak}
 
-本节推导主线 BA-$k$ 分配器：以离线校准产物为输入，由逐层 K 侧角色尺度生成保护层集合。以 \texttt{INT4-RoleAlign} 为主实例，校准产物中存有逐层 K 侧 per-group scale 张量
+本节推导主线 BA-$k$ 分配器：以离线校准产物为输入，由逐层 K 侧角色尺度生成保护层集合。以 \texttt{INT4-RoleAlign} 为主实例，校准产物中存有逐层 K 侧 per-channel scale 范围张量
 \begin{equation}
-\sigma_K^{(l)}\in\mathbb{R}^{H_{kv}\times G},
+\sigma_K^{(l)}\in\mathbb{R}^{H_{kv}\times d_k},
 \end{equation}
-其中 $H_{kv}$ 为 KV head 数，$G$ 为 K 侧 per-channel 量化的 group 数。该读数与第~\ref{sec:ch3-calibration}~节产出的角色尺度统计同源，与表~\ref{tab:ch3-rolealign-final-config}~"分配读数"列描述的接口一致；整个分配阶段以离线读数驱动，不再对样本逐 token / 逐 head 计算注意力 KL。校准产物同时存有 V 侧读数 $\sigma_V^{(l)}\in\mathbb{R}^{H_{kv}\times d_v}$（$d_v$ 为 V 侧特征维），将在第~\ref{subsec:ch3-budget-kv}~节角色感知扩展中使用。
+其中 $H_{kv}$ 为 KV head 数，$d_k$ 为 Key 通道数（沿用第~\ref{subsec:ch3-rolealign}~节 per-channel 非对称量化的通道分组）。该读数与第~\ref{sec:ch3-calibration}~节产出的角色尺度统计同源，与表~\ref{tab:ch3-rolealign-final-config}~"分配读数"列描述的接口一致；整个分配阶段以离线读数驱动，不再对样本逐 token / 逐 head 计算注意力 KL。校准产物同时存有 V 侧读数 $\sigma_V^{(l)}\in\mathbb{R}^{H_{kv}\times d_v}$，由 V 侧 per-token 范围沿校准集 token 方向聚合到 $d_v$ 个 V 侧特征维（与第~\ref{subsec:ch3-rolealign}~节 per-token 量化一致），将在第~\ref{subsec:ch3-budget-kv}~节角色感知扩展中使用。
 
-第~\ref{sec:ch3-motivation-kv}~节的 K-cliff 诊断给出本节代理的物理来源：在 Qwen 与 LLaMA 系列对称 INT4 场景中，K 精度下降是触发分配崩塌的主导方向，因此本节以 K 侧角色尺度构建逐层画像，V 侧读数留作角色感知扩展使用。本文的实验范围限于上述两个研究族；其他模型族的分配行为不在本章主张之内。给定聚合模式 $\alpha$，第 $l$ 层的逐层敏感度记为
+第~\ref{sec:ch3-motivation-kv}~节的 K-cliff 诊断给出本节代理的物理来源：在 Qwen 与 LLaMA 系列对称 \texttt{INT4} 场景中，K 位宽下降是触发分配崩塌的主导方向，因此本节以 K 侧角色尺度构建逐层画像，V 侧读数留作角色感知扩展使用。机制依据来自 Qwen 与 LLaMA 系列的单侧诊断；跨家族适用区间由第四章在 Qwen2.5、LLaMA-3.1 与 Mistral 三个模型族上分别读取。给定聚合模式 $\alpha$，第 $l$ 层的逐层敏感度记为
 \begin{equation}
 s_{\alpha}^{(l)}
 =
 \operatorname{Agg}_{\alpha}\!\bigl(\sigma_K^{(l)}\bigr),
 \qquad l=1,\dots,L,
 \end{equation}
-其中 $\operatorname{Agg}_\alpha:\mathbb{R}^{H_{kv}\times G}\to\mathbb{R}$ 在 head 与 group 两轴上做一次性 $\max$ 或 $\mathrm{mean}$ 聚合。主线分配器固定 $\alpha=\max$，对应"最脆弱读数主导"的保守口径，因此后文实验统一以 BA-$k$ 命名；$\alpha=\mathrm{mean}$ 作为聚合鲁棒性消融，留待第~\ref{subsec:ch3-aggregation-robust}~节单独评估。整层画像记为有序序列
+其中 $\operatorname{Agg}_\alpha:\mathbb{R}^{H_{kv}\times d_k}\to\mathbb{R}$ 在 head 与通道两轴上做一次性 $\max$ 或 $\mathrm{mean}$ 聚合。主线分配器固定 $\alpha=\max$，对应"最脆弱读数主导"的保守口径，因此后文实验统一以 BA-$k$ 命名；$\alpha=\mathrm{mean}$ 作为聚合鲁棒性消融，留待第~\ref{subsec:ch3-aggregation-robust}~节单独评估。整层画像记为有序序列
 \begin{equation}
 S_{\alpha}
 =
@@ -499,7 +499,7 @@ b_\mathrm{lo}+\frac{k_K+k_V}{2L}\bigl(b_\mathrm{hi}-b_\mathrm{lo}\bigr),
 \subsection{敏感度聚合与覆盖度准则}
 \label{subsec:ch3-aggregation-robust}
 
-前两小节给出了由校准产物到逐层/角色感知预算的基本接口。本节把"画像形状"这一定性描述转写为可计算的覆盖度函数 $\Gamma(k)$，作为 \texttt{AutoK} 的输入。第~\ref{subsec:ch3-baseline-bak}~节定义的聚合算子 $\operatorname{Agg}_\alpha:\mathbb{R}^{H_{kv}\times G}\to\mathbb{R}$ 在两轴上一次性归约（flat 聚合），即第 $l$ 层敏感度
+前两小节给出了由校准产物到逐层/角色感知预算的基本接口。本节把"画像形状"这一定性描述转写为可计算的覆盖度函数 $\Gamma(k)$，作为 \texttt{AutoK} 的输入。第~\ref{subsec:ch3-baseline-bak}~节定义的聚合算子 $\operatorname{Agg}_\alpha:\mathbb{R}^{H_{kv}\times d_k}\to\mathbb{R}$ 在两轴上一次性归约（flat 聚合），即第 $l$ 层敏感度
 \begin{equation}
 s^{(l)}
 =
@@ -510,7 +510,7 @@ s^{(l)}
 \displaystyle \frac{1}{|\mathcal U_l|}\sum_{u\in\mathcal U_l}\sigma^{(l)}_{K,u}, & \alpha=\mathrm{mean},
 \end{cases}
 \end{equation}
-其中 $\mathcal U_l=\{(h,g):h\in\{1,\dots,H_{kv}\},\,g\in\{1,\dots,G\}\}$。\texttt{INT4-RoleAlign} 校准产物中存储的 $\sigma_K^{(l)}$ 由非对称量化在 $p_K$ 下确定的百分位端点区间 $[m^K_{l,j}, M^K_{l,j}]$ 跨通道聚合得到，逐元素非负，因此 $s^{(l)}\ge 0$。BA-$k$ 主线固定 $\alpha=\max$，$\alpha=\mathrm{mean}$ 留作聚合敏感性的备用读数。
+其中 $\mathcal U_l=\{(h,g):h\in\{1,\dots,H_{kv}\},\,g\in\{1,\dots,d_k\}\}$。\texttt{INT4-RoleAlign} 校准产物中存储的 $\sigma_K^{(l)}$ 由非对称量化在 $p_K$ 下确定的百分位端点区间 $[m^K_{l,j}, M^K_{l,j}]$ 跨通道聚合得到，逐元素非负，因此 $s^{(l)}\ge 0$。BA-$k$ 主线固定 $\alpha=\max$，$\alpha=\mathrm{mean}$ 留作聚合敏感性的备用读数。
 
 将 $\{s^{(l)}\}_{l=1}^L$ 归一化为概率分布
 \begin{equation}
@@ -543,7 +543,7 @@ s^{(l)}
 \subsection{AutoK 的预算自动建议机制}
 \label{sec:ch3-autok}
 
-BA-$k$ 把人工选定的整数 $k$ 作为保护层数，但不同模型的敏感度画像形状不一致，相同的 $k$ 在画像集中模型与画像弥散模型上对应的行为覆盖差异显著。\texttt{AutoK} 直接读取第~\ref{subsec:ch3-aggregation-robust}~节给出的覆盖度函数 $\Gamma(k)$，把"覆盖阈值"作为外部超参数取代逐 $k$ 网格扫描，从而把人工选 $k$ 的环节折叠到画像曲线本身。
+BA-$k$ 把人工选定的整数 $k$ 作为保护层数，但不同模型的敏感度画像形状不一致，相同的 $k$ 在画像集中模型与画像弥散模型上对应的行为覆盖差异显著。\texttt{AutoK} 直接读取第~\ref{subsec:ch3-aggregation-robust}~节给出的覆盖度函数 $\Gamma(k)$，把"覆盖阈值"作为外部超参数取代逐 $k$ 网格扫描，从而把人工选 $k$ 的环节折叠到画像曲线本身。\texttt{AutoK} 不是完全无超参的自动决策，而是把整数 $k$ sweep 转换为覆盖率阈值 $\rho$ 下的候选生成器：决策粒度从「逐模型逐 $k$ 跑实验」转移到「按画像曲线一次写入 $\rho$」，但 $\rho$ 仍由设计者按部署目标在 $(0,1)$ 内取值。
 
 给定覆盖阈值 $\rho\in(0,1)$，定义满足覆盖的最小保护层数
 \begin{equation}
@@ -584,7 +584,7 @@ b_\mathrm{lo}+\bigl(b_\mathrm{hi}-b_\mathrm{lo}\bigr)\,\mathbf 1\!\left[l\in \ma
   \end{tabularx}
 \end{table}
 
-表~\ref{tab:ch3-allocator-policies}~中 $S_{K,\alpha}=(s^{(l)})_{l=1}^{L}$ 为第~\ref{subsec:ch3-baseline-bak}~节定义的逐层 K 侧敏感度序列；Heuristic-$k$ 作为 BA-$k$ 的强基线对照在第~\ref{subsec:exp-int4-cross-model}~节定义具体位置规则。\texttt{AutoK} 的"无需扫描整数 $k$"与 BA-$k$ 的"按 $k$ 网格扫描"在工程粒度上有数量级差异：BA-$k$ 在第四章按 $k\in\{1,3,5,7,11\}$ 等量化区间逐点跑实验，\texttt{AutoK} 仅在校准期一次写入 $\rho$，$k^\star(\rho)$ 由画像曲线确定。
+表~\ref{tab:ch3-allocator-policies}~中 $S_{K,\alpha}=(s^{(l)})_{l=1}^{L}$ 为第~\ref{subsec:ch3-baseline-bak}~节定义的逐层 K 侧敏感度序列；Heuristic-$k$ 作为 BA-$k$ 的强基线对照在第~\ref{subsec:exp-int4-cross-model}~节定义具体位置规则。\texttt{AutoK} 的"无需扫描整数 $k$"与 BA-$k$ 的"按 $k$ 网格扫描"在工程粒度上有数量级差异：BA-$k$ 在第四章按 $k\in\{1,3,5,7,11\}$ 等量化区间逐点跑实验，\texttt{AutoK} 仅在校准期一次写入 $\rho$，$k^\star(\rho)$ 由画像曲线确定。该粒度差异不等同于完全无超参；\texttt{AutoK} 仍以 $\rho$ 作为部署侧外部超参，整体定位为画像驱动的候选生成器，而非端到端自动决策。
 
 \section{系统级部署实现与开销分析}
 \label{sec:ch3-deployment}
