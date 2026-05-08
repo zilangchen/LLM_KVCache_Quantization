@@ -1888,3 +1888,24 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - 下一轮进入 Segment 23 的 `\texttt{INT4-RoleAlign}` 角色感知非对称量化段。
 - Commit: pending at log-write time; committed as `docs: polish aigc ch3 int4 lower reference`
+
+### 2026-05-09 01:24 | AIGC 段落修订 23a: RoleAlign K/V 分路设计
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理 `\texttt{INT4-RoleAlign}` 角色感知非对称量化总述段。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将括号式诊断和冒号式 K/V 展开改为两条分路设计说明。
+  - 保留 Key 排序扰动、Value 聚合扰动、逐通道 Key、逐 token Value、通道独立参数和第~`\ref{sec:ch3-calibration}`~节纪律。
+  - 技术、中文、跨章一致性和 skeptical 审查均返回 PASS，失败建议已吸收。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated.
+- Risks / follow-ups:
+  - Segment 23 还包含下文公式省略维度与 Key 侧分位数边界段，下一轮单独处理。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 rolealign kv paths`

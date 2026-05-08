@@ -251,7 +251,7 @@ s_{l,j}^{\mathrm{dyn}}
 \subsection{INT4-RoleAlign 的角色感知非对称量化}
 \label{subsec:ch3-rolealign}
 
-\texttt{INT4-RoleAlign} 把第~\ref{sec:ch3-paths}~节开头的两段诊断结论（Key 扰动改变 $qK^\top$ 排序、Value 量化误差经注意力权重进入聚合）落到两个独立的量化轴：Key 侧逐通道（per-channel）非对称量化，用独立通道参数保留排序中各特征方向的范围；Value 侧逐 token（per-token）非对称量化，用当前 token 的动态范围服务后续加权聚合。两条路径仍遵守第~\ref{sec:ch3-calibration}~节的候选搜索、稳定性筛选与边界记录纪律。
+\texttt{INT4-RoleAlign} 将第~\ref{sec:ch3-paths}~节开头的两条诊断落实为 K/V 分路设计。Key 扰动会改变 $qK^\top$ 排序，因此 Key 侧采用逐通道非对称量化，用通道独立参数保留各特征方向的取值范围；Value 误差经注意力权重进入聚合，因此 Value 侧采用逐 token 非对称量化，围绕当前 token 的动态范围保留后续加权聚合所需的信息。两条分路仍沿用第~\ref{sec:ch3-calibration}~节的候选搜索、稳定性筛选与边界记录纪律。
 
 下文公式省略 batch 与 KV head 维度（实现层面 K/V 张量形状为 $[B, H_{kv}, S, D]$，Key scale 形状为 $[B, H_{kv}, D]$、Value scale 形状为 $[B, H_{kv}, S]$）。Key 侧使用逐通道非对称量化。设第 $l$ 层 Key 矩阵为 $K^{(l)}\in\mathbb{R}^{S\times d_k}$，对第 $j$ 个通道，分位数裁剪边界
 \begin{equation}

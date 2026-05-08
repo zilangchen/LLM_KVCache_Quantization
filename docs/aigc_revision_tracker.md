@@ -939,6 +939,49 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 23a
+
+- Report segment: 23
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 254
+- Detector excerpt begins: `\texttt{INT4-RoleAlign} 把第 3.5节开头...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: parenthetical diagnostic packing, colon-led K/V split, and English `per-channel` / `per-token` annotations.
+- Rewrite goal: turn the diagnosis into two role-specific design sentences while keeping the K/V paths tied to the same calibration discipline.
+- Style constraints: avoid unnecessary parentheses and keep the handoff to formulas natural.
+
+### Preserved Information
+
+- `\texttt{INT4-RoleAlign}` still uses the two diagnoses introduced at the beginning of Section~`\ref{sec:ch3-paths}`.
+- Key perturbation still changes `$qK^\top$` ranking.
+- Value quantization error still enters aggregation through attention weights.
+- Key side still uses per-channel asymmetric quantization.
+- Key side still uses channel-independent parameters to preserve feature-direction ranges.
+- Value side still uses per-token asymmetric quantization.
+- Value side still uses the current token dynamic range for later weighted aggregation.
+- Both K/V paths still follow Section~`\ref{sec:ch3-calibration}` candidate search, stability filtering, and boundary-recording discipline.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the K/V design mapping and calibration discipline are preserved.
+- Chinese academic writing reviewer: first pass failed on `落到 K/V 分路设计中` and `按当前 token 的动态范围服务后续加权聚合`; final version passed after rewriting these phrases.
+- Cross-chapter consistency reviewer: PASS; confirmed alignment with Section~`\ref{sec:ch3-paths}`, Section~`\ref{sec:ch3-calibration}`, and the following formulas.
+- Skeptical reviewer: PASS; no over-causal wording or new claim found.
+
+### Applied Revision
+
+```tex
+\texttt{INT4-RoleAlign} 将第~\ref{sec:ch3-paths}~节开头的两条诊断落实为 K/V 分路设计。Key 扰动会改变 $qK^\top$ 排序，因此 Key 侧采用逐通道非对称量化，用通道独立参数保留各特征方向的取值范围；Value 误差经注意力权重进入聚合，因此 Value 侧采用逐 token 非对称量化，围绕当前 token 的动态范围保留后续加权聚合所需的信息。两条分路仍沿用第~\ref{sec:ch3-calibration}~节的候选搜索、稳定性筛选与边界记录纪律。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 22b
 
 - Report segment: 22
