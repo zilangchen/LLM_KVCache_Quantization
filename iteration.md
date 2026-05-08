@@ -36,6 +36,27 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 01:50 | AIGC 段落修订 26b: AutoK 覆盖度入口句
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理正文中 \texttt{AutoK} 读取 $\Gamma(k)$ 的过渡句。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将“直接读取”改为“以 $\Gamma(k)$ 为依据”，弱化程序接口感。
+  - 保留 AutoK 给出达到覆盖阈值所需的最小保护层数建议，并保留与 BA-$k$ 方案共用敏感度画像的关系。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS，中文失败建议已吸收。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated.
+- Risks / follow-ups:
+  - 下一轮继续处理 Segment 27 中运行时字段与写入公式相关高嫌疑句。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 autok coverage entry`
+
 ### 2026-05-09 01:48 | AIGC 段落修订 26a: AutoK 覆盖度图注
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理图~`\ref{fig:ch3-coverage-curve}` 的 caption。
 - Changed files:

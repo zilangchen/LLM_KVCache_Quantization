@@ -939,6 +939,46 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 26b
+
+- Report segment: 26
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 541
+- Detector excerpt begins: `AutoK 在第 3.6.4节直接读取 Γ(k)...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: `直接读取` program-like wording and a compressed cause-effect sentence.
+- Rewrite goal: keep the transition into the AutoK subsection while making the shared-profile relationship explicit.
+- Style constraints: avoid interface-manual wording and keep AutoK framed as a suggestion mechanism.
+
+### Preserved Information
+
+- The AutoK rule is still introduced in Section~`\ref{sec:ch3-autok}`.
+- `$\Gamma(k)$` remains the basis for AutoK.
+- AutoK still gives a minimum protected-layer-count suggestion.
+- The suggestion still targets reaching a coverage threshold.
+- The coverage criterion and BA-`$k$` still read the same sensitivity profile.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the `$\Gamma(k)$` input, minimum protection count, and shared-profile meaning are preserved.
+- Chinese academic writing reviewer: first pass failed on program-like `返回`; final version passed after switching to `以 $\Gamma(k)$ 为依据`.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with Section~`\ref{sec:ch3-autok}` and Chapter 4 AutoK usage.
+- Skeptical reviewer: PASS; confirmed the word `建议` preserves the candidate-generator boundary and does not imply an end-to-end automatic decision.
+
+### Applied Revision
+
+```tex
+第~\ref{sec:ch3-autok}~节随后给出 \texttt{AutoK} 的具体规则。该规则以 $\Gamma(k)$ 为依据，给出达到覆盖阈值所需的最小保护层数建议；覆盖度准则与 BA-$k$ 方案因此读取同一份敏感度画像。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 26a
 
 - Report segment: 26
