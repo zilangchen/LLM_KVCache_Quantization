@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 22:01 | AIGC paragraph polish ch1 motivation paragraph 2
+- Goal: Process the second high-suspicion paragraph in AIGC report segment 4 while preserving the Chapter 1 motivation claim.
+- Scope: One paragraph in Chapter 1 plus audit logs.
+- Changed files:
+  - `thesis/chapters/ch1_introduction.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch1_introduction.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Removed repeated `因此` and colon-style viewpoint framing.
+  - Preserved attention-distribution, aggregation-output, task-behavior, long-context, low-bit, layer/head/role, and stability/usability claims.
+  - Multi-angle review converged on avoiding new mechanism claims and preserving the original `稳定和可用` boundary.
+- Validation:
+  - `git diff --check`: PASS
+  - LaTeX: PASS, generated 99-page PDF
+  - Residual: existing Chapter 3 overfull hboxes at lines 369 and 644--646, unrelated to this paragraph.
+- Risks / follow-ups:
+  - Continue with report segment 5 after commit.
+  - Unrelated dirty items remain outside this paragraph scope.
+
 ### 2026-05-08 21:46 | AIGC paragraph polish ch1 motivation paragraph 1
 
 - Goal: Reduce AIGC-style regularity in the Chapter 1 calibration-premise paragraph while preserving all mechanism and boundary claims.

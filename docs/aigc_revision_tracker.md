@@ -335,3 +335,46 @@ Experiments across six open-source instruction models from the Qwen2.5, LLaMA-3.
 - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 99-page PDF
 - Residual log notes: existing Chapter 3 overfull hboxes at lines 369 and 644--646; unrelated to this paragraph.
 - Commit: see Git history for message `docs: polish aigc ch1 motivation paragraph 1`
+
+## Segment 4.2
+
+- Report segment: 4
+- Source paragraph: `thesis/chapters/ch1_introduction.tex`, line 27
+- Detector excerpt begins: `因此，KV Cache量化的困难不只是继续调节超参数...`
+- Suspected segment size in report: 296 characters for segment 4; this entry covers the second source paragraph in that segment.
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: repeated `因此`, colon-style enumeration, generic statement of viewpoint, and highly regular problem-to-claim structure.
+- Rewrite goal: keep the same technical claim while removing template connectors and making the paragraph read as an authorial motivation rather than a slogan.
+- Style constraints: avoid unnecessary colon usage, avoid `本文因此`, preserve the original strength of the `stable and usable` claim, and avoid adding unvalidated mechanism claims.
+
+### Preserved Information
+
+- KV Cache quantization is not only a matter of tuning hyperparameters or reducing reconstruction error.
+- The relevant deviation appears after quantization error enters attention computation.
+- The paragraph keeps the three observable effects: attention distribution reordering, aggregation-output deviation, and task-behavior change.
+- Long-context and low-bit settings make the issue more salient.
+- Same-magnitude numerical perturbations may have different consequences when they appear in different layers, attention heads, or cache roles.
+- The final claim remains that minimizing global numerical error alone may not guarantee stable and usable inference.
+
+### Review Gate
+
+- Technical accuracy reviewer: multiple rounds flagged over-strong mechanism additions such as fixed `logits` and `Value` propagation chains; the applied version removes those additions.
+- Chinese academic writing reviewer: flagged `它需要通过...来观察`, `本文认为`, and `作用于 Key 与 Value 等缓存角色` as unnatural; the applied version uses direct prose and `不同缓存角色`.
+- Cross-chapter consistency reviewer: PASS; confirmed alignment with the preceding softmax discussion, the following three-observable definition, and Chapter 3 K/V role decomposition.
+- Skeptical reviewer: flagged concept drift around `内部计算路径`, `通常不足以说明`, and narrowed task metrics; the applied version avoids these terms and preserves the original `稳定和可用` boundary.
+
+### Applied Revision
+
+```tex
+KV Cache 量化的困难并不只是继续调节超参数或降低重建误差。误差进入注意力计算以后，推理过程中实际暴露出来的是行为偏移，而不是孤立的张量差值。具体来看，这种偏移会体现为注意力分布是否被重排、聚合输出是否偏离，以及任务行为是否随之改变。长上下文和低比特设置会让这种差异更加突出；同一量级的数值扰动，出现在不同层、不同注意力头，或不同缓存角色中时，可能产生截然不同的后果。因此，单纯追求全局数值误差最小，不一定能保证模型在推理时保持稳定和可用。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch1_introduction.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 99-page PDF
+- Residual log notes: existing Chapter 3 overfull hboxes at lines 369 and 644--646; unrelated to this paragraph.
+- Commit: see Git history for message `docs: polish aigc ch1 motivation paragraph 2`
