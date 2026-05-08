@@ -1345,3 +1345,155 @@
 - Risks / follow-ups:
   - 下一步 Round 2: §3.3 检查（KL 目标 + Scale 搜索），重点审 L319 "H_kv ... 而非全文的组织脊柱" meta 自我否定
   - §3.4 10 subsection 仍待决定（promote 5 Triton subsec 为 paragraph 还是保持 flat）
+
+### 2026-04-21 01:13 | Ch3 逐节优化 Round 2: §3.3 行为引导校准方法清理（10 处 surgical）
+- Goal: §3.3 结构/内容 depth 合适无需重写，但存在 meta 自我否定 + 散装英文 + 错位加粗 + 内部注释泄露等 surgical 问题
+- Scope: thesis/chapters/ch3_method.tex §3.3 L154-284
+- Changed files: ch3_method.tex (10 处替换)
+- 10 处清单:
+  - HIGH H1: 删除 L245 meta 自我否定句 "$H_{kv}$... 而非全文的组织脊柱" (违反纪律一正向陈述)
+  - HIGH H2: L244 空格 artifact "提供了 行为引导 校准目标" → "提供了行为引导校准目标"
+  - HIGH H3: L179 `\textbf{完整流程}` 错位加粗 → 去 textbf + 重写"在离线校准阶段可视化"
+  - HIGH H4: L248 label 内部注释 "% 保留 label 用于 backward-compat" 删除
+  - MED M1: L243 "bit-width" → "位宽"
+  - MED M2a: L265 "robust 优先策略" → "稳健优先策略"
+  - MED M2b: L272 "完整 calibration 过程" → "完整校准过程"
+  - MED M2c: L280 "diagnostic 观察" → "诊断观察"
+  - MED M2d: L282 "在 calibration 与推理阶段" → "在校准与推理阶段"
+  - MED M3a: L180+L181 "两条 path" × 2 → "两条路径"
+  - MED M3b: L182 "降级为附录 diagnostic note" → "降级为附录诊断说明"
+- 保留: 三点选 KL 理由 / forward vs reverse KL / epsilon 截断数值分析 / 专业术语英文 (softmax/mass-covering/Jensen-Shannon)
+- Commands: python heredoc 10 处 str.replace (比 Edit tool 单处替换更快) + xelatex ×2
+- Outputs: main.pdf 99 pages / 1.64 MB
+- Validation: 0 undefined / 0 multiply-defined / 0 dim-too-large / 0 error
+- Risks / follow-ups: 下一步 Round 3 §3.4 (10 subsec 的行为引导 INT8/INT4 实现，最长一节)
+
+### 2026-04-21 01:19 | Ch3 逐节优化 Round 3: §3.4 INT8+INT4 实现清理（10 处 surgical + 3 处 meta 否定重写）
+- Goal: §3.4 是 Ch3 最长节（411 行 / 10 subsec），结构 OK 但 Triton 尾部有连续 meta 否定 + scaffold 注释 + 中英空格
+- Scope: thesis/chapters/ch3_method.tex §3.4 L284-695
+- Changed files: ch3_method.tex (10 处替换)
+- 改动清单:
+  - HIGH scaffold 清理:
+    - H1: 删 L385 "原 §3.5 KIVI-style 实例化 RoleAlign 合入" 注释
+    - H2+H3: 删 L545 "原 §3.8 Triton 融合核" 注释 + L547-550 Triton 开篇待定注释块（FlashInfer/BitDecoding positioning + 反向 "不做 kernel 速度级比较"）
+  - HIGH 空格 artifact:
+    - H4: L552 "行为引导 校准方案" → "行为引导校准方案"
+    - H5a: L388 "Role-Aware量化" → "Role-Aware 量化"
+    - H5b: L434 "为Role-Aware的" → "为 Role-Aware 的"
+  - HIGH meta 否定改正向（纪律一）:
+    - H6: L679-680 "未纳入 Split-K...不应理解为本质属性" → "聚焦 H_kv≥4 主流 GQA；H_kv=2 场景 Split-K 作为未来扩展"
+    - H7: L690-692 "不构成净加速...而非对...绝对加速" → "40% 加速口径相对未融合参考实现成立；与 FlashAttention-2 的对比属另一维度，Tensor Core 未来扩展方向"
+    - H8: L614 "故此处不声称 无需 Residual Buffer 优于 KIVI" → "RoleAlign 融合核针对 cs=128 评测设计；Residual Buffer + flash-decoding 分块未来工作"
+  - MED:
+    - M1: L441 "离线 BA 校准" → "离线行为引导校准"（术语冻结废弃词清理）
+    - M2a: L573 "naive dequant+SDPA 路径" → "未融合的 dequant+SDPA 路径"
+    - M2b: L691 "未融合 INT4 naive 参考实现" → "未融合 INT4 参考实现"（含在 H7 改写中）
+- 保留 depth: §3.4.1-5 数学推导完整；Triton 技术术语（softmax/FlashAttention/SRAM/Tensor Core/CUDA Core/Residual Buffer/Split-K/Flash-Decoding/bit-packing/nibble/per-channel/per-token）
+- Commands: python heredoc str.replace ×10 + xelatex ×2
+- Outputs: main.pdf 99 pages / 1.64 MB
+- Validation: 0 undefined / 0 multi-defined / 0 dim-too-large / 0 error
+- Risks / follow-ups: 下一步 Round 4 §3.5 Allocator (L697-) 含 2 裸 label (sec:ch3-rolealign/triton 已处理) + Role-Aware 部分 meta 否定
+
+### 2026-04-21 01:24 | Ch3 逐节优化 Round 4: §3.5 Allocator + AutoK 清理（13 处）
+- Goal: §3.5 有 scaffold 注释、behavior/sensitivity 散装英文、AutoK 定位段连续两处 meta 否定、一处循环引用
+- Scope: thesis/chapters/ch3_method.tex §3.5 L691-800
+- Changed files: ch3_method.tex (13 处)
+- HIGH (7 处):
+  - H1: 删 L755-757 scaffold 注释 + 挪 `\label{sec:ch3-autok}` 到 §3.5.4 subsection 下 (修复裸 label)
+  - H2: L699 "behavior 原则" → "行为引导原则"
+  - H4: L740 "第五章 future work" → "第五章"
+  - H5a: L751 "operating 适用区间" → "适用区间特征"
+  - H5b: L752 "supporting case" → "佐证案例"
+  - H6: AutoK 定位段 (§3.5.5) 整段重写 — 去除 "而非宣称...普适最优策略" 连续两处 meta 否定 + "行为引导 框架" 空格，改为正向 "AutoK 作为自然延伸 + 定位于具体场景"
+  - H7: L786 循环引用 `\ref{sec:ch3-autok}` parenthetical 删除
+- MEDIUM (6 处):
+  - M1a: L719 "heuristic 选择器" → "启发式选择器"
+  - M1b: L722 "sensitivity 信息" → "敏感度信息"
+  - M1c: L723 "Heuristic 在实验章节作为强基线被正面承认" → "启发式选择器在实验章节中作为强基线与行为引导策略并列比较" (去 awkward 被动 + 散装)
+  - M2: L732 "Role-aware allocator" → "Role-Aware Allocator" (全文大小写统一)
+  - M3a: L745 "Per-layer sensitivity" → "逐层敏感度"
+  - M3b: L765 "sensitivity profile" → "敏感度画像"
+- 保留: top-k 公式 / K-V 非对称预算公式 / cov80-90 阈值 / 术语 AutoK/fixed-k/Role-Aware
+- Commands: python heredoc str.replace ×13 + xelatex ×2
+- Validation: 99 pages / 0 undef / 0 multi / 0 error
+- 剩余 follow-ups: Round 5 §3.7 本章小结 (~8 处空格+散装) + §3.6 已扫过基本干净
+
+### 2026-04-21 01:28 | Ch3 逐节优化 Round 5: §3.7 本章小结清理（5 处）+ Ch3 整章优化收尾 tag
+- Goal: §3.7 本章小结的空格 artifact + 散装英文 + sensitivity profile 遗漏，§3.6 复杂度分析扫过基本干净无改动
+- Scope: thesis/chapters/ch3_method.tex §3.7 L881-920
+- Changed files: ch3_method.tex (5 处)
+- 5 处清单:
+  - "给出了 行为引导 量化框架" → "给出了行为引导量化框架" (空格)
+  - L895-897 "per-layer sensitivity profile / 提出 行为引导 allocator / profile-guided 预算建议机制" → "逐层敏感度画像 / 提出行为引导的层间预算分配器 / 敏感度引导的预算建议机制"
+  - L901 "使 behavior 原则在框架内部" → "使行为引导原则在框架内部"
+  - L917 "行为引导 allocator 的跨模型适用区间地图" → "行为引导分配器的跨模型适用区间地图"
+  - L919 "Mistral、3B、14B 的 per-model 案例分析" → "…的逐模型案例分析"
+- 保留: "INT8 canonical path" / attention / KIVI-style 等方法名
+- Commands: python heredoc str.replace ×5 + xelatex ×2
+- Validation: 99 pages / 0 undef / 0 multi / 0 error
+- Ch3 整章优化收尾: Round 1 (§3.1/§3.2/全章空格) + Round 2 (§3.3) + Round 3 (§3.4) + Round 4 (§3.5) + Round 5 (§3.7) 累计 ~60 处 surgical 改动；打 tag `thesis-m-plus-v4` 标记 Ch3 新骨架 + 全章清理完成
+- 下一步: Round 6 跨章审计 (preamble cross-ref / chapter title "Behavior-Guided 量化框架设计" 中英混排判定)，或进入其他章节 review
+
+### 2026-04-21 03:22 | Ch3 逐节优化 Round 6: preamble 清理 + chapter/section title 一致中化 + 裸 label 归位（9 处）
+- Goal: Round 5 tag thesis-m-plus-v4 后 user 选 A "Ch3 最后遗漏项"：chapter title 中英混排 + preamble L6-14 散装英文 + 2 个裸 label (sec:ch3-rolealign / sec:ch3-triton) 定位问题
+- Scope: thesis/chapters/ch3_method.tex L1-18 + L385 + L544 + L426/L558 + L691
+- Changed files: ch3_method.tex (9 处)
+- 改动清单:
+  - 1. L4 chapter title 中文化: "Behavior-Guided 量化框架设计" → "行为引导量化框架设计"
+  - 2. L6 preamble 空格 artifact: "形式化 行为引导 量化" → "形式化行为引导量化"
+  - 3. L13 preamble 散装: "per-layer 敏感度画像" → "逐层敏感度画像"
+  - 4. L14 preamble 空格+散装: "行为引导 allocator 与 profile-guided 预算建议机制" → "行为引导的层间预算分配器与敏感度引导的预算建议机制"
+  - 5. §3.5 section title 一致化: "Behavior-Guided 层间预算分配器" → "行为引导的层间预算分配器" (与 chapter title 一致; 方法名英文保留在正文 inline terms)
+  - 6. 裸 label `sec:ch3-rolealign` L385 删除 + 挪到 §3.4.3 "从对称到非对称的格式升级" 下 → aux resolve 为 3.4.3 (原解为 3.4)
+  - 7. 裸 label `sec:ch3-triton` L544 删除 + 挪到 §3.4.6 "INT8 核函数设计" 下 → aux resolve 为 3.4.6 (原解为 3.4)
+- Commands: python heredoc str.replace ×9 + xelatex ×2
+- Validation:
+  - 0 undefined / 0 multi / 0 error
+  - aux label 验证: rolealign→3.4.3 / triton→3.4.6 / autok→3.5.4 全部指向具体 subsection
+- Ch3 终局: Rounds 1-6 累计 ~69 处 surgical 改动；tag `thesis-m-plus-v4` 之前已打，本轮后考虑补 v4.1 或直接继续下一章（Ch4/Ch5 逐节优化或 Codex adversarial-review）
+- 下一步 candidate: Ch4 逐节优化 (8 subsection) / Ch5 逐节优化 (3 节 + 小结) / Codex 过审 Ch3 v4+
+
+### 2026-04-21 04:40 | Ch3 Round 7: Codex adversarial-review 5 issues 全修 (7a + 7b 共 14 处)
+- Goal: Codex 过审 Ch3 v4 发现 2 HIGH + 1 MED + 2 LOW 全是真问题 (verdict: needs-attention)；按 Round 7a (快速) + Round 7b (HIGH 1 口径统一) 两子轮全修
+- Scope: thesis/chapters/ch3_method.tex
+- Round 7a (9 处):
+  - LOW 2: Forward KL "mass-covering (zero-forcing)" → "mass-covering (zero-avoiding)" — 纠正术语错配 (zero-forcing 对应 reverse KL)
+  - LOW 1a: 删 L645-647 "Phase Boundary" 英文别名 (保留 "经验交叉点" 作唯一命名)
+  - LOW 1b-e: 散装 per-layer / allocator 4 处清理 → 逐层敏感度画像 / 分配器
+  - MED 1a: L602 "附录~\ref{subsec:exp-int4-honest}" → "第~\ref...~节" (label 实际在 ch4 不是 appendix)
+  - MED 1b: L732 cross-ref 错链修正 (跨模型实验→sec:exp-cross-model; 第五章→sec:conclusion-future)
+  - HIGH 2: §3.4.8 "核内 Percentile 在线估计" paragraph 重写为 "RoleAlign 与融合核的路径分工" — 明确 RoleAlign 默认路径=torch_ref 消费离线 (p_K,p_V)；融合核=工程可行性验证 (decode M=1 无 Tensor Core); 消除原段"避免校准产物与 kernel 耦合"导致的 RoleAlign 融合核定义歧义
+- Round 7b (5 处, HIGH 1 Static Scale 对象口径统一):
+  - §3.2 L82-89: "逐层 Scale JSON" → "per-layer per-group 静态 Scale 常量 + JSON 不含 adaptive 覆盖"
+  - §3.4.1 eq 3-12 (`s_{b,h,s,j}`) → (`s^{(l)}_j`) 离线校准常量公式, 消除 batch/time 下标歧义
+  - §3.4.1 eq 3-15 (`s_{b,h,t,j}`) → (`s^{\text{cache}}_{b,h,t,j}`) 推理时 per-token scale 快照, 明确 static 路径下=$s^{(l)}_j$, adaptive 触发时=$s_{\text{final}}$
+  - §3.6.2 显存公式前加说明: cache 存 per-token scale 快照以支持 "写入即冻结" adaptive 语义
+  - §3.6.4 JSON 开销: 仅含离线 $\{s^{(l)}_j\}$ + clip percentile + group size, 推理 adaptive 快照不落盘
+- Commands: python heredoc ×2 (7a: 9 处 / 7b: 5 处) + xelatex ×2
+- Outputs: main.pdf 99 → 100 pages (解释增加 1 页) / 1.64 MB
+- Validation: 0 undef / 0 multi / 0 dim / 0 error
+- Tag: `thesis-m-plus-v5` 标记 Ch3 经 Codex review 全修后的稳定版本
+- 下一步 candidate: Codex review round 2 验证 v5 无回归 / 或进入 Ch4 逐节优化
+
+### 2026-04-21 04:50 | Ch3 Round 8: §3.4 Triton 5 subsec 合并为 1 subsec + 5 paragraph
+- Goal: 用户反馈 §3.4.6/7/8 (INT8 核函数 / INT4 核函数 / INT4 非对称融合核函数) 三个小节应合并为一个"Triton 核函数设计"小节; §3.4.10 标题 "经验交叉点：融合核延迟收益的 (H_kv, seq_len) 空间特征" 太长, 且内容属于 Triton 范畴, 应一并并入
+- Scope: thesis/chapters/ch3_method.tex §3.4.6-10 五 subsec 合并
+- Changed files: ch3_method.tex (5 处 subsec → paragraph demotion)
+- 改动清单:
+  - §3.4.6 "INT8 核函数设计" subsection → "Triton 核函数设计" subsection (保留 sec:ch3-triton label), 原 body 成 `\paragraph{INT8 核函数}` (保留 subsec:ch3-triton-int8)
+  - §3.4.7 "INT4 核函数设计" subsec → `\paragraph{INT4 核函数}` (保留 subsec:ch3-triton-int4)
+  - §3.4.8 "INT4 非对称融合核函数" subsec → `\paragraph{INT4 非对称核函数}` (保留 subsec:ch3-triton-int4-asym)
+  - §3.4.9 "GQA 支持机制" subsec → `\paragraph{GQA 支持}` (保留 subsec:ch3-gqa, 顺手简化标题)
+  - §3.4.10 "经验交叉点: ..." 长标题 subsec → `\paragraph{经验交叉点}` (保留 subsec:ch3-phase-boundary, 去 texorpdfstring)
+- 新 §3.4 TOC (从 10 → 6 subsec):
+  - §3.4.1 静态 Scale 的设计
+  - §3.4.2 自适应保护机制
+  - §3.4.3 从对称到非对称的格式升级
+  - §3.4.4 Behavior-Guided Percentile 校准
+  - §3.4.5 与 KIVI 的设计差异
+  - §3.4.6 Triton 核函数设计 (含 INT8/INT4/INT4 非对称/RoleAlign 分工/GQA/经验交叉点 6 paragraph)
+- Commands: python heredoc str.replace ×5 + xelatex ×2
+- Outputs: main.pdf 99 pages / 1.64 MB (保持, 因为内容等量保留)
+- Validation: 0 undef / 0 multi / 0 dim / 0 error; 所有 label (sec:ch3-triton / subsec:ch3-triton-int8/int4/int4-asym/gqa/phase-boundary) 保留跨章 ref 兼容
+- Tag: `thesis-m-plus-v5.1` (标记 Ch3 subsec 合并后的稳定版本)
+- 下一步: 继续 Ch3 review 或开 Ch4

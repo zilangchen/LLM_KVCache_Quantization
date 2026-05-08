@@ -36,6 +36,18 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 17:52 | Thesis §3.2 Codex Round-2 P1 修订（统计协议归属 + line 48 顺滑度）
+
+- Goal: 解决 Codex §3.2 复审 P1 + 非阻塞建议
+- Scope:
+  - **line 58 P1（统计协议归属错配）**: 拆分 bundled 引用为 (a) PPL 原始读数 → 表~\ref{tab:ch4-kv-ppl}, (b) 跨任务读数 + 统计协议（Bootstrap 95\% CI / sign-flip / BH-FDR）→ 表~\ref{tab:ch4-kv-multitask} + 第~\ref{sec:exp-kv-sensitivity}~节。根因：PPL 是固定 likelihood 指标，无 sampling variance，resampling 推断与 multiple-testing 协议对其无意义；Codex 引用 ch4 表 4-6 注释明确该范畴
+  - **line 48（非阻塞顺滑度）**: "Key 侧和 Value 侧的扰动如式~\eqref{...} 显示，Key 扰动..." → "式~\eqref{...} 显示，Key 侧扰动...Value 侧则以..."；前导冗余移除 + Value 端对称化为"Value 侧"
+- Changed files: `thesis/chapters/ch3_method.tex` (3 insertions / 3 deletions)
+- Commands: `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+- Outputs: 97 页（与 round-1 一致）；0 undefined / 0 multiply-defined / 0 hard error
+- Validation: `grep "(undefined|multiply.defined|! )" main.log` 无匹配；diff scope 限于 line 48/50/58
+- Risks / follow-ups: 无；§3.2 二轮 P1 后视为通过候选
+
 ### 2026-05-08 08:49 | Thesis Ch3 全章 6-Agent Audit 收口 (§3.6.2 → §3.8 共 7 节)
 
 - Goal: 完成第三章剩余 7 节的 6-agent 审改循环，全章 11 个目标小节全部落地至 PASS（本 session 推进 §3.5.3 → §3.8）
@@ -870,48 +882,3 @@ Canonical agent workflow directory is `.agents/`.
 - Outputs: main.pdf 100 → 98 pages (压缩 2 页) / 1.64 MB
 - Validation: 0 undef / 0 multi / 0 dim / 0 error
 - 下一步: 继续 Ch2 可能遗漏项或进 Ch4/Ch5 review
-
-### 2026-04-21 04:50 | Ch3 Round 8: §3.4 Triton 5 subsec 合并为 1 subsec + 5 paragraph
-- Goal: 用户反馈 §3.4.6/7/8 (INT8 核函数 / INT4 核函数 / INT4 非对称融合核函数) 三个小节应合并为一个"Triton 核函数设计"小节; §3.4.10 标题 "经验交叉点：融合核延迟收益的 (H_kv, seq_len) 空间特征" 太长, 且内容属于 Triton 范畴, 应一并并入
-- Scope: thesis/chapters/ch3_method.tex §3.4.6-10 五 subsec 合并
-- Changed files: ch3_method.tex (5 处 subsec → paragraph demotion)
-- 改动清单:
-  - §3.4.6 "INT8 核函数设计" subsection → "Triton 核函数设计" subsection (保留 sec:ch3-triton label), 原 body 成 `\paragraph{INT8 核函数}` (保留 subsec:ch3-triton-int8)
-  - §3.4.7 "INT4 核函数设计" subsec → `\paragraph{INT4 核函数}` (保留 subsec:ch3-triton-int4)
-  - §3.4.8 "INT4 非对称融合核函数" subsec → `\paragraph{INT4 非对称核函数}` (保留 subsec:ch3-triton-int4-asym)
-  - §3.4.9 "GQA 支持机制" subsec → `\paragraph{GQA 支持}` (保留 subsec:ch3-gqa, 顺手简化标题)
-  - §3.4.10 "经验交叉点: ..." 长标题 subsec → `\paragraph{经验交叉点}` (保留 subsec:ch3-phase-boundary, 去 texorpdfstring)
-- 新 §3.4 TOC (从 10 → 6 subsec):
-  - §3.4.1 静态 Scale 的设计
-  - §3.4.2 自适应保护机制
-  - §3.4.3 从对称到非对称的格式升级
-  - §3.4.4 Behavior-Guided Percentile 校准
-  - §3.4.5 与 KIVI 的设计差异
-  - §3.4.6 Triton 核函数设计 (含 INT8/INT4/INT4 非对称/RoleAlign 分工/GQA/经验交叉点 6 paragraph)
-- Commands: python heredoc str.replace ×5 + xelatex ×2
-- Outputs: main.pdf 99 pages / 1.64 MB (保持, 因为内容等量保留)
-- Validation: 0 undef / 0 multi / 0 dim / 0 error; 所有 label (sec:ch3-triton / subsec:ch3-triton-int8/int4/int4-asym/gqa/phase-boundary) 保留跨章 ref 兼容
-- Tag: `thesis-m-plus-v5.1` (标记 Ch3 subsec 合并后的稳定版本)
-- 下一步: 继续 Ch3 review 或开 Ch4
-
-### 2026-04-21 04:40 | Ch3 Round 7: Codex adversarial-review 5 issues 全修 (7a + 7b 共 14 处)
-- Goal: Codex 过审 Ch3 v4 发现 2 HIGH + 1 MED + 2 LOW 全是真问题 (verdict: needs-attention)；按 Round 7a (快速) + Round 7b (HIGH 1 口径统一) 两子轮全修
-- Scope: thesis/chapters/ch3_method.tex
-- Round 7a (9 处):
-  - LOW 2: Forward KL "mass-covering (zero-forcing)" → "mass-covering (zero-avoiding)" — 纠正术语错配 (zero-forcing 对应 reverse KL)
-  - LOW 1a: 删 L645-647 "Phase Boundary" 英文别名 (保留 "经验交叉点" 作唯一命名)
-  - LOW 1b-e: 散装 per-layer / allocator 4 处清理 → 逐层敏感度画像 / 分配器
-  - MED 1a: L602 "附录~\ref{subsec:exp-int4-honest}" → "第~\ref...~节" (label 实际在 ch4 不是 appendix)
-  - MED 1b: L732 cross-ref 错链修正 (跨模型实验→sec:exp-cross-model; 第五章→sec:conclusion-future)
-  - HIGH 2: §3.4.8 "核内 Percentile 在线估计" paragraph 重写为 "RoleAlign 与融合核的路径分工" — 明确 RoleAlign 默认路径=torch_ref 消费离线 (p_K,p_V)；融合核=工程可行性验证 (decode M=1 无 Tensor Core); 消除原段"避免校准产物与 kernel 耦合"导致的 RoleAlign 融合核定义歧义
-- Round 7b (5 处, HIGH 1 Static Scale 对象口径统一):
-  - §3.2 L82-89: "逐层 Scale JSON" → "per-layer per-group 静态 Scale 常量 + JSON 不含 adaptive 覆盖"
-  - §3.4.1 eq 3-12 (`s_{b,h,s,j}`) → (`s^{(l)}_j`) 离线校准常量公式, 消除 batch/time 下标歧义
-  - §3.4.1 eq 3-15 (`s_{b,h,t,j}`) → (`s^{\text{cache}}_{b,h,t,j}`) 推理时 per-token scale 快照, 明确 static 路径下=$s^{(l)}_j$, adaptive 触发时=$s_{\text{final}}$
-  - §3.6.2 显存公式前加说明: cache 存 per-token scale 快照以支持 "写入即冻结" adaptive 语义
-  - §3.6.4 JSON 开销: 仅含离线 $\{s^{(l)}_j\}$ + clip percentile + group size, 推理 adaptive 快照不落盘
-- Commands: python heredoc ×2 (7a: 9 处 / 7b: 5 处) + xelatex ×2
-- Outputs: main.pdf 99 → 100 pages (解释增加 1 页) / 1.64 MB
-- Validation: 0 undef / 0 multi / 0 dim / 0 error
-- Tag: `thesis-m-plus-v5` 标记 Ch3 经 Codex review 全修后的稳定版本
-- 下一步 candidate: Codex review round 2 验证 v5 无回归 / 或进入 Ch4 逐节优化

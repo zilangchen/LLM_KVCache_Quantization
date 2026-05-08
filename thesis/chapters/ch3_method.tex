@@ -45,9 +45,9 @@ KV Cache 量化的目标即
 \section{动机诊断：K/V 敏感性不对称及其设计启示}
 \label{sec:ch3-motivation-kv}
 
-由式~\eqref{eq:ch3-error-decomp}，Key 扰动先经 logits 改变注意力分布，再通过分布差异进入输出；Value 项则以 $\hat a_i(\hat v_i-v_i)$ 形式线性进入聚合。两条路径上扰动的放大或衰减由分布形态与 logit 间隔共同决定，因此低比特预算下的脆弱程度可能不对称。后文以 K/V 单侧诊断与对称低比特锚点验证这种不对称，为低比特路径的格式选择提供依据。
+式~\eqref{eq:ch3-error-decomp} 显示，Key 侧扰动先经 logits 改变注意力分布，再通过分布差异进入输出；Value 侧则以 $\hat a_i(\hat v_i-v_i)$ 形式线性进入聚合。两条路径上扰动的放大或衰减由分布形态与 logit 间隔共同决定，因此低比特预算下的脆弱程度可能不对称。后文以 K/V 单侧诊断与对称低比特锚点验证这种不对称，为低比特路径的格式选择提供依据。
 
-本节用统一记号 \texttt{K?V?} 表示 K/V 双侧位宽组合，\texttt{K4V8} 即 4-bit Key 与 8-bit Value，\texttt{K4V16} 与 \texttt{K16V4} 表示在 FP16 上隔离单侧的诊断配置；为与第四章实验记号一致，\texttt{MixedKV} $\equiv$ \texttt{K8V4}。图~\ref{fig:ch3-kv-asymmetry} 呈现压缩诊断视图：\texttt{FP16} 为未量化参考，\texttt{K8V8} 为高精度量化参考，\texttt{K8V4}/\texttt{K4V8} 构成同平均位宽预算下的角色对照，\texttt{K4V4} 提供对称低比特锚点。
+本节用统一记号 \texttt{KxVy} 表示 K/V 双侧位宽组合，\texttt{K4V8} 即 4-bit Key 与 8-bit Value，\texttt{K4V16} 与 \texttt{K16V4} 表示在 FP16 上隔离单侧的诊断配置；为与第四章实验记号一致，\texttt{MixedKV} $\equiv$ \texttt{K8V4}。图~\ref{fig:ch3-kv-asymmetry} 呈现压缩诊断视图：\texttt{FP16} 为未量化参考，\texttt{K8V8} 为高精度量化参考，\texttt{K8V4}/\texttt{K4V8} 构成同平均位宽预算下的角色对照，\texttt{K4V4} 提供对称低比特锚点。
 
 \input{figures/fig_ch3_kv_diag_needle}
 
@@ -55,7 +55,7 @@ KV Cache 量化的目标即
 
 该不对称在不同模型族上强度不同：Qwen 系列（$H_{kv}=2$ 或 $4$）在 \texttt{K4V8} 与 \texttt{K4V4} 下出现完全的检索归零，而具有更高 $H_{kv}$ 或不同头共享结构的模型（如 LLaMA-3.1-8B，$H_{kv}=8$）失稳幅度较小，单 KV 头量化误差被其对应的 $H_q/H_{kv}$ 个查询头共享；在当前对照中，LLaMA-3.1-8B 的重复因子 $H_q/H_{kv}$ 较小，每个 KV 头影响的查询头数也较少（详见表~\ref{tab:ch4-kv-multitask}）。其严重性与触发位宽的具体边界仍受模型规模、训练数据与 GQA 配置共同调制；$H_{kv}$ 在此充当组间差异的代理变量。
 
-因此 Key 侧低比特退化被确立为低比特路径设计的核心约束。这一结论的核心论据是单侧 PPL 诊断的隔离证据（\texttt{K4V16} 单独触发数量级 PPL 退化）；\texttt{K4V8}/\texttt{K4V4} 的位宽对照作为剂量-响应（dose-response）验证与之同向，但因二者同时压低 K 与 V，单独不构成 K 主导的隔离推断。完整跨模型读数与统计协议（Bootstrap 95\% CI、sign-flip 置换检验与 BH-FDR 多重比较校正）见表~\ref{tab:ch4-kv-ppl}、表~\ref{tab:ch4-kv-multitask} 与第~\ref{sec:exp-kv-sensitivity}~节。
+因此 Key 侧低比特退化被确立为低比特路径设计的核心约束。这一结论的核心论据是单侧 PPL 诊断的隔离证据（\texttt{K4V16} 单独触发数量级 PPL 退化）；\texttt{K4V8}/\texttt{K4V4} 的位宽对照作为剂量-响应（dose-response）验证与之同向，但因二者同时压低 K 与 V，单独不构成 K 主导的隔离推断。PPL 原始读数见表~\ref{tab:ch4-kv-ppl}；跨任务读数及统计协议（Bootstrap 95\% CI、sign-flip 置换检验与 BH-FDR 多重比较校正）见表~\ref{tab:ch4-kv-multitask} 与第~\ref{sec:exp-kv-sensitivity}~节。
 
 \section{行为引导量化框架总览}
 \label{sec:ch3-framework}
