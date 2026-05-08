@@ -36,6 +36,33 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 21:01 | Thesis 第四章全文审查 Round 2（caption ↔ body / 数字算术 / 协议一致性）
+
+- Goal: Round 2 做核验式审查——检查所有 figure caption ↔ body 文字描述对齐、数字内部算术、跨表/跨节协议一致性。Round 1 已修主要术语漂移，Round 2 主要做深度核验。
+- Scope:
+  - **核验通过的检查项（无需修复）**：
+    - **5 figure caption ↔ body 全部对齐** ✅：fig 4-1 (kv-ruler32) / 4-2 (kv-error-heatmap) / 4-3 (autok-protection) / 4-4 (pareto) / 4-5 (regime-heatmap) 的 caption 文字描述与对应正文 \\ref 段落语义一致
+    - **14 table caption ↔ body 全部对齐** ✅：所有 \\caption{...} 与正文「表~\\ref{...}~显示/汇总/表明...」语义一致
+    - **数字算术内部一致** ✅：tab:ch4-int8-canonical mean 行 (7.07+4.90+9.21)/3=7.06、(7.16+4.88+9.20)/3≈7.08；tab:ch4-longbench-official 宏平均行同理；tab:ch4-rolealign-kivi |ΔPPL|≤0.15
+    - **best-$k$ 跨表一致** ✅：tab:ch4-regime-main 注（Qwen2.5-3B k=1, LLaMA-3.1-8B k=11, Qwen2.5-14B k=7, Mistral-7B k=3）与 tab:ch4-profile-a/b 头标 (BA-k1/BA-k3/BA-k7/BA-k11) 完全对齐
+    - **百分比读数算术正确** ✅：14B 长序列 -17\\%/-28\\%/-40\\% 对应 -14.54/86.08, -33.26/119.83, -77.08/190.23 算术正确
+    - **覆盖阈值跨表跨图一致** ✅：14B=90\\%, 其余=80\\% 在表注 446、fig 4-3 caption（Round 1 修订后）、tab:ch4-profile-a 与 tab:ch4-profile-b panel header 一致
+    - **PPL 读数 K4V16 +13,774\\%** ✅：(1290.9-9.31)/9.31 = 137.74 → +13,774\\% 算术正确
+    - **§4.6 机制辨析层无 overclaim** ✅：line 784「仍属于解释性推断，尚未构成机制定理」、line 786「避免...普适性 overclaim」、line 798「克制语气」属克制写作纪律
+    - **scope 声明全章一致** ✅：「LongBench 风格合成」vs「官方 LongBench」在 line 55/61/108/117/124/169/171/818 反复一致
+  - **修复的 1 处问题（P2 跨节协议混用）**:
+    - **line 701 8B vs 14B 4K 控制对照协议混用**: 「8B vs 14B 同 H_kv=8 控制对比」中 8B=−0.39ms 来自 §4.5.1 表 4-7 (gen=128，44.49−44.88)，14B=−0.44ms 来自 §4.5.3 Panel A (gen=64)。同一句对照混了两个不同生成长度协议。修订为统一从 §4.5.1 (gen=128) 取值：8B=−0.39ms，14B=−0.40ms (67.67−68.07)，并在文中显式说明协议来源。
+- Changed files: `thesis/chapters/ch4_experiments.tex` (1 处)
+- Commands: `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+- Outputs: 99 页稳定，0 hard error
+- Validation:
+  - 修订后 8B vs 14B 4K 对照统一为 (−0.39, −0.40)，仍支持「高度一致」结论（差距 0.01ms 比原 (−0.39, −0.44) 的 0.05ms 更接近）
+  - 无新增 overfull
+- Risks / follow-ups:
+  - Round 2 完成 caption/算术/协议三层核验，仅发现 1 处实质问题
+  - 已识别但低优先级备查：17 处 hardcoded "第 4.X.Y 节"、sec:ch4-rqN 标签命名 (P3 不修)
+  - **Round 3 计划评估**: ch4 经过 1 轮内部修订 + 1 轮深度核验，质量已显著收敛。如需继续，Round 3 可关注「与外部章节（ch1/ch3/ch5/abstract）的横向对齐」最后一遍核查
+
 ### 2026-05-08 20:56 | Thesis 第四章全文审查 Round 1（术语 / caption / 跨章一致性扫描）
 
 - Goal: 启动 ch4 全章审查。Round 1 聚焦快速发现的高密度问题：跨章节术语漂移（"Key 精度下降"）、figure caption 与表注矛盾、章内交叉引用。
