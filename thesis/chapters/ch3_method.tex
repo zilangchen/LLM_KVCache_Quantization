@@ -3,17 +3,17 @@
 \section{注意力近似误差的代数分解与问题形式化}
 \label{sec:ch3-problem}
 
-下游任务感知到的是注意力分布 $a$ 与注意力输出 $o$，而非 $K, V$ 的逐元素重建距离。因此本文以 $(a,o)$ 这对联合对象作为量化保持的目标，并在单头 MHA 设定下推导其代数分解，刻画两条传播路径的耦合结构。
+在模型生成最终输出之前，KV Cache 误差会通过注意力 logits、softmax 权重和 Value 聚合进入后续计算，并在该层注意力中体现为注意力分布 $a$ 与注意力输出 $o$ 的变化。$K,V$ 的逐元素重建距离仍可作为数值代理，但不足以单独刻画这种行为变化。基于这一观察，本文将 $(a,o)$ 视为量化后需要共同保持的行为表征，并先在单头注意力设定下展开代数分解，以说明 Key 扰动经注意力分布影响输出、Value 扰动经加权聚合影响输出的两条耦合路径。
 
-约定 $q$ 视作行向量 $q\in\mathbb{R}^{1\times d_k}$，历史上下文长度为 $S$，$K\in\mathbb{R}^{S\times d_k}$、$V\in\mathbb{R}^{S\times d_v}$ 由其行向量 $k_i, v_i$ 拼接而成；本文实验涵盖的 Qwen2.5、LLaMA-3.1 与 Mistral-7B 系列均按常见设置满足 $d_v=d_k$ 约定，由此 $q$ 与 $o$ 同维。标准单头注意力可写为
+记当前查询为行向量 $q\in\mathbb{R}^{1\times d_k}$，历史上下文长度为 $S$，$K\in\mathbb{R}^{S\times d_k}$ 与 $V\in\mathbb{R}^{S\times d_v}$ 分别由行向量 $k_i, v_i$ 拼接而成。本文实验涉及的 Qwen2.5、LLaMA-3.1 以及 Mistral-7B-Instruct-v0.3 均采用常见的 $d_v=d_k$ 设置，因此在下述单头注意力记法中 $q$ 与 $o$ 同维。标准单头注意力可写为
 \begin{equation}
 a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 \end{equation}
-其中 $a\in\mathbb{R}^{1\times S}$ 表示注意力分布（按分量索引为 $a_i\in\mathbb{R}$），$o\in\mathbb{R}^{1\times d_v}$ 表示注意力输出。注意力行为记作联合对象
+其中 $a\in\mathbb{R}^{1\times S}$ 为注意力分布，其第 $i$ 个分量记为 $a_i\in\mathbb{R}$；$o\in\mathbb{R}^{1\times d_v}$ 为注意力输出。注意力行为记作联合表征
 \begin{equation}
 \mathcal{B}(q,K,V):=(a,o).
 \end{equation}
-多层、多头情形按层索引 $\ell$ 与头索引 $h$ 平行展开，记为 $q^{(\ell,h)}, K^{(\ell,h)}$ 等；本节代数分析对每个 Query 头与其映射到的 KV 头之间成立，GQA/MQA 下的具体头映射关系已在第~\ref{sec:ch2-kv-memory}~节给出。
+后文以 $\Delta_{\mathrm{beh}}$ 刻画量化前后 $(a,o)$ 的行为偏移。多层、多头情形可按层索引 $\ell$ 与头索引 $h$ 逐一展开，记为 $q^{(\ell,h)}, K^{(\ell,h)}$ 等；GQA/MQA 下，多个 Query 头可共享同一 KV 头，本节分解可对应到每个 Query 头及其映射的 KV 头，具体映射关系已在第~\ref{sec:ch2-kv-memory}~节给出。
 
 设 $Q_{\theta_K}(\cdot)$ 与 $Q_{\theta_V}(\cdot)$ 分别表示作用于 Key 与 Value 的量化映射；参数 $\theta_K, \theta_V$ 的具体含义（scale、zero-point、bit-width 等）以及作用域（逐元素、逐通道或逐 token）由量化路径决定，详见第~\ref{sec:ch3-paths}~节。量化后的 Key 与 Value 记为
 \begin{equation}

@@ -36,6 +36,26 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 00:07 | AIGC paragraph polish ch3 problem formalization
+- Goal: Process report segment 11 in Chapter 3 while preserving the attention-behavior object, tensor shapes, single-head equation, model-scope boundary, and GQA/MQA applicability.
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Rewrote the opening problem-formalization paragraph to state the behavior target through logits, softmax, and Value aggregation rather than a terse reconstruction-distance contrast.
+  - Narrowed the Mistral scope to `Mistral-7B-Instruct-v0.3` and made the $d_v=d_k$ statement local to the single-head notation.
+  - Added explicit GQA/MQA shared-KV-head wording and a forward link to `\Delta_{\mathrm{beh}}`.
+- Validation:
+  - PASS: whitespace/error check and full LaTeX build completed; generated 100-page PDF.
+  - Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated.
+- Risks / follow-ups:
+  - Continue with report segment 12 after this commit.
+- Commit: see Git history for `docs: polish aigc ch3 problem formalization`
+
 ### 2026-05-09 00:01 | AIGC paragraph polish ch2 low-bit recovery boundary
 - Goal: Process report segment 10 in Chapter 2 while preserving the low-bit recovery related-work mapping and the boundary between content protection, instability diagnosis, and budget allocation.
 - Changed files:
