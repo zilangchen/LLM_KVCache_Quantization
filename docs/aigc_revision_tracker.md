@@ -13,6 +13,48 @@ This file records paragraph-level AIGC-polish changes. Each entry maps one detec
 - Overall suspected AIGC ratio: 20.38%
 - Highest-risk chapters: Chinese abstract 72.0%, English abstract 72.0%, Chapter 3 32.0%, Chapter 1 24.0%, Conclusion 14.0%
 
+## Segment 40
+
+- Report segment: 40
+- Source paragraph: `thesis/chapters/ch4_experiments.tex`, line 246
+- Detector excerpt begins: `LLaMA-3.1-8B 则保留98% Needle...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: colon-style evidence unpacking, repeated boundary-signaling phrases such as `只确认一个有边界的现象`, and the loose expression `参数再调一调`.
+- Rewrite goal: keep the evidence chain and bounded conclusion while making the paragraph read as a direct interpretation of Table~4-5.
+- Style constraints: avoid unnecessary colon usage, avoid `xxxx 上/下` phrasing, retain the exact Needle percentages and the architecture-dependent cliff claim.
+
+### Preserved Information
+
+- Table~\ref{tab:ch4-int4-cliff} is the minimal evidence anchor for the stepwise collapse.
+- Qwen2.5-1.5B and Qwen2.5-7B drop from 100\% Needle to 0\% under symmetric `\texttt{INT4}`.
+- The same cases also show obvious language-modeling degradation.
+- LLaMA-3.1-8B remains at 98\% Needle.
+- The subsection's conclusion is bounded to one model class, not all architectures.
+- The following analysis should focus on matching quantization format with error-propagation structure, beyond simply tuning calibration parameters.
+
+### Review Gate
+
+- Technical accuracy reviewer: PASS.
+- Chinese academic writing reviewer: PASS after replacing `在...下` and `在...上` structures.
+- Cross-chapter consistency reviewer: PASS.
+- Skeptical reviewer: PASS.
+
+### Applied Revision
+
+```tex
+表~\ref{tab:ch4-int4-cliff} 给出了这一阶跃崩塌的最小证据。Qwen2.5-1.5B 与 Qwen2.5-7B 使用对称 \texttt{INT4} 时，Needle 由 100\% 直接降至 0\%，语言建模读数也同步出现明显退化；LLaMA-3.1-8B 仍保留 98\% Needle。基于这一组对照，第~\ref{subsec:ch4-int4-cliff}~节给出的结论限定为\textbf{对称 \texttt{INT4} 会使一类模型出现架构依附性的阶跃崩塌。} 这个读数将后续分析推向更结构化的问题，即量化格式如何匹配误差传播路径，而不仅是继续调整校准参数。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing overfull hbox at line 369; no undefined references or citation warnings.
+- Commit: see Git history for message `docs: polish aigc ch4 int4 cliff evidence`
+
 ## Segment 39
 
 - Report segment: 39
