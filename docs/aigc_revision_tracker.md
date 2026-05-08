@@ -939,6 +939,47 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 22b
+
+- Report segment: 22
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 249
+- Detector excerpt begins: `因此对称 \texttt{INT4} 在本文中扮演格式选择...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: `扮演...锚点` formulation, colon-led explanation, and abstract `互相妥协`.
+- Rewrite goal: keep the format-upgrade motivation while making the two conflicting statistical dimensions concrete.
+- Style constraints: avoid colon expansion and use a natural Chinese handoff into the RoleAlign section.
+
+### Preserved Information
+
+- Symmetric `\texttt{INT4}` remains the lower-bound reference for low-bit format choice.
+- A single symmetric scale must still cover Key channel amplitude differences.
+- The same scale must also cover Value dynamic range changes along tokens.
+- The two dimensions remain coupled by the same parameter under the coarse `\texttt{INT4}` grid.
+- The next section still turns to `\texttt{INT4-RoleAlign}`.
+- The two differences are still handled through separated K/V quantization paths in the next design.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the lower-bound reference, single-scale coupling, and RoleAlign handoff are preserved.
+- Chinese academic writing reviewer: first pass failed on `格式选择的下界锚点`, `这两个维度落到同一参数后`, and `独立量化轴`; final version passed after rewriting these phrases.
+- Cross-chapter consistency reviewer: PASS; confirmed alignment with the next `\texttt{INT4-RoleAlign}` subsection.
+- Skeptical reviewer: PASS; no overclaim about `\texttt{INT4-RoleAlign}` superiority found.
+
+### Applied Revision
+
+```tex
+据此，本文把对称 \texttt{INT4} 作为低比特格式选择的下界参照。单一对称 scale 需要同时覆盖 Key 通道间的幅值差异和 Value 沿 token 变化的动态范围；当这两类差异由同一个参数覆盖时，会在粗 \texttt{INT4} 网格内相互牵制。下一节转向 \texttt{INT4-RoleAlign}，把两类差异交给分开的 K/V 量化路径处理。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 22a
 
 - Report segment: 22

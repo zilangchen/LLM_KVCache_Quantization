@@ -246,7 +246,7 @@ s_{l,j}^{\mathrm{dyn}}
 
 前文提供了理解这一现象的机制线索。第~\ref{sec:ch3-problem}~节说明 Key 扰动先进入 logits 排序，再经 softmax 改写注意力分布；第~\ref{sec:ch3-motivation-kv}~节与第~\ref{sec:exp-kv-sensitivity}~节的 Qwen 系列读数给出经验锚点。结合前述单侧诊断，Key 降到 4 bit 的配置更直接暴露风险；任务对照中，\texttt{K4V8} 在 Qwen 系列出现断崖式失稳，而 \texttt{K8V4} 未出现同等强度退化。\texttt{K4V4} 同时压低 K 与 V，只作为同向辅助观察列出。跨模型判读仍以第四章表图为准，其中 Qwen 系列的归零更明显，LLaMA-3.1-8B 在当前对照中失稳幅度较小，具体边界还受模型规模、训练数据与 GQA 配置共同影响。
 
-因此对称 \texttt{INT4} 在本文中扮演格式选择的下界锚点：单一对称 scale 既要在 \texttt{INT4} 网格上覆盖 Key 通道间的幅值异质性，又要承担 Value 逐 token 的动态范围变化，两个维度被压在同一参数上互相妥协。下一节将低比特路径改写为 \texttt{INT4-RoleAlign}，把这两个维度分配到独立量化轴上。
+据此，本文把对称 \texttt{INT4} 作为低比特格式选择的下界参照。单一对称 scale 需要同时覆盖 Key 通道间的幅值差异和 Value 沿 token 变化的动态范围；当这两类差异由同一个参数覆盖时，会在粗 \texttt{INT4} 网格内相互牵制。下一节转向 \texttt{INT4-RoleAlign}，把两类差异交给分开的 K/V 量化路径处理。
 
 \subsection{INT4-RoleAlign 的角色感知非对称量化}
 \label{subsec:ch3-rolealign}

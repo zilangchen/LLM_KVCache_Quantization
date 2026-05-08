@@ -1866,3 +1866,25 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - Segment 22 还包含对称 `\texttt{INT4}` 下界锚点段，下一轮单独处理。
 - Commit: pending at log-write time; committed as `docs: polish aigc ch3 qwen int4 boundary`
+
+### 2026-05-09 01:21 | AIGC 段落修订 22b: 对称 INT4 下界参照
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理对称 `\texttt{INT4}` 格式下界参照段。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将 `扮演格式选择的下界锚点` 改为低比特格式选择的下界参照。
+  - 保留单一 scale 同时覆盖 Key 通道幅值差异和 Value 沿 token 动态范围的冲突。
+  - 保留下一节转向 `\texttt{INT4-RoleAlign}` 与 K/V 分路径处理两类差异。
+  - 技术、中文、跨章一致性和 skeptical 审查均返回 PASS，失败建议已吸收。
+- Validation:
+  - `git diff --check`: PASS
+  - LaTeX: PASS，生成 101 页 PDF
+  - Residual: 仍有既存 Chapter 3 overfull hbox，与本段修订无关。
+- Risks / follow-ups:
+  - 下一轮进入 Segment 23 的 `\texttt{INT4-RoleAlign}` 角色感知非对称量化段。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 int4 lower reference`
