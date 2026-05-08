@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 22:14 | AIGC paragraph polish ch1 related work kv paragraph
+- Goal: Process report segment 5's KV Cache quantization related-work paragraph while preserving literature positioning.
+- Scope: One paragraph in Chapter 1 plus audit logs.
+- Changed files:
+  - `thesis/chapters/ch1_introduction.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch1_introduction.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Replaced list-like related-work prose with a more specific cache-state motivation.
+  - Aligned KVQuant wording with Chapter 2 by using non-uniform codebook, Pre-RoPE Key quantization, and outlier handling.
+  - Kept Key-side and Value-side perturbation paths separate before posing the calibration/format audit question.
+- Validation:
+  - `git diff --check`: PASS
+  - LaTeX: PASS, generated 99-page PDF
+  - Residual: existing Chapter 3 overfull hboxes at lines 369 and 644--646, unrelated to this paragraph.
+- Risks / follow-ups:
+  - Continue with report segment 5's high-efficiency inference paragraph after commit.
+  - Unrelated dirty items remain outside this paragraph scope.
+
 ### 2026-05-08 22:01 | AIGC paragraph polish ch1 motivation paragraph 2
 - Goal: Process the second high-suspicion paragraph in AIGC report segment 4 while preserving the Chapter 1 motivation claim.
 - Scope: One paragraph in Chapter 1 plus audit logs.
