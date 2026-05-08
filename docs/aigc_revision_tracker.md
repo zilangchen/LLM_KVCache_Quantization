@@ -939,6 +939,49 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 17b
+
+- Report segment: 17
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 133
+- Detector excerpt begins: `前向KL DKL(pref∥pθ)对参考高概率位置...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: textbook-like semicolon structure, compact contrast among forward KL, reverse KL, and JS, and a final boundary sentence that read as appended rather than integrated.
+- Rewrite goal: preserve the forward-KL design reason, the reverse-KL/JS diagnostic roles, and the independent V-path output-perturbation proxy.
+- Style constraints: avoid `在...下`, keep the forward-KL claim directional rather than universal, and make the Value-path boundary explicit.
+
+### Preserved Information
+
+- The chosen objective remains forward KL `$D_{\mathrm{KL}}(p_{\mathrm{ref}}\|p_\theta)$`.
+- Forward KL still penalizes cases where quantization underestimates high-probability positions in the reference distribution.
+- The design connection to long-context retrieval and not missing key tokens is preserved.
+- Reverse KL still focuses more on high-probability regions under the quantized distribution.
+- JS divergence remains the more symmetric diagnostic.
+- Reverse KL and JS are still retained as supplementary diagnostics.
+- The Value path still uses an independent output-perturbation proxy.
+- Section~`\ref{sec:ch3-paths}` remains the reference for the Value-path detail.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed forward/reverse KL, JS, and V-path proxy semantics are preserved.
+- Chinese academic writing reviewer: PASS; confirmed the paragraph avoids colon-led or English-style phrasing.
+- Cross-chapter consistency reviewer: PASS; confirmed alignment with Section~`\ref{sec:ch3-paths}` and the KL objective.
+- Skeptical reviewer: PASS; confirmed the wording does not overstate forward KL or erase supplementary diagnostics.
+
+### Applied Revision
+
+```tex
+本文采用前向 KL $D_{\mathrm{KL}}(p_{\mathrm{ref}}\|p_\theta)$，因为当量化路径低估参考分布中的高概率位置时，该方向会给出更大的惩罚。这一取向对应长上下文检索中“不漏关键 token”的需求。反向 KL 更关注量化分布自身的高概率区域，JS 散度则更对称，二者保留为补充诊断。Value 路径不沿用这一分布代理，而使用独立的输出扰动代理，见第~\ref{sec:ch3-paths}~节。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 16
 
 - Report segment: 16

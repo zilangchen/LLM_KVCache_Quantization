@@ -130,7 +130,7 @@ p_{\theta}^{(l,h,t)}
 
 MSE 仍停留在张量重建空间，只比较 $K$ 或 $V$ 的逐元素差异。Key 侧误差进入输出前，还要经过 $qK^\top$、softmax 排序和概率质量分配；因此，即便某个候选的 MSE 较小，关键 token 的注意力概率质量仍可能发生转移。式~\eqref{eq:ch3-error-decomp} 给出对应的两条输出误差路径。分布项为 $\sum_i(\hat a_i-a_i)v_i$，聚合项为 $\sum_i \hat a_i(\hat v_i-v_i)$。这里 $a_i\equiv p_{\mathrm{ref},i}^{(l,h,t)}$、$\hat a_i\equiv p_{\theta,i}^{(l,h,t)}$，$v_i$ 与 $\hat v_i$ 分别表示参考 Value 和量化 Value。KL 直接比较 $a$ 与 $\hat a$ 的分布偏移，与分布项对应；聚合项则保留 Value 扰动经由量化后权重 $\hat a_i$ 进入输出的作用。这个分工使 KL 沿分布侧误差路径，比逐元素重建误差更贴近输出层面的注意力行为。
 
-前向 KL $D_{\mathrm{KL}}(p_{\mathrm{ref}}\|p_\theta)$ 对参考高概率位置在量化路径下被低估的情况惩罚更强，对应长上下文检索“不漏关键 token”的设计需求；反向 KL 偏向量化分布自身的高概率区域，JS 散度更对称，二者作为补充诊断保留。Value 路径使用独立的输出扰动代理，详见第~\ref{sec:ch3-paths}~节。
+本文采用前向 KL $D_{\mathrm{KL}}(p_{\mathrm{ref}}\|p_\theta)$，因为当量化路径低估参考分布中的高概率位置时，该方向会给出更大的惩罚。这一取向对应长上下文检索中“不漏关键 token”的需求。反向 KL 更关注量化分布自身的高概率区域，JS 散度则更对称，二者保留为补充诊断。Value 路径不沿用这一分布代理，而使用独立的输出扰动代理，见第~\ref{sec:ch3-paths}~节。
 
 数值上对 $p_{\mathrm{ref}}$ 与 $p_\theta$ 均在 $[\varepsilon, 1]$ 上做 clamp 截断（取 $\varepsilon=10^{-6}$）以避免极端尾部概率引起的不稳定。KL 与数值代理（如 MSE）的必要性边界——在哪些条件下 KL 更必要、在哪些条件下二者会趋同——见第~\ref{chap:experiments}~章。
 

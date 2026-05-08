@@ -36,6 +36,26 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 00:47 | AIGC paragraph polish ch3 forward kl
+- Goal: Process the second natural paragraph of report segment 17 in Chapter 3 while preserving forward-KL motivation, reverse-KL/JS diagnostic roles, and the Value-path proxy boundary.
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Rewrote the forward-KL paragraph into shorter sentences while preserving the high-probability reference-position penalty.
+  - Preserved reverse KL and JS as supplementary diagnostics.
+  - Made the Value-path independent output-perturbation proxy boundary explicit.
+- Validation:
+  - PASS: diff whitespace check.
+  - PASS: LaTeX build generated the PDF; log check found no undefined references or citation warnings. Existing overfull hboxes at Chapter 3 lines 369 and 644--646 are unrelated to this paragraph.
+- Risks / follow-ups:
+  - Continue with report segment 18 after this commit.
+- Commit: pending until this entry is committed.
+
 ### 2026-05-09 00:45 | AIGC paragraph polish ch3 kl decomposition
 - Goal: Process the first natural paragraph of report segment 17 in Chapter 3 while preserving MSE/KL boundaries and the distribution/aggregation error decomposition.
 - Changed files:
