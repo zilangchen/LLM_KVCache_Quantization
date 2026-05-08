@@ -135,7 +135,7 @@ $N\in\{16, 32\}$ 来复现同一已选参数配置。
     \makecell[l]{融合 INT4\\诊断变体} & symmetric INT4 fused-kernel diagnostic & 4/4 & Triton & 同校准参数的融合路径诊断，非 Ch4 主表项 \\
     INT4-RoleAlign & role-aware asymmetric INT4 & 4/4 & 参考实现\tnote{$\star$} & per-channel K + per-token V \\
     KIVI-style & runtime-statistic asymmetric INT4 & 4/4 & 参考实现 & 同格式 runtime 统计基线 \\
-    MixedKV & mixed-precision diagnostic & 8/4 & 参考实现 & K@INT8 + V@INT4 诊断路径 \\
+    MixedKV & mixed-precision diagnostic & 8/4 & 参考实现 & K8V4 诊断路径 \\
     \bottomrule
   \end{tabularx}
   \begin{tablenotes}
