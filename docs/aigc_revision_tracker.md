@@ -939,6 +939,48 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 35
+
+- Report segment: 35
+- Source paragraph: `thesis/chapters/ch4_experiments.tex`, line 57
+- Detector excerpt begins: `PPL的失败信号是固定窗口内的整体likelihood退化...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: rigid metric-definition opening, English `likelihood` embedded in Chinese prose, mechanical causal sentence `这一设置决定...`, and a negative cross-protocol caveat.
+- Rewrite goal: keep the PPL protocol fully auditable while making the paragraph read as a concise protocol note.
+- Style constraints: use Chinese `语言建模似然` for likelihood, avoid `xxxx 上`, keep `32K` and `\texttt{chunk_size}=128`, and preserve the 14B fixed-prefix boundary.
+
+### Preserved Information
+
+- PPL still measures degradation of fixed-window language modeling likelihood.
+- The evaluation protocol still uses 32K context.
+- `\texttt{chunk_size}` remains fixed at 128.
+- The chunk setting still constrains the history window available to each position during cross-entropy accumulation.
+- Models with sufficient memory still report PPL on the full test-set protocol.
+- The 14B model is still evaluated only on a fixed test-set prefix because of H20 memory constraints.
+- The 14B PPL absolute value is still not used for direct cross-protocol comparison with other models; the revision states this as within-model use and same-protocol comparison.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the PPL protocol and 14B boundary remain intact.
+- Chinese academic writing reviewer: first pass failed on `likelihood`, `32K 上下文协议`, and mechanical wording; final version passed after replacing them with Chinese academic phrasing.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with the PPL tables and Chapter 4 protocol notes.
+- Skeptical reviewer: PASS; confirmed the 14B fixed-prefix and cross-protocol comparison boundary remain explicit.
+
+### Applied Revision
+
+```tex
+PPL 用来观察固定窗口内的整体语言建模似然是否退化。本文统一采用 32K 上下文评测协议，并将 \texttt{chunk\_size} 固定为 128；交叉熵累计时，每个位置可访问的历史窗口受该设置约束。显存充足的模型按完整测试集协议报告 PPL；14B 模型受 H20 显存约束，只使用测试集固定前缀评测，因此其绝对值仅用于该模型内部对照，跨模型比较仍以同协议读数为准。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated to this segment.
+
 ## Segment 34
 
 - Report segment: 34

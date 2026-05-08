@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 02:57 | AIGC 段落修订 35: 第四章 PPL 协议边界
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理 PPL 指标协议、32K 上下文、chunk size 和 14B 前缀评测边界。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将 `likelihood` 改为“语言建模似然”，减少英文式中文。
+  - 保留 32K 评测协议、`\texttt{chunk_size}=128` 和每位置历史窗口约束。
+  - 将 14B 固定前缀评测边界写成内部对照和同协议比较规则。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated.
+- Risks / follow-ups:
+  - 下一轮继续处理 Segment 36 的 Needle-in-a-Haystack 段。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch4 ppl protocol`
+
 ### 2026-05-09 02:54 | AIGC 段落修订 34: 第四章指标失败模式总览
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理评测任务、数据与指标小节的指标总览段。
 - Changed files:
