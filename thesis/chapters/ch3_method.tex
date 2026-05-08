@@ -644,7 +644,7 @@ h^{K/V}(\theta_{\mathrm{path}}^{(l)}, x_t^{(l)}), & \text{\texttt{INT4-RoleAlign
 \end{equation}
 这里，$\theta_{\mathrm{path}}^{(l)}$ 是离线冻结的路径参数集合。对称路径对应静态尺度 scale，\texttt{INT4-RoleAlign} 对应冻结的 percentile 参数 $(p_K,p_V)$、量化轴标记和边界元数据。$g_t$ 只读取当前 token 在该层待写入的张量与离线参数，并依据第~\ref{subsec:ch3-int8-baseline}~节的逐 token 最大值触发规则，通过自适应保护逻辑确定当前组 scale。$h^{K/V}$ 描述 \texttt{INT4-RoleAlign} 在 K 和 V 两侧的运行时映射。K 侧在预填充阶段依据冻结 percentile，用逐通道数据一次性计算 $(s_K,\zeta_K)$，之后保持不变并复用；V 侧在每个新 token 写入时，用逐 token 数据即时计算 $(s_V,\zeta_V)$。
 
-任意 $t'<t$ 的历史缓存项 $\hat x_{t'}^{(l)}$ 在第 $t$ 步保持不变，缓存写入是单调追加的；这一"写入确定、历史封闭"的语义在主线实验中由多 seed 复现的逐位一致结果间接验证（详见第四章第~\ref{subsec:ch4-int8-canonical}~节）。自适应保护在主线实验中只对 \texttt{INT8-Canonical} 路径开启；对称路径其余情形退化为常量 $\theta_{\mathrm{path}}^{(l)}$，\texttt{INT4-RoleAlign} 始终通过 $h^{K/V}$ 在 K/V 双轴上现场计算仿射参数，与自适应保护机制无关。
+对任意 $t'<t$，第 $t$ 步不会改写历史缓存项 $\hat x_{t'}^{(l)}$，缓存只按时间追加。多随机种子复现中的逐位一致结果，为写入过程确定且历史缓存封闭的语义提供了间接核验；第四章第~\ref{subsec:ch4-int8-canonical}~节给出固定协议得到的 \texttt{INT8-Canonical} 主线读数。自适应保护只在主线实验的 \texttt{INT8-Canonical} 路径中开启；其余对称路径使用常量 $\theta_{\mathrm{path}}^{(l)}$。\texttt{INT4-RoleAlign} 按照 $h^{K/V}$ 给出的 K/V 两侧规则生成仿射参数，其中 K 侧在预填充后复用，V 侧随新 token 写入即时计算，不依赖自适应保护机制。
 
 Prefill 阶段按路径规则把当前块的 K/V 量化写入缓存，Decode 阶段从历史量化缓存中读取并路由到对应的注意力后端。该数据流约束 Decode 路径只读固定产物与已写入的历史缓存，使后续融合解码核能避免低比特缓存的中间物化。
 

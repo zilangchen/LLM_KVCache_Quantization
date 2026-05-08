@@ -939,6 +939,49 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 28b
+
+- Report segment: 28
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 647
+- Detector excerpt begins: `任意 t′ <t 的历史缓存项...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: semicolon-heavy chaining, quoted meta-labels, mixed English `seed`, and a compressed final sentence that blurs K/V timing.
+- Rewrite goal: keep the append-only cache semantics and adaptive-protection scope while making the validation and RoleAlign statements more precise.
+- Style constraints: avoid unnecessary quotation marks and parentheses, avoid `xxxx 下`, and do not over-attach the multi-seed bitwise result to a chapter reference that reports the main INT8-Canonical readings.
+
+### Preserved Information
+
+- For any `$t'<t$`, historical cache item `$\hat x_{t'}^{(l)}$` is not rewritten at step `$t$`.
+- Cache writing remains monotonic and append-only.
+- Multi-random-seed bitwise consistency remains the indirect check for deterministic writing and closed history.
+- Chapter~4 Section~`\ref{subsec:ch4-int8-canonical}` remains the reference for the fixed-protocol `\texttt{INT8-Canonical}` main readings.
+- Adaptive protection is still enabled only for `\texttt{INT8-Canonical}` in the main experiments.
+- Other symmetric path cases still use constant `$\theta_{\mathrm{path}}^{(l)}$`.
+- `\texttt{INT4-RoleAlign}` still uses `$h^{K/V}$` rather than adaptive protection.
+- K-side parameters remain reused after prefill, while V-side parameters remain computed with new-token writes.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the cache semantics and path scopes are preserved.
+- Chinese academic writing reviewer: first pass failed on `多 seed` and a rigid semantic label; final version passed after using `多随机种子` and removing `xxxx 下` wording.
+- Cross-chapter consistency reviewer: first pass failed because the Chapter~4 reference should not be written as direct proof of bitwise consistency and because K-side timing needed to be explicit; final version passed after narrowing the reference and spelling out K/V timing.
+- Skeptical reviewer: PASS; found no information loss or overclaim after the cross-chapter fixes.
+
+### Applied Revision
+
+```tex
+对任意 $t'<t$，第 $t$ 步不会改写历史缓存项 $\hat x_{t'}^{(l)}$，缓存只按时间追加。多随机种子复现中的逐位一致结果，为写入过程确定且历史缓存封闭的语义提供了间接核验；第四章第~\ref{subsec:ch4-int8-canonical}~节给出固定协议得到的 \texttt{INT8-Canonical} 主线读数。自适应保护只在主线实验的 \texttt{INT8-Canonical} 路径中开启；其余对称路径使用常量 $\theta_{\mathrm{path}}^{(l)}$。\texttt{INT4-RoleAlign} 按照 $h^{K/V}$ 给出的 K/V 两侧规则生成仿射参数，其中 K 侧在预填充后复用，V 侧随新 token 写入即时计算，不依赖自适应保护机制。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing Chapter 3 overfull hbox at line 369; no undefined references or citation warnings.
+
 ## Segment 28a
 
 - Report segment: 28

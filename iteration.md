@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 02:09 | AIGC 段落修订 28b: 历史缓存闭包与自适应保护边界
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理历史缓存不改写、单调追加、自适应保护开启范围和 RoleAlign 参数生成边界。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将半说明书式长句改为三句，保留历史缓存闭包、逐位一致间接核验和 INT8-Canonical 开启范围。
+  - 将第四章引用收窄为固定协议主线读数，避免把其写成逐位一致的直接证明。
+  - 明确 RoleAlign 的 K 侧预填充后复用与 V 侧随新 token 即时计算，避免 K 侧每步重算误读。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated.
+- Risks / follow-ups:
+  - Segment 28 还剩 Prefill/Decode 数据流段，下一轮单独处理。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 cache closure semantics`
+
 ### 2026-05-09 02:04 | AIGC 段落修订 28a: 路径参数与运行时映射解释
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理公式后对 $\theta_{\mathrm{path}}^{(l)}$、$g_t$ 与 $h^{K/V}$ 的参数解释。
 - Changed files:
