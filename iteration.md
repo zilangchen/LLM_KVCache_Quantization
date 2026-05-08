@@ -36,6 +36,26 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 00:22 | AIGC paragraph polish ch3 qwen kv diagnosis
+- Goal: Process the first natural paragraph of report segment 13 in Chapter 3 while preserving PPL isolation, 32K task diagnostics, and the Key-side trigger interpretation.
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Rewrote the paragraph to avoid report-like colon structure and inaccurate attribution of statistical protocol to the PPL table.
+  - Preserved the `K4V16`, `K16V4`, `K4V8`, and `K8V4` comparisons while narrowing the conclusion to the cited Qwen2.5 low-bit contrasts.
+  - Added an explicit Value-side boundary so the paragraph does not imply Value compression has no effect.
+- Validation:
+  - PASS: diff whitespace check.
+  - PASS: LaTeX build generated the PDF; log check found no undefined references or citation warnings. Existing overfull hboxes at Chapter 3 lines 369 and 644--646 are unrelated to this paragraph.
+- Risks / follow-ups:
+  - Continue with the next natural paragraph in the same detector segment after this commit.
+- Commit: pending until this entry is committed.
+
 ### 2026-05-09 00:14 | AIGC paragraph polish ch3 kv diagnosis notation
 - Goal: Process report segment 12 in Chapter 3 while preserving the equation-based K/V mechanism explanation and the KxVy diagnostic notation.
 - Changed files:

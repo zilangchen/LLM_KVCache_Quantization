@@ -894,3 +894,47 @@ a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 - PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
+## Segment 13a
+
+- Report segment: 13
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 54
+- Detector excerpt begins: `对Qwen2.5-1.5B的单侧PPL诊断表明...`
+- Processing scope: first natural paragraph only. The detector also spans the next paragraph opening, which will be handled in the next commit.
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: report-like `表明` plus colon structure, compressed contrast between PPL and task diagnostics, over-direct causal phrasing around Key-side triggering, and inaccurate attribution of statistical protocol to Table~`\ref{tab:ch4-kv-ppl}`.
+- Rewrite goal: keep all K/V diagnostic readings while separating PPL raw evidence from task evidence, narrowing the causal wording, and making the Value-side boundary explicit.
+- Style constraints: avoid colon-led explanation, avoid unnecessary parentheses, avoid English shorthand such as `cliff` in Chinese prose, and keep the claim scoped to the Qwen2.5 low-bit comparisons in this paragraph.
+
+### Preserved Information
+
+- `\texttt{K4V16}` still raises PPL by about two orders of magnitude relative to FP16.
+- `\texttt{K16V4}` still causes only a small change near the baseline.
+- The PPL raw readings are still attributed to Table~`\ref{tab:ch4-kv-ppl}`.
+- In the 32K task diagnostics, `\texttt{K4V8}` still drives Qwen2.5-1.5B and Qwen2.5-7B RULER pass rates to zero.
+- `\texttt{K8V4}` still does not show zero-collapse instability.
+- The combined reading still identifies Key-side low-bit noise as the more direct task-level instability trigger under these Qwen2.5 comparisons.
+- The Value-side boundary is preserved by saying it does not trigger instability of the same strength in the cited contrasts, rather than claiming it has no effect.
+- The final interpretation remains consistent with Equation~`\eqref{eq:ch3-error-decomp}` and its Key/Value path separation.
+
+### Review Gate
+
+- Technical reviewer: initially requested retaining the old table-statistics wording, then passed after Chapter 4 context confirmed that Table~`\ref{tab:ch4-kv-ppl}` reports deterministic PPL raw values and does not use Bootstrap or sign-flip testing.
+- Chinese academic writing reviewer: first pass failed only on the English shorthand `cliff`; final version passed after replacing it with `同等强度的失稳`.
+- Cross-chapter consistency reviewer: PASS; confirmed the Table~`\ref{tab:ch4-kv-ppl}` and Table~`\ref{tab:ch4-kv-multitask}` evidence split remains coherent.
+- Skeptical reviewer: first pass failed for over-causal wording and overly weak Value-side phrasing; final version passed after changing the conclusion to a narrower supported judgment.
+
+### Applied Revision
+
+```tex
+Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16} 将 PPL 相对 FP16 基线推高约两个数量级，\texttt{K16V4} 只带来基线邻域内的小幅变化，原始读数见表~\ref{tab:ch4-kv-ppl}。同一方向也出现在 32K 任务诊断中。\texttt{K4V8} 下，Qwen2.5-1.5B 与 Qwen2.5-7B 的 RULER 通过率降为零；\texttt{K8V4} 没有出现归零式失稳。两组读数共同支持一个较窄判断，即在本文这些 Qwen2.5 低比特对照中，Key 侧低比特噪声是更直接的任务级失稳触发源；Value 侧压缩并非没有影响，但在 \texttt{K16V4} 与 \texttt{K8V4} 对照中没有触发同等强度的失稳。这个判断与式~\eqref{eq:ch3-error-decomp} 对 Key/Value 两条误差路径的机制区分一致。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
