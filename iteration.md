@@ -36,6 +36,27 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 22:29 | AIGC paragraph polish ch1 chapter roadmap
+- Goal: Process report segment 6's Chapter 1 roadmap paragraph while preserving all chapter responsibilities.
+- Scope: One paragraph in Chapter 1 plus audit logs.
+- Changed files:
+  - `thesis/chapters/ch1_introduction.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch1_introduction.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Split a semicolon-heavy chapter roadmap into shorter sentences.
+  - Preserved Chapter 2 positioning, Chapter 3 method design, Chapter 4 experimental evidence, and Chapter 5 conclusion/scope/future-space roles.
+- Validation:
+  - `git diff --check`: PASS
+  - LaTeX: PASS, generated 99-page PDF
+  - Residual: existing Chapter 3 overfull hboxes at lines 369 and 644--646, unrelated to this paragraph.
+- Risks / follow-ups:
+  - Continue with report segment 6 contribution paragraph after commit.
+  - Unrelated dirty items remain outside this paragraph scope.
+
 ### 2026-05-08 22:25 | AIGC paragraph polish ch1 efficient inference paragraph
 - Goal: Process report segment 5's high-efficiency inference systems paragraph while preserving system boundary claims.
 - Scope: One paragraph in Chapter 1 plus audit logs.
