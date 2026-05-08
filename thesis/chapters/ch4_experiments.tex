@@ -381,7 +381,7 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
   }
 \end{table}
 
-表~\ref{tab:ch4-rolealign-kivi} 的配对范围是 1.5B、7B 与 8B 三个模型；14B 行只说明当前 RoleAlign 覆盖范围。配对模型上，RoleAlign 相对 KIVI-style 的 PPL 差距为 $+0.15$、$+0.05$ 与 $+0.00$，两类 Needle 任务均恢复到 100\%。这些读数首先支持一个较窄判断：从对称 per-group 升级到 \texttt{per-channel K + per-token V} 后，低比特检索从崩塌状态回到可用状态；在这一格式内，校准来源没有造成大幅质量分化。
+表~\ref{tab:ch4-rolealign-kivi} 的配对比较只覆盖 1.5B、7B 与 8B 三个模型，14B 行用于标明当前 RoleAlign 覆盖范围。配对模型中，RoleAlign 相对 KIVI-style 的 PPL 差距分别为 $+0.15$、$+0.05$ 和 $+0.00$，两类 Needle 任务均恢复到 100\%。这些读数支持的判断较窄。从对称逐组格式升级为 \texttt{per-channel K + per-token V} 后，低比特检索由崩塌状态恢复到可用状态；同一格式内，不同校准来源对应的质量读数保持接近。
 
 校准来源的差异仍然有方法层价值，但表~\ref{tab:ch4-rolealign-kivi} 未显示稳定、可外推的质量分化。\texttt{KIVI-style} 在运行时根据 \texttt{min/max} 更新 scale；\texttt{RoleAlign} 则把 K-path 与 V-path 的分路校准结果固化为离线产物，并把同一产物继续交给第 4.4 节的行为引导分配器。因此，本小节读取的是“同格式恢复 + 离线产物组织”的组合，不将其读成跨模型无条件优越。
 

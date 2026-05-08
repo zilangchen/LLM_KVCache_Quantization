@@ -13,6 +13,48 @@ This file records paragraph-level AIGC-polish changes. Each entry maps one detec
 - Overall suspected AIGC ratio: 20.38%
 - Highest-risk chapters: Chinese abstract 72.0%, English abstract 72.0%, Chapter 3 32.0%, Chapter 1 24.0%, Conclusion 14.0%
 
+## Segment 43
+
+- Report segment: 43
+- Source paragraph: `thesis/chapters/ch4_experiments.tex`, line 384
+- Detector excerpt begins: `表 4-8 的配对范围是 1.5B...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: semicolon-heavy bookkeeping, `配对模型上` phrasing, colon-style `较窄判断`, and a rigid final negative claim.
+- Rewrite goal: keep the paired comparison scope, PPL differences, Needle recovery, and bounded interpretation while improving Chinese academic flow.
+- Style constraints: avoid `xxxx 上`, avoid unnecessary colon expansion, and keep RoleAlign/KIVI-style evidence bounded to the shared-format comparison.
+
+### Preserved Information
+
+- Paired comparison only covers 1.5B, 7B, and 8B.
+- The 14B row only indicates the current RoleAlign coverage.
+- RoleAlign versus KIVI-style PPL gaps are $+0.15$, $+0.05$, and $+0.00$.
+- Both Needle tasks recover to 100\%.
+- Upgrading from symmetric per-group format to `\texttt{per-channel K + per-token V}` restores low-bit retrieval from collapse to usability.
+- Within this shared format, calibration sources produce close quality readings rather than a large quality split.
+
+### Review Gate
+
+- Technical accuracy reviewer: PASS.
+- Chinese academic writing reviewer: PASS after clarifying the paired-comparison scope and replacing `per-group` with `对称逐组格式`.
+- Cross-chapter consistency reviewer: PASS.
+- Skeptical reviewer: PASS.
+
+### Applied Revision
+
+```tex
+表~\ref{tab:ch4-rolealign-kivi} 的配对比较只覆盖 1.5B、7B 与 8B 三个模型，14B 行用于标明当前 RoleAlign 覆盖范围。配对模型中，RoleAlign 相对 KIVI-style 的 PPL 差距分别为 $+0.15$、$+0.05$ 和 $+0.00$，两类 Needle 任务均恢复到 100\%。这些读数支持的判断较窄。从对称逐组格式升级为 \texttt{per-channel K + per-token V} 后，低比特检索由崩塌状态恢复到可用状态；同一格式内，不同校准来源对应的质量读数保持接近。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing overfull hbox at line 369; no undefined references or citation warnings.
+- Commit: see Git history for message `docs: polish aigc ch4 rolealign paired reading`
+
 ## Segment 42
 
 - Report segment: 42

@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 03:19 | AIGC 段落修订 43: 第四章 RoleAlign 配对读数解释
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理表 4-8 后 RoleAlign 与 KIVI-style 的配对范围、PPL 差距和 Needle 恢复读法。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将配对范围改为“配对比较只覆盖 1.5B、7B 与 8B”，避免误读成模型之间互配。
+  - 保留 $+0.15$、$+0.05$、$+0.00$ 三个 PPL 差距和两类 Needle 任务恢复到 100\%。
+  - 将 `per-group` 改为“对称逐组格式”，并保留 `\texttt{per-channel K + per-token V}` 格式标签。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check`: PASS。
+  - `latexmk`: PASS，生成 101 页 PDF。
+  - 日志仅保留既有 line 369 overfull hbox，无 undefined references 或 citation warnings。
+- Risks / follow-ups:
+  - 下一轮进入第 4.5.3 节控制对比和表 4-13 部署读数段落。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch4 rolealign paired reading`
+
 ### 2026-05-09 03:16 | AIGC 段落修订 42: 第四章 RoleAlign 表注边界
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理表 4-8 关于 Needle 列、固定 seeds 和 Qwen2.5-14B 配对范围的表注。
 - Changed files:
