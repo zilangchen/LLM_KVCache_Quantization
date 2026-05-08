@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 03:36 | AIGC 段落修订 49: 第五章预算比较边界
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 5 的高嫌疑段落，本轮处理逐层预算分配的同量级预算带与严格预算匹配比较边界。
+- Changed files:
+  - `thesis/chapters/ch5_conclusion.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch5_conclusion.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将 `在比较口径上` 改为直接边界说明。
+  - 将 repeated `matched-budget` 改为“预算匹配”，并把 `分配器线` 改为“分配器方向”。
+  - 保留第 4.4 节只能支持结构落点、高性能区间和 heuristic 强基线，不支持严格同预算形式化胜负判定的边界。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check`: PASS。
+  - `latexmk`: PASS，生成 101 页 PDF。
+  - 日志仅保留既有 line 369 overfull hbox，无 undefined references 或 citation warnings。
+- Risks / follow-ups:
+  - 下一轮处理第五章机制解耦与模型族覆盖边界段落。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch5 budget boundary`
+
 ### 2026-05-09 03:34 | AIGC 段落修订 48: 第五章评测协议边界
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 5 的高嫌疑段落，本轮处理研究局限性中官方 LongBench 对照与真实应用分布覆盖边界。
 - Changed files:

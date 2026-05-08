@@ -13,6 +13,51 @@ This file records paragraph-level AIGC-polish changes. Each entry maps one detec
 - Overall suspected AIGC ratio: 20.38%
 - Highest-risk chapters: Chinese abstract 72.0%, English abstract 72.0%, Chapter 3 32.0%, Chapter 1 24.0%, Conclusion 14.0%
 
+## Segment 49
+
+- Report segment: 49
+- Source paragraph: `thesis/chapters/ch5_conclusion.tex`, line 53
+- Detector excerpt begins: `在比较口径上，逐层预算分配结果...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: `在...上` template, colon-style expansion after `能够支持的是`, repeated English `matched-budget`, and internal shorthand `分配器线`.
+- Rewrite goal: preserve the allocation-comparison boundary while making the limitation paragraph read as a clean second boundary.
+- Style constraints: avoid `xxxx 上/下`, translate nonessential `matched-budget` as budget matching, and retain the strict same-budget caveat.
+
+### Preserved Information
+
+- Layer-wise budget allocation results are based on the same-order `\texttt{INT4}` budget band.
+- They are not strict budget-matched comparisons.
+- Section 4.4 supports structural conclusions about different model structure points.
+- Model family, scale, and task jointly shape high-performance regimes.
+- Heuristic is a strong baseline in some regimes.
+- No single strategy has completed formal win/loss validation under a strict same-budget protocol.
+- The allocator has not completed a budget-matched formal comparison against `\texttt{KIVI-style}`.
+- The current contribution is identifying and organizing cross-model applicability regimes.
+- Strict budget comparability remains future work.
+
+### Review Gate
+
+- Technical accuracy reviewer: PASS.
+- Chinese academic writing reviewer: PASS after replacing `严格同预算条件下`, `没有完成`, `分配器线`, and repeated `matched-budget`.
+- Cross-chapter consistency reviewer: PASS.
+- Skeptical reviewer: PASS.
+
+### Applied Revision
+
+```tex
+比较口径给出第二层边界。逐层预算分配结果来自同量级 \texttt{INT4} 预算带，而不是严格预算匹配比较。第 4.4 节能够支持的结论是，不同模型存在不同结构落点，模型族、规模和任务共同塑造高性能区间，heuristic 在部分区间中是强基线。当前结果尚未完成某一单一策略在严格同预算口径内的形式化胜负判定，也尚未完成分配器相对 \texttt{KIVI-style} 的预算匹配正式比较。因此，分配器方向的当前贡献应理解为识别和组织跨模型适用区间，严格预算可比性问题仍保留为后续任务。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch5_conclusion.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing overfull hbox at line 369; no undefined references or citation warnings.
+- Commit: see Git history for message `docs: polish aigc ch5 budget boundary`
+
 ## Segment 48
 
 - Report segment: 48
