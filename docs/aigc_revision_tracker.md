@@ -939,6 +939,53 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 30b
+
+- Report segment: 30
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 690
+- Detector excerpt begins: `INT4路径在数据表示上引入额外解包成本...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: dense semicolon list, mixed English implementation labels, and compressed storage/quantization semantics that could blur symmetric and asymmetric INT4 ranges.
+- Rewrite goal: preserve all nibble-packing and runtime-path details while separating storage code representation from the symmetric diagnostic quantization grid.
+- Style constraints: reduce engineering shorthand, avoid unnecessary parentheses, and keep fixed implementation labels only where useful.
+
+### Preserved Information
+
+- `\texttt{INT4}` still reduces stored payload bytes but introduces unpacking cost.
+- Nibble packing still stores two 4-bit integers in one 8-bit byte.
+- Packed storage still maps integer codes into the unsigned `$[0,15]$` nibble domain.
+- The asymmetric `\texttt{INT4}` codebook remains `$[-8,7]$` with 16 levels.
+- The symmetric diagnostic path is now explicitly tied back to `$q_{\max}=7$` and the `$[-7,7]$` grid from the calibration section.
+- Reading still uses shift and mask operations to recover half-byte values.
+- Dequantization remains path-dependent, with scale for the symmetric path and `$(s,\zeta)$` for `\texttt{INT4-RoleAlign}`.
+- The symmetric `\texttt{INT4}` diagnostic path still uses a wrapper, explicitly materializes an INT8 intermediate tensor, and reuses the `\texttt{INT8}` fused kernel.
+- `\texttt{INT4-RoleAlign}` still uses kernel-internal unpacking and reads K-side per-channel and V-side per-token `$(s,\zeta)$`.
+- `\texttt{INT4-RoleAlign}` still avoids explicit INT8 intermediate tensor materialization.
+- The paragraph still states that 4-bit payloads reduce global read bytes, while unpacking and register pressure reappear in TPOT.
+- Appendix and Chapter 4 references remain unchanged.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the storage-domain and path-dependent dequantization semantics.
+- Chinese academic writing reviewer: first pass failed on `wrapper`, `in-kernel unpack`, `per-channel`, and `每输出 token 时间`; final version passed after using `wrapper 封装`, `核内解包`, `逐通道`, and `每输出 token 的时间 TPOT`.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with the asymmetric quantization section, appendix variants, and Chapter 4 TPOT references.
+- Skeptical reviewer: first pass failed because the original rewrite could conflict with the symmetric `[-7,7]` grid and overgeneralize `$(s,\zeta)`; final version passed after explicitly separating symmetric and asymmetric paths.
+
+### Applied Revision
+
+```tex
+\texttt{INT4} 的表示形式减少了存储字节数，但解包开销也进入运行路径。nibble packing 将两个 4-bit 整数放入一个 8-bit 字节。写入 packed 缓存时，整数码值先平移到无符号 $[0,15]$ 域再存入 nibble；非对称 \texttt{INT4} 使用 $[-8,7]$ 的 16 级码本，对称诊断路径仍按前文 $q_{\max}=7$ 的 $[-7,7]$ 网格产生码值。读取时，核函数用位移和掩码拆出半字节，再还原为路径对应的有符号整数，并按对应参数反量化；对称路径使用 scale，\texttt{INT4-RoleAlign} 使用 $(s,\zeta)$。本文把执行路径分为两类。对称 \texttt{INT4} 诊断路径采用 wrapper 封装，先将 nibble 缓存批量反打包为 INT8 张量，再复用 \texttt{INT8} 融合核完成片上反量化、点积、online softmax 和输出累加。\texttt{INT4-RoleAlign} 的非对称融合扩展采用核内解包，核函数直接读取 K 侧逐通道与 V 侧逐 token 的 $(s,\zeta)$，在片上存储中完成 nibble 解包和非对称反量化，避免显式 INT8 中间张量物化。4-bit 载荷减少全局读取字节数，反打包和寄存器压力则会重新体现在每输出 token 的时间 TPOT 中。相关变体命名与角色见附录第~\ref{sec:app-triton-variants}~节，端到端 TPOT 数字见第四章第~\ref{subsec:ch4-tpot-4k}~节。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing Chapter 3 overfull hbox at line 369; no undefined references or citation warnings.
+
 ## Segment 29b-30
 
 - Report segment: 29 and 30

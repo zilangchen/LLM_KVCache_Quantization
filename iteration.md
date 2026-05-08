@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 02:24 | AIGC 段落修订 30b: INT4 nibble packing 与解包路径
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理 INT4 nibble packing、wrapper 反打包、RoleAlign 核内解包和 TPOT 边界。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将 INT4 解包说明重构为存储码值、读取反量化、两类执行路径和 TPOT 边界四层。
+  - 明确非对称 INT4 的 `[-8,7]` 16 级码本与对称诊断路径 `q_{\max}=7`、`[-7,7]` 网格的区别。
+  - 限定对称路径使用 scale、RoleAlign 使用 `$(s,\zeta)$`，避免把非对称参数误写为所有路径共有。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated.
+- Risks / follow-ups:
+  - 下一轮处理 Segment 30 的 GQA head mapping 段。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 int4 unpack paths`
+
 ### 2026-05-09 02:18 | AIGC 段落修订 29b-30: 融合核分块循环与 online softmax 递推说明
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理融合核分块循环、online softmax 递推状态和最终归一化说明。
 - Changed files:

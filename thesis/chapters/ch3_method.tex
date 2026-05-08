@@ -687,7 +687,7 @@ o^{(r+1)}
 \end{equation}
 这里 $v_i$ 表示反量化后的第 $i$ 个 Value 行向量。上述递推与 FlashAttention 的 online softmax 等价；实现中保留非归一化累加器 $\tilde o^{(r+1)} = \ell^{(r+1)}\,o^{(r+1)}$，待全部块处理完后再除以 $\ell^{(\mathrm{final})}$，从而避免逐步重复除法。
 
-\texttt{INT4} 路径在数据表示上引入额外解包成本。\texttt{INT4} 采用 nibble packing，把两个 4-bit 整数打包进一个 8-bit 字节；写入时把有符号 $[-8,7]$ 加上 +8 偏移映射到无符号 $[0,15]$ 域存入 nibble，读取时先按位移与掩码拆出半字节，再减 8 还原至有符号网格，并按存储的 $(s, \zeta)$ 反量化。本文实现按路径分两类：对称 \texttt{INT4} 诊断路径采用 wrapper 实现，先把 nibble 缓存批量反 pack 为 INT8 张量，再复用 \texttt{INT8} 融合核完成片上反量化、点积、online softmax 与输出累加；\texttt{INT4-RoleAlign} 的非对称融合扩展则采用 in-kernel unpack，核函数直接读取 K 侧 per-channel 与 V 侧 per-token 的 $(s, \zeta)$，对 nibble 在片上完成解包与非对称反量化，避免显式中间 INT8 张量物化。4-bit 载荷减少了全局读字节数，但反 pack 步骤与寄存器压力会以每输出 token 时间（TPOT）形式重新出现，相关变体的命名与角色见附录第~\ref{sec:app-triton-variants}~节，端到端 TPOT 数字见第四章第~\ref{subsec:ch4-tpot-4k}~节。
+\texttt{INT4} 的表示形式减少了存储字节数，但解包开销也进入运行路径。nibble packing 将两个 4-bit 整数放入一个 8-bit 字节。写入 packed 缓存时，整数码值先平移到无符号 $[0,15]$ 域再存入 nibble；非对称 \texttt{INT4} 使用 $[-8,7]$ 的 16 级码本，对称诊断路径仍按前文 $q_{\max}=7$ 的 $[-7,7]$ 网格产生码值。读取时，核函数用位移和掩码拆出半字节，再还原为路径对应的有符号整数，并按对应参数反量化；对称路径使用 scale，\texttt{INT4-RoleAlign} 使用 $(s,\zeta)$。本文把执行路径分为两类。对称 \texttt{INT4} 诊断路径采用 wrapper 封装，先将 nibble 缓存批量反打包为 INT8 张量，再复用 \texttt{INT8} 融合核完成片上反量化、点积、online softmax 和输出累加。\texttt{INT4-RoleAlign} 的非对称融合扩展采用核内解包，核函数直接读取 K 侧逐通道与 V 侧逐 token 的 $(s,\zeta)$，在片上存储中完成 nibble 解包和非对称反量化，避免显式 INT8 中间张量物化。4-bit 载荷减少全局读取字节数，反打包和寄存器压力则会重新体现在每输出 token 的时间 TPOT 中。相关变体命名与角色见附录第~\ref{sec:app-triton-variants}~节，端到端 TPOT 数字见第四章第~\ref{subsec:ch4-tpot-4k}~节。
 
 为兼容 GQA~\cite{ainslie2023gqa}，融合核函数还需要把 query head 映射到共享的 KV head。设 query 头数为 $H_q$、KV 头数为 $H_{kv}$，并要求 $H_{kv}\mid H_q$（本文涉及的 GQA 模型均满足），则重复因子
 \begin{equation}
