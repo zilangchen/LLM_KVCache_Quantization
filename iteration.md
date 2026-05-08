@@ -36,6 +36,27 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 23:53 | AIGC paragraph polish ch2 asymmetric quantization axes
+- Goal: Process report segment 9 in Chapter 2 while preserving asymmetric-quantization motivation, K/V role-diagnosis parameters, quantization-axis semantics, and attention-path mechanism.
+- Changed files:
+  - `thesis/chapters/ch2_related_work.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch2_related_work.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Rewrote the asymmetric-quantization paragraph to avoid `在 KV Cache 上`, strengthen Chinese flow, and make zero-point alignment and K/V axis roles more precise.
+  - Preserved the roles of zero-point/scale, per-channel Key, per-token Value, logits/softmax, and weighted aggregation.
+  - Added explicit scope around same calibration/clipping policy and avoided treating the K/V statistics as absolute facts across all settings.
+- Validation:
+  - PASS: whitespace/error check and full LaTeX build completed; generated 100-page PDF.
+  - Page-count note: this paragraph expansion shifted the generated PDF from 99 to 100 pages.
+  - Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated.
+- Risks / follow-ups:
+  - Continue with report segment 10 after this commit.
+- Commit: see Git history for `docs: polish aigc ch2 asymmetric quantization axes`
+
 ### 2026-05-08 23:45 | AIGC paragraph polish ch2 symmetric quantization roles
 - Goal: Process report segment 8 in Chapter 2 while preserving the INT8/symmetric INT4 role split, integer-grid facts, bit-packing storage estimate, and behavior-usability boundary.
 - Changed files:
