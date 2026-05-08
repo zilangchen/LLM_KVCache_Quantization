@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 03:39 | AIGC 段落修订 50: 第五章机制解耦边界
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 5 的高嫌疑段落，本轮处理模型族覆盖、同格式比较和机制解耦边界。
+- Changed files:
+  - `thesis/chapters/ch5_conclusion.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch5_conclusion.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 保留 decoder-only GQA、MHA、MQA、滑动窗口注意力、MoE 和长上下文注意力变体覆盖边界。
+  - 保留 `\texttt{INT4-RoleAlign}` 与 `\texttt{KIVI-style}` 在 `\texttt{per-channel K + per-token V}` 同格式条件内比较。
+  - 将 `family-/scale-/task-dependent` 中文化为“受模型族、规模和任务共同影响的结构读数”。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check`: PASS。
+  - `latexmk`: PASS，生成 101 页 PDF。
+  - 日志仅保留既有 line 369 overfull hbox，无 undefined references 或 citation warnings。
+- Risks / follow-ups:
+  - 下一轮处理第五章系统层和动态决策层边界段落。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch5 mechanism boundary`
+
 ### 2026-05-09 03:36 | AIGC 段落修订 49: 第五章预算比较边界
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 5 的高嫌疑段落，本轮处理逐层预算分配的同量级预算带与严格预算匹配比较边界。
 - Changed files:

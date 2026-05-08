@@ -52,7 +52,7 @@
 
 比较口径给出第二层边界。逐层预算分配结果来自同量级 \texttt{INT4} 预算带，而不是严格预算匹配比较。第 4.4 节能够支持的结论是，不同模型存在不同结构落点，模型族、规模和任务共同塑造高性能区间，heuristic 在部分区间中是强基线。当前结果尚未完成某一单一策略在严格同预算口径内的形式化胜负判定，也尚未完成分配器相对 \texttt{KIVI-style} 的预算匹配正式比较。因此，分配器方向的当前贡献应理解为识别和组织跨模型适用区间，严格预算可比性问题仍保留为后续任务。
 
-第三类边界来自机制解耦。本文的模型集合以 decoder-only GQA 模型为主，尚未覆盖 MHA、MQA、滑动窗口注意力、MoE 或新的长上下文注意力变体。\texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 的比较被限制在 \texttt{per-channel K + per-token V} 同格式条件下，这有助于减少格式差异干扰，但格式贡献、校准贡献与架构因素尚未完全正交拆开。当前证据更适合支持一条在已验证设定下成立的低比特恢复路径，以及一组 family-/scale-/task-dependent 的结构读数；更广模型族和更细粒度机制因果仍需单独验证。
+机制解耦构成第三层边界。本文模型集合以 decoder-only GQA 模型为主，MHA、MQA、滑动窗口注意力、MoE 和新的长上下文注意力变体尚未纳入验证。\texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 的比较限定在 \texttt{per-channel K + per-token V} 同格式条件内，这有助于减少格式差异干扰；格式贡献、校准贡献与架构因素仍需要进一步正交拆分。当前证据更适合支持一条已验证设定中的低比特恢复路径，以及一组受模型族、规模和任务共同影响的结构读数；更广模型族与更细粒度机制因果仍需单独验证。
 
 系统层和动态决策层也有清楚边界。部署效率、性能交叉边界和显存读数绑定于当前 \texttt{NVIDIA H20}、固定软件栈、\texttt{batch=1}、贪婪解码以及当前 Triton/FlashInfer 后端组合；A100/H100、消费级 GPU、多 batch serving、speculative decoding、连续批处理调度或 streaming decode 都可能移动交叉点。\texttt{AutoK} 目前主要是模型级静态 proposer，prompt 级自适应路由只呈现弱改善或混合信号，尚不足以写成正式结论。结果溯源链保证的是当前版本可追溯，未来架构或部署栈仍需重新复核。
 

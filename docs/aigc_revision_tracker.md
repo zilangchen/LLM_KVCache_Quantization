@@ -13,6 +13,50 @@ This file records paragraph-level AIGC-polish changes. Each entry maps one detec
 - Overall suspected AIGC ratio: 20.38%
 - Highest-risk chapters: Chinese abstract 72.0%, English abstract 72.0%, Chapter 3 32.0%, Chapter 1 24.0%, Conclusion 14.0%
 
+## Segment 50
+
+- Report segment: 50
+- Source paragraph: `thesis/chapters/ch5_conclusion.tex`, line 55
+- Detector excerpt begins: `本文的模型集合以decoder-only GQA 模型为主...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: dense limitation list, `被限制在...条件下` structure, and English-style `family-/scale-/task-dependent`.
+- Rewrite goal: preserve the mechanism-disentanglement boundary while making the paragraph read as a cleaner scope statement.
+- Style constraints: avoid `xxxx 下`, translate nonessential English-style phrasing, and keep the same-format comparison boundary intact.
+
+### Preserved Information
+
+- The model set is mainly decoder-only GQA models.
+- MHA, MQA, sliding-window attention, MoE, and new long-context attention variants are not covered.
+- `\texttt{INT4-RoleAlign}` and `\texttt{KIVI-style}` are compared under the same `\texttt{per-channel K + per-token V}` format.
+- Same-format comparison helps reduce format-difference interference.
+- Format contribution, calibration contribution, and architecture factors are not fully orthogonally separated.
+- Current evidence supports a low-bit recovery path in verified settings.
+- Current evidence supports structure readings jointly affected by model family, scale, and task.
+- Broader model families and finer-grained mechanism causality need separate validation.
+
+### Review Gate
+
+- Technical accuracy reviewer: PASS.
+- Chinese academic writing reviewer: PASS after replacing `family-/scale-/task-dependent` and smoothing the model-set sentence.
+- Cross-chapter consistency reviewer: PASS.
+- Skeptical reviewer: PASS.
+
+### Applied Revision
+
+```tex
+机制解耦构成第三层边界。本文模型集合以 decoder-only GQA 模型为主，MHA、MQA、滑动窗口注意力、MoE 和新的长上下文注意力变体尚未纳入验证。\texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 的比较限定在 \texttt{per-channel K + per-token V} 同格式条件内，这有助于减少格式差异干扰；格式贡献、校准贡献与架构因素仍需要进一步正交拆分。当前证据更适合支持一条已验证设定中的低比特恢复路径，以及一组受模型族、规模和任务共同影响的结构读数；更广模型族与更细粒度机制因果仍需单独验证。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch5_conclusion.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing overfull hbox at line 369; no undefined references or citation warnings.
+- Commit: see Git history for message `docs: polish aigc ch5 mechanism boundary`
+
 ## Segment 49
 
 - Report segment: 49
