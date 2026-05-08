@@ -939,6 +939,50 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 22a
+
+- Report segment: 22
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 247
+- Detector excerpt begins: `第3.2节与第4.3.2节的 Qwen系列读数...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: colon-led evidence packing, English `cliff`, and `剂量-响应` translation phrasing.
+- Main technical risk: the original wording could be read as treating `\texttt{K4V8}` as single-side Key isolation evidence, while it is a task-level contrast with `V=8`.
+- Rewrite goal: keep the mechanism explanation and Qwen empirical anchor while making the evidence hierarchy and cross-model boundary explicit.
+- Style constraints: avoid English-style terms where a Chinese technical phrase works, and avoid implying full causal proof.
+
+### Preserved Information
+
+- Section~`\ref{sec:ch3-problem}` still supplies the mechanism line.
+- Key perturbations still enter logits ranking before softmax changes the attention distribution.
+- Qwen-series readings still come from Section~`\ref{sec:ch3-motivation-kv}` and Section~`\ref{sec:exp-kv-sensitivity}`.
+- `\texttt{K4V8}` still indicates stronger instability when Key is at 4 bit in Qwen task-level contrasts.
+- `\texttt{K8V4}` still does not show instability of the same strength.
+- `\texttt{K4V4}` still lowers both K and V and remains auxiliary evidence.
+- Complete cross-model interpretation remains assigned to Chapter 4 tables and figures.
+- The cross-model boundary is now explicit: Qwen zero-collapse is stronger, LLaMA-3.1-8B is weaker in the current comparison, and scale/training data/GQA configuration co-modulate the boundary.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the mechanism, empirical anchor, and K/V evidence hierarchy are preserved.
+- Chinese academic writing reviewer: first pass failed on `cliff` and `剂量响应方向`; final version passed after using `断崖式失稳` and `同向辅助观察`.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with Chapter 4 Section~`\ref{sec:exp-kv-sensitivity}` and related tables/figures.
+- Skeptical reviewer: first pass failed on causal strength, K4V8 evidence level, and cross-model boundary; final version passed after adding the single-side-diagnosis reference and explicit Qwen/LLaMA boundary.
+
+### Applied Revision
+
+```tex
+前文提供了理解这一现象的机制线索。第~\ref{sec:ch3-problem}~节说明 Key 扰动先进入 logits 排序，再经 softmax 改写注意力分布；第~\ref{sec:ch3-motivation-kv}~节与第~\ref{sec:exp-kv-sensitivity}~节的 Qwen 系列读数给出经验锚点。结合前述单侧诊断，Key 降到 4 bit 的配置更直接暴露风险；任务对照中，\texttt{K4V8} 在 Qwen 系列出现断崖式失稳，而 \texttt{K8V4} 未出现同等强度退化。\texttt{K4V4} 同时压低 K 与 V，只作为同向辅助观察列出。跨模型判读仍以第四章表图为准，其中 Qwen 系列的归零更明显，LLaMA-3.1-8B 在当前对照中失稳幅度较小，具体边界还受模型规模、训练数据与 GQA 配置共同影响。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 21b
 
 - Report segment: 21

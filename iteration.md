@@ -1844,3 +1844,25 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - 下一轮进入 Segment 22 的对称 `\texttt{INT4}` 格式下界锚点段。
 - Commit: pending at log-write time; committed as `docs: polish aigc ch3 int8 adaptive guard`
+
+### 2026-05-09 01:17 | AIGC 段落修订 22a: Qwen 低比特经验锚点边界
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理对称 `\texttt{INT4}` 局限小节中的机制与 Qwen 经验锚点段。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将 `cliff` 与 `剂量-响应` 改成中文技术表达，并补强证据层级。
+  - 保留 Key 扰动机制、Qwen 系列读数、`\texttt{K4V8}`/`\texttt{K8V4}`/`\texttt{K4V4}` 对照和第四章跨模型判读归属。
+  - 明确 Qwen 与 LLaMA-3.1-8B 的边界差异，避免把任务对照误读为单侧隔离证据。
+  - 技术、中文、跨章一致性和 skeptical 审查均返回 PASS，失败建议已吸收。
+- Validation:
+  - `git diff --check`: PASS
+  - LaTeX: PASS，生成 101 页 PDF
+  - Residual: 仍有既存 Chapter 3 overfull hbox，与本段修订无关。
+- Risks / follow-ups:
+  - Segment 22 还包含对称 `\texttt{INT4}` 下界锚点段，下一轮单独处理。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 qwen int4 boundary`
