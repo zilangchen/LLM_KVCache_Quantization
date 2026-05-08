@@ -13,6 +13,46 @@ This file records paragraph-level AIGC-polish changes. Each entry maps one detec
 - Overall suspected AIGC ratio: 20.38%
 - Highest-risk chapters: Chinese abstract 72.0%, English abstract 72.0%, Chapter 3 32.0%, Chapter 1 24.0%, Conclusion 14.0%
 
+## Segment 42
+
+- Report segment: 42
+- Source paragraph: `thesis/chapters/ch4_experiments.tex`, line 379
+- Detector excerpt begins: `注：Needle列中的100/100%表示...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: compact table-note colon, mechanical `表示...；...。...不参与...` structure, and stiff wording around the 14B boundary.
+- Rewrite goal: keep the table semantics and pairwise-comparison boundary while removing unnecessary colon punctuation.
+- Style constraints: keep the table note concise, preserve all task names and fixed-seed information, and avoid changing the comparison scope.
+
+### Preserved Information
+
+- `\texttt{100/100\%}` means both Needle-single-retrieval and MK-NIAH-2 reach 100\% pass rate.
+- The generative-quality protocol uses 5 fixed seeds.
+- Qwen2.5-14B currently has only RoleAlign results.
+- Qwen2.5-14B is excluded from paired-difference judgment.
+
+### Review Gate
+
+- Technical accuracy reviewer: PASS.
+- Chinese academic writing reviewer: PASS.
+- Cross-chapter consistency reviewer: PASS.
+- Skeptical reviewer: PASS.
+
+### Applied Revision
+
+```tex
+\emph{注} \texttt{100/100\%} 表示 Needle-single-retrieval 与 MK-NIAH-2 两类检索任务均达到 100\% 通过率；生成式质量协议使用 5 个固定 seeds。Qwen2.5-14B 当前仅有 RoleAlign 结果，因此不纳入配对差异判断。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing overfull hbox at line 369; no undefined references or citation warnings.
+- Commit: see Git history for message `docs: polish aigc ch4 rolealign table note`
+
 ## Segment 41
 
 - Report segment: 41

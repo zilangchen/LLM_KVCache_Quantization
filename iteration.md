@@ -36,6 +36,27 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 03:16 | AIGC 段落修订 42: 第四章 RoleAlign 表注边界
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理表 4-8 关于 Needle 列、固定 seeds 和 Qwen2.5-14B 配对范围的表注。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 去掉表注中的冒号式 `注：`。
+  - 保留 Needle-single-retrieval、MK-NIAH-2、100\% 通过率、5 个固定 seeds 和 Qwen2.5-14B 不纳入配对差异判断。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check`: PASS。
+  - `latexmk`: PASS，生成 101 页 PDF。
+  - 日志仅保留既有 line 369 overfull hbox，无 undefined references 或 citation warnings。
+- Risks / follow-ups:
+  - 下一轮处理表 4-8 后 RoleAlign 与 KIVI-style 配对读数解释段。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch4 rolealign table note`
+
 ### 2026-05-09 03:14 | AIGC 段落修订 41: 第四章 softmax 阶跃机制解释
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理对称 INT4 阶跃崩塌的 softmax 机制解释和 K/V 诊断过渡。
 - Changed files:
