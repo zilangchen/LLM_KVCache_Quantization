@@ -36,6 +36,33 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 04:58 | 摘要结论化改写与中英文对齐
+- Goal: 按用户确认的中文摘要版本替换正文，并对照中文逻辑重写英文摘要，使实验结论更结论化、减少跨模型数字堆叠。
+- Scope:
+  - 替换中文摘要三段正文。
+  - 对齐英文摘要的问题引入、方法路径、实验结论和框架总结。
+  - 重新编译并写回正式 PDF。
+- Changed files:
+  - `thesis/chapters/abstract_zh.tex`
+  - `thesis/chapters/abstract_en.tex`
+  - `thesis/main.pdf`
+- Commands:
+  - `git diff --check -- thesis/chapters/abstract_zh.tex thesis/chapters/abstract_en.tex`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/abstract_update_build main.tex`
+  - `cp /tmp/abstract_update_build/main.pdf thesis/main.pdf`
+  - `pdfinfo thesis/main.pdf | rg 'Pages|File size|PDF version'`
+- Outputs:
+  - 中文摘要采用用户确认的完整版本。
+  - 英文摘要按中文摘要重构，保留框架、INT8、INT4-RoleAlign、跨模型预算和系统边界结论。
+  - 正式 PDF 更新为 102 页，文件大小 1,497,561 bytes，PDF version 1.5。
+- Validation:
+  - `git diff --check`: PASS。
+  - `latexmk`: PASS。
+  - 日志无 undefined references 或 citation warnings，仅保留既有 line 369 overfull hbox。
+- Risks / follow-ups:
+  - 摘要变长导致 PDF 从 101 页变为 102 页，需由用户确认是否接受页数变化。
+- Commit: current commit (`docs: update thesis abstracts to conclusion-focused version`)
+
 ### 2026-05-09 04:44 | 第四章 6-Reviewer 多轮审查（Phase A+B 完成）
 - Goal: 按用户要求的"6 视角 Agent 审查 + 多轮迭代打磨"协议，对 ch4_experiments.tex 逐节审查，修复发现的实质问题。
 - Scope:
