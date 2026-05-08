@@ -1802,3 +1802,24 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - 下一轮进入 Segment 21 的候选网格筛选与自适应保护段。
 - Commit: pending at log-write time; committed as `docs: polish aigc ch3 int8 static scale`
+
+### 2026-05-09 01:10 | AIGC 段落修订 21a: INT8 候选网格筛选句
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理 `$(p_c,g)$` 候选网格筛选句。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将被动筛选句改为候选网格枚举和筛选依据的主动表述。
+  - 保留 `$(p_c,g)$`、`$\Theta_\mathrm{path}$`、KL 尾部统计、裁剪率约束和第~`\ref{subsec:ch3-two-stage}`~节归属。
+  - 技术、中文、跨章一致性和 skeptical 审查均返回 PASS，失败建议已吸收。
+- Validation:
+  - `git diff --check`: PASS
+  - LaTeX: PASS，生成 100 页 PDF
+  - Residual: 仍有既存 Chapter 3 overfull hbox，与本段修订无关。
+- Risks / follow-ups:
+  - Segment 21 还包含自适应保护段，下一轮单独处理。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 int8 candidate grid`

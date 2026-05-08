@@ -220,7 +220,7 @@ q
 \qquad
 \hat x = q\, s_{l,j}^{\mathrm{static}}.
 \end{equation}
-$(p_c, g)$ 在 $\Theta_\mathrm{path}$ 候选网格上由第~\ref{subsec:ch3-two-stage}~节的 KL 尾部统计与裁剪率约束筛选选出。
+候选网格 $\Theta_\mathrm{path}$ 同时枚举 $(p_c,g)$，并依据第~\ref{subsec:ch3-two-stage}~节给出的 KL 尾部统计与裁剪率约束选出最终组合。
 
 为处理运行时输入分布超出校准覆盖范围的情况，本路径在静态缩放参数之外引入自适应保护机制。记当前写入张量为 $x^{\mathrm{cur}}_{l,j}$，动态尺度
 \begin{equation}

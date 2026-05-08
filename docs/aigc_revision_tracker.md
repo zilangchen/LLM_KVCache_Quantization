@@ -939,6 +939,46 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 21a
+
+- Report segment: 21
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 223
+- Detector excerpt begins: `$(p_c,g)$在 $\Theta_\mathrm{path}$ 候选网格...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: passive construction and compact `候选网格上由...筛选选出` phrasing.
+- Rewrite goal: make the candidate-grid role explicit and keep the selection rule tied to Section~`\ref{subsec:ch3-two-stage}`.
+- Style constraints: avoid awkward passive wording and keep the sentence as a formula handoff rather than a new method claim.
+
+### Preserved Information
+
+- `$(p_c,g)$` remains the candidate pair.
+- The candidate grid remains `$\Theta_\mathrm{path}$`.
+- The selection still uses KL tail statistics and clipping-rate constraints.
+- The rule remains attributed to Section~`\ref{subsec:ch3-two-stage}`.
+- The output remains the final selected combination.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed no optimization semantics changed.
+- Chinese academic writing reviewer: first pass failed on `负责从中选出最终组合`; final version passed after rewriting it as `依据...选出最终组合`.
+- Cross-chapter consistency reviewer: PASS; confirmed the section reference remains accurate.
+- Skeptical reviewer: PASS; no omitted information or claim drift found.
+
+### Applied Revision
+
+```tex
+候选网格 $\Theta_\mathrm{path}$ 同时枚举 $(p_c,g)$，并依据第~\ref{subsec:ch3-two-stage}~节给出的 KL 尾部统计与裁剪率约束选出最终组合。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 20b
 
 - Report segment: 20
