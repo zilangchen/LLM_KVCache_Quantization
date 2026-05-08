@@ -36,6 +36,41 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 20:20 | Thesis 第三章全文审查 Round 2（图表引用补全 + 跨章术语 alias + 排版规范化）
+
+- Goal: Round 2 聚焦 ch3 内部图表的可发现性、跨章术语漂移、与排版规范化。Round 1 主要解决「内容/口径」问题，Round 2 回到「读者导航/术语规范/可读性」层面。
+- Scope:
+  - **图表引用补全（最大发现）**: ch3 共 7 个 figure，仅 fig:ch3-kv-asymmetry 与 fig:ch3-calibration-workflow 在正文 \\ref；其余 5 个图（误差分解、framework、rolealign-axes、allocator-flow、coverage-curves）虽通过 \\input 出现在 PDF 中，但正文从未引用，违反学术写作规范（顶级论文要求每个图都被正文显式 \\ref）。同样发现 1 个 table（path_instantiation）也未被引用。逐一补正文引用：
+    - line 40 末尾加「两条耦合路径的可视化分解见图~\\ref{fig:error-decomposition}。」
+    - line 83 末尾加「整体离线—在线协作与共享画像在校准、低比特恢复、预算分配三层之间的传递关系见图~\\ref{fig:ch3-framework-shared-profile}。」
+    - line 196 末尾加「三条路径在量化格式、参数接口与行为代理上的并列对照见表~\\ref{tab:ch3-path-instantiation}。」
+    - line 321 末尾加「\\texttt{INT4-RoleAlign} 在 K 侧沿 token 聚合按 channel 独立确定 $(s_K,\\zeta_K)$、V 侧沿 channel 聚合按 token 独立确定 $(s_V,\\zeta_V)$ 的双轴非对称布局见图~\\ref{fig:ch3-rolealign-axis}。」
+    - line 441 末尾加「从离线读数 $\\sigma_K^{(l)}$ 经聚合、覆盖度与 \\texttt{TopK} 写入逐层位宽向量的整体流程，以及 K/V 角色接口的预留位置见图~\\ref{fig:ch3-allocation-flow}。」
+    - line 537 末尾加「集中型与弥散型画像在相同覆盖阈值 $\\rho$ 下推出不同最小保护层数 $k^\\star$ 的直观对照见图~\\ref{fig:ch3-coverage-curve}。」
+  - **跨章术语 alias 桥接**: ch4/ch5 使用 "INT8-Canonical" 8+ 次为 INT8 基准路径的实验标号，但 ch3 method 章从未定义此名，造成跨章术语漂移。在 §3.5.1（line 203）首次定义 INT8 基准路径处加 alias：「该路径在第四章实验章节中以 \\texttt{INT8-Canonical} 标注」。
+  - **§3.6 开头排版规范化**: line 377 使用 `第 \\ref{sec:ch3-calibration} 节`（普通空格）与 `INT8 基准路径`（无 texttt）— 与 ch3 其他位置 `第~\\ref{...}~节`（非破坏性 ~）+ `\\texttt{INT8}` 不一致。统一改写。
+  - **路径名 \\texttt{} 包装规范化**: 4 处正文中 INT4/INT8 作为路径名但未 wrap：
+    - line 276 「粗 INT4 网格」 → 「粗 \\texttt{INT4} 网格」
+    - line 311 「INT4 非对称网格」 → 「\\texttt{INT4} 非对称网格」
+    - line 433 「INT4...INT8」 → 「\\texttt{INT4}...\\texttt{INT8}」
+    - line 715 「本文 INT8 路径...对称 INT4 路径」 + 「§\\ref」 → 全部规范化
+    - line 773 「对称 INT8 基准路径」 → 「对称 \\texttt{INT8} 基准路径」
+- Cross-chapter audit findings:
+  - ch3 → ch4/ch5/appendix 的 38 个 \\ref 全部解析（无 undefined）✅
+  - 7 个 figure + 3 个 table 全部被正文引用 ✅
+  - 路径术语横向对齐：INT4-RoleAlign / KIVI-style / INT8-Canonical / MixedKV 在 ch3/ch4/ch5 一致 ✅
+  - 章节内 4 个 unused section labels（sec:ch3-summary / sec:ch3-triton / subsec:ch3-system-overhead / subsec:ch3-triton-int4-asym）保留，作为未来 anchor 备用，不算缺陷
+- Changed files: `thesis/chapters/ch3_method.tex`
+- Commands: `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`（两遍）
+- Outputs: 99 页（+1 from Round 1 由于 6 处新引用）；0 undefined / 0 multiply-defined / 0 hard error
+- Validation:
+  - 全部 7 figure + 1 table cited 重核：`for fig in ...; do grep -rE "\\\\ref{$label}" chapters/`
+  - 关键术语 grep: `\\texttt{INT8-Canonical}` 在 ch3/ch4/ch5 各章都出现
+  - 38 个 \\ref 全部对齐到现有 \\label
+- Risks / follow-ups:
+  - Round 2 完成图表可发现性 + 跨章术语对齐 + 排版规范化三层
+  - **Round 3 计划**：(a) 检查每节首末段的过渡句质量是否对称、(b) appendix 引用方向是否完整、(c) caption 与正文 ref 文字是否匹配（避免 caption 自我描述但 ref 文字弱化）、(d) 公式编号利用率（未引用的 numbered equation 是否值得保留 label）
+
 ### 2026-05-08 20:09 | Thesis 第三章全文审查 Round 1（ch3 内部 + 跨章节一致性 + 外部回退修复）
 
 - Goal: 用户指令「进行第三章的全文审查，以及它相对于其他章节在整篇文章中的比对和审查」。Round 1 在 ch3 内部找出 14 项问题（A 必修 / B 精度 / C 文字），同时检测出外部修改（abstract / ch1 / ch2 / 两个 figure）的格式回退与跨章口径漂移，统一一并处理。
