@@ -939,6 +939,57 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 15a
+
+- Report segment: 15
+- Source paragraph: `thesis/chapters/ch3_method.tex`, lines 77--81
+- Detector excerpt begins: `线优化也不重复参数搜索。最简形式下 b⋆...`
+- Processing scope: first natural paragraph only. The detector also spans the following offline/online paragraph, which will be handled in the next commit.
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: compressed definition prose after the displayed equation, parenthetical `本文取...`, English-style `bit` phrasing, and `K/V 角色条件化` wording.
+- Rewrite goal: preserve the allocation mapping, budget inequality, deterministic offline/online boundary, and K/V role extension while making the prose less mechanical.
+- Style constraints: use `位宽` rather than `bit` in Chinese prose where possible, avoid unnecessary parentheses, and replace `角色条件化` with a more natural Chinese phrase.
+
+### Preserved Information
+
+- The allocation layer still decides which layers retain higher bit-width budgets.
+- The average KV bit-width budget remains `$\bar b$`.
+- The mapping remains `$b^\star = \mathcal{A}(\mathcal{S};\bar b)` with the same average-budget constraint.
+- The allocator remains a deterministic rule.
+- `$\mathcal{S}$` remains read-only input and is still converted into an integer bit-width vector `$b^\star$`.
+- The online path still does not re-optimize or repeat calibration parameter search.
+- The basic form remains `$b^\star\in\{b_{\min},\dots,b_{\max}\}^L`.
+- The paper still uses `$b\in\{4,8,16\}$`.
+- The K/V role extension remains `$L\times 2$` and stays tied to the Key/Value roles identified in Section~`\ref{sec:ch3-motivation-kv}`.
+- `$\mathcal{S}$` still extends into role-wise components.
+- Section~`\ref{sec:ch3-allocator}` remains the location for the concrete allocation rules.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the displayed equation, domain, budget constraint, deterministic mapping, and K/V role extension are preserved.
+- Chinese academic writing reviewer: first pass failed on `处理各层保留多少位宽` and `K/V 角色条件化`; final version passed after rewriting these phrases.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with Section~`\ref{sec:ch3-allocator}` and Figure~`\ref{fig:ch3-framework-shared-profile}`.
+- Skeptical reviewer: PASS; no change to online/offline semantics or allocation-domain meaning.
+
+### Applied Revision
+
+```tex
+分配层负责决定各层保留的位宽预算。设平均 KV 位宽预算为 $\bar b$，分配映射
+\begin{equation}
+b^\star = \mathcal{A}(\mathcal{S};\bar b),\quad \tfrac{1}{L}\sum_{l=1}^{L} b^\star_l \le \bar b,
+\end{equation}
+是一个确定性规则。它只读取共享画像 $\mathcal{S}$，把逐层敏感度转换为整数位宽向量 $b^\star$，在线推理时不重新优化，也不重复校准参数搜索。基础设置把 $b^\star$ 写成 $L$ 维逐层预算，$b^\star\in\{b_{\min},\dots,b_{\max}\}^L$，本文使用 $b\in\{4,8,16\}$。当预算表达进一步区分 K/V 角色时，$b^\star$ 变为 $\{b_{\min},\dots,b_{\max}\}^{L\times 2}$ 中的向量，对应第~\ref{sec:ch3-motivation-kv}~节识别的 Key/Value 双角色；此时 $\mathcal{S}$ 也拆分为角色分量。第~\ref{sec:ch3-allocator}~节给出具体规则。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 14
 
 - Report segment: 14

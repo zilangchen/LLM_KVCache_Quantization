@@ -36,6 +36,26 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 00:35 | AIGC paragraph polish ch3 allocation mapping
+- Goal: Process the first natural paragraph of report segment 15 in Chapter 3 while preserving the allocation mapping, budget constraint, and K/V role extension.
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - Rewrote allocation prose to use `位宽预算` and avoid compressed parenthetical style.
+  - Preserved the deterministic mapping, read-only use of `\\mathcal{S}`, no-online-optimization boundary, and `L \\times 2` K/V role extension.
+  - Replaced `K/V 角色条件化` with a more natural `进一步区分 K/V 角色` formulation.
+- Validation:
+  - PASS: diff whitespace check.
+  - PASS: LaTeX build generated the PDF; log check found no undefined references or citation warnings. Existing overfull hboxes at Chapter 3 lines 369 and 644--646 are unrelated to this paragraph.
+- Risks / follow-ups:
+  - Continue with the second natural paragraph in detector segment 15 after this commit.
+- Commit: pending until this entry is committed.
+
 ### 2026-05-09 00:31 | AIGC paragraph polish ch3 evidence hierarchy
 - Goal: Process report segment 14 in Chapter 3 while preserving the Key-side low-bit risk conclusion and the PPL/task evidence hierarchy.
 - Changed files:
