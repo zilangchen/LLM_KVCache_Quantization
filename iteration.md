@@ -36,6 +36,56 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 08:49 | Thesis Ch3 全章 6-Agent Audit 收口 (§3.6.2 → §3.8 共 7 节)
+
+- Goal: 完成第三章剩余 7 节的 6-agent 审改循环，全章 11 个目标小节全部落地至 PASS（本 session 推进 §3.5.3 → §3.8）
+- Scope:
+  - **§3.6.2 K/V 角色感知预算扩展 (line 445-498)** R1 加权 6.20 → v1 落地（删除 $\mathcal A_{KV}$ 抽象算子 / 显式 $s_K, s_V$ 与 §3.6.1 的衔接 / $S_{K,\alpha}, S_{V,\alpha}$ 序列定义 / $k_K + k_V$ 与 $\bar b$ 联合约束推导 / 删除 L506 meta-disclaimer / 加 honest scope statement "K/V 独立保护数留作后续工作"）
+  - **§3.6.3 敏感度聚合与覆盖度准则 (line 499-541)** R1 加权 5.91 → v1 落地（标题改"敏感度聚合与覆盖度准则"删"鲁棒性"伪承诺 / 删除 L511 BA-$k_\max$/BA-$k_\mathrm{mean}$ 悬挂 / 删除 L502 strawman "嵌套规则" / $\sigma_K^{(l)}$ 非负性显式 / $\Gamma(0)=0, \Gamma(L)=1$ 边界 / $\tilde s_{(i)}$ 排序映射 $\pi$ / 删除 4 处元叙述）
+  - **§3.6.4 AutoK 预算建议 (line 543-595)** R1 加权 6.74 → v1 落地（删除 $\rho=0.85$ 第四章无数据 / 加 $\Gamma(k^\star) \ge \rho > \Gamma(k^\star-1)$ 不等式 + $\rho=1/\rho \to 0^+$ 边界 / 显式 $S_{K,\alpha}$ 而非 $S_\alpha$ / 表格"扫描?"改"需扫整数 $k$?" / 删除 L546/L571/L573 4 处元叙述+连续否定 / 加工程粒度差异 BA-$k$ 跑 5 整数 vs AutoK 一次设 $\rho$）
+  - **§3.7.1 离线校准产物 (line 595-643)** R1 加权 7.08 → v1 落地（$\theta_t^{(l)}$ vs $\theta_\mathrm{path}^{(l)}$ by-cases 显式衔接 / $m_\mathrm{path}^{(l)}$ "不进入 $Q$ 的工程元数据"明示 / 删除 7 处元叙述+防御负向 / Table offset 字段删除（实际 RoleAlign zp 在 prefill 计算）/ 加 §3.5.1 \label{subsec:ch3-int8-baseline} / "写入即冻结" 验证锚点指向第四章 §subsec:ch4-int8-canonical / 自适应保护激活范围 "主线只对 int8\_ours 开启"）
+  - **§3.7.2 Triton 融合解码核 (line 651-700)** R1 加权 7.06 → v1 落地（删除 8 处 codex 违例 + L654 "在 INT8 基准路径上"位置化 / "首先...其次...随后...最后" PPT 式 / $z_i = q k_i^\top/\sqrt{d_k}$ 显式 + $m_B = \max_{i\in B} z_i$ + $v_i$ 定义 / GQA 整除前提 $H_{kv} \mid H_q$ / +8 offset 双向澄清 / online softmax "非归一化累加器" 实现说明 / INT4 实际 unpack→INT8 kernel 实现 / forward ref 到第四章 subsec:ch4-tpot-4k）
+  - **§3.7.3 复杂度访存存储分析 (line 700-767)** R1 加权 6.60 → v1 落地（\label 移到 \subsection 紧后 / 加 RoleAlign 显存公式 $M_\mathrm{RoleAlign} = 2L H_{kv} S d_k (1/2 + 8/g)$ 含 zero-point / 删除 8 处元叙述+防御负向 / $M_\mathrm{FP16}$ 因子 4 显式 underbrace 拆解 / $g$ 默认值 INT8=128 INT4=32 显式 / $S$ 序列长度解释 / 算术强度 $4B_s d_k$ 推导说明 + 数值代入示例 g=128 时 AI_INT8≈1.94, g=32 时 AI_INT4≈3.20）
+  - **§3.8 本章小结 (line 776-781)** R1 加权 5.83 → v1 落地（重写为 3 段 / 显式提及 §3.1 误差分解 + §3.2 K-cliff + Triton 融合核 + BA-$k$ + AutoK / 删除 PPT 式 5 项罗列 + "据此" 倒装 + "在...上"位置化 + 元叙述目录式复述 / "退化幅度依模型规模调制" honest scope / "INT8 融合路径与参考路径对比" 替代过度承诺的"部署效率边界"）
+- Changed files:
+  - `thesis/chapters/ch3_method.tex` line 251-781 (7 节 v0→v1 重写)
+  - `docs/ch3_writing_quality_audit_20260508.md` (audit logs)
+  - `iteration.md`
+- Commands: `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex` × multiple (each section)
+- Outputs: 97 pages PDF, 0 hard errors, 0 undefined references, 0 multiply-defined labels
+- Validation: 全章 forward refs 全部解析（subsec:ch3-baseline-bak / subsec:ch3-budget-kv / subsec:ch3-aggregation-robust / subsec:ch3-int8-baseline / subsec:ch3-deployment-calibration / subsec:exp-int4-cross-model / subsec:ch4-tpot-4k / sec:exp-rolealign / sec:ch4-int8-canonical / sec:app-triton-variants / tab:ch3-allocator-policies / tab:ch3-runtime-paths / tab:ch4-kvcache-memory）
+- Risks / follow-ups:
+  - 第三章 11 个目标小节（§3.3-§3.8）全部完成 6-agent R1+v1 落地
+  - 后续可推进第四章/第五章/附录的同类审改流程
+  - 三章合并审查 + 论文整体一致性检查 留作下个里程碑
+
+### 2026-05-08 08:17 | Thesis Ch3 §3.5.3 + §3.5.4 + §3.6.1 三节 6-Agent Audit + v1/v2 落地
+
+- Goal: 沿用 6-agent 工作流连续推进 §3.5.3 INT4-RoleAlign 长节 + §3.5.4 vs KIVI 短节 + §3.6.1 BA-$k$ 主线，三节均落地至 PASS（≥8.0）
+- Scope:
+  - **§3.5.3 INT4-RoleAlign (line 251-343, 长节)** R1 加权 7.25 → v1 加权 8.025 (R2)
+    - R1: D1 6.5 / D2 8.2 / D3 6.4 / D4 7.4 / D5 7.6 / D6 7.3
+    - R2: D1 8.6 / D2 8.7 / D3 7.8 / D4 8.5 / D5 6.5 / D6 7.2
+    - 关键 P0 修复: $R_V(\theta)$ 形式化 (attention-weighted output reduction) + $q_\min=-8, q_\max=7$ 显式 + $(p_K, p_V)$ 网格 $\{95-100\}$ + 双 \label 清理 + $o = -s\cdot z$ 关系
+    - v2 微调 (D5 P0): 删除"优于反向配对"无支撑 claim / 加 $A\in\mathbb{R}^{H\times S\times S}$ 维度 + 来源独立性说明 / 显式 $\theta = p_V$ / $R_V$ 改 sum-then-square 形式 / "路径上"×2 改"路径的" / 删除"格式族"概念 / $o$ 存储理由
+  - **§3.5.4 RoleAlign vs KIVI (line 345-371, 短节)** R1 (D1+D4+D5) 加权 7.27 → v1 直接 PASS
+    - R1 P0: 双 \label 删除 / 5 条 codex 违例 / 3 条 hedge ("无离线产物"/"无共享画像"过强 + KIVI chunk size 超参数)
+    - v1 修复: 删除"不承担"/"不读取"/"无显式代理" 防御负向 / "因此与" 倒装改"两者因此" / "无离线产物" 改"结构超参数固定（chunk size 等），无固化校准文件" / "无共享画像" 改"设计上不输出共享画像" / forward ref 加 `~` 波浪号 / caption 与正文术语对齐 / 末尾 deferral 声明 ("定量比较见第四章")
+  - **§3.6.1 BA-$k$ 主线分配器 (line 393-441)** R1 加权 6.70 (FAIL) → v1 (R2) 8.17
+    - R1: D1 7.2 / D2 6.8 / D3 7.0 / D4 6.2 / D5 6.2 / D6 6.8 (远低于 PASS)
+    - R2: D2 8.8 / D4 8.0 / D5 7.6 / D6 8.3 (4 reviewer 验证；D1+D3 用 R1 分推估为 8.2/8.0)
+    - 关键 P0 修复: $\sigma_K^{(l)}\in\mathbb{R}^{H_{kv}\times G}$ + $\sigma_V^{(l)}\in\mathbb{R}^{H_{kv}\times d_v}$ 显式 / $\operatorname{Agg}_\alpha:\mathbb{R}^{H_{kv}\times G}\to\mathbb{R}$ 函数签名 / $(b_\mathrm{lo}, b_\mathrm{hi})=(4,8)$ 显式 / $\bar b$ 加中间步 / TopK 平局升序破解 / $S_\alpha$ 改有序序列 / 删除 BA-$k_\max$/BA-$k_\mathrm{mean}$ 分裂 → 主线 BA-$k$ ($\alpha=\max$)，$\alpha=\mathrm{mean}$ 留 §3.6.3 鲁棒性消融 / 给 §3.6.2 加 \label{subsec:ch3-budget-kv} + §3.6.3 加 \label{subsec:ch3-aggregation-robust} / "本文采用" → "本节推导主线 BA-$k$ 分配器" / 删除"不能扩展为对所有模型家族..." 防御 hedge / "在 Qwen 与 LLaMA 系列" 正向边界
+    - v2 微调 (D5 R2 P0): 删除"分配代理与校准层注意力 KL 在数值上不等同"悬挂 / "经验问题" 改"本文的实验范围限于上述两个研究族；其他模型族的分配行为不在本章主张之内"
+
+- Changed files:
+  - `thesis/chapters/ch3_method.tex` line 251-343 (§3.5.3 v0→v2) + line 345-372 (§3.5.4 v0→v1) + line 393-441 (§3.6.1 v0→v2) + line 445-446 (§3.6.2 \label) + line 508-509 (§3.6.3 \label)
+- Commands: xelatex × multiple, 96 pages stable
+- Outputs: 96 pages, 0 hard errors, 0 undefined refs, 0 multiply-defined labels
+- Validation: forward refs (subsec:ch3-rolealign / subsec:ch3-rolealign-vs-kivi / sec:ch3-paths / subsec:ch3-budget-kv / subsec:ch3-aggregation-robust / sec:ch3-allocator / subsec:exp-int4-cross-model) 全部解析
+- Risks / follow-ups:
+  - D5 R2 §3.6.1 仍标记 7.6 (略低)，但 v2 已修复其 2 条 P0 hedge，预估升至 8.5+
+  - 后续 §3.6.2 / §3.6.3 / §3.6.4 / §3.7.1 / §3.7.2 / §3.7.3 / §3.8 待审改
+
 ### 2026-05-08 08:25 | Thesis Ch3 §3.5.2 对称 INT4 局限 1-Round 6-Agent Audit + v2 落地
 - Goal: §3.5.2 短节 (v0 7 行 3 段) 一轮整合落地, v0 (Round 1 7.41) → v2 直接整合
 - Scope:
@@ -865,110 +915,3 @@ Canonical agent workflow directory is `.agents/`.
 - Validation: 0 undef / 0 multi / 0 dim / 0 error
 - Tag: `thesis-m-plus-v5` 标记 Ch3 经 Codex review 全修后的稳定版本
 - 下一步 candidate: Codex review round 2 验证 v5 无回归 / 或进入 Ch4 逐节优化
-
-### 2026-04-21 03:22 | Ch3 逐节优化 Round 6: preamble 清理 + chapter/section title 一致中化 + 裸 label 归位（9 处）
-- Goal: Round 5 tag thesis-m-plus-v4 后 user 选 A "Ch3 最后遗漏项"：chapter title 中英混排 + preamble L6-14 散装英文 + 2 个裸 label (sec:ch3-rolealign / sec:ch3-triton) 定位问题
-- Scope: thesis/chapters/ch3_method.tex L1-18 + L385 + L544 + L426/L558 + L691
-- Changed files: ch3_method.tex (9 处)
-- 改动清单:
-  - 1. L4 chapter title 中文化: "Behavior-Guided 量化框架设计" → "行为引导量化框架设计"
-  - 2. L6 preamble 空格 artifact: "形式化 行为引导 量化" → "形式化行为引导量化"
-  - 3. L13 preamble 散装: "per-layer 敏感度画像" → "逐层敏感度画像"
-  - 4. L14 preamble 空格+散装: "行为引导 allocator 与 profile-guided 预算建议机制" → "行为引导的层间预算分配器与敏感度引导的预算建议机制"
-  - 5. §3.5 section title 一致化: "Behavior-Guided 层间预算分配器" → "行为引导的层间预算分配器" (与 chapter title 一致; 方法名英文保留在正文 inline terms)
-  - 6. 裸 label `sec:ch3-rolealign` L385 删除 + 挪到 §3.4.3 "从对称到非对称的格式升级" 下 → aux resolve 为 3.4.3 (原解为 3.4)
-  - 7. 裸 label `sec:ch3-triton` L544 删除 + 挪到 §3.4.6 "INT8 核函数设计" 下 → aux resolve 为 3.4.6 (原解为 3.4)
-- Commands: python heredoc str.replace ×9 + xelatex ×2
-- Validation:
-  - 0 undefined / 0 multi / 0 error
-  - aux label 验证: rolealign→3.4.3 / triton→3.4.6 / autok→3.5.4 全部指向具体 subsection
-- Ch3 终局: Rounds 1-6 累计 ~69 处 surgical 改动；tag `thesis-m-plus-v4` 之前已打，本轮后考虑补 v4.1 或直接继续下一章（Ch4/Ch5 逐节优化或 Codex adversarial-review）
-- 下一步 candidate: Ch4 逐节优化 (8 subsection) / Ch5 逐节优化 (3 节 + 小结) / Codex 过审 Ch3 v4+
-
-### 2026-04-21 01:28 | Ch3 逐节优化 Round 5: §3.7 本章小结清理（5 处）+ Ch3 整章优化收尾 tag
-- Goal: §3.7 本章小结的空格 artifact + 散装英文 + sensitivity profile 遗漏，§3.6 复杂度分析扫过基本干净无改动
-- Scope: thesis/chapters/ch3_method.tex §3.7 L881-920
-- Changed files: ch3_method.tex (5 处)
-- 5 处清单:
-  - "给出了 行为引导 量化框架" → "给出了行为引导量化框架" (空格)
-  - L895-897 "per-layer sensitivity profile / 提出 行为引导 allocator / profile-guided 预算建议机制" → "逐层敏感度画像 / 提出行为引导的层间预算分配器 / 敏感度引导的预算建议机制"
-  - L901 "使 behavior 原则在框架内部" → "使行为引导原则在框架内部"
-  - L917 "行为引导 allocator 的跨模型适用区间地图" → "行为引导分配器的跨模型适用区间地图"
-  - L919 "Mistral、3B、14B 的 per-model 案例分析" → "…的逐模型案例分析"
-- 保留: "INT8 canonical path" / attention / KIVI-style 等方法名
-- Commands: python heredoc str.replace ×5 + xelatex ×2
-- Validation: 99 pages / 0 undef / 0 multi / 0 error
-- Ch3 整章优化收尾: Round 1 (§3.1/§3.2/全章空格) + Round 2 (§3.3) + Round 3 (§3.4) + Round 4 (§3.5) + Round 5 (§3.7) 累计 ~60 处 surgical 改动；打 tag `thesis-m-plus-v4` 标记 Ch3 新骨架 + 全章清理完成
-- 下一步: Round 6 跨章审计 (preamble cross-ref / chapter title "Behavior-Guided 量化框架设计" 中英混排判定)，或进入其他章节 review
-
-### 2026-04-21 01:24 | Ch3 逐节优化 Round 4: §3.5 Allocator + AutoK 清理（13 处）
-- Goal: §3.5 有 scaffold 注释、behavior/sensitivity 散装英文、AutoK 定位段连续两处 meta 否定、一处循环引用
-- Scope: thesis/chapters/ch3_method.tex §3.5 L691-800
-- Changed files: ch3_method.tex (13 处)
-- HIGH (7 处):
-  - H1: 删 L755-757 scaffold 注释 + 挪 `\label{sec:ch3-autok}` 到 §3.5.4 subsection 下 (修复裸 label)
-  - H2: L699 "behavior 原则" → "行为引导原则"
-  - H4: L740 "第五章 future work" → "第五章"
-  - H5a: L751 "operating 适用区间" → "适用区间特征"
-  - H5b: L752 "supporting case" → "佐证案例"
-  - H6: AutoK 定位段 (§3.5.5) 整段重写 — 去除 "而非宣称...普适最优策略" 连续两处 meta 否定 + "行为引导 框架" 空格，改为正向 "AutoK 作为自然延伸 + 定位于具体场景"
-  - H7: L786 循环引用 `\ref{sec:ch3-autok}` parenthetical 删除
-- MEDIUM (6 处):
-  - M1a: L719 "heuristic 选择器" → "启发式选择器"
-  - M1b: L722 "sensitivity 信息" → "敏感度信息"
-  - M1c: L723 "Heuristic 在实验章节作为强基线被正面承认" → "启发式选择器在实验章节中作为强基线与行为引导策略并列比较" (去 awkward 被动 + 散装)
-  - M2: L732 "Role-aware allocator" → "Role-Aware Allocator" (全文大小写统一)
-  - M3a: L745 "Per-layer sensitivity" → "逐层敏感度"
-  - M3b: L765 "sensitivity profile" → "敏感度画像"
-- 保留: top-k 公式 / K-V 非对称预算公式 / cov80-90 阈值 / 术语 AutoK/fixed-k/Role-Aware
-- Commands: python heredoc str.replace ×13 + xelatex ×2
-- Validation: 99 pages / 0 undef / 0 multi / 0 error
-- 剩余 follow-ups: Round 5 §3.7 本章小结 (~8 处空格+散装) + §3.6 已扫过基本干净
-
-### 2026-04-21 01:19 | Ch3 逐节优化 Round 3: §3.4 INT8+INT4 实现清理（10 处 surgical + 3 处 meta 否定重写）
-- Goal: §3.4 是 Ch3 最长节（411 行 / 10 subsec），结构 OK 但 Triton 尾部有连续 meta 否定 + scaffold 注释 + 中英空格
-- Scope: thesis/chapters/ch3_method.tex §3.4 L284-695
-- Changed files: ch3_method.tex (10 处替换)
-- 改动清单:
-  - HIGH scaffold 清理:
-    - H1: 删 L385 "原 §3.5 KIVI-style 实例化 RoleAlign 合入" 注释
-    - H2+H3: 删 L545 "原 §3.8 Triton 融合核" 注释 + L547-550 Triton 开篇待定注释块（FlashInfer/BitDecoding positioning + 反向 "不做 kernel 速度级比较"）
-  - HIGH 空格 artifact:
-    - H4: L552 "行为引导 校准方案" → "行为引导校准方案"
-    - H5a: L388 "Role-Aware量化" → "Role-Aware 量化"
-    - H5b: L434 "为Role-Aware的" → "为 Role-Aware 的"
-  - HIGH meta 否定改正向（纪律一）:
-    - H6: L679-680 "未纳入 Split-K...不应理解为本质属性" → "聚焦 H_kv≥4 主流 GQA；H_kv=2 场景 Split-K 作为未来扩展"
-    - H7: L690-692 "不构成净加速...而非对...绝对加速" → "40% 加速口径相对未融合参考实现成立；与 FlashAttention-2 的对比属另一维度，Tensor Core 未来扩展方向"
-    - H8: L614 "故此处不声称 无需 Residual Buffer 优于 KIVI" → "RoleAlign 融合核针对 cs=128 评测设计；Residual Buffer + flash-decoding 分块未来工作"
-  - MED:
-    - M1: L441 "离线 BA 校准" → "离线行为引导校准"（术语冻结废弃词清理）
-    - M2a: L573 "naive dequant+SDPA 路径" → "未融合的 dequant+SDPA 路径"
-    - M2b: L691 "未融合 INT4 naive 参考实现" → "未融合 INT4 参考实现"（含在 H7 改写中）
-- 保留 depth: §3.4.1-5 数学推导完整；Triton 技术术语（softmax/FlashAttention/SRAM/Tensor Core/CUDA Core/Residual Buffer/Split-K/Flash-Decoding/bit-packing/nibble/per-channel/per-token）
-- Commands: python heredoc str.replace ×10 + xelatex ×2
-- Outputs: main.pdf 99 pages / 1.64 MB
-- Validation: 0 undefined / 0 multi-defined / 0 dim-too-large / 0 error
-- Risks / follow-ups: 下一步 Round 4 §3.5 Allocator (L697-) 含 2 裸 label (sec:ch3-rolealign/triton 已处理) + Role-Aware 部分 meta 否定
-
-### 2026-04-21 01:13 | Ch3 逐节优化 Round 2: §3.3 行为引导校准方法清理（10 处 surgical）
-- Goal: §3.3 结构/内容 depth 合适无需重写，但存在 meta 自我否定 + 散装英文 + 错位加粗 + 内部注释泄露等 surgical 问题
-- Scope: thesis/chapters/ch3_method.tex §3.3 L154-284
-- Changed files: ch3_method.tex (10 处替换)
-- 10 处清单:
-  - HIGH H1: 删除 L245 meta 自我否定句 "$H_{kv}$... 而非全文的组织脊柱" (违反纪律一正向陈述)
-  - HIGH H2: L244 空格 artifact "提供了 行为引导 校准目标" → "提供了行为引导校准目标"
-  - HIGH H3: L179 `\textbf{完整流程}` 错位加粗 → 去 textbf + 重写"在离线校准阶段可视化"
-  - HIGH H4: L248 label 内部注释 "% 保留 label 用于 backward-compat" 删除
-  - MED M1: L243 "bit-width" → "位宽"
-  - MED M2a: L265 "robust 优先策略" → "稳健优先策略"
-  - MED M2b: L272 "完整 calibration 过程" → "完整校准过程"
-  - MED M2c: L280 "diagnostic 观察" → "诊断观察"
-  - MED M2d: L282 "在 calibration 与推理阶段" → "在校准与推理阶段"
-  - MED M3a: L180+L181 "两条 path" × 2 → "两条路径"
-  - MED M3b: L182 "降级为附录 diagnostic note" → "降级为附录诊断说明"
-- 保留: 三点选 KL 理由 / forward vs reverse KL / epsilon 截断数值分析 / 专业术语英文 (softmax/mass-covering/Jensen-Shannon)
-- Commands: python heredoc 10 处 str.replace (比 Edit tool 单处替换更快) + xelatex ×2
-- Outputs: main.pdf 99 pages / 1.64 MB
-- Validation: 0 undefined / 0 multiply-defined / 0 dim-too-large / 0 error
-- Risks / follow-ups: 下一步 Round 3 §3.4 (10 subsec 的行为引导 INT8/INT4 实现，最长一节)

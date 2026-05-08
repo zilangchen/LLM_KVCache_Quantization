@@ -1639,3 +1639,41 @@ s_{l,j}^{\mathrm{dyn}}
 因此对称 \texttt{INT4} 在本文中扮演格式选择的下界锚点：单一对称 scale 既要在 \texttt{INT4} 网格上覆盖 Key 通道间的幅值异质性，又要承担 Value 逐 token 的动态范围变化，两个维度被压在同一参数上互相妥协。下一节将低比特路径改写为 \texttt{INT4-RoleAlign}，把这两个维度分配到独立量化轴上。
 ```
 
+
+
+## §3.5.3 INT4-RoleAlign 角色感知非对称量化 — 审改循环
+
+**目标行**: ch3_method.tex line 251-342 (长节, v0)
+
+### Round 1 综合（v0 审）
+
+加权综合: **7.25 / 10**
+
+| Agent | 分数 | Verdict | 关键问题 |
+|-------|------|---------|---------|
+| D1 顶会 | 6.5 | 🟡 | P0: $q_\min/q_\max$ 缺 / 双 label / P1: 元叙述 + 防御 |
+| D2 数学 | 8.2 | 🟡 | P1: $q_\min=-8/q_\max=7$ 缺 / P2: 维度 / $p_K\in(50,100]$ / o-z 关系 |
+| D3 复现 | 6.4 | 🟡 | P1: $q_\min=-8, q_\max=7$ / 候选网格 {95-100} |
+| D4 中文 | 7.4 | 🟡 | 4 必改: L255/299/318/342 元叙述 + 防御 |
+| D5 Skeptical | 7.6 | 🟡 | **P1: $R_V(\theta)$ 悬挂——§3.4.1/§3.4.2 forward ref 到 §3.5.3 但本节未定义！** |
+| D6 博士生 | 7.3 | 🟡 | M1: $q_\min/q_\max$ 缺 / M2: KIVI ↔ 端点逻辑联系缺 |
+
+### Round 1 整合修订（v0 → v1，落地）
+
+**P0 必改：**
+1. **D5 Q5**: $R_V(\theta) = \mathbb E\|A \cdot (V - \tilde V_\theta)\|^2$ 显式公式（attention-weighted MSE，代码 ground truth）
+2. **D1+D2+D3+D6**: $q_\min=-8, q_\max=7$ INT4 取值（代码 ground truth: asymmetric_quant.py L83）
+3. **D1 P0**: 删除双 label `\label{sec:ch3-rolealign}`
+4. **D3 P1**: $(p_K, p_V)$ 候选网格 $\{95, 97, 99, 99.5, 99.9, 100.0\}$
+5. **D4 4 必改**: L255 / 299 / 318 / 342 元叙述 + 防御负向清理
+
+**P1：**
+6. L257/279 "本文采用" → "Key 侧使用 / Value 侧使用"
+7. 加 K/V 组合动机 (D1 P2)
+8. $\operatorname{Percentile}(\cdot;100)=\max$ 显式 (D5 Q3)
+9. $o = -s\cdot z$ 关系 (D2 G3)
+10. $p_K \in (50, 100]$ 约束 (D2 G4)
+11. L318 "因此..." 英文倒装 → 改为直接陈述（D4 P3）
+
+### v1 落地稿见 git commit。
+
