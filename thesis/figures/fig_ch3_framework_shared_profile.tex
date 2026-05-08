@@ -1,75 +1,103 @@
 \begin{figure}[!htbp]
   \centering
-  \resizebox{0.96\linewidth}{!}{%
+  \resizebox{0.98\linewidth}{!}{%
   \begin{tikzpicture}[
     x=1cm, y=1cm,
     >=Stealth,
     every node/.style={font=\rmfamily\small, align=center, text=black},
+    stage/.style={
+      rectangle, rounded corners=6pt,
+      draw=black!22, fill=black!1, line width=0.65pt
+    },
+    stageLabel/.style={font=\bfseries\scriptsize, text=black!68, anchor=west},
     card/.style={
       rectangle, rounded corners=5pt,
-      fill=black!1, line width=0.75pt,
-      minimum height=3.20cm
+      draw=black!28, fill=white, line width=0.72pt,
+      minimum height=3.15cm
     },
-    title/.style={font=\bfseries\small, text=black, anchor=west},
-    subtitle/.style={font=\scriptsize, text=black!62, anchor=west},
-    tag/.style={
-      rectangle, rounded corners=3pt,
-      minimum height=0.42cm, inner sep=2.5pt,
-      font=\scriptsize, line width=0.55pt
+    smallcard/.style={
+      rectangle, rounded corners=5pt,
+      draw=black!28, fill=white, line width=0.72pt,
+      minimum height=1.28cm
     },
+    cardTitle/.style={font=\bfseries\scriptsize, text=black!78},
     row/.style={
       rectangle, rounded corners=3pt,
-      minimum height=0.62cm, inner sep=3.0pt,
-      font=\scriptsize, line width=0.62pt
+      minimum height=0.46cm, inner sep=2.3pt,
+      font=\scriptsize, line width=0.55pt
     },
-    arr/.style={-Stealth, draw=black!52, line width=0.75pt},
-    faint/.style={draw=black!16, line width=0.55pt}
+    note/.style={font=\scriptsize, text=black!58},
+    arr/.style={-Stealth, draw=black!50, line width=0.74pt},
+    arrBlue/.style={-Stealth, draw=blueTone!72!black, line width=0.78pt},
+    arrGreen/.style={-Stealth, draw=greenTone!70!black, line width=0.78pt},
+    arrGold/.style={-Stealth, draw=goldTone!78!black, line width=0.78pt}
   ]
-    \definecolor{kBlue}{RGB}{58,104,173}
-    \definecolor{kBlueFill}{RGB}{224,235,249}
-    \definecolor{vTeal}{RGB}{66,139,133}
-    \definecolor{vTealFill}{RGB}{224,242,239}
-    \definecolor{safeGreen}{RGB}{73,135,96}
-    \definecolor{safeGreenFill}{RGB}{230,243,234}
-    \definecolor{anchorGold}{RGB}{178,130,26}
-    \definecolor{anchorGoldFill}{RGB}{250,239,202}
+    \definecolor{blueTone}{RGB}{62,103,167}
+    \definecolor{blueFill}{RGB}{230,238,250}
+    \definecolor{greenTone}{RGB}{66,134,108}
+    \definecolor{greenFill}{RGB}{229,243,236}
+    \definecolor{goldTone}{RGB}{178,132,37}
+    \definecolor{goldFill}{RGB}{251,240,211}
+    \definecolor{grayFill}{RGB}{245,246,248}
 
-    \node[title] at (0.25,4.05) {行为引导量化框架};
-    \node[subtitle] at (0.25,3.68) {从离线行为参考形成共享画像，再分别落到校准与预算分配};
-    \draw[faint] (0.25,3.42) -- (13.60,3.42);
+    \node[stage, minimum width=13.80cm, minimum height=5.42cm] (offline) at (6.95,2.76) {};
+    \node[stage, minimum width=3.18cm, minimum height=5.42cm] (onlineStage) at (15.70,2.76) {};
+    \node[stageLabel] at (0.34,5.28) {离线阶段};
+    \node[stageLabel] at (14.30,5.28) {在线推理阶段};
 
-    % Card 1
-    \node[card, draw=vTeal!70!black, minimum width=3.15cm] (c1) at (1.95,1.78) {};
-    \node[font=\bfseries\scriptsize, text=vTeal!70!black] at (1.95,2.98) {1 \quad 离线行为参考};
-    \node[tag, draw=vTeal, fill=vTealFill, text width=2.05cm] at (1.95,2.34) {注意力分布};
-    \node[tag, draw=vTeal, fill=vTealFill, text width=2.05cm] at (1.95,1.64) {聚合输出};
-    \node[font=\scriptsize, text=black!56] at (1.95,0.86) {FP16 参考路径};
+    \node[card, minimum width=2.52cm] (input) at (1.55,2.72) {};
+    \node[cardTitle] at (1.55,4.03) {离线输入};
+    \node[row, draw=black!24, fill=grayFill, minimum width=1.82cm] at (1.55,3.45) {校准样本};
+    \node[row, draw=black!24, fill=grayFill, minimum width=1.82cm] at (1.55,2.72) {FP16 参考行为};
+    \node[row, draw=black!24, fill=grayFill, minimum width=1.82cm] at (1.55,1.99) {候选路径 $\Theta$};
+    \node[note] at (1.55,1.31) {固定校准集};
 
-    % Card 2
-    \node[card, draw=safeGreen!70!black, fill=safeGreenFill, minimum width=3.55cm] (c2) at (6.10,1.78) {};
-    \node[font=\bfseries\scriptsize, text=safeGreen!64!black] at (6.10,2.98) {2 \quad 共享画像};
-    \node[font=\bfseries\small] at (6.10,2.36) {行为敏感度画像 $\mathcal S$};
-    \node[font=\scriptsize, text=black!64] at (6.10,1.94) {逐层读数};
-    \node[font=\scriptsize, text=black!64] at (6.10,1.58) {供预算分配读取};
-    \node[tag, draw=safeGreen!45!black, fill=white, text width=0.95cm] at (5.02,0.86) {来源};
-    \node[tag, draw=safeGreen!45!black, fill=white, text width=0.95cm] at (6.10,0.86) {接口};
-    \node[tag, draw=safeGreen!45!black, fill=white, text width=0.95cm] at (7.18,0.86) {稳健};
+    \node[card, draw=blueTone!60!black, fill=blueFill, minimum width=3.18cm] (calib) at (4.95,2.72) {};
+    \node[cardTitle, text=blueTone!64!black] at (4.95,4.03) {离线校准链路};
+    \node[row, draw=blueTone!55!black, fill=white, minimum width=2.34cm] at (4.95,3.43)
+      {计算 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$};
+    \node[row, draw=blueTone!55!black, fill=white, minimum width=2.34cm] at (4.95,2.72)
+      {候选搜索 $\theta\in\Theta$};
+    \node[row, draw=blueTone!55!black, fill=white, minimum width=2.34cm] at (4.95,2.01)
+      {稳健选择};
+    \node[note] at (4.95,1.31) {路径参数在离线侧确定};
 
-    % Card 3
-    \node[card, draw=black!32, minimum width=4.65cm] (c3) at (11.15,1.78) {};
-    \node[font=\bfseries\scriptsize, text=black!70] at (11.15,2.98) {3 \quad 决策落点};
-    \node[row, draw=kBlue, fill=kBlueFill, text width=3.75cm] at (11.15,2.32)
-      {\textbf{校准决策}\quad INT8 基准 / 对称 INT4 / RoleAlign};
-    \node[row, draw=anchorGold, fill=anchorGoldFill, text width=3.75cm] at (11.15,1.48)
-      {\textbf{预算分配}\quad BA-$k$ / Heuristic-$k$ / AutoK};
-    \node[row, draw=black!42, fill=black!4, text width=3.75cm] at (11.15,0.70)
-      {在线只读：读取冻结产物与预算配置};
+    \node[smallcard, draw=blueTone!60!black, fill=white, minimum width=2.72cm] (theta) at (8.75,3.72) {};
+    \node[cardTitle, text=blueTone!64!black] at (8.75,4.08) {冻结校准产物};
+    \node[font=\bfseries\small] at (8.75,3.68) {$\theta^\star$};
+    \node[note] at (8.75,3.30) {尺度、零点、角色格式};
 
-    \draw[arr] (c1.east) -- node[above, font=\tiny, text=black!55] {读数} (c2.west);
-    \draw[arr] (c2.east) -- node[above, font=\tiny, text=black!55] {复用} (c3.west);
+    \node[smallcard, draw=greenTone!62!black, fill=greenFill, minimum width=2.72cm] (profile) at (8.75,1.72) {};
+    \node[cardTitle, text=greenTone!58!black] at (8.75,2.09) {行为敏感度画像};
+    \node[font=\bfseries\small] at (8.75,1.69) {$\mathcal S=\{s^{(l)}\}_{l=1}^{L}$};
+    \node[note] at (8.75,1.30) {校准链路副产物};
 
+    \node[smallcard, draw=goldTone!70!black, fill=goldFill, minimum width=2.82cm] (alloc) at (12.03,1.72) {};
+    \node[cardTitle, text=goldTone!72!black] at (12.03,2.09) {预算分配};
+    \node[font=\bfseries\small] at (12.03,1.69) {$\mathcal A(\mathcal S;\bar b)$};
+    \node[note] at (12.03,1.30) {生成位宽向量 $b^\star$};
+
+    \node[card, draw=black!32, fill=white, minimum width=2.72cm] (online) at (15.70,2.72) {};
+    \node[cardTitle] at (15.70,4.03) {在线只读执行};
+    \node[row, draw=blueTone!45!black, fill=blueFill, minimum width=1.82cm] at (15.70,3.45)
+      {读取 $\theta^\star$};
+    \node[row, draw=goldTone!55!black, fill=goldFill, minimum width=1.82cm] at (15.70,2.72)
+      {读取 $b^\star$};
+    \node[row, draw=black!24, fill=grayFill, minimum width=1.82cm] at (15.70,1.99)
+      {缓存写入与解码};
+    \node[note] at (15.70,1.31) {固定产物执行};
+
+    \draw[arr] (input.east) -- node[above, font=\tiny, text=black!55] {参考与候选} (calib.west);
+
+    \coordinate (fork) at ($(calib.east)+(0.42,0)$);
+    \draw[arrBlue] (calib.east) -- (fork) |- node[pos=0.72, above, font=\tiny, text=blueTone!66!black] {冻结产物} (theta.west);
+    \draw[arrGreen] (fork) |- node[pos=0.72, below, font=\tiny, text=greenTone!58!black] {副产物} (profile.west);
+    \draw[arrGold] (profile.east) -- node[above, font=\tiny, text=goldTone!70!black] {只读画像} (alloc.west);
+
+    \draw[arrBlue] (theta.east) -- ++(0.52,0) |- node[pos=0.70, above, font=\tiny, text=blueTone!66!black] {缓存参数} (online.west |- theta.east);
+    \draw[arrGold] (alloc.east) -- ++(0.52,0) |- node[pos=0.70, below, font=\tiny, text=goldTone!70!black] {预算配置} (online.west |- alloc.east);
   \end{tikzpicture}%
   }
-  \caption{行为引导量化框架总览。\textbf{Card 1} 提供 FP16 注意力分布与聚合输出两类离线参考行为；\textbf{Card 2} 汇聚为校准链路的副产物——逐层共享画像 \(\mathcal{S}=\{s^{(l)}\}_{l=1}^{L}\)；\textbf{Card 3} 中的校准决策 \(\theta^\star\) 由同一离线链路直接产出，预算分配决策 \(b^\star\) 由分配模块只读 \(\mathcal{S}\) 推得。代理实例与稳健性细节分见第~\ref{sec:ch3-calibration}~节与第~\ref{sec:ch3-allocator}~节。}
+  \caption{行为引导量化框架总览。离线校准链路以校准样本、FP16 参考行为与候选量化路径为输入，计算行为代理并完成稳健选择，随后形成冻结校准产物 \(\theta^\star\)。同一链路同步生成逐层行为敏感度画像 \(\mathcal S\)，预算分配模块只读该画像，在平均位宽预算 \(\bar b\) 下生成位宽向量 \(b^\star\)。在线推理阶段读取 \(\theta^\star\) 与 \(b^\star\)，执行缓存写入与解码。}
   \label{fig:ch3-framework-shared-profile}
 \end{figure}
