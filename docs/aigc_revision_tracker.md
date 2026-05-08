@@ -939,6 +939,47 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 36
+
+- Report segment: 36
+- Source paragraph: `thesis/chapters/ch4_experiments.tex`, line 59
+- Detector excerpt begins: `Needle-in-a-Haystack的失败信号是目标片段能否被精确取回...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: rigid `失败信号是...` opening, quoted meta phrase, and a compressed final clause that turned the metric explanation into a formulaic boundary statement.
+- Rewrite goal: keep the Needle protocol exact while describing the metric as a concrete retrieval proxy.
+- Style constraints: avoid quoted self-explanation, avoid overclaiming exact-match pass rate as full long-context ability, and keep the four context lengths and needle-depth scan.
+
+### Preserved Information
+
+- The paragraph still describes Needle-in-a-Haystack.
+- The target fragment still must be precisely retrieved.
+- The evaluation still covers 4K, 8K, 16K, and 32K context lengths.
+- The evaluation still scans unified needle-depth settings.
+- The main text still uses exact-match pass rate as the reported reading.
+- The reading still serves as a functional boundary signal for retrieval, now phrased as a proxy for long-distance target-fragment retrieval ability.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the protocol details are preserved.
+- Chinese academic writing reviewer: PASS; confirmed the paragraph is less mechanical.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with Chapter 4 Needle and RULER usage.
+- Skeptical reviewer: first pass failed because `唯一主读数` and `长距离检索能力` were too strong; final version passed after narrowing exact match to a proxy reading.
+
+### Applied Revision
+
+```tex
+Needle-in-a-Haystack 关注目标片段能否被精确取回。评测覆盖 4K、8K、16K 与 32K 四个上下文长度，并在各长度内按统一的 needle 深度设置扫描；正文以精确匹配通过率作为主读数，将其作为长距离目标片段取回能力的代理读数。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated to this segment.
+
 ## Segment 35
 
 - Report segment: 35
