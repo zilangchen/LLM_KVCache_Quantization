@@ -1718,3 +1718,24 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - 报告 segment 1 还包含中文摘要第 2、3 段，后续继续按自然段逐段处理。
 - Commit: pending at log-write time; committed as `docs: polish aigc zh abstract paragraph 1`
+
+### 2026-05-09 00:59 | AIGC 段落修订 19a: INT4-RoleAlign K/V 路径代理口径
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理 `\texttt{INT4-RoleAlign}` K/V 分路径代理段。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将 `K-path`/`V-path` 与括号式参数说明改为自然中文表述。
+  - 保留五步流程、`$p_K$`/`$p_V$` 分别选择、K 侧注意力分布 KL 与尾部统计、V 侧 `$R_V(\theta)$` 与稳健统计、可行域审计框架和分路径阈值/排序键。
+  - 技术、中文、跨章一致性和 skeptical 审查均返回 PASS，失败建议已吸收。
+- Validation:
+  - `git diff --check`: PASS
+  - LaTeX: PASS，生成 100 页 PDF
+  - Residual: 仍有既存 Chapter 3 overfull hbox，与本段修订无关。
+- Risks / follow-ups:
+  - 同一检测片段还包含产物字段段落，下一轮单独处理。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 rolealign paths`

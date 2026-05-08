@@ -939,6 +939,49 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 19a
+
+- Report segment: 19
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 190
+- Detector excerpt begins: `K-path以pK...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: English-style `K-path`/`V-path`, parenthetical packing around `per-channel` and `per-token`, mixed English terminology for attention KL, and dash-packed framework wording.
+- Rewrite goal: keep the two-path calibration semantics while separating K-side and V-side proxy ownership more explicitly.
+- Style constraints: avoid unnecessary parentheses and dash explanations, prefer natural Chinese path names, and avoid implying that the V path is selected by attention KL tail statistics.
+
+### Preserved Information
+
+- `\texttt{INT4-RoleAlign}` still uses the preceding five-step flow.
+- `$p_K$` and `$p_V$` remain separately selected and are not collapsed into a single attention KL score.
+- K path still uses `$p_K$`, the per-channel Key asymmetric percentile-clipping parameter, with details in Section~`\ref{sec:ch3-paths}`.
+- K path still uses attention-distribution KL and tail statistics.
+- V path still uses `$p_V$`, the per-token Value asymmetric percentile-clipping parameter.
+- V path still uses the independent output perturbation proxy `$R_V(\theta)$`; its concrete form remains assigned to Section~`\ref{sec:ch3-paths}`.
+- The two paths still share the feasible-set audit framework, including clipping-rate filtering, path-specific primary ranking statistics, and secondary keys for ties or fallback.
+- Thresholds, primary ranking statistics, and secondary keys remain separately specified for the K/V paths.
+
+### Review Gate
+
+- Technical reviewer: first pass failed because the shared framework wording was too broad and did not explicitly preserve clipping-rate filtering, tail/robust primary ranking, and secondary-key fallback; final version passed after narrowing the shared part to a feasible-set audit framework.
+- Chinese academic writing reviewer: first pass failed on English-style path names and `为主序`; final version passed after using `K 路径`/`V 路径` and rewriting the ranking sentence.
+- Cross-chapter consistency reviewer: PASS; confirmed the paragraph remains aligned with Section~`\ref{sec:ch3-paths}` and Section~`\ref{sec:ch3-allocator}`.
+- Skeptical reviewer: first pass failed on possible V-path/KL ambiguity; final version passed after assigning K and V proxies separately.
+
+### Applied Revision
+
+```tex
+\texttt{INT4-RoleAlign} 仍使用上述五步流程，但 $p_K$ 与 $p_V$ 分别选择，不合并为单一注意力 KL 分数。K 路径的候选参数为 $p_K$，对应逐通道 Key 非对称量化的百分位裁剪参数，具体路径见第~\ref{sec:ch3-paths}~节；该路径使用注意力分布 KL 及其尾部统计完成选择。V 路径的候选参数为 $p_V$，对应逐 token Value 非对称量化的百分位裁剪参数；该路径使用独立输出扰动代理 $R_V(\theta)$ 及其稳健统计，具体形式见第~\ref{sec:ch3-paths}~节。两条路径共享可行域审计框架，包含裁剪率过滤、依据各自代理的尾部统计或稳健统计排序、用次级排序键处理并列与回退；对应阈值、主排序统计和次级排序键在 K/V 两条路径中分别给出。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 18
 
 - Report segment: 18
