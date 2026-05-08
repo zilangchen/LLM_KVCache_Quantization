@@ -939,6 +939,50 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 33.3
+
+- Report segment: 33
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 788
+- Detector excerpt begins: `第 3.6 节把校准产物中的逐层 K 侧角色尺度转写为敏感度画像...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: compressed section-list style, quoted abstract phrase `画像形状`, over-mechanical `折叠为单一阈值`, and a broad Chapter 4 handoff that sounded like a full deployment evaluation claim.
+- Rewrite goal: preserve the allocator and system handoff while correcting the AutoK coverage-threshold direction and making the Chapter 4 handoff more bounded.
+- Style constraints: avoid unnecessary quotes, avoid over-abstract phrasing, avoid saying AutoK makes a final automatic decision, and keep system evaluation scoped to TPOT and related system readings.
+
+### Preserved Information
+
+- Section~`\ref{sec:ch3-allocator}` still turns calibration artifacts into layer-level budget decisions.
+- The source signal remains the per-layer K-side role scale.
+- The sensitivity profile remains `$S_{K,\alpha}$`.
+- BA-`$k$` remains the main allocator.
+- The normalized coverage function `$\Gamma(k)$` remains part of the AutoK mechanism.
+- The coverage threshold `$\rho$` is still used by `\texttt{AutoK}` to obtain a minimum protected-layer count, now explicitly as a candidate.
+- Section~`\ref{sec:ch3-deployment}` still provides offline artifact fields, fused decode kernel interfaces, and memory-access/arithmetic-intensity decompositions for the three paths.
+- Chapter 4 still follows these fixed interfaces.
+- Chapter 4 still reports fidelity, low-bit-path effects and boundaries, cross-model policy regimes, and system readings relative to the reference decode path.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed the allocator and system handoff information is preserved.
+- Chinese academic writing reviewer: first pass failed on unnatural wording and hard phrases; final version passed after replacing `用到层级预算`, `反推`, `补齐系统接口`, and `跨模型策略适用区间`.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with Chapter 3 allocator definitions and Chapter 4 result organization.
+- Skeptical reviewer: first pass failed because the coverage-threshold direction was inaccurate and the deployment wording was broad; final version passed after stating that `\rho` is given and AutoK generates a candidate, and after narrowing system results to TPOT-style readings.
+
+### Applied Revision
+
+```tex
+分配部分接着把校准产物转化为层级预算。第~\ref{sec:ch3-allocator}~节从逐层 K 侧角色尺度得到敏感度画像 $S_{K,\alpha}$，并据此定义 BA-$k$ 主线分配器；归一化覆盖度函数 $\Gamma(k)$ 描述前 $k$ 个保护层对敏感度画像的累计覆盖程度。给定覆盖阈值 $\rho$ 后，\texttt{AutoK} 据此生成最小保护层数候选。第~\ref{sec:ch3-deployment}~节说明系统接口，列出离线校准产物字段、融合解码核接口，以及三条路径的访存和算术强度分解。第四章将基于这些固定接口报告质量保真、低比特路径的缓解效果与边界证据、跨模型策略的适用区间，并比较融合解码路径相对参考解码的 TPOT 等系统读数。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated to this segment.
+
 ## Segment 33.2
 
 - Report segment: 33

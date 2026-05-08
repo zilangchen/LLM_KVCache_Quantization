@@ -36,6 +36,28 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 02:50 | AIGC 段落修订 33.3: 第三章小结分配与系统承接
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理第三章小结中 BA-$k$、AutoK、系统接口与第四章承接段。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将分配器段从机械清单改为校准产物到层级预算的承接。
+  - 修正 AutoK 覆盖阈值方向，明确给定 $\rho$ 后生成最小保护层数候选。
+  - 将第四章承接收窄为质量、低比特路径边界、跨模型适用区间和 TPOT 等系统读数。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated.
+- Risks / follow-ups:
+  - 下一轮进入检测报告 Segment 34 的第四章评测指标段落。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 summary allocation handoff`
+
 ### 2026-05-09 02:46 | AIGC 段落修订 33.2: 第三章小结路径实例链
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理第三章小结中 §3.4、§3.5 与 KIVI-style 对照的路径实例链段。
 - Changed files:
