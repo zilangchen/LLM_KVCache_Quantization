@@ -939,6 +939,47 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 28c
+
+- Report segment: 28
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 649
+- Detector excerpt begins: `Prefill阶段按路径规则...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: rigid Prefill/Decode parallelism, engineering-manual verbs such as `路由`, and an imprecise statement about avoiding low-bit cache materialization.
+- Rewrite goal: keep the runtime data-flow contract while clarifying that the fusion path avoids materializing dequantized intermediate tensors, not the low-bit cache itself.
+- Style constraints: avoid unnecessary colon expansion and reduce raw English phrase-as-verb usage.
+
+### Preserved Information
+
+- During prefill, the current block's K/V are quantized and written into cache according to the path rule.
+- During decode, K/V are read from the historical quantized cache.
+- The read K/V are sent to the corresponding attention backend.
+- The Decode path input remains limited to fixed artifacts and already-written historical cache.
+- The data-flow boundary supports later fused decode kernels consuming quantized cache directly.
+- The fusion statement now specifies avoidance of dequantized intermediate tensor materialization.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed Prefill write, Decode read, backend handoff, and input contract are preserved.
+- Chinese academic writing reviewer: first pass failed on `进入 Decode 后`, `路由`, and `中间物化`; final version passed after using `解码阶段开始后`, `送入`, and `中间张量物化`.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with the runtime path table and the following Triton fusion section.
+- Skeptical reviewer: first pass failed because `跳过低比特缓存的中间物化` was semantically imprecise; final version passed after rewriting it as avoidance of dequantized intermediate tensor materialization.
+
+### Applied Revision
+
+```tex
+预填充时，当前块的 K/V 先按路径规则量化并写入缓存；解码阶段开始后，系统从历史量化缓存读取 K/V，并送入相应的注意力后端。这样的数据流把 Decode 路径的输入限定为固定产物和已经写入的历史缓存，也为后续融合解码核直接消费量化缓存、避免反量化后的中间张量物化提供接口边界。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing Chapter 3 overfull hbox at line 369; no undefined references or citation warnings.
+
 ## Segment 28b
 
 - Report segment: 28

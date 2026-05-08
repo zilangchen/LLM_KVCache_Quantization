@@ -36,6 +36,27 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 02:11 | AIGC 段落修订 28c: Prefill/Decode 数据流边界
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理 Prefill/Decode 数据流、注意力后端交接和融合解码核接口边界。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将 Prefill/Decode 平行说明改写为自然数据流，保留预填充写入、解码读取和后端交接。
+  - 将“避免低比特缓存中间物化”收窄为“避免反量化后的中间张量物化”，避免语义漂移。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hbox at line 369 remains unrelated.
+- Risks / follow-ups:
+  - Segment 28 已按三个自然段处理完成，下一轮进入报告 Segment 29。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 prefill decode boundary`
+
 ### 2026-05-09 02:09 | AIGC 段落修订 28b: 历史缓存闭包与自适应保护边界
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理历史缓存不改写、单调追加、自适应保护开启范围和 RoleAlign 参数生成边界。
 - Changed files:

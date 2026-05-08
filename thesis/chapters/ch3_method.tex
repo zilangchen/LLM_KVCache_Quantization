@@ -646,7 +646,7 @@ h^{K/V}(\theta_{\mathrm{path}}^{(l)}, x_t^{(l)}), & \text{\texttt{INT4-RoleAlign
 
 对任意 $t'<t$，第 $t$ 步不会改写历史缓存项 $\hat x_{t'}^{(l)}$，缓存只按时间追加。多随机种子复现中的逐位一致结果，为写入过程确定且历史缓存封闭的语义提供了间接核验；第四章第~\ref{subsec:ch4-int8-canonical}~节给出固定协议得到的 \texttt{INT8-Canonical} 主线读数。自适应保护只在主线实验的 \texttt{INT8-Canonical} 路径中开启；其余对称路径使用常量 $\theta_{\mathrm{path}}^{(l)}$。\texttt{INT4-RoleAlign} 按照 $h^{K/V}$ 给出的 K/V 两侧规则生成仿射参数，其中 K 侧在预填充后复用，V 侧随新 token 写入即时计算，不依赖自适应保护机制。
 
-Prefill 阶段按路径规则把当前块的 K/V 量化写入缓存，Decode 阶段从历史量化缓存中读取并路由到对应的注意力后端。该数据流约束 Decode 路径只读固定产物与已写入的历史缓存，使后续融合解码核能避免低比特缓存的中间物化。
+预填充时，当前块的 K/V 先按路径规则量化并写入缓存；解码阶段开始后，系统从历史量化缓存读取 K/V，并送入相应的注意力后端。这样的数据流把 Decode 路径的输入限定为固定产物和已经写入的历史缓存，也为后续融合解码核直接消费量化缓存、避免反量化后的中间张量物化提供接口边界。
 
 \input{tables/table_ch3_runtime_paths}
 
