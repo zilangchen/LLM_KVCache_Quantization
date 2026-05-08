@@ -1823,3 +1823,24 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - Segment 21 还包含自适应保护段，下一轮单独处理。
 - Commit: pending at log-write time; committed as `docs: polish aigc ch3 int8 candidate grid`
+
+### 2026-05-09 01:14 | AIGC 段落修订 21b: INT8 自适应保护机制
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理 `\texttt{INT8}` 自适应保护机制段。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 保留动态尺度和最终 scale 公式，重写触发条件、当前 token 写入语义、K/V 独立开关和工程代价说明。
+  - 明确 `$m=1$` 是本文设置，并作为后续扩展参数保留。
+  - 技术、中文、跨章一致性和 skeptical 审查均返回 PASS，失败建议已吸收。
+- Validation:
+  - `git diff --check`: PASS
+  - LaTeX: PASS，生成 100 页 PDF
+  - Residual: 仍有既存 Chapter 3 overfull hbox，与本段修订无关。
+- Risks / follow-ups:
+  - 下一轮进入 Segment 22 的对称 `\texttt{INT4}` 格式下界锚点段。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 int8 adaptive guard`

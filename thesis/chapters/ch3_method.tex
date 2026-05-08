@@ -222,13 +222,13 @@ q
 \end{equation}
 候选网格 $\Theta_\mathrm{path}$ 同时枚举 $(p_c,g)$，并依据第~\ref{subsec:ch3-two-stage}~节给出的 KL 尾部统计与裁剪率约束选出最终组合。
 
-为处理运行时输入分布超出校准覆盖范围的情况，本路径在静态缩放参数之外引入自适应保护机制。记当前写入张量为 $x^{\mathrm{cur}}_{l,j}$，动态尺度
+运行时样本可能落到校准覆盖范围之外，因此该路径在静态缩放参数之外加入自适应保护。设当前写入张量为 $x^{\mathrm{cur}}_{l,j}$，动态尺度定义为
 \begin{equation}
 s_{l,j}^{\mathrm{dyn}}
 =
 \frac{\operatorname{absmax}\!\big(x^{\mathrm{cur}}_{l,j}\big)}{q_{\max}},
 \end{equation}
-保护裕度 $m$ 为固定超参（本文取 $m=1$，作为工程扩展预留）。最终缩放参数取
+保护裕度 $m$ 是固定超参数，本文取 $m=1$，并将其保留为后续扩展参数。最终缩放参数取
 \begin{equation}
 s_{l,j}^{\mathrm{final}}
 =
@@ -238,7 +238,7 @@ m \cdot s_{l,j}^{\mathrm{static}},
 s_{l,j}^{\mathrm{dyn}}
 \right),
 \end{equation}
-即在校准分布内静态参数主导；当当前 token 的 $\operatorname{absmax}$ 超出 $m \cdot s_{l,j}^{\mathrm{static}}\cdot q_{\max}$ 对应的覆盖时，由动态尺度接管以维持当前 token 的量化覆盖、防止异常 token 被强制截断至 $q_{\max}$。$\max$ 操作在每个写入步独立执行，K 与 V 的自适应保护开关相互独立。极端漂移下 $s_{l,j}^{\mathrm{final}}$ 增大会带来一定量化误差扩大，作为换取裁剪安全的工程代价。该机制在缓存写入时是否回写历史缓存的系统语义见第~\ref{sec:ch3-deployment}~节。
+当前 token 仍处在校准覆盖范围内时，静态参数继续主导。若当前 token 的 $\operatorname{absmax}$ 超过 $m \cdot s_{l,j}^{\mathrm{static}}\cdot q_{\max}$ 对应的覆盖，则改用动态尺度写入当前 token，使该 token 仍落在量化网格内，避免异常值被直接压到 $q_{\max}$。$\max$ 在每个写入步单独计算，K 与 V 的自适应保护开关也分别控制。极端漂移会抬高 $s_{l,j}^{\mathrm{final}}$，进而扩大一定量化误差；这是为裁剪安全付出的工程代价。缓存写入时是否回写历史缓存的系统语义，见第~\ref{sec:ch3-deployment}~节。
 
 \subsection{对称 INT4 的局限与格式升级动因}
 

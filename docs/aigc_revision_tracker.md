@@ -939,6 +939,69 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 21b
+
+- Report segment: 21
+- Source paragraph: `thesis/chapters/ch3_method.tex`, lines 225--241
+- Detector excerpt begins: `为处理运行时输入分布超出校准覆盖范围的情况...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: explanation-first template, parenthetical hyperparameter note, and several compressed mechanism/boundary statements.
+- Rewrite goal: preserve the adaptive-protection equations while making the trigger condition, runtime behavior, and engineering tradeoff easier to read.
+- Style constraints: avoid unnecessary parentheses and reduce engineering jargon that sounds translated.
+
+### Preserved Information
+
+- Runtime samples may fall outside the calibration coverage.
+- The path still adds adaptive protection beyond static scale.
+- The current write tensor remains `$x^{\mathrm{cur}}_{l,j}$`.
+- The dynamic scale remains `$\operatorname{absmax}(x^{\mathrm{cur}}_{l,j})/q_{\max}$`.
+- The margin `$m$` remains a fixed hyperparameter, with `$m=1$` in this thesis and retained for future extension.
+- The final scale remains the maximum of `$m\cdot s_{l,j}^{\mathrm{static}}$` and `$s_{l,j}^{\mathrm{dyn}}$`.
+- Static parameters still dominate within calibration coverage.
+- Dynamic scale still handles writes whose current-token absmax exceeds the static coverage threshold.
+- The mechanism still keeps the current token inside the quantization grid and avoids direct clipping to `$q_{\max}$`.
+- The `$\max$` computation remains per write step, and K/V adaptive-protection switches remain independent.
+- Extreme drift may still increase quantization error as the engineering cost of clipping safety.
+- Historical-cache writeback semantics remain deferred to Section~`\ref{sec:ch3-deployment}`.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed equations, trigger condition, switch independence, and engineering boundary are preserved.
+- Chinese academic writing reviewer: first pass failed on `固定超参`, `工程扩展入口`, and `动态尺度接管当前写入`; final version passed after rewriting these phrases.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with Section~`\ref{sec:ch3-deployment}`.
+- Skeptical reviewer: PASS; no overstatement of dynamic-scale benefits or missing boundary found.
+
+### Applied Revision
+
+```tex
+运行时样本可能落到校准覆盖范围之外，因此该路径在静态缩放参数之外加入自适应保护。设当前写入张量为 $x^{\mathrm{cur}}_{l,j}$，动态尺度定义为
+\begin{equation}
+s_{l,j}^{\mathrm{dyn}}
+=
+\frac{\operatorname{absmax}\!\big(x^{\mathrm{cur}}_{l,j}\big)}{q_{\max}},
+\end{equation}
+保护裕度 $m$ 是固定超参数，本文取 $m=1$，并将其保留为后续扩展参数。最终缩放参数取
+\begin{equation}
+s_{l,j}^{\mathrm{final}}
+=
+\max\!\left(
+m \cdot s_{l,j}^{\mathrm{static}},
+\;
+s_{l,j}^{\mathrm{dyn}}
+\right),
+\end{equation}
+当前 token 仍处在校准覆盖范围内时，静态参数继续主导。若当前 token 的 $\operatorname{absmax}$ 超过 $m \cdot s_{l,j}^{\mathrm{static}}\cdot q_{\max}$ 对应的覆盖，则改用动态尺度写入当前 token，使该 token 仍落在量化网格内，避免异常值被直接压到 $q_{\max}$。$\max$ 在每个写入步单独计算，K 与 V 的自适应保护开关也分别控制。极端漂移会抬高 $s_{l,j}^{\mathrm{final}}$，进而扩大一定量化误差；这是为裁剪安全付出的工程代价。缓存写入时是否回写历史缓存的系统语义，见第~\ref{sec:ch3-deployment}~节。
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 21a
 
 - Report segment: 21
