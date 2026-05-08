@@ -196,3 +196,49 @@ During long-context decoding, KV cache growth shifts the decoding bottleneck fro
 - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 99-page PDF
 - Residual log notes: existing Chapter 3 overfull hboxes at lines 369 and 644--646; unrelated to this paragraph.
 - Commit: see Git history for message `docs: polish aigc en abstract paragraph 1`
+
+## Segment 2.2
+
+- Report segment: 2
+- Source paragraph: `thesis/chapters/abstract_en.tex`, English abstract paragraph 2
+- Detector excerpt begins: `The framework builds an INT8 canonical path calibrated...`
+- Suspected segment size in report: 281 words for the full English abstract segment; this entry covers paragraph 2 only.
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: repeated framework-method sentence pattern, `It then introduces` sequencing, passive summarization, and a generic `consistent evidence chain` ending.
+- Rewrite goal: preserve the method chain while removing mechanical step framing and making the calibration-to-allocation relation more concrete.
+- Style constraints: preserve INT8 canonical path, attention-distribution KL proxy, conservative bit-width anchor, `\texttt{INT4-RoleAlign}`, per-channel Key and per-token Value formats, separate Key/Value error channels, behavior-guided fixed-$k$, positional heuristic comparison, and `\texttt{AutoK}` coverage proposals.
+
+### Preserved Information
+
+- INT8 canonical path uses the attention-distribution KL proxy.
+- INT8 establishes a reproducible fidelity anchor under a conservative bit-width.
+- `\texttt{INT4-RoleAlign}` is used for INT4 quantization.
+- `\texttt{INT4-RoleAlign}` uses role-aware asymmetric quantization with per-channel Key and per-token Value formats.
+- Key-side attention-ranking shifts and Value-side output perturbations are separated.
+- The two error channels are not reduced to a single reconstruction objective.
+- The same offline calibration artifacts support layer-wise behavioral sensitivity profiles.
+- The profiles support behavior-guided fixed-$k$ allocation, positional heuristic comparison, and `\texttt{AutoK}` coverage-based budget proposals.
+- Calibration evidence is linked to allocation decisions without claiming global optimality.
+
+### Review Gate
+
+- Technical accuracy reviewer: PASS; suggested `For INT4 path` and retaining the `same offline calibration artifacts` emphasis.
+- English academic writing reviewer: initial FAIL on the candidate opening `three linked steps`; final wording removes that frame and direct `First/then` sequencing.
+- Cross-chapter consistency reviewer: PASS; confirmed alignment with the Chinese abstract and Chapters 1, 3, 4, and 5.
+- Skeptical reviewer: PASS with suggestions; warned that `resulting offline calibration artifacts` might imply INT4-only artifacts, so the final version keeps `same offline calibration artifacts`.
+
+### Applied Revision
+
+```tex
+An INT8 canonical path uses the attention-distribution KL proxy to establish a reproducible fidelity anchor at a conservative bit-width. For INT4 quantization, \texttt{INT4-RoleAlign} uses role-aware asymmetric quantization with per-channel Key and per-token Value formats, separating Key-side attention-ranking shifts from Value-side output perturbations rather than reducing both error channels to a single reconstruction objective. The same offline calibration artifacts further support layer-wise behavioral sensitivity profiles for behavior-guided fixed-$k$ allocation, positional heuristic comparison, and \texttt{AutoK} coverage-based budget proposals, linking calibration evidence to allocation decisions.
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/abstract_en.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 99-page PDF
+- Residual log notes: existing Chapter 3 overfull hboxes at lines 369 and 644--646; unrelated to this paragraph.
+- Commit: see Git history for message `docs: polish aigc en abstract paragraph 2`

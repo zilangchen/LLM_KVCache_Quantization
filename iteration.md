@@ -36,6 +36,17 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 21:38 | AIGC paragraph polish en abstract paragraph 2
+
+- Goal: Reduce formulaic method sequencing in the English abstract method paragraph while preserving all calibration, RoleAlign, and allocation claims.
+- Scope: One source paragraph from `thesis/chapters/abstract_en.tex`, mapped to detector segment 2.
+- Changed files: `thesis/chapters/abstract_en.tex`, `docs/aigc_revision_tracker.md`.
+- Commands: four-angle reviewer agents; `git diff --check -- thesis/chapters/abstract_en.tex docs/aigc_revision_tracker.md iteration.md`; `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`.
+- Outputs: Rewrote the method paragraph to remove `three linked steps` framing, retain `same offline calibration artifacts`, and make calibration-to-allocation linkage concrete without stronger optimality claims.
+- Validation: Reviewer gates PASS after adopting required writing fixes; LaTeX compile PASS. Existing Chapter 3 overfull hboxes are unrelated to this paragraph.
+- Risks / follow-ups: Continue with English abstract paragraph 3 from detector segment 2, one paragraph per commit.
+- Commit: see Git history for message `docs: polish aigc en abstract paragraph 2`
+
 ### 2026-05-08 21:33 | AIGC paragraph polish en abstract paragraph 1
 
 - Goal: Reduce formulaic phrasing in the English abstract motivation paragraph while preserving the bottleneck claim, K/V propagation distinction, and framework scope.
