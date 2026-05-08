@@ -168,7 +168,7 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
 
 前文主矩阵中的 LongBench 评测均建立在 LongBench 风格合成基准任务之上。这样的主协议适合做 controlled comparison，但其绝对值不与社区官方榜单直接对齐。因此，在基准路径已经通过第~\ref{subsec:ch4-int8-canonical}~节立住之后，还需要一块范围受控的官方真实数据对照，检查本文主评测协议的方向性结论是否会被系统性带偏。
 
-为此，本文从官方 LongBench~\cite{bai2024longbench} 数据集中选取三个代表性子任务进行对照实验：NarrativeQA（单文档问答，F1）、HotpotQA（多文档问答，F1）与 GovReport（摘要，Rouge-L）。实验模型固定为 Qwen2.5-1.5B-Instruct，上下文截断至 32K，随机种子固定为 \texttt{1234}，每个任务最多采样 50 个官方样本；量化配置固定为 \texttt{INT8-Canonical} 主线配置。上述设定的作用，是对主文合成协议做一块最小但可信的一致性检查，而不是替代整章跨模型主实验。
+为此，本文从官方 LongBench~\cite{bai2024longbench} 数据集中选取三个代表性子任务进行对照实验：NarrativeQA（单文档问答，F1）、HotpotQA（多文档问答，F1）与 GovReport（摘要，Rouge-L）。实验模型固定为 Qwen2.5-1.5B-Instruct，上下文截断至 4K，生成长度为 64，随机种子固定为 \texttt{1234}，每个任务最多采样 50 个官方样本；量化配置固定为 \texttt{INT8-Canonical} 主线配置。上述设定的作用，是对主文合成协议做一块最小但可信的一致性检查，而不是替代整章跨模型主实验。
 
 \begin{table}[H]
   \centering
@@ -182,22 +182,22 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
     \toprule
     官方任务 & FP16 & INT8-Canonical & $\Delta$ (pp) \\
     \midrule
-    NarrativeQA (F1)        & 7.07 & 6.64 & -0.43 \\
-    HotpotQA (F1)           & 4.90 & 5.21 & +0.31 \\
-    GovReport (Rouge-L)     & 9.21 & 9.29 & +0.08 \\
-    宏平均                  & 7.06 & 7.05 & -0.01 \\
+    NarrativeQA (F1)        & 7.07 & 7.13 & +0.06 \\
+    HotpotQA (F1)           & 4.90 & 5.27 & +0.37 \\
+    GovReport (Rouge-L)     & 9.21 & 9.25 & +0.04 \\
+    宏平均                  & 7.06 & 7.22 & +0.16 \\
     \bottomrule
   \end{tabular}
 
   \vspace{0.35em}
   \begin{minipage}{0.94\linewidth}
     \footnotesize
-    注：Qwen2.5-1.5B-Instruct，32K，上下文截断，\texttt{seed=1234}，每任务最多 50 个样本；本表仅用于评测协议一致性检验，不构成全面统计检验，也不进入主评测矩阵。
+    注：Qwen2.5-1.5B-Instruct，4K 上下文截断，\texttt{seed=1234}，生成长度为 64，每任务最多 50 个样本；数字取自 \texttt{phase1\_summary.csv}（与第~\ref{subsec:ch4-int8-canonical}~节 task-core 合成基准属于不同评测数据集，不可与表~\ref{tab:ch4-int8-canonical}~做绝对值并列读取）。本表仅用于评测协议一致性检验，不构成全面统计检验，也不进入主评测矩阵。
   \end{minipage}
   }
 \end{table}
 
-表~\ref{tab:ch4-longbench-official} 表明，官方真实数据上的单任务差异均控制在 $0.5$ pp 以内：NarrativeQA 为 $-0.43$ pp，HotpotQA 为 $+0.31$ pp，GovReport 为 $+0.08$ pp，而宏平均仅相差 $0.01$ pp。与第~\ref{subsec:ch4-int8-canonical}~节相似，这一小范围对照没有出现“统一朝某一方向偏移”的现象；这些差异更适合作为方向一致性检查，而不是官方真实分布上的显著性结论。
+表~\ref{tab:ch4-longbench-official} 表明，官方真实数据上的单任务差异均控制在 $0.4$ pp 以内：NarrativeQA 为 $+0.06$ pp，HotpotQA 为 $+0.37$ pp，GovReport 为 $+0.04$ pp，宏平均相差 $+0.16$ pp。三者方向均为正，但绝对幅度仍处于 task-core 协议中观察到的量化噪声范围内。\texttt{INT8-Canonical} 在三个官方任务上未出现相对 \texttt{FP16} 的显著性退化；这一结果与第~\ref{subsec:ch4-int8-canonical}~节方向一致，更适合作为评测协议一致性检验，而不是官方真实分布上的显著性结论。
 
 表~\ref{tab:ch4-longbench-official} 的作用是排除一个具体风险：主文合成协议没有在这三个官方任务上把 \texttt{INT8-Canonical} 的方向性结论反转。它不证明真实数据分布上的全面泛化，也不替代跨模型主矩阵。关于为何校准层采用 KL 而非 MSE，以及该选择在不同规模上的必要性差异，将在第 4.6.1 节中讨论。
 
@@ -229,16 +229,16 @@ PPL 的读法需要单独说明：在固定输入序列、固定 tokenization、
     \toprule
     模型 & $H_{kv}$ & FP16 Needle & 对称 INT4 Needle & 诊断标签 \\
     \midrule
-    Qwen2.5-1.5B & 2 & 100\% & 0\%  & 阶跃崩塌；PPL $9.31 \rightarrow 19.5$ \\
-    Qwen2.5-7B   & 4 & 100\% & 0\%  & 阶跃崩塌；PPL $7.14 \rightarrow 85.5$ \\
-    LLaMA-3.1-8B & 8 & 100\% & 98\% & 架构例外；PPL $6.73 \rightarrow 6.97$ \\
+    Qwen2.5-1.5B & 2 & 100\% & 0\%  & 阶跃崩塌；PPL $8.93 \rightarrow 19.54$ \\
+    Qwen2.5-7B   & 4 & 100\% & 0\%  & 阶跃崩塌；PPL $6.71 \rightarrow 85.49$ \\
+    LLaMA-3.1-8B & 8 & 100\% & 98\% & 架构例外；PPL $6.92 \rightarrow 6.97$ \\
     \bottomrule
   \end{tabular}
 
   \vspace{0.35em}
   \begin{minipage}{0.94\linewidth}
     \footnotesize
-    注：本表只汇总对称 \texttt{INT4} 的最小现象锚点。Needle 百分比为第~\ref{subsec:ch4-benchmarks} 节定义的 exact-match 通过率，按 4K--32K 上下文与统一 depth sweep 汇总；生成式质量协议使用 5 个固定 seeds。Qwen2.5-1.5B/7B 出现“100\%\,$\rightarrow$\,0\%”的检索阶跃；LLaMA-3.1-8B（$H_{kv}=8$）作为架构例外保留 98\% Needle。
+    注：本表只汇总对称 \texttt{INT4} 的最小现象锚点。Needle 百分比为第~\ref{subsec:ch4-benchmarks} 节定义的 exact-match 通过率，按 4K--32K 上下文与统一 depth sweep 汇总；生成式质量协议使用 5 个固定 seeds。PPL 列采用 \texttt{phase5v2} 主线统一协议（WikiText-2，\texttt{seq\_len=32K}，\texttt{kv\_cache} 模式，\texttt{chunk\_size=128}，每条配置 $\geq 20$ runs），与表~\ref{tab:ch4-rolealign-kivi}~所用的 hf-mode 长序列 likelihood 协议不同；两者各自内部自洽，不做跨表绝对值比较。Qwen2.5-1.5B/7B 出现“100\%\,$\rightarrow$\,0\%”的检索阶跃；LLaMA-3.1-8B（$H_{kv}=8$）作为架构例外保留 98\% Needle。
   \end{minipage}
   }
 \end{table}
@@ -684,7 +684,7 @@ Qwen2.5-14B 提供的是第 4.4 节的边界剖面：并非每个模型都会给
   \vspace{0.35em}
   \begin{minipage}{0.94\linewidth}
     \footnotesize
-    \emph{注} Panel A 与 Panel B 共享生成长度 64 协议（10 次运行），与表~\ref{tab:ch4-tpot-4k}~的入口层（生成长度 128）不同，因此同模型 4K 处的 $\Delta T$ 与从表~\ref{tab:ch4-tpot-4k}~推出的差值略有不同。Panel A 与 Panel B 分别对应第 4.5.2 节与第 4.5.3 节。这里的“性能交叉边界”是经验读数，并非理论闭式模型；8B vs 14B 的同 $H_{kv}=8$ 控制对比不单独列成表，而在第 4.5.3 节正文作为补充段落报告。4K 处 $|\Delta T|<2$\,ms 的读数统一标记为 n.s.，不作为交叉点读取。
+    \emph{注} Panel A 与 Panel B 共享生成长度 64 协议（10 次运行），与表~\ref{tab:ch4-tpot-4k}~的入口层（生成长度 128）不同，因此同模型 4K 处的 $\Delta T$ 与从表~\ref{tab:ch4-tpot-4k}~推出的差值略有不同。Panel A 与 Panel B 分别对应第 4.5.2 节与第 4.5.3 节。这里的“性能交叉边界”是经验读数，并非理论闭式模型；8B vs 14B 的同 $H_{kv}=8$ 控制对比不单独列成表，而在第 4.5.3 节正文作为补充段落报告。所有长度点上 $|\Delta T|<2$\,ms 的读数统一标记为 n.s.，不作为交叉点读取。
   \end{minipage}
   }
 \end{table}
@@ -694,7 +694,7 @@ Qwen2.5-14B 提供的是第 4.4 节的边界剖面：并非每个模型都会给
 \subsection{性能交叉边界与 GQA 影响}
 \label{subsec:ch4-crossover}
 
-第~\ref{subsec:ch4-tpot-4k}~节给出入口层读数，第~\ref{subsec:ch4-tpot-scaling}~节给出单模型的扩展证据；本节把这些读数整理成一条可命名的经验边界。这里的“性能交叉边界”严格指经验量 $\Delta T = T_{\mathrm{Triton}} - T_{\mathrm{ref}}$ 的符号变化，并非理论闭式模型或严格因果识别。对 4K 处 $|\Delta T|<2$\,ms 的情况，本文统一视为 \texttt{n.s.}；因此本节关心的是融合路径何时进入可读出的加速区间，以及这条边界如何随 $H_{kv}$ 与序列长度共同移动。
+第~\ref{subsec:ch4-tpot-4k}~节给出入口层读数，第~\ref{subsec:ch4-tpot-scaling}~节给出单模型的扩展证据；本节把这些读数整理成一条可命名的经验边界。这里的“性能交叉边界”严格指经验量 $\Delta T = T_{\mathrm{Triton}} - T_{\mathrm{ref}}$ 的符号变化，并非理论闭式模型或严格因果识别。对所有长度点上 $|\Delta T|<2$\,ms 的情况，本文统一视为 \texttt{n.s.}；因此本节关心的是融合路径何时进入可读出的加速区间，以及这条边界如何随 $H_{kv}$ 与序列长度共同移动。
 
 表~\ref{tab:ch4-deployment-boundary} 的 Panel B 给出三条边界路径。对于 Qwen2.5-1.5B（$H_{kv}=2$），$\Delta T$ 在 4K/8K/16K/32K 上分别为 +1.67 / +4.23 / +9.78 / +15.92\,ms，说明融合路径在全长度下都不划算；对于 Qwen2.5-7B（$H_{kv}=4$），$\Delta T$ 在 4K/8K/16K 仍为正或近似零，直到 32K 才降为 -4.90\,ms，说明交叉点被推迟到更长序列；而对于 Qwen2.5-14B（$H_{kv}=8$），$\Delta T$ 从 8K 起越过 \texttt{n.s.} 区间，并在更长上下文下继续扩大。由这三条路径可读出的经验边界是：在当前硬件与后端组合下，$H_{kv}$ 越高，交叉点越早；序列越长，融合路径越容易进入收益区间。
 
