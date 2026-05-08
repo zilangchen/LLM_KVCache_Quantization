@@ -36,6 +36,27 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-08 18:40 | Thesis §3.5 Codex 复审 2 必改 + 3 建议改 + 文风清理
+
+- Goal: 解决 Codex §3.5「跨位宽路径实例化」复审的全部 2 项必改 + 3 项建议改 + 4 项文风小修，端点表述跨 §3.5/§3.6/ch4/3 个 table 一致化
+- Scope（必改）:
+  - **#1 (R_V 公式维度，line 313)**: 旧式 $\sum_t A_{:,t} \odot (V_{t,:} - \tilde V_{t,:})$ 维度对不上（$A$ 是 $H\!\times\!S\!\times\!S$，$V_{t,:}$ 是 $D$-vec，$\odot$ 不存在）。改为按 head/query 展开：$R_V(p_V) = \mathbb E_{\mathcal D}\sum_h\sum_r\|\sum_t a_{h,r,t}(V_{t,:}-\tilde V_{t,:})\|^2$，prose 同步引入 $a_{h,r,t}$ 索引说明
+  - **#2 (absmax/absmin → min/max + 端点参数来源精确化，§3.5 line 321/350，§3.6 line 513，ch4 4 处，table_s3/t2 各 1 处)**: 代码实际用 t_min/t_max（不是绝对值）；RoleAlign 离线冻结的是百分位 $(p_K, p_V)$ 不是实际 scale/range——运行时仍按这组 percentile 重算 (s, ζ)。改写"参数来源差异"叙事而非"运行时 vs 离线冻结"
+- Scope（建议改）:
+  - **#3 (line 311 o → ζ，cross-file)**: $o$ 与 §3.1-3.2 的 attention output $o$ 撞名；body 用 $o$、figure 用 $z_K$ 也不一致。统一改 $\zeta$（浮点仿射偏移），body equation/prose/table cell + figure 同步重命名；body line 311 加 disambiguation 注（$\zeta$ 与整数 zero-point $z$ 关系 $\zeta = -s\cdot z$）
+  - **#4 (line 256 维度省略说明)**: 公式以单层、单 KV head 写；补一句「下文公式省略 batch 与 KV head 维度（实现层面 K/V 张量形状为 $[B, H_{kv}, S, D]$，Key scale 形状 $[B, H_{kv}, D]$、Value scale 形状 $[B, H_{kv}, S]$）」
+  - **#5 (line 203 措辞)**: "scale 误差" → "scale 参数"（校准输出是参数不是误差）；"压缩率上 INT8 也作为..." → "INT8 同时为后续低比特路径提供压缩率对照基线"（删 "上" 位置化）
+- Scope（文风小修）:
+  - 子节标题 line 200/251 删除「：」: "INT8 基准路径：静态 Scale" → "INT8 基准路径下的静态 Scale"；"INT4-RoleAlign：角色感知非对称量化" → "INT4-RoleAlign 的角色感知非对称量化"
+  - figure line 11/27 删冒号: "Key 侧：优先保持排序结构" → "Key 侧 — 优先保持排序结构"；"Value 侧：" 同改
+  - figure line 21/37 z → ζ: $(s_K,z_K) \to (s_K,\zeta_K)$；$(s_V,z_V) \to (s_V,\zeta_V)$
+  - table_ch3_path_instantiation.tex 删「注：」前缀（与 §3.4 同模式）
+- Changed files: `thesis/chapters/ch3_method.tex`、`thesis/chapters/ch4_experiments.tex`、`thesis/figures/fig_ch3_rolealign_axes.tex`、`thesis/tables/table_ch3_path_instantiation.tex`、`thesis/tables/table_s3_rolealign_vs_kivi.tex`、`thesis/tables/table_t2_int4_kivi.tex`
+- Commands: `cd thesis && xelatex -interaction=nonstopmode -halt-on-error main.tex`
+- Outputs: 97 页（稳定）；0 undefined / 0 multiply-defined / 0 hard error
+- Validation: 跨文件 grep 确认 live thesis 中无残留 absmax/absmin (除 ch3 INT8 baseline 处 \operatorname{absmax} 是符号正确保留)；§3.5 中无残留 offset $o$ (除 line 311 刻意保留的 disambiguation 引用)
+- Risks / follow-ups: §3.5 必改+建议+文风全部落地；可推进 §3.6 (allocator) Codex 复审
+
 ### 2026-05-08 18:29 | Thesis §3.4 body-figure 四步↔五步对齐
 
 - Goal: 修复图 3-4 重写后与 §3.4.2 body line 140 的 step 数不一致

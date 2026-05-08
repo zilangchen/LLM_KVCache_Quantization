@@ -14,7 +14,7 @@
     Qwen2.5-14B & 8 & 4.68 & --- & \textbf{5.04} \scriptsize{(+7.6\%)} & 100\% & --- & \textbf{100/100\%} & --- \\
     \bottomrule
   \end{tabular}
-  \caption{INT4-RoleAlign vs KIVI-style 跨模型对比（PPL, WikiText-2 固定序列 likelihood；Needle 4K--32K 通过率）。两者共享 \textbf{per-channel K + per-token V} 非对称格式；唯一差异是 calibration philosophy——\textbf{RoleAlign} 采用离线 K/V 分路径校准，K-path 以注意力分布代理确定 Key 参数，V-path 以输出扰动代理确定 Value 参数；KIVI 用运行时 absmax/min。8B 上两者 $\Delta{=}0$；1.5B/7B 差距在 0.15 PPL 内，方向随 $H_{kv}$ 减小而略偏向 KIVI。设计差异见表~\ref{tab:ch3-rolealign-vs-kivi}。}
+  \caption{INT4-RoleAlign vs KIVI-style 跨模型对比（PPL, WikiText-2 固定序列 likelihood；Needle 4K--32K 通过率）。两者共享 \textbf{per-channel K + per-token V} 非对称格式；唯一差异是 calibration philosophy——\textbf{RoleAlign} 采用离线 K/V 分路径校准，K-path 以注意力分布代理确定 Key 参数，V-path 以输出扰动代理确定 Value 参数；KIVI 用运行时 min/max。8B 上两者 $\Delta{=}0$；1.5B/7B 差距在 0.15 PPL 内，方向随 $H_{kv}$ 减小而略偏向 KIVI。设计差异见表~\ref{tab:ch3-rolealign-vs-kivi}。}
   \label{tab:t2-int4-kivi}
   \par\smallskip\noindent{\footnotesize Needle 列 \code{100/100} 表示 Needle-single-retrieval 与 MK-NIAH-2 两类检索同时 100\% 恢复。14B 为外部效度锚点（32K prefix，无 KIVI 对照）。1.5B、7B、8B 与 14B 数据均按同一指标定义汇总；其中前三个模型参与完整配对差异判断，14B 仅用于观察外部效度。}
 \end{table}
