@@ -13,6 +13,47 @@ This file records paragraph-level AIGC-polish changes. Each entry maps one detec
 - Overall suspected AIGC ratio: 20.38%
 - Highest-risk chapters: Chinese abstract 72.0%, English abstract 72.0%, Chapter 3 32.0%, Chapter 1 24.0%, Conclusion 14.0%
 
+## Segment 44
+
+- Report segment: 44
+- Source paragraph: `thesis/chapters/ch4_experiments.tex`, line 687
+- Detector excerpt begins: `控制对比不再单列成表...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: table-note colon, stacked protocol clauses, and rigid `不再...仅在...` phrasing.
+- Rewrite goal: keep the deployment boundary note compact while preserving the empirical-crossing and n.s. interpretation rules.
+- Style constraints: avoid unnecessary colon usage, preserve Panel A/B mapping and the 8B vs 14B control-comparison placement.
+
+### Preserved Information
+
+- Panel A and Panel B correspond to Sections 4.5.2 and 4.5.3.
+- The performance crossing boundary is empirical, not a theoretical closed-form model.
+- The same-$H_{kv}=8$ 8B vs 14B control comparison is reported only in Section 4.5.3 text rather than as a standalone table.
+- 4K readings with $|\Delta T|<2$ ms are marked as n.s.
+- n.s. readings are not used as crossing points.
+
+### Review Gate
+
+- Technical accuracy reviewer: PASS.
+- Chinese academic writing reviewer: PASS.
+- Cross-chapter consistency reviewer: PASS.
+- Skeptical reviewer: PASS.
+
+### Applied Revision
+
+```tex
+\emph{注} Panel A 与 Panel B 分别对应第 4.5.2 节与第 4.5.3 节。这里的“性能交叉边界”是经验读数，并非理论闭式模型；8B vs 14B 的同 $H_{kv}=8$ 控制对比不单独列成表，而在第 4.5.3 节正文作为补充段落报告。4K 处 $|\Delta T|<2$\,ms 的读数统一标记为 n.s.，不作为交叉点读取。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing overfull hbox at line 369; no undefined references or citation warnings.
+- Commit: see Git history for message `docs: polish aigc ch4 deployment table note`
+
 ## Segment 43
 
 - Report segment: 43

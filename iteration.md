@@ -36,6 +36,27 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 03:22 | AIGC 段落修订 44: 第四章部署边界表注
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理表 4-13 中 Panel A/B、经验交叉边界、8B vs 14B 控制对比和 n.s. 规则的表注。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 去掉表注中的冒号式 `注：`。
+  - 保留 Panel A/B 对应小节、性能交叉边界为经验读数、8B vs 14B 控制对比放在第 4.5.3 节正文、4K 处 $|\Delta T|<2$ ms 标记为 n.s. 且不作为交叉点读取。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS。
+- Validation:
+  - `git diff --check`: PASS。
+  - `latexmk`: PASS，生成 101 页 PDF。
+  - 日志仅保留既有 line 369 overfull hbox，无 undefined references 或 citation warnings。
+- Risks / follow-ups:
+  - 下一轮处理表 4-13 Panel A 的 Qwen2.5-14B 融合路径部署读数。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch4 deployment table note`
+
 ### 2026-05-09 03:19 | AIGC 段落修订 43: 第四章 RoleAlign 配对读数解释
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 4 的高嫌疑段落，本轮处理表 4-8 后 RoleAlign 与 KIVI-style 的配对范围、PPL 差距和 Needle 恢复读法。
 - Changed files:
