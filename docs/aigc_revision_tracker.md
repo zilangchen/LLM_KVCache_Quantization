@@ -939,6 +939,49 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 23b
+
+- Report segment: 23
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 256
+- Detector excerpt begins: `下文公式省略 batch 与 KV head 维度...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: implementation shapes packed into parentheses, mixed English labels, and an overlong formula handoff sentence.
+- Rewrite goal: separate notation simplification from implementation tensor shapes while keeping the Key-side formula introduction precise.
+- Style constraints: avoid unnecessary parentheses and make the shape statement read as normal Chinese technical prose.
+
+### Preserved Information
+
+- Subsequent formulas still omit batch and KV head dimensions.
+- The retained formula dimensions remain sequence length and channel dimension.
+- Runtime K/V tensor shape remains `$[B, H_{kv}, S, D]$`.
+- Key scale tensor shape remains `$[B, H_{kv}, D]$`.
+- Value scale tensor shape remains `$[B, H_{kv}, S]$`.
+- Key side still uses per-channel asymmetric quantization.
+- The Key matrix remains `$K^{(l)}\in\mathbb{R}^{S\times d_k}$`.
+- The following percentile-clipping boundary is still defined for the `$j$`-th channel.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed all shapes, dimension omissions, quantization axis, and formula handoff are preserved.
+- Chinese academic writing reviewer: first pass failed on `Key scale 形状`, `Value scale 形状`, and the mechanical implementation sentence; final version passed after rewriting them as scale tensor shapes and splitting the notation statement.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with Chapter 3 runtime shapes and the following Key/Value formulas.
+- Skeptical reviewer: PASS; no omitted information, dimension error, overclaim, or formula-connection risk found.
+
+### Applied Revision
+
+```tex
+下文公式只保留序列长度与通道维度，记号中省略 batch 维度与 KV head 维度。实现中 K/V 张量形状为 $[B, H_{kv}, S, D]$，Key 的 scale 张量形状为 $[B, H_{kv}, D]$，Value 的 scale 张量形状为 $[B, H_{kv}, S]$。Key 侧采用逐通道非对称量化。设第 $l$ 层 Key 矩阵为 $K^{(l)}\in\mathbb{R}^{S\times d_k}$；对第 $j$ 个通道，分位数裁剪边界定义为
+```
+
+### Verification
+
+- PASS: `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`.
+- PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
+- Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
+
 ## Segment 23a
 
 - Report segment: 23

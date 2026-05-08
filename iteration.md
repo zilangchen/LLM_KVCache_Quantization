@@ -36,6 +36,27 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 01:30 | AIGC 段落修订 23b: RoleAlign Key 侧形状说明
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理 `\texttt{INT4-RoleAlign}` Key 侧公式前的维度省略与实现形状说明。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将括号内实现形状拆成独立说明，避免一长句同时承担记号省略、张量形状和公式引入。
+  - 保留 K/V 张量、Key scale 张量、Value scale 张量形状，以及 Key 逐通道非对称量化和第 $j$ 通道分位数边界。
+  - 技术、中文、跨章一致性和 skeptical 审查均返回 PASS，中文审查失败建议已吸收。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated.
+- Risks / follow-ups:
+  - Segment 24 将继续处理 Value 侧分位数统计和逐 token 非对称量化说明。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 rolealign key shape`
+
 ### 2026-05-09 00:52 | AIGC paragraph polish ch3 feasible set
 - Goal: Process report segment 18 in Chapter 3 while preserving robust-selection statistics, clipping-rate feasible set, and tail-priority selection rule.
 - Changed files:
