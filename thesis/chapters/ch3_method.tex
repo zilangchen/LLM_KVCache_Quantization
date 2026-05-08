@@ -655,11 +655,11 @@ h^{K/V}(\theta_{\mathrm{path}}^{(l)}, x_t^{(l)}), & \text{\texttt{INT4-RoleAlign
 
 自回归解码每前进一步只新增一个查询 token，但注意力仍需访问全部历史 KV Cache，主要瓶颈来自访存。朴素实现会先从低比特缓存取出 K/V，将其完整反量化为 FP16 中间张量，再交给标准注意力计算；这条路径功能正确，代价是中间张量物化和显存读写会随序列长度线性增长。\texttt{INT8} 路径采用基于 Triton~\cite{tillet2019triton} 的融合解码核，把反量化、点积、online softmax 和输出累加放入同一条片上流水线，减少往返全局内存的数据量。
 
-融合核函数沿序列维度分块循环：每一 block 从量化缓存读入低比特 $K_B, V_B$ 与对应的缩放参数与元数据，在片上存储（SRAM / 寄存器）完成解包与反量化，直接计算当前 query 与该块 Key 的点积 $z_i = q k_i^\top / \sqrt{d_k}$（$k_i$ 为反量化后的第 $i$ 个 Key 行向量），随后用在线 softmax 维护跨块递推状态~\cite{dao2022flashattention}。设第 $r$ 个 block 的状态分别为行最大值 $m^{(r)}$、归一化因子 $\ell^{(r)}$ 与归一化输出累加器 $o^{(r)}$，并令
+融合核按序列维度分块推进。每个块从量化缓存读取低比特 $K_B,V_B$ 以及对应的缩放参数和元数据，在 SRAM 和寄存器等片上存储中完成解包和反量化，并直接计算当前查询向量与该块 Key 的点积 $z_i = q k_i^\top / \sqrt{d_k}$，其中 $k_i$ 表示反量化后的第 $i$ 个 Key 行向量。随后，核函数用在线 softmax 维护跨块递推状态~\cite{dao2022flashattention}。设第 $r$ 个块的状态包含行最大值 $m^{(r)}$、归一化因子 $\ell^{(r)}$ 和归一化输出累加器 $o^{(r)}$，并令
 \begin{equation}
 m_B = \max_{i\in B} z_i,
 \qquad
-B = \{\text{第 } r{+}1 \text{ 个 block 中的 token 索引}\},
+B = \{\text{第 } r{+}1 \text{ 个块中的 token 索引}\},
 \end{equation}
 跨块更新写为
 \begin{equation}
@@ -685,7 +685,7 @@ o^{(r+1)}
 \ell^{(r+1)}
 },
 \end{equation}
-其中 $v_i$ 为反量化后的第 $i$ 个 Value 行向量。该递推与 FlashAttention 的 online softmax 在数学上等价；具体实现采用非归一化累加器 $\tilde o^{(r+1)} = \ell^{(r+1)}\,o^{(r+1)}$，循环结束时再统一除以 $\ell^{(\mathrm{final})}$，避免每步重复除法。
+这里 $v_i$ 表示反量化后的第 $i$ 个 Value 行向量。上述递推与 FlashAttention 的 online softmax 等价；实现中保留非归一化累加器 $\tilde o^{(r+1)} = \ell^{(r+1)}\,o^{(r+1)}$，待全部块处理完后再除以 $\ell^{(\mathrm{final})}$，从而避免逐步重复除法。
 
 \texttt{INT4} 路径在数据表示上引入额外解包成本。\texttt{INT4} 采用 nibble packing，把两个 4-bit 整数打包进一个 8-bit 字节；写入时把有符号 $[-8,7]$ 加上 +8 偏移映射到无符号 $[0,15]$ 域存入 nibble，读取时先按位移与掩码拆出半字节，再减 8 还原至有符号网格，并按存储的 $(s, \zeta)$ 反量化。本文实现按路径分两类：对称 \texttt{INT4} 诊断路径采用 wrapper 实现，先把 nibble 缓存批量反 pack 为 INT8 张量，再复用 \texttt{INT8} 融合核完成片上反量化、点积、online softmax 与输出累加；\texttt{INT4-RoleAlign} 的非对称融合扩展则采用 in-kernel unpack，核函数直接读取 K 侧 per-channel 与 V 侧 per-token 的 $(s, \zeta)$，对 nibble 在片上完成解包与非对称反量化，避免显式中间 INT8 张量物化。4-bit 载荷减少了全局读字节数，但反 pack 步骤与寄存器压力会以每输出 token 时间（TPOT）形式重新出现，相关变体的命名与角色见附录第~\ref{sec:app-triton-variants}~节，端到端 TPOT 数字见第四章第~\ref{subsec:ch4-tpot-4k}~节。
 

@@ -939,6 +939,57 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 29b-30
+
+- Report segment: 29 and 30
+- Source paragraph: `thesis/chapters/ch3_method.tex`, lines 658--688
+- Detector excerpt begins: `融合核函数沿序列维度分块循环...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: colon-led implementation listing, parentheses-heavy inline explanations, mixed `block/query` terminology, and a mechanical final sentence about division.
+- Rewrite goal: keep the online-softmax recurrence and implementation detail intact while improving Chinese readability around the formulas.
+- Style constraints: do not alter the mathematical recurrence, avoid unnecessary parentheses, and use consistent Chinese wording for `block`.
+
+### Preserved Information
+
+- The fused kernel still loops by sequence blocks.
+- Each block still reads low-bit `$K_B,V_B$`, scale parameters, and metadata from quantized cache.
+- Unpacking and dequantization still occur in SRAM/register on-chip storage.
+- The dot product remains `$z_i = q k_i^\top / \sqrt{d_k}$`.
+- `$k_i$` remains the dequantized `$i$`-th Key row vector.
+- Online softmax still maintains cross-block recurrence state with the FlashAttention citation.
+- The state variables remain row maximum `$m^{(r)}$`, normalization factor `$\ell^{(r)}$`, and normalized output accumulator `$o^{(r)}$`.
+- `$B$` still denotes token indices in the `$r{+}1$`-th block, with only the Chinese explanatory word changed from `block` to `块`.
+- `$v_i$` remains the dequantized `$i$`-th Value row vector.
+- The recurrence remains equivalent to FlashAttention's online softmax.
+- The implementation still keeps the unnormalized accumulator `$\tilde o^{(r+1)} = \ell^{(r+1)}\,o^{(r+1)}$`.
+- The final division by `$\ell^{(\mathrm{final})}$` remains deferred until all blocks are processed, avoiding repeated division.
+
+### Review Gate
+
+- Technical reviewer: PASS; confirmed all recurrence semantics and implementation details are preserved.
+- Chinese academic writing reviewer: first pass failed on `block` mixing, `数学等价`, and `等全部 block`; final version passed after normalizing prose and formula annotation to `块`.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with the FlashAttention citation, Triton kernel explanation, and following INT4 path paragraph.
+- Skeptical reviewer: PASS; found no information loss or overclaim.
+
+### Applied Revision
+
+```tex
+融合核按序列维度分块推进。每个块从量化缓存读取低比特 $K_B,V_B$ 以及对应的缩放参数和元数据，在 SRAM 和寄存器等片上存储中完成解包和反量化，并直接计算当前查询向量与该块 Key 的点积 $z_i = q k_i^\top / \sqrt{d_k}$，其中 $k_i$ 表示反量化后的第 $i$ 个 Key 行向量。随后，核函数用在线 softmax 维护跨块递推状态~\cite{dao2022flashattention}。设第 $r$ 个块的状态包含行最大值 $m^{(r)}$、归一化因子 $\ell^{(r)}$ 和归一化输出累加器 $o^{(r)}$，并令
+...
+B = \{\text{第 } r{+}1 \text{ 个块中的 token 索引}\},
+...
+这里 $v_i$ 表示反量化后的第 $i$ 个 Value 行向量。上述递推与 FlashAttention 的 online softmax 等价；实现中保留非归一化累加器 $\tilde o^{(r+1)} = \ell^{(r+1)}\,o^{(r+1)}$，待全部块处理完后再除以 $\ell^{(\mathrm{final})}$，从而避免逐步重复除法。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing Chapter 3 overfull hbox at line 369; no undefined references or citation warnings.
+
 ## Segment 29a
 
 - Report segment: 29
