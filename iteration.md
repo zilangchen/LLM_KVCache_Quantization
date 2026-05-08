@@ -36,6 +36,32 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 04:44 | 第四章 6-Reviewer 多轮审查（Phase A+B 完成）
+- Goal: 按用户要求的"6 视角 Agent 审查 + 多轮迭代打磨"协议，对 ch4_experiments.tex 逐节审查，修复发现的实质问题。
+- Scope:
+  - Phase A 7 轮：§4.1-§4.7 各跑 6-reviewer 矩阵（R1 技术 + R2 中文 + R3 跨章 + R4 怀疑 + R5 统计 + R6 读者）。
+  - Phase B 2 轮：Ch4 整章自审 + Ch4 × Ch1/Ch2/Ch3/Ch5 跨章节比对。
+  - Phase C Round 10（用户自办 Codex 外审）暂未触发。
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`（5 处实质性修复，7 行净变化）
+- Commands:
+  - `git tag chapter-4-review-baseline-v1` 锁基线（commit ab66f7f）
+  - `latexmk -xelatex -interaction=nonstopmode` 每轮验证
+  - `git tag round-{1,3,5}-s4.{1,3,5}-done` 标注落地修复
+- Outputs:
+  - Round 1 §4.1: 修复 line 98 "scale 时间语义" 类型误用 + line 115 dangling non-inferiority。Commit 088bc91.
+  - Round 3 §4.3: 修复表 4-5 "PPL 退化 >15%" 替换为具体 PPL 数值（Qwen-1.5B 9.31→19.5 / 7B 7.14→85.5 / LLaMA-8B 6.73→6.97）。Commit 4f90084.
+  - Round 5 §4.5: 修复表 4-13 Panel B 1.5B 4K 标 n.s. 一致性 + 表注新增 gen=64 vs gen=128 协议差异声明。Commit b2f3651.
+  - Round 2/4/6/7/8/9: 6-reviewer 全 PASS，无文本修复。
+  - 跨章节比对：Ch1 RQ1-4 / Ch2 KIVI per-channel K+per-token V / Ch3 §3.2 K8V4 表述 / Ch5 全部 8 个 numeric claim 与 Ch4 表逐一 verify 通过。
+- Validation:
+  - 最终 latexmk PASS，101 页 PDF，仅保留既有 line 369 cosmetic overfull (1.55pt)。
+  - 全章无新增 warning / undefined references。
+- Risks / follow-ups:
+  - **P1 deferred for Codex Round 10**: 表 4-3 vs 表 4-4 FP16 数字 (NarrativeQA 7.07/HotpotQA 4.90/GovReport 9.21) 完全一致，但两表 protocol 不同（合成 vs 真实）。phase1_summary.csv 数据是 4K context，与 §4.2 声明的 32K 不符。需作者自行 verify CSV 数据来源。
+  - P3 未修：sec:ch4-rqX label 命名与 body RQ 编号 off-by-one（内部一致，建议 Round 8 不动）；§4.4 主表跳过 Qwen2.5-7B 未明示理由；14B AutoK 阈值 90% 不同于其他 80% 未解释；best-k 选法 (3B=1, 8B=11, 14B=7, Mistral=3) 选法 protocol 缺。
+- Commit: 088bc91、4f90084、b2f3651（已落地）；本 entry 后续待提交。
+
 ### 2026-05-09 03:56 | AIGC 修订后状态冻结
 - Goal: 将 AIGC 段落修订、第三章分配器图调整、迭代日志归档窗口和正式 PDF 写回后的当前仓库状态冻结为一个可追溯提交。
 - Scope:
