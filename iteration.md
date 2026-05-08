@@ -36,6 +36,27 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-09 01:56 | AIGC 段落修订 27a: Runtime artifact 字段与 K/V 参数生成
+- Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮处理三条路径在 $\mathcal A_{\mathrm{path}}$ 中的字段差异和 K/V 仿射参数运行时生成语义。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `docs/aigc_revision_tracker.md`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 将冒号式字段列表改写为分句说明，保留表~`\ref{tab:ch3-runtime-paths}` 的详细字段引用。
+  - 保留 INT8、对称 INT4、INT4-RoleAlign 三条路径的字段差异，以及 K 侧预填充阶段一次计算后复用、V 侧逐 token 即时计算的运行时语义。
+  - 技术、中文、跨章一致性和 skeptical 审查最终均返回 PASS，中文失败建议已吸收。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS.
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF.
+  - Log check: PASS; no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 are unrelated.
+- Risks / follow-ups:
+  - Segment 27 还包含在线推理阶段写入公式引入句，下一轮单独处理。
+- Commit: pending at log-write time; committed as `docs: polish aigc ch3 runtime artifact fields`
+
 ### 2026-05-09 01:50 | AIGC 段落修订 26b: AutoK 覆盖度入口句
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 3 的高嫌疑段落，本轮只处理正文中 \texttt{AutoK} 读取 $\Gamma(k)$ 的过渡句。
 - Changed files:

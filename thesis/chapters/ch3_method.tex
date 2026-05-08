@@ -627,7 +627,7 @@ m_{\mathrm{path}}^{(l)}
   \end{tabularx}
 \end{table}
 
-三条路径在 $\mathcal A_{\mathrm{path}}$ 中占用的字段不同（详见表~\ref{tab:ch3-runtime-paths}）：\texttt{INT8} 基准路径写入逐组静态 scale 与分组元数据，inv\_tau 字段在产物中存在但主线运行时以 \texttt{use\_attn\_temperature: false} 关闭；对称 \texttt{INT4} 路径共享同一字段格式，量化网格降为 4-bit；\texttt{INT4-RoleAlign} 在量化参数字段中加入 K/V 各侧 percentile 选择记录与轴元数据。运行时按角色分两侧计算具体仿射参数：K 侧在 prefill 阶段依冻结 percentile 一次性按 per-channel 数据计算 $(s_K, \zeta_K)$ 并冻结复用，V 侧的 $(s_V, \zeta_V)$ 在每个新 token 写入时按 per-token 数据现场计算。
+三条路径写入 $\mathcal A_{\mathrm{path}}$ 的字段并不相同，具体对照见表~\ref{tab:ch3-runtime-paths}。\texttt{INT8} 基准路径保存逐组静态 scale 与分组元数据，inv\_tau 字段保留在产物中，但主线运行时将 \texttt{use\_attn\_temperature} 设为 \texttt{false}。对称 \texttt{INT4} 沿用这一字段组织，只把量化网格降为 4-bit。\texttt{INT4-RoleAlign} 则在量化参数字段中增加 K/V 两侧的 percentile 选择记录与轴向元数据。运行时再按 K/V 角色生成仿射参数。K 侧在预填充阶段依据冻结 percentile，用逐通道数据一次性计算 $(s_K,\zeta_K)$，之后保持不变并复用；V 侧在每个新 token 写入时，用逐 token 数据即时计算 $(s_V,\zeta_V)$。
 
 在线推理阶段第 $t$ 个新 token 在第 $l$ 层的写入可写为
 \begin{equation}

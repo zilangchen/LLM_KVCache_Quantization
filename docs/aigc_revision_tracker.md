@@ -939,6 +939,51 @@ Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16}
 - PASS: `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex` from `thesis/`.
 - Build note: PDF generation completed; log check found no undefined references or citation warnings. Existing Chapter 3 overfull hboxes at lines 369 and 644--646 remain unrelated to this segment.
 
+## Segment 27a
+
+- Report segment: 27
+- Source paragraph: `thesis/chapters/ch3_method.tex`, line 630
+- Detector excerpt begins: `use_attn_temperature: false关闭...`
+- Status: applied
+
+### Diagnosis
+
+- Main AIGC triggers: colon-led field listing, parenthetical table pointer, mixed English runtime terms, and an overlong implementation sentence.
+- Rewrite goal: keep the runtime artifact fields and K/V affine-parameter generation semantics while changing the paragraph from an interface dump into readable prose.
+- Style constraints: avoid unnecessary parentheses and avoid YAML-style `key: value` prose when a Chinese sentence can state the same setting.
+
+### Preserved Information
+
+- The three paths still write different fields into `$\mathcal A_{\mathrm{path}}$`.
+- Table~`\ref{tab:ch3-runtime-paths}` remains the detailed field reference.
+- `\texttt{INT8}` baseline still stores per-group static scale and group metadata.
+- `inv\_tau` still exists in the artifact.
+- Mainline runtime still disables attention temperature by setting `\texttt{use\_attn\_temperature}` to `\texttt{false}`.
+- Symmetric `\texttt{INT4}` still uses the same field organization while lowering the quantization grid to 4-bit.
+- `\texttt{INT4-RoleAlign}` still adds K/V-side percentile selection records and axis metadata to quantization parameters.
+- Runtime affine parameters are still generated separately by K/V role.
+- K-side parameters are still computed once from per-channel data during prefill according to frozen percentiles and then reused.
+- V-side parameters are still computed at each new-token write using per-token data.
+
+### Review Gate
+
+- Technical reviewer: initial and final passes approved the artifact-field and runtime-parameter semantics.
+- Chinese academic writing reviewer: first pass failed on `字段格式`, `现场计算`, `prefill` and mixed English phrasing; final version passed after rewriting them as `字段组织`, `即时计算`, and `预填充阶段`.
+- Cross-chapter consistency reviewer: PASS; confirmed consistency with the runtime path table, RoleAlign K/V axes, and subsequent `h^{K/V}` rules.
+- Skeptical reviewer: PASS; confirmed no information loss or implementation-semantics drift.
+
+### Applied Revision
+
+```tex
+三条路径写入 $\mathcal A_{\mathrm{path}}$ 的字段并不相同，具体对照见表~\ref{tab:ch3-runtime-paths}。\texttt{INT8} 基准路径保存逐组静态 scale 与分组元数据，inv\_tau 字段保留在产物中，但主线运行时将 \texttt{use\_attn\_temperature} 设为 \texttt{false}。对称 \texttt{INT4} 沿用这一字段组织，只把量化网格降为 4-bit。\texttt{INT4-RoleAlign} 则在量化参数字段中增加 K/V 两侧的 percentile 选择记录与轴向元数据。运行时再按 K/V 角色生成仿射参数。K 侧在预填充阶段依据冻结 percentile，用逐通道数据一次性计算 $(s_K,\zeta_K)$，之后保持不变并复用；V 侧在每个新 token 写入时，用逐 token 数据即时计算 $(s_V,\zeta_V)$。
+```
+
+### Verification
+
+- `git diff --check -- thesis/chapters/ch3_method.tex docs/aigc_revision_tracker.md iteration.md`: PASS
+- `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`: PASS, generated 101-page PDF
+- Residual log notes: existing Chapter 3 overfull hboxes at lines 369 and 644--646; no undefined references or citation warnings.
+
 ## Segment 26b
 
 - Report segment: 26
