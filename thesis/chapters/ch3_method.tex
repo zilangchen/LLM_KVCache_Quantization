@@ -772,7 +772,7 @@ AI_{\mathrm{INT4}}
 
 离线校准产物的存储相对运行时 KV Cache 与模型权重可忽略。对称 INT8 基准路径的产物规模为
 \begin{equation}
-\mathcal O\!\bigl(L d_k/g\bigr),
+\mathcal O\!\bigl(L H_{kv} d_k/g\bigr),
 \end{equation}
 \texttt{INT4-RoleAlign} 产物由层级分位数参数与量化轴元数据构成；K 侧 per-channel scale/zero-point 在 prefill 阶段由数据现场计算后冻结复用，V 侧 per-token scale/zero-point 随追加 token 现场计算后入缓存，二者均不持久化到校准文件，因此离线产物规模量级与对称 INT8 同阶。第四章在上述公式基础上给出部署效率边界与跨硬件读数。
 
