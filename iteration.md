@@ -1204,3 +1204,22 @@ Canonical agent workflow directory is `.agents/`.
 - Outputs: main.pdf 100 → 98 pages (压缩 2 页) / 1.64 MB
 - Validation: 0 undef / 0 multi / 0 dim / 0 error
 - 下一步: 继续 Ch2 可能遗漏项或进 Ch4/Ch5 review
+
+### 2026-05-08 21:18 | AIGC 段落修订 1.1: 中文摘要第 1 段
+- Goal: 按 AIGC 检测报告逐段降低模板化表达风险，第一轮只处理中文摘要第 1 段。
+- Changed files:
+  - `thesis/chapters/abstract_zh.tex`
+  - `docs/aigc_revision_tracker.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/abstract_zh.tex docs/aigc_revision_tracker.md`
+  - `latexmk -xelatex -interaction=nonstopmode -halt-on-error -outdir=/tmp/aigc_paragraph_build main.tex`
+- Outputs:
+  - 中文摘要第 1 段完成机制化改写，保留 KV Cache 瓶颈、张量重建误差边界、K/V 传播差异、行为对齐框架和三类决策环节。
+  - 4 个只读审查 Agent 均返回 PASS，建议项已吸收。
+- Validation:
+  - `git diff --check`: PASS
+  - LaTeX: PASS，生成 99 页 PDF
+  - Residual: 仍有既存 Chapter 3 overfull hbox，与本段修订无关。
+- Risks / follow-ups:
+  - 报告 segment 1 还包含中文摘要第 2、3 段，后续继续按自然段逐段处理。
+- Commit: pending at log-write time; committed as `docs: polish aigc zh abstract paragraph 1`
