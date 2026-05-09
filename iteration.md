@@ -36,6 +36,33 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-10 04:16 | Chapter 1/2 与摘要修订冻结
+- Goal: 冻结用户完成的 Chapter 1、Chapter 2 和中英文摘要修订，并同步正式 PDF。
+- Scope:
+  - Chapter 1: 研究内容、技术路线、研究问题与贡献口径的当前修订版。
+  - Chapter 2: 量化基础、相关工作与写作风格的当前修订版。
+  - Abstracts: 中英文摘要对齐到当前行为对齐框架、敏感度画像和实验结论口径。
+- Changed files:
+  - `thesis/chapters/abstract_zh.tex`
+  - `thesis/chapters/abstract_en.tex`
+  - `thesis/chapters/ch1_introduction.tex`
+  - `thesis/chapters/ch2_related_work.tex`
+  - `thesis/main.pdf`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/abstract_en.tex thesis/chapters/abstract_zh.tex thesis/chapters/ch1_introduction.tex thesis/chapters/ch2_related_work.tex`
+  - `latexmk -xelatex -halt-on-error -interaction=nonstopmode main.tex`
+  - `pdfinfo thesis/main.pdf | rg 'Pages|File size'`
+- Outputs:
+  - 正式 PDF 已重新渲染，输出为 101 页。
+- Validation:
+  - `git diff --check -- thesis/chapters/abstract_en.tex thesis/chapters/abstract_zh.tex thesis/chapters/ch1_introduction.tex thesis/chapters/ch2_related_work.tex`: PASS.
+  - `latexmk -xelatex -halt-on-error -interaction=nonstopmode main.tex`: PASS.
+  - `pdfinfo thesis/main.pdf`: Pages 101, File size 1489598 bytes.
+- Risks / follow-ups:
+  - 本轮按用户手动定稿提交，未额外改写正文内容。
+- Commit: pending at log-write time; intended `docs: polish thesis ch1 ch2 abstracts`
+
 ### 2026-05-09 05:37 | Ch4 官方 LongBench 解读措辞收窄
 - Goal: 修正第 4 章官方 LongBench 对照段中“显著性退化”的统计含义偏强问题，使正文解读与表注“不构成全面统计检验”的边界一致。
 - Scope:
