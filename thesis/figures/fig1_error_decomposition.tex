@@ -29,7 +29,7 @@
     eqcard/.style={
       rectangle, rounded corners=5pt,
       draw=gray!55, line width=0.95pt,
-      fill=gray!5, minimum width=10.9cm, minimum height=1.25cm
+      fill=gray!5, minimum width=12.95cm, minimum height=1.22cm
     },
     note/.style={
       rectangle, rounded corners=4pt,
@@ -75,15 +75,23 @@
     \draw[arr, orange!82!black] (vq.east) -- (vp.west);
 
     % Bottom decomposition
-    \node[eqcard] (eq) at (-0.18,-2.20) {};
-    \node[font=\bfseries\small] at (-0.18,-1.80) {输出误差分解};
-    \node[font=\normalsize] at (-0.18,-2.35) {分布侧传播项 \(+\) 聚合侧传播项};
+    \node[eqcard] (eq) at (0.15,-2.12) {};
+    \node[font=\footnotesize] at (0.15,-2.12) {%
+      \textbf{输出误差分解：}\quad
+      $\textstyle
+      \hat o-o
+      =
+      \big[\sum_{i=1}^{S}\hat a_i(\hat v_i-v_i)\big]_{\text{Value 聚合项}}
+      +
+      \big[\sum_{i=1}^{S}(\hat a_i-a_i)v_i\big]_{\text{Key 分布项}}
+      $%
+    };
 
     % subtle guide marks
     \draw[blue!18, line width=0.6pt] (-3.15,2.75) -- (-3.15,-1.25);
     \draw[red!18, line width=0.6pt] (1.05,2.75) -- (1.05,-1.25);
 
   \end{tikzpicture}
-  \caption{注意力误差的两条耦合传播路径及其精确代数分解。左侧为 FP16 attention flow，中部为量化扰动，右侧为由 Key 与 Value 误差分别触发的两条传播路径，底部标出输出误差对应的两类传播项。}
+  \caption{注意力误差的两条传播路径及其代数分解。FP16 attention 给出参考分布 \(a\) 与输出 \(o\)，量化后的 Key 误差经 logits 与 softmax 改变注意力分布，Value 误差在量化后权重下进入加权聚合。底部公式给出式~\eqref{eq:ch3-error-decomp} 的最终分解形式。}
   \label{fig:error-decomposition}
 \end{figure}

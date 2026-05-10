@@ -41,40 +41,40 @@
     \node[title] at (0.30,5.30) {（a）位宽落点诊断};
     \node[note] at (0.30,4.95) {同平均位宽预算下，4bit 应优先落在 K 还是 V？};
 
-    \node[font=\tiny\bfseries, text=black!70] at (1.85,4.42) {8 位基准};
-    \draw[black!28, line width=0.55pt] (1.28,4.26) -- (2.42,4.26);
-    \node[font=\tiny\bfseries, text=black!70] at (3.95,4.42) {同预算对照};
-    \draw[black!28, line width=0.55pt] (2.75,4.26) -- (5.15,4.26);
-    \node[font=\tiny\bfseries, text=black!70] at (6.25,4.42) {对称低比特锚点};
-    \draw[black!28, line width=0.55pt] (5.60,4.26) -- (6.90,4.26);
+    \node[font=\tiny\bfseries, text=black!70] at (2.38,4.42) {8 位基准};
+    \draw[black!28, line width=0.55pt] (1.81,4.26) -- (2.95,4.26);
+    \node[font=\tiny\bfseries, text=black!70] at (4.48,4.42) {同预算对照};
+    \draw[black!28, line width=0.55pt] (3.28,4.26) -- (5.68,4.26);
+    \node[font=\tiny\bfseries, text=black!70] at (6.78,4.42) {对称低比特锚点};
+    \draw[black!28, line width=0.55pt] (6.13,4.26) -- (7.43,4.26);
 
-    \node[font=\scriptsize\bfseries] at (1.85,3.94) {\texttt{K8V8}};
-    \node[font=\scriptsize\bfseries] at (3.25,3.94) {\texttt{K8V4}};
-    \node[font=\scriptsize\bfseries] at (4.65,3.94) {\texttt{K4V8}};
-    \node[font=\scriptsize\bfseries] at (6.25,3.94) {\texttt{K4V4}};
+    \node[font=\scriptsize\bfseries] at (2.38,3.94) {\texttt{K8V8}};
+    \node[font=\scriptsize\bfseries] at (3.78,3.94) {\texttt{K8V4}};
+    \node[font=\scriptsize\bfseries] at (5.18,3.94) {\texttt{K4V8}};
+    \node[font=\scriptsize\bfseries] at (6.78,3.94) {\texttt{K4V4}};
 
-    \node[anchor=east, font=\tiny\bfseries, align=right] at (1.05,3.22) {Qwen\\1.5B};
-    \node[anchor=east, font=\tiny\bfseries, align=right] at (1.05,2.42) {Qwen\\7B};
-    \node[anchor=east, font=\tiny\bfseries, align=right] at (1.05,1.62) {LLaMA\\8B};
+    \node[anchor=east, font=\tiny\bfseries, align=right] at (1.78,3.22) {Qwen2.5-1.5B};
+    \node[anchor=east, font=\tiny\bfseries, align=right] at (1.78,2.42) {Qwen2.5-7B};
+    \node[anchor=east, font=\tiny\bfseries, align=right] at (1.78,1.62) {LLaMA-3.1-8B};
 
     \foreach \y in {2.82,2.02,1.22} {
-      \draw[black!10] (1.28,\y) -- (7.10,\y);
+      \draw[black!10] (1.81,\y) -- (7.63,\y);
     }
 
-    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (1.85,3.22) {可用};
-    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (3.25,3.22) {未归零};
-    \node[statebox, fill=riskRedFill, draw=riskRed, text=riskRed!80!black] at (4.65,3.22) {崩塌};
-    \node[statebox, fill=riskRedFill, draw=riskRed, text=riskRed!80!black] at (6.25,3.22) {崩塌};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (2.38,3.22) {可用};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (3.78,3.22) {未归零};
+    \node[statebox, fill=riskRedFill, draw=riskRed, text=riskRed!80!black] at (5.18,3.22) {崩塌};
+    \node[statebox, fill=riskRedFill, draw=riskRed, text=riskRed!80!black] at (6.78,3.22) {崩塌};
 
-    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (1.85,2.42) {可用};
-    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (3.25,2.42) {未归零};
-    \node[statebox, fill=riskRedFill, draw=riskRed, text=riskRed!80!black] at (4.65,2.42) {崩塌};
-    \node[statebox, fill=riskRedFill, draw=riskRed, text=riskRed!80!black] at (6.25,2.42) {崩塌};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (2.38,2.42) {可用};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (3.78,2.42) {未归零};
+    \node[statebox, fill=riskRedFill, draw=riskRed, text=riskRed!80!black] at (5.18,2.42) {崩塌};
+    \node[statebox, fill=riskRedFill, draw=riskRed, text=riskRed!80!black] at (6.78,2.42) {崩塌};
 
-    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (1.85,1.62) {可用};
-    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (3.25,1.62) {未归零};
-    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (4.65,1.62) {保留};
-    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (6.25,1.62) {保留};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (2.38,1.62) {可用};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (3.78,1.62) {未归零};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (5.18,1.62) {保留};
+    \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (6.78,1.62) {保留};
 
     \node[font=\tiny, text=black!62, align=left, anchor=west] at (0.65,0.48)
       {代表性检索观察（Needle）：K8V8 与 K8V4 未进入归零式失稳；\\Qwen 系列在 4bit K 下更易崩塌；LLaMA-3.1-8B 保留较高通过率，\\说明强度受架构调制。};
@@ -84,13 +84,13 @@
     \node[note] at (9.25,4.95) {从诊断观察收束为低比特路径约束};
 
     \node[chainstep, fill=kBlueFill, draw=kBlue] (c1) at (11.88,4.28)
-      {高精度路径未触发 cliff};
+      {\texttt{K8V8} 高位宽参考保持可用};
     \node[chainstep, fill=vTealFill, draw=vTeal] (c2) at (11.88,3.34)
-      {同预算落点暴露失效侧};
+      {\texttt{K8V4}/\texttt{K4V8} 对照暴露 K 侧风险};
     \node[chainstep, fill=riskRedFill, draw=riskRed] (c3) at (11.88,2.40)
       {4bit K 可能越过注意力排序临界点};
     \node[chainstep, fill=anchorGoldFill, draw=anchorGold] (c4) at (11.88,1.42)
-      {角色感知：优先保护 K，区分 K/V};
+      {分离 K/V 量化轴，优先约束 Key};
 
     \draw[arr] (c1.south) -- (c2.north);
     \draw[arr] (c2.south) -- (c3.north);

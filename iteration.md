@@ -36,6 +36,31 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-10 16:09 | Chapter 3 手动修订冻结
+- Goal: 冻结第三章手动修订后的正文与配套图件，并同步正式 PDF。
+- Scope: Chapter 3 writing polish, Figure 3-1 output-error decomposition layout, Figure 3-2 K/V diagnostic diagram layout and wording, rendered thesis PDF.
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `thesis/figures/fig1_error_decomposition.tex`
+  - `thesis/figures/fig_ch3_kv_diag_needle.tex`
+  - `thesis/main.pdf`
+  - `iteration.md`
+- Commands:
+  - `git diff --check`
+  - `latexmk -xelatex -halt-on-error -interaction=nonstopmode main.tex`
+  - `git status --short --branch`
+- Outputs:
+  - 第三章多处 AIGC 高嫌疑段落已按用户偏好改写，保留原有技术含义、公式边界、路径定义和跨章引用。
+  - 图 3-1 底部加入输出误差分解公式并调整框体尺寸，图 3-2 保留英文模型名并更新设计启示链。
+  - 正式 `thesis/main.pdf` 已由当前 LaTeX 源重新渲染。
+- Validation:
+  - `git diff --check`: PASS.
+  - `latexmk -xelatex -halt-on-error -interaction=nonstopmode main.tex`: PASS, generated 100-page PDF.
+  - Build warnings limited to existing Underfull boxes and a small Chapter 3 overfull hbox.
+- Risks / follow-ups:
+  - 本次提交只冻结第三章文本、图件和 PDF，不额外处理剩余排版 warning。
+  - Intended commit: `docs: freeze chapter 3 polish`
+
 ### 2026-05-10 04:16 | Chapter 1/2 与摘要修订冻结
 - Goal: 冻结用户完成的 Chapter 1、Chapter 2 和中英文摘要修订，并同步正式 PDF。
 - Scope:
