@@ -36,6 +36,33 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-11 09:15 | AIGC 重构第一组：摘要、第一章与第二章
+- Goal: 按检测报告优先处理摘要、英文摘要、第一章贡献段和第二章量化基础段的高疑似 AIGC 表达。
+- Scope: 中文摘要、英文摘要、Chapter 1 研究现状与研究内容段、Chapter 2 非对称量化与量化轴说明。
+- Changed files:
+  - `thesis/chapters/abstract_zh.tex`
+  - `thesis/chapters/abstract_en.tex`
+  - `thesis/chapters/ch1_introduction.tex`
+  - `thesis/chapters/ch2_related_work.tex`
+  - `thesis/main.pdf`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/abstract_zh.tex thesis/chapters/abstract_en.tex thesis/chapters/ch1_introduction.tex thesis/chapters/ch2_related_work.tex`
+  - `latexmk -xelatex -halt-on-error main.tex`
+  - `rg -n "形成一个三层|第一层|第二层|第三层|先在 INT8 基准路径先在|而是为|这个性质正好对应|后文不只报告|总体而言" ...`
+  - `rg -n "undefined|Reference.*undefined|Label.*multiply|Rerun to get cross-references" thesis/main.log || true`
+- Outputs:
+  - 摘要改为问题路径、方法流程和实验发现三段，不再逐句镜像原模板。
+  - 第一章修复贡献段语法硬伤，并把系统实现贡献接回 Triton Decode kernel、离线产物和在线管线。
+  - 第二章把非对称量化与量化轴说明改为机制推导，减少清单式表达。
+- Validation:
+  - `git diff --check`: PASS.
+  - `latexmk -xelatex -halt-on-error main.tex`: PASS, generated 95-page PDF.
+  - 高风险模板检索无命中；日志检查无 undefined references、multiply-defined labels 或 rerun 提示。
+- Risks / follow-ups:
+  - 本组只处理摘要、Chapter 1 和 Chapter 2；Chapter 3 与 Chapter 4 高疑似片段进入后续提交。
+- Intended commit: `docs: polish aigc abstracts and early chapters`
+
 ### 2026-05-11 09:07 | Thesis 全文叙事与证据链修订冻结
 - Goal: 冻结当前全文 polish 状态，覆盖摘要、Chapter 1--5、附录、关键图表和正式 PDF。
 - Scope: 论文写作风格降重、Chapter 4 防守式表达收敛、Chapter 5 结论重构、图表字号与表注压缩、正式 PDF 同步。
