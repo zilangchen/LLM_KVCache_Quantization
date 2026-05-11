@@ -36,6 +36,34 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-11 09:07 | Thesis 全文叙事与证据链修订冻结
+- Goal: 冻结当前全文 polish 状态，覆盖摘要、Chapter 1--5、附录、关键图表和正式 PDF。
+- Scope: 论文写作风格降重、Chapter 4 防守式表达收敛、Chapter 5 结论重构、图表字号与表注压缩、正式 PDF 同步。
+- Changed files:
+  - `thesis/chapters/*.tex`
+  - `thesis/figures/**/*.tex`
+  - `thesis/figures/**/*.pdf`
+  - `thesis/tables/*.tex`
+  - `scripts/thesis/*.py`
+  - `thesis/main.pdf`
+  - `iteration.md`
+- Commands:
+  - `git diff --check`
+  - `latexmk -xelatex -halt-on-error main.tex`
+  - `rg -n "undefined|Reference.*undefined|Label.*multiply|Rerun to get cross-references" thesis/main.log || true`
+- Outputs:
+  - 全文当前版本重新渲染为 95 页 PDF。
+  - Chapter 4 过度防守与重复解释已收敛，4.7 小结扩展为更完整的实验结论收束。
+  - Chapter 5 已按当前写作偏好重构为更自然的结论、价值、边界与后续工作表述。
+- Validation:
+  - `git diff --check`: PASS.
+  - `latexmk -xelatex -halt-on-error main.tex`: PASS.
+  - 引用与标签日志检查无 undefined references、multiply-defined labels 或 rerun 提示。
+- Risks / follow-ups:
+  - `thesis/本科毕业设计.doc` 为未跟踪文件，本次不纳入提交。
+  - 现存 Underfull/Overfull box 仅作为后续版面细修项处理。
+- Intended commit: `docs: polish thesis narrative and evidence chain`
+
 ### 2026-05-10 16:09 | Chapter 3 手动修订冻结
 - Goal: 冻结第三章手动修订后的正文与配套图件，并同步正式 PDF。
 - Scope: Chapter 3 writing polish, Figure 3-1 output-error decomposition layout, Figure 3-2 K/V diagnostic diagram layout and wording, rendered thesis PDF.

@@ -53,7 +53,7 @@
   \end{tikzpicture}
   \caption{Framework overview。单一 \textbf{behavior-guided 原则}（attention 分布保持度）
   同时贯通两层：(i) \emph{Static Calibration} 以 KL 目标驱动 INT8 canonical
-  与 INT4-RoleAlign；(ii) \emph{Budget Allocation} 以 behavior sensitivity profile
+  与 INT4-RoleAlign。(ii) \emph{Budget Allocation} 以 behavior sensitivity profile
   指导逐层预算分配，AutoK 作为 profile-guided 扩展自然长出。
   两层共享同一个 behavior sensitivity profile（虚线箭头），
   在下游的 empirical validation（INT8 canonical $\Delta{=}{+}0.02$ 保真度

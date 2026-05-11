@@ -96,8 +96,10 @@ def main():
     if cjk_font is None:
         raise RuntimeError("No CJK-capable font found for fig4_sensitivity_heatmap.")
 
+    legend_font = FontProperties(fname=cjk_font.get_file(), size=9.6)
+
     # 4 subplot 横排：把 protection map 收成结构解释图，而不是调试可视化
-    fig, axes = plt.subplots(1, 4, figsize=(11.6, 4.8), sharey=False)
+    fig, axes = plt.subplots(1, 4, figsize=(10.4, 4.8), sharey=False)
     cmap = ListedColormap(["#F2F3EE", "#2F6B4F"])  # default INT4 vs protected INT8
     norm = BoundaryNorm([3, 6, 9], ncolors=2)  # 4→index 0, 8→index 1
 
@@ -120,19 +122,19 @@ def main():
             origin="upper",
             interpolation="nearest",
         )
-        ax.set_title(title, fontsize=10, pad=18, fontweight="semibold")
+        ax.set_title(title, fontsize=11.2, pad=18, fontweight="semibold")
         ax.set_xticks([0, 1])
-        ax.set_xticklabels([r"$K$", r"$V$"], fontsize=10)
+        ax.set_xticklabels([r"$K$", r"$V$"], fontsize=11.0)
         ax.set_xlim(-0.5, 1.5)
         yticks = [0, max(0, num_layers // 2 - 1), num_layers - 1]
         ylabels = ["1", str(max(1, num_layers // 2)), str(num_layers)]
         ax.set_yticks(yticks)
-        ax.set_yticklabels(ylabels)
+        ax.set_yticklabels(ylabels, fontsize=9.6)
         if mkey == MODEL_ORDER[0]:
             ax.set_ylabel("层", fontproperties=cjk_font)
         else:
             ax.set_ylabel("")
-        ax.tick_params(axis="y", length=2.5)
+        ax.tick_params(axis="y", length=2.5, labelsize=9.6)
         ax.grid(False)
         for spine in ax.spines.values():
             spine.set_linewidth(0.8)
@@ -150,7 +152,7 @@ def main():
                 + (f" · top {', '.join(str(i + 1) for i in top3)}" if top3 else "")
             ) if avg_bits else cov_label,
             transform=ax.transAxes,
-            ha="center", va="bottom", fontsize=8, color="#555",
+            ha="center", va="bottom", fontsize=9.2, color="#555",
         )
         top3_info[mkey] = (top3, protected.tolist(), num_layers)
 
@@ -166,22 +168,22 @@ def main():
         ncol=2,
         bbox_to_anchor=(0.5, 0.98),
         frameon=False,
-        prop=cjk_font,
+        prop=legend_font,
     )
 
     fig.suptitle(
         r"Behavior-guided AutoK 逐层保护图",
-        fontsize=11, y=1.06, fontweight="semibold",
+        fontsize=12.2, y=1.06, fontweight="semibold",
         fontproperties=cjk_font,
     )
     fig.text(
         0.02, 0.5, "浅层", rotation=90,
-        va="center", ha="center", fontsize=8.5, color="#666666",
+        va="center", ha="center", fontsize=9.5, color="#666666",
         fontproperties=cjk_font,
     )
     fig.text(
         0.98, 0.5, "深层", rotation=270,
-        va="center", ha="center", fontsize=8.5, color="#666666",
+        va="center", ha="center", fontsize=9.5, color="#666666",
         fontproperties=cjk_font,
     )
     plt.tight_layout(rect=(0.03, 0.02, 0.97, 0.90))

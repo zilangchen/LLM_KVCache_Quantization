@@ -9,13 +9,13 @@
 \begin{equation}
 a=\mathrm{softmax}\!\left(\frac{qK^\top}{\sqrt{d_k}}\right), \qquad o=aV,
 \end{equation}
-其中 $a\in\mathbb{R}^{1\times S}$ 为注意力分布，其第 $i$ 个分量记为 $a_i\in\mathbb{R}$；$o\in\mathbb{R}^{1\times d_v}$ 为注意力输出。注意力行为记作联合表征
+其中 $a\in\mathbb{R}^{1\times S}$ 为注意力分布，其第 $i$ 个分量记为 $a_i\in\mathbb{R}$，$o\in\mathbb{R}^{1\times d_v}$ 为注意力输出。注意力行为记作联合表征
 \begin{equation}
 \mathcal{B}(q,K,V):=(a,o).
 \end{equation}
-后文以 $\Delta_{\mathrm{beh}}$ 刻画量化前后 $(a,o)$ 的行为偏移。多层、多头情形可按层索引 $\ell$ 与头索引 $h$ 逐一展开，记为 $q^{(\ell,h)}, K^{(\ell,h)}$ 等；GQA/MQA 下，多个 Query 头可共享同一 KV 头，本节分解可对应到每个 Query 头及其映射的 KV 头，具体映射关系已在第~\ref{sec:ch2-kv-memory}~节给出。
+后文以 $\Delta_{\mathrm{beh}}$ 刻画量化前后 $(a,o)$ 的行为偏移。多层、多头情形可按层索引 $\ell$ 与头索引 $h$ 逐一展开，记为 $q^{(\ell,h)}, K^{(\ell,h)}$ 等。GQA/MQA 下，多个 Query 头可共享同一 KV 头，本节分解可对应到每个 Query 头及其映射的 KV 头，具体映射关系已在第~\ref{sec:ch2-kv-memory}~节给出。
 
-设 $Q_{\theta_K}(\cdot)$ 与 $Q_{\theta_V}(\cdot)$ 分别表示作用于 Key 与 Value 的量化映射；参数 $\theta_K, \theta_V$ 的具体含义（scale、zero-point、bit-width 等）以及作用域（逐元素、逐通道或逐 token）由量化路径决定，详见第~\ref{sec:ch3-paths}~节。量化后的 Key 与 Value 记为
+设 $Q_{\theta_K}(\cdot)$ 与 $Q_{\theta_V}(\cdot)$ 分别表示作用于 Key 与 Value 的量化映射。参数 $\theta_K, \theta_V$ 的具体含义（scale、zero-point、bit-width 等）以及作用域（逐元素、逐通道或逐 token）由量化路径决定，详见第~\ref{sec:ch3-paths}~节。量化后的 Key 与 Value 记为
 \begin{equation}
 \hat K = Q_{\theta_K}(K), \qquad \hat V = Q_{\theta_V}(V),
 \end{equation}
@@ -27,7 +27,7 @@ KV Cache 量化的目标即
 \begin{equation}
 \min_{\theta_K,\theta_V}\Delta_{\mathrm{beh}}\big((a,o),(\hat a,\hat o)\big),
 \end{equation}
-其中 $\Delta_{\mathrm{beh}}: (\mathbb{R}^{1\times S}\times\mathbb{R}^{1\times d_v})^2 \to \mathbb{R}_{\ge 0}$ 满足 $\Delta_{\mathrm{beh}}(x,x)=0$，刻画量化前后注意力行为的联合偏移；其作为损失函数使用，无需满足度量空间的对称性或三角不等式。$\Delta_{\mathrm{beh}}$ 的具体实例化由量化路径决定，并在层、头或路径粒度上聚合实例化（第~\ref{sec:ch3-calibration}~节）。
+其中 $\Delta_{\mathrm{beh}}: (\mathbb{R}^{1\times S}\times\mathbb{R}^{1\times d_v})^2 \to \mathbb{R}_{\ge 0}$ 满足 $\Delta_{\mathrm{beh}}(x,x)=0$，刻画量化前后注意力行为的联合偏移。其作为损失函数使用，无需满足度量空间的对称性或三角不等式。$\Delta_{\mathrm{beh}}$ 的具体实例化由量化路径决定，并在层、头或路径粒度上聚合实例化（第~\ref{sec:ch3-calibration}~节）。
 
 由 $\hat o=\hat a\hat V$ 与 $o=aV$ 的定义，输出误差可作如下精确代数展开：
 \begin{align}
@@ -51,43 +51,43 @@ KV Cache 量化的目标即
 
 \input{figures/fig_ch3_kv_diag_needle}
 
-Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16} 将 PPL 相对 FP16 基线推高约两个数量级，\texttt{K16V4} 只带来基线邻域内的小幅变化，原始读数见表~\ref{tab:ch4-kv-ppl}。同一方向也出现在 32K 任务诊断中。\texttt{K4V8} 下，Qwen2.5-1.5B 与 Qwen2.5-7B 的 RULER 通过率降为零；\texttt{K8V4} 没有出现归零式失稳。两组读数共同支持一个较窄判断，即在本文这些 Qwen2.5 低比特对照中，Key 侧低比特噪声是更直接的任务级失稳触发源；Value 侧压缩并非没有影响，但在 \texttt{K16V4} 与 \texttt{K8V4} 对照中没有触发同等强度的失稳。这个判断与式~\eqref{eq:ch3-error-decomp} 对 Key/Value 两条误差路径的机制区分一致。
+Qwen2.5-1.5B 的单侧 PPL 诊断给出最直接的隔离读数。\texttt{K4V16} 将 PPL 相对 FP16 基线推高约两个数量级，\texttt{K16V4} 只带来基线邻域内的小幅变化，原始读数见表~\ref{tab:ch4-kv-ppl}。同一方向也出现在 32K 任务诊断中，\texttt{K4V8} 下 Qwen2.5-1.5B 与 Qwen2.5-7B 的 RULER 通过率降为零，而 \texttt{K8V4} 没有出现归零式失稳。两组读数共同支持一个较窄判断，即在本文这些 Qwen2.5 低比特对照中，Key 侧低比特噪声是更直接的任务级失稳触发源。Value 侧压缩并非没有影响，但在 \texttt{K16V4} 与 \texttt{K8V4} 对照中没有触发同等强度的失稳。这个判断与式~\eqref{eq:ch3-error-decomp} 对 Key/Value 两条误差路径的机制区分一致。
 
-这种不对称的强弱还随模型族和头共享结构改变。Qwen 系列的 $H_{kv}$ 为 2 或 4，重复因子 $N_{\mathrm{rep}}=H_q/H_{kv}$ 落在 $\{6,7\}$，在 \texttt{K4V8} 与 \texttt{K4V4} 下出现检索归零。LLaMA-3.1-8B 的 $H_{kv}=8$、$N_{\mathrm{rep}}=4$，在当前对照里失稳幅度较小。在 GQA 机制中，同一个 KV 头的量化误差会由映射到该头的一组 Query 头共同承受；在 $H_q$ 可比的对照中，较小的 $N_{\mathrm{rep}}$ 意味着共享同一 KV 头误差的 Query 头更少，相关读数见表~\ref{tab:ch4-kv-multitask}。模型规模、训练数据与 GQA 配置也同样会影响效果，$H_{kv}$ 在本文中作为组间差异的代理变量，用于描述严重程度与触发位宽的边界变化。
+这种不对称的强弱还随模型族和头共享结构改变。Qwen 系列的 $H_{kv}$ 为 2 或 4，重复因子 $N_{\mathrm{rep}}=H_q/H_{kv}$ 落在 $\{6,7\}$，在 \texttt{K4V8} 与 \texttt{K4V4} 下出现检索归零。LLaMA-3.1-8B 的 $H_{kv}=8$、$N_{\mathrm{rep}}=4$，在当前对照里失稳幅度较小。在 GQA 机制中，同一个 KV 头的量化误差会由映射到该头的一组 Query 头共同承受。在 $H_q$ 可比的对照中，较小的 $N_{\mathrm{rep}}$ 意味着共享同一 KV 头误差的 Query 头更少，相关读数见表~\ref{tab:ch4-kv-multitask}。模型规模、训练数据与 GQA 配置也同样会影响效果，$H_{kv}$ 在本文中作为组间差异的代理变量，用于描述严重程度与触发位宽的边界变化。
 
-这些证据表明，Key 侧低比特退化是低比特路径设计中需要优先约束的风险点。主要隔离依据来自单侧 PPL 诊断，\texttt{K4V16} 单独使 PPL 出现数量级退化，\texttt{K16V4} 只带来小幅变化。任务读数提供外部一致性，\texttt{K4V8}/\texttt{K4V4} 在 Key 位宽降到 4 bit 后出现更强失稳，\texttt{K8V4} 未出现归零式失稳。由于 \texttt{K4V8} 与 \texttt{K4V4} 同时压低 K 与 V，它们仍只适合作为边界辅助证据，不能单独支撑 K 主导的隔离推断。PPL 原始读数见表~\ref{tab:ch4-kv-ppl}；跨任务读数及统计协议，包括 Bootstrap 95\% CI、sign-flip 置换检验与 BH-FDR 多重比较校正，见表~\ref{tab:ch4-kv-multitask} 与第~\ref{sec:exp-kv-sensitivity}~节。
+这些证据表明，Key 侧低比特退化是低比特路径设计中需要优先约束的风险点。主要隔离依据来自单侧 PPL 诊断，\texttt{K4V16} 单独使 PPL 出现数量级退化，\texttt{K16V4} 只带来小幅变化。任务读数提供外部一致性，\texttt{K4V8}/\texttt{K4V4} 在 Key 位宽降到 4 bit 后出现更强失稳，\texttt{K8V4} 未出现归零式失稳。由于 \texttt{K4V8} 与 \texttt{K4V4} 同时压低 K 与 V，它们仍只适合作为边界辅助证据，不能单独支撑 K 主导的隔离推断。PPL 原始读数见表~\ref{tab:ch4-kv-ppl}。跨任务读数及统计协议，包括 Bootstrap 95\% CI、sign-flip 置换检验与 BH-FDR 多重比较校正，见表~\ref{tab:ch4-kv-multitask} 与第~\ref{sec:exp-kv-sensitivity}~节。
 
 \section{行为引导量化框架总览}
 \label{sec:ch3-framework}
 
-第~\ref{sec:ch3-problem}~节把量化质量评判从张量重建误差移至注意力行为差异 $\Delta_{\mathrm{beh}}$，第~\ref{sec:ch3-motivation-kv}~节把低比特退化定位为 Key 侧主导。框架以两个离线模块落实上述约束：校准模块按候选量化路径搜索行为代理最优的参数；预算分配模块在同一离线链路上读取逐层敏感度统计量，输出每层（或 Key/Value 角色）保留多少 bit。
+第~\ref{sec:ch3-problem}~节把量化质量评判从张量重建误差移至注意力行为差异 $\Delta_{\mathrm{beh}}$，第~\ref{sec:ch3-motivation-kv}~节把低比特退化定位为 Key 侧主导。框架以两个离线模块落实上述约束：校准模块按候选量化路径搜索行为代理最优的参数。预算分配模块在同一离线链路上读取逐层敏感度统计量，输出每层（或 Key/Value 角色）保留多少 bit。
 
 逐层行为敏感度画像
 \begin{equation}
 \mathcal{S}=\{s^{(l)}\}_{l=1}^{L},\quad s^{(l)}\in\mathbb{R}_{\geq 0},
 \end{equation}
-是离线校准链路在处理校准样本时作为副产物输出的逐层标量统计量；分配模块以只读方式读取它，不发起新的校准搜索。$\mathcal{S}$ 不预设唯一计算公式，由具体量化路径对应的行为代理实例化（第~\ref{sec:ch3-calibration}~节详述）。本文取 $s^{(l)}$ 越大表示第 $l$ 层在量化扰动下注意力行为越不稳定，并归纳地采用单调假设——读数越高的层在预算受限时保留更高位宽的边际收益越大；该假设的实验支撑见第~\ref{sec:exp-cross-model}~节。
+是离线校准链路在处理校准样本时作为副产物输出的逐层标量统计量。分配模块以只读方式读取它，不发起新的校准搜索。$\mathcal{S}$ 不预设唯一计算公式，由具体量化路径对应的行为代理实例化（第~\ref{sec:ch3-calibration}~节详述）。本文取 $s^{(l)}$ 越大表示第 $l$ 层在量化扰动下注意力行为越不稳定，并归纳地采用单调假设——读数越高的层在预算受限时保留更高位宽的边际收益越大。该假设的实验支撑见第~\ref{sec:exp-cross-model}~节。
 
 校准层把“如何量化”组织为参数选择问题。设候选量化参数空间 $\Theta$ 为离散候选集合，如 per-layer scale 候选格点，校准层求解
 \begin{equation}
 \theta^\star = \arg\min_{\theta\in\Theta}\Delta_{\mathrm{beh}}^{\mathrm{cal}}(\theta),
 \end{equation}
-其中 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}(\theta)$ 是 $\Delta_{\mathrm{beh}}$ 在有限校准样本上的代理估计——把第~\ref{sec:ch3-problem}~节联合行为目标限制到离线校准集，转化为可执行计算。给定一条路径及其候选参数家族，校准层输出 $\theta^\star$ 供在线缓存写入直接读取；不同位宽与格式的差异由候选家族 $\Theta$ 与代理 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 的具体形式承担，框架不要求所有路径使用同一数值评分。
+其中 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}(\theta)$ 是 $\Delta_{\mathrm{beh}}$ 在有限校准样本上的代理估计——把第~\ref{sec:ch3-problem}~节联合行为目标限制到离线校准集，转化为可执行计算。给定一条路径及其候选参数家族，校准层输出 $\theta^\star$ 供在线缓存写入直接读取。不同位宽与格式的差异由候选家族 $\Theta$ 与代理 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 的具体形式承担，框架不要求所有路径使用同一数值评分。
 
 分配层负责决定各层保留的位宽预算。设平均 KV 位宽预算为 $\bar b$，分配映射
 \begin{equation}
 b^\star = \mathcal{A}(\mathcal{S};\bar b),\quad \tfrac{1}{L}\sum_{l=1}^{L} b^\star_l \le \bar b,
 \end{equation}
-是一个确定性规则。它读取共享画像 $\mathcal{S}$，把逐层敏感度转换为整数位宽向量 $b^\star$，在线推理时不重新优化，也不重复校准参数搜索。基础设置把 $b^\star$ 写成 $L$ 维逐层预算，$b^\star\in\{b_{\min},\dots,b_{\max}\}^L$，本文使用 $b\in\{4,8,16\}$。当预算表达进一步区分 K/V 角色时，$b^\star$ 变为 $\{b_{\min},\dots,b_{\max}\}^{L\times 2}$ 中的向量，对应第~\ref{sec:ch3-motivation-kv}~节识别的 Key/Value 双角色；此时 $\mathcal{S}$ 也拆分为角色分量。第~\ref{sec:ch3-allocator}~节给出具体规则。
+是一个确定性规则。它读取共享画像 $\mathcal{S}$，把逐层敏感度转换为整数位宽向量 $b^\star$，在线推理时不重新优化，也不重复校准参数搜索。基础设置把 $b^\star$ 写成 $L$ 维逐层预算，$b^\star\in\{b_{\min},\dots,b_{\max}\}^L$，本文使用 $b\in\{4,8,16\}$。当预算表达进一步区分 K/V 角色时，$b^\star$ 变为 $\{b_{\min},\dots,b_{\max}\}^{L\times 2}$ 中的向量，对应第~\ref{sec:ch3-motivation-kv}~节识别的 Key/Value 双角色。此时 $\mathcal{S}$ 也拆分为角色分量。第~\ref{sec:ch3-allocator}~节给出具体规则。
 
-上述组织使校准链路和推理链路可以分开核验。离线阶段提取参考行为，完成路径参数搜索，写出冻结校准产物，并同步生成 $\mathcal{S}$。在线推理阶段只读取这些冻结产物，按照固定规则为当前缓存写入计算尺度或预算。推理阶段不重复离线搜索，这是框架的执行边界；$\theta^\star$ 与 $b^\star$ 也相应作为离线交付物保存，而不是在线决策变量。图~\ref{fig:ch3-framework-shared-profile} 给出离线—在线协作关系，以及共享画像在校准、低比特恢复和预算分配三层之间的传递方式。
+上述组织使校准链路和推理链路可以分开核验。离线阶段提取参考行为，完成路径参数搜索，写出冻结校准产物，并同步生成 $\mathcal{S}$。在线推理阶段只读取这些冻结产物，按照固定规则为当前缓存写入计算尺度或预算。推理阶段不重复离线搜索，这是框架的执行边界。$\theta^\star$ 与 $b^\star$ 也相应作为离线交付物保存，而不是在线决策变量。图~\ref{fig:ch3-framework-shared-profile} 给出离线—在线协作关系，以及共享画像在校准、低比特恢复和预算分配三层之间的传递方式。
 
 \input{figures/fig_ch3_framework_shared_profile}
 
 \section{行为引导校准目标与参数搜索策略}
 \label{sec:ch3-calibration}
 
-第~\ref{sec:ch3-problem}~节把量化质量评判落到联合行为偏移 $\Delta_{\mathrm{beh}}$，但该量在样本上无显式可执行形式。本节把代理 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 实例化为分布侧 KL 散度，作为对称路径与 \texttt{INT4-RoleAlign} 的 K-path 共用的可计算目标；V-path 使用独立的输出扰动代理，详见第~\ref{sec:ch3-paths}~节。两类代理均在路径相关的候选参数家族上完成稳健选择。
+第~\ref{sec:ch3-problem}~节把量化质量评判落到联合行为偏移 $\Delta_{\mathrm{beh}}$，但该量在样本上无显式可执行形式。本节把代理 $\Delta_{\mathrm{beh}}^{\mathrm{cal}}$ 实例化为分布侧 KL 散度，作为对称路径与 \texttt{INT4-RoleAlign} 的 K-path 共用的可计算目标。V-path 使用独立的输出扰动代理，详见第~\ref{sec:ch3-paths}~节。两类代理均在路径相关的候选参数家族上完成稳健选择。
 
 对称路径与角色感知低比特路径在候选参数家族与代理形式上不必相同，但都在离线样本上计算行为读数，在可行域约束下控制尾部坏案例，并把最终选择写入固定校准产物。
 
@@ -126,7 +126,7 @@ p_{\theta}^{(l,h,t)}
 =
 \frac{1}{|T_{\mathrm{cal}}|}\sum_{(x,l,h,t)\in T_{\mathrm{cal}}} d_{\mathrm{KL}}^{(x,l,h,t)}(\theta),
 \end{equation}
-其中 $T_{\mathrm{cal}}=\{(x,l,h,t):x\in\mathcal D_{\mathrm{calib}}\}$ 收集校准样本中的位置、层和头索引。后续离线搜索直接以该代理作为候选参数的评分函数；候选家族、尾部读数和稳健选择规则在第~\ref{subsec:ch3-two-stage}~节展开。
+其中 $T_{\mathrm{cal}}=\{(x,l,h,t):x\in\mathcal D_{\mathrm{calib}}\}$ 收集校准样本中的位置、层和头索引。后续离线搜索直接以该代理作为候选参数的评分函数。候选家族、尾部读数和稳健选择规则在第~\ref{subsec:ch3-two-stage}~节展开。
 
 用 MSE 选择量化参数时，比较对象仍是 $K$ 或 $V$ 的逐元素重建差异。对 Key 来说，这个差异进入输出之前还会经过 $qK^\top$、softmax 排序和概率质量重新分配。于是，某个候选即使在逐元素误差上较小，也可能把关键 token 的注意力质量转移到其它位置。式~\eqref{eq:ch3-error-decomp} 正好给出这种差异进入输出的两条路径，
 \[
@@ -134,9 +134,9 @@ p_{\theta}^{(l,h,t)}
 \quad\text{与}\quad
 \sum_i\hat a_i(\hat v_i-v_i).
 \]
-前一项对应分布侧偏移，后一项对应 Value 聚合侧扰动。这里 $a_i\equiv p_{\mathrm{ref},i}^{(l,h,t)}$，$\hat a_i\equiv p_{\theta,i}^{(l,h,t)}$，$v_i$ 与 $\hat v_i$ 分别表示参考 Value 和量化 Value。KL 直接比较 $a$ 与 $\hat a$，因此读取的是分布侧误差；Value 侧扰动则通过量化后权重 $\hat a_i$ 进入聚合项。这个对应关系说明，attention-distribution KL 更贴近 Key 误差影响输出的路径，而不是只停留在逐元素重建距离。
+前一项对应分布侧偏移，后一项对应 Value 聚合侧扰动。这里 $a_i\equiv p_{\mathrm{ref},i}^{(l,h,t)}$，$\hat a_i\equiv p_{\theta,i}^{(l,h,t)}$，$v_i$ 与 $\hat v_i$ 分别表示参考 Value 和量化 Value。KL 直接比较 $a$ 与 $\hat a$，因此读取的是分布侧误差。Value 侧扰动则通过量化后权重 $\hat a_i$ 进入聚合项。这个对应关系说明，attention-distribution KL 更贴近 Key 误差影响输出的路径，而不是只停留在逐元素重建距离。
 
-本文使用前向 KL $D_{\mathrm{KL}}(p_{\mathrm{ref}}\|p_\theta)$。在长上下文检索中，高概率参考位置通常对应需要保留的关键信息；若量化候选低估这些位置，前向 KL 会给出更直接的惩罚。反向 KL 更偏向量化分布自身的高概率区域，JS 散度则提供对称读数，二者在本文中保留为补充诊断。Value 路径不复用该分布代理，而采用独立的输出扰动代理，见第~\ref{sec:ch3-paths}~节。
+本文使用前向 KL $D_{\mathrm{KL}}(p_{\mathrm{ref}}\|p_\theta)$。在长上下文检索中，高概率参考位置通常对应需要保留的关键信息。若量化候选低估这些位置，前向 KL 会给出更直接的惩罚。反向 KL 更偏向量化分布自身的高概率区域，JS 散度则提供对称读数，二者在本文中保留为补充诊断。Value 路径不复用该分布代理，而采用独立的输出扰动代理，见第~\ref{sec:ch3-paths}~节。
 
 数值上对 $p_{\mathrm{ref}}$ 与 $p_\theta$ 均在 $[\varepsilon, 1]$ 上做 clamp 截断（取 $\varepsilon=10^{-6}$）以避免极端尾部概率引起的不稳定。KL 与数值代理（如 MSE）的必要性边界——在哪些条件下 KL 更必要、在哪些条件下二者会趋同——见第~\ref{chap:experiments}~章。
 
@@ -156,7 +156,7 @@ p_{\theta}^{(l,h,t)}
 \arg\min_{\theta \in \Theta_{\mathrm{path}}}
 R_{\mathrm{path}}(\theta),
 \end{equation}
-其中 $R_{\mathrm{path}}(\theta)$ 是该路径上的稳健风险统计量；具体形式由路径决定，对称路径下以下文式~\eqref{eq:ch3-q95} 给出的 attention-distribution KL 95\% 分位数 $q_{0.95}(\theta)$ 为主序，并叠加裁剪率过滤与字典序回退（详见下文）。角色感知低比特路径在同一选择纪律下，把 K-path 与 V-path 的代理分开定义。
+其中 $R_{\mathrm{path}}(\theta)$ 是该路径上的稳健风险统计量。具体形式由路径决定，对称路径下以下文式~\eqref{eq:ch3-q95} 给出的 attention-distribution KL 95\% 分位数 $q_{0.95}(\theta)$ 为主序，并叠加裁剪率过滤与字典序回退（详见下文）。角色感知低比特路径在同一选择纪律下，把 K-path 与 V-path 的代理分开定义。
 
 对称路径（包括 \texttt{INT8} 基准与对称 \texttt{INT4} 试探路径）使用同一组本地读数。设校准样本集合为 $\mathcal D_{\mathrm{calib}}$（来源、规模与序列长度见第~\ref{sec:ch3-deployment}~节），$K^{\mathrm{cal}}$ 与 $V^{\mathrm{cal}}$ 分别为 $\mathcal D_{\mathrm{calib}}$ 上抽取的 Key 与 Value 张量元素集合，定义
 \begin{equation}
@@ -176,7 +176,7 @@ d_{\mathrm{KL}}^{(x,l,h,t)}(\theta),
 c_K(\theta) &= \frac{|\{x\in K^{\mathrm{cal}}: |x/s_\theta(x)| > q_{\max}\}|}{|K^{\mathrm{cal}}|}, \\
 c_V(\theta) &= \frac{|\{x\in V^{\mathrm{cal}}: |x/s_\theta(x)| > q_{\max}\}|}{|V^{\mathrm{cal}}|}.
 \end{align}
-这里的 $\mu(\theta)$ 是第~\ref{subsec:ch3-kl-target}~节均值代理对每个候选的取值，$q_{0.95}(\theta)$ 是同一逐位置 KL 分布的 95\% 分位数。$c_K(\theta)$ 与 $c_V(\theta)$ 分别记录 Key 与 Value 张量的裁剪率。对元素 $x$ 以候选 $\theta$ 对应的分组尺度 $s_\theta(x)$ 缩放后，若 $|x/s_\theta(x)|$ 超过整数上界 $q_{\max}$，该元素计入对应裁剪率；\texttt{INT8} 取 $q_{\max}=127$，\texttt{INT4} 取 $q_{\max}=7$。可行域用裁剪率阈值 $\tau_K,\tau_V$ 硬过滤候选，定义为
+这里的 $\mu(\theta)$ 是第~\ref{subsec:ch3-kl-target}~节均值代理对每个候选的取值，$q_{0.95}(\theta)$ 是同一逐位置 KL 分布的 95\% 分位数。$c_K(\theta)$ 与 $c_V(\theta)$ 分别记录 Key 与 Value 张量的裁剪率。对元素 $x$ 以候选 $\theta$ 对应的分组尺度 $s_\theta(x)$ 缩放后，若 $|x/s_\theta(x)|$ 超过整数上界 $q_{\max}$，该元素计入对应裁剪率。\texttt{INT8} 取 $q_{\max}=127$，\texttt{INT4} 取 $q_{\max}=7$。可行域用裁剪率阈值 $\tau_K,\tau_V$ 硬过滤候选，定义为
 \begin{equation}
 \Theta_{\mathrm{feasible}}
 =
@@ -189,9 +189,9 @@ c_V(\theta) &= \frac{|\{x\in V^{\mathrm{cal}}: |x/s_\theta(x)| > q_{\max}\}|}{|V
 \arg\min_{\theta \in \Theta_{\mathrm{feasible}}}
 q_{0.95}(\theta).
 \end{equation}
-以尾部统计 $q_{0.95}$ 为主序；$\mu$ 不参与主选择规则的最小化目标，仅在并列或下文的回退规则中作为次级排序键。
+以尾部统计 $q_{0.95}$ 为主序。$\mu$ 不参与主选择规则的最小化目标，仅在并列或下文的回退规则中作为次级排序键。
 
-若所有候选均违反裁剪率约束，回退规则按字典序选取：先最小化总裁剪负担 $c_K(\theta)+c_V(\theta)$；若总裁剪负担相同，再比较尾部统计 $q_{0.95}(\theta)$；若尾部统计仍相同，最后比较平均偏移 $\mu(\theta)$。排序第一的候选记为 $\theta^\star$，并在产物字段中标记触发回退及其原因。
+若所有候选均违反裁剪率约束，回退规则按字典序选取：先最小化总裁剪负担 $c_K(\theta)+c_V(\theta)$。若总裁剪负担相同，再比较尾部统计 $q_{0.95}(\theta)$。若尾部统计仍相同，最后比较平均偏移 $\mu(\theta)$。排序第一的候选记为 $\theta^\star$，并在产物字段中标记触发回退及其原因。
 
 \texttt{INT4-RoleAlign} 沿用上述五步校准流程，但不再把 Key 与 Value 合成一个统一的 KL 分数来选择参数。Key 路径只搜索 $p_K$，它对应逐通道 Key 非对称量化中的百分位裁剪参数，读取 attention-distribution KL 及其尾部统计，用来约束 Key 侧排序扰动。Value 路径只搜索 $p_V$，它对应逐 token Value 非对称量化中的百分位裁剪参数，读取独立的输出扰动代理 $R_V(\theta)$ 及其稳健统计，用来约束聚合内容侧的偏移。两条路径的具体量化形式见第~\ref{sec:ch3-paths}~节。
 
@@ -201,7 +201,7 @@ q_{0.95}(\theta).
 \section{跨位宽量化路径的实例化设计}
 \label{sec:ch3-paths}
 
-第~\ref{sec:ch3-calibration}~节给出的离线校准流程与稳健选择纪律不规定唯一位宽或唯一量化格式。后文先用 \texttt{INT8} 基准路径检查校准闭环能否在保守位宽下稳定落地，再用对称 \texttt{INT4} 试探路径暴露直接降位宽后的结构困难，最后用 \texttt{INT4-RoleAlign} 把低比特路径改写为 K/V 角色分离的非对称格式，并在方法层面区分它与 \texttt{KIVI-style}~\cite{liu2024kivi} 的参数来源。三条路径共享第~\ref{sec:ch3-calibration}~节的参考行为提取、可行域约束、尾部优先选择和固定产物输出，差异仅在参数接口、量化轴与行为代理；三条路径输出的逐层敏感度统计共同供第~\ref{sec:ch3-allocator}~节的 allocator 读取。三条路径在量化格式、参数接口与行为代理上的并列对照见表~\ref{tab:ch3-path-instantiation}。
+第~\ref{sec:ch3-calibration}~节给出的离线校准流程与稳健选择纪律不规定唯一位宽或唯一量化格式。后文先用 \texttt{INT8} 基准路径检查校准闭环能否在保守位宽下稳定落地，再用对称 \texttt{INT4} 试探路径暴露直接降位宽后的结构困难，最后用 \texttt{INT4-RoleAlign} 把低比特路径改写为 K/V 角色分离的非对称格式，并在方法层面区分它与 \texttt{KIVI-style}~\cite{liu2024kivi} 的参数来源。三条路径共享第~\ref{sec:ch3-calibration}~节的参考行为提取、可行域约束、尾部优先选择和固定产物输出，差异仅在参数接口、量化轴与行为代理。三条路径输出的逐层敏感度统计共同供第~\ref{sec:ch3-allocator}~节的 allocator 读取。三条路径在量化格式、参数接口与行为代理上的并列对照见表~\ref{tab:ch3-path-instantiation}。
 
 \input{tables/table_ch3_path_instantiation}
 
@@ -210,7 +210,7 @@ q_{0.95}(\theta).
 
 \texttt{INT8} 的有效整数等级为 255 级，量化网格相对细，校准层写出的 scale 参数也能按组追溯。本文先在这一设置下检查离线选择与在线执行是否形成闭环，并在第四章将该路径记为 \texttt{INT8-Canonical}。\texttt{INT8} 还提供后续低比特路径的压缩率参照。
 
-该路径对 Key 和 Value 使用相同的静态对称逐组量化。分组沿通道维度划分，每组包含 $g=128$ 个元素并共享一个缩放参数。设第 $l$ 层第 $j$ 个分组的待量化张量为 $x_{l,j}$；给定校准百分位参数 $p_c$ 和分组大小 $g$ 后，静态缩放参数定义为
+该路径对 Key 和 Value 使用相同的静态对称逐组量化。分组沿通道维度划分，每组包含 $g=128$ 个元素并共享一个缩放参数。设第 $l$ 层第 $j$ 个分组的待量化张量为 $x_{l,j}$。给定校准百分位参数 $p_c$ 和分组大小 $g$ 后，静态缩放参数定义为
 \begin{equation}
 s_{l,j}^{\mathrm{static}}
 =
@@ -246,15 +246,15 @@ m \cdot s_{l,j}^{\mathrm{static}},
 s_{l,j}^{\mathrm{dyn}}
 \right),
 \end{equation}
-当前 token 仍处在校准覆盖范围内时，静态参数继续主导。若当前 token 的 $\operatorname{absmax}$ 超过 $m \cdot s_{l,j}^{\mathrm{static}}\cdot q_{\max}$ 对应的覆盖，则改用动态尺度写入当前 token，使该 token 仍落在量化网格内，避免异常值被直接压到 $q_{\max}$。$\max$ 在每个写入步单独计算，K 与 V 的自适应保护开关也分别控制。极端漂移会抬高 $s_{l,j}^{\mathrm{final}}$，进而扩大一定量化误差；这是为裁剪安全付出的工程代价。缓存写入时是否回写历史缓存的系统语义，见第~\ref{sec:ch3-deployment}~节。
+当前 token 仍处在校准覆盖范围内时，静态参数继续主导。若当前 token 的 $\operatorname{absmax}$ 超过 $m \cdot s_{l,j}^{\mathrm{static}}\cdot q_{\max}$ 对应的覆盖，则改用动态尺度写入当前 token，使该 token 仍落在量化网格内，避免异常值被直接压到 $q_{\max}$。$\max$ 在每个写入步单独计算，K 与 V 的自适应保护开关也分别控制。极端漂移会抬高 $s_{l,j}^{\mathrm{final}}$，进而扩大一定量化误差。这是为裁剪安全付出的工程代价。缓存写入时是否回写历史缓存的系统语义，见第~\ref{sec:ch3-deployment}~节。
 
 \subsection{对称 INT4 的局限与格式升级动因}
 
 将第~\ref{subsec:ch3-int8-baseline}~节的对称路径改为对称 \texttt{INT4} 后，最先改变的是整数网格。\texttt{INT8} 有 255 个有效离散等级，对称 \texttt{INT4} 只保留 15 个，离散等级数量约相差 17 倍。原本可以由 \texttt{INT8} scale 细调吸收的通道幅值差异和 token 动态范围变化，在 \texttt{INT4} 中会被映射到更稀疏的整数等级里，量化扰动也更容易进入注意力计算。
 
-这类扰动的主要风险落在 Key 侧。第~\ref{sec:ch3-problem}~节已经把 Key 误差的传播路径写成 logits 排序变化和 softmax 分布偏移；第~\ref{sec:ch3-motivation-kv}~节以及第~\ref{sec:exp-kv-sensitivity}~节中的 Qwen 系列读数给出对应的实验参照。单侧诊断与任务诊断方向一致，Key 降到 4 bit 后更容易触发功能断点。\texttt{K4V8} 在 Qwen 系列出现断崖式失稳，\texttt{K8V4} 没有出现同等强度退化。\texttt{K4V4} 同时降低 K 与 V 的位宽，因此只作为同向辅助观察。第四章的跨模型表图进一步限定了这一判断的范围。Qwen 系列的归零现象更明显，LLaMA-3.1-8B 在当前对照中失稳幅度较小。
+这类扰动的主要风险落在 Key 侧。第~\ref{sec:ch3-problem}~节已经把 Key 误差的传播路径写成 logits 排序变化和 softmax 分布偏移。第~\ref{sec:ch3-motivation-kv}~节以及第~\ref{sec:exp-kv-sensitivity}~节中的 Qwen 系列读数给出对应的实验参照。单侧诊断与任务诊断方向一致，Key 降到 4 bit 后更容易触发功能断点。\texttt{K4V8} 在 Qwen 系列出现断崖式失稳，\texttt{K8V4} 没有出现同等强度退化。\texttt{K4V4} 同时降低 K 与 V 的位宽，因此只作为同向辅助观察。第四章的跨模型表图进一步限定了这一判断的范围。Qwen 系列的归零现象更明显，LLaMA-3.1-8B 在当前对照中失稳幅度较小。
 
-据此，本文把对称 \texttt{INT4} 作为低比特格式选择的下界参照。单一对称 scale 需要同时覆盖 Key 通道间的幅值差异和 Value 沿 token 变化的动态范围；当这两类差异由同一个参数覆盖时，会在粗 \texttt{INT4} 网格内相互牵制。下一节转向 \texttt{INT4-RoleAlign}，把两类差异交给分开的 K/V 量化路径处理。
+据此，本文把对称 \texttt{INT4} 作为低比特格式选择的下界参照。单一对称 scale 需要同时覆盖 Key 通道间的幅值差异和 Value 沿 token 变化的动态范围。当这两类差异由同一个参数覆盖时，会在粗 \texttt{INT4} 网格内相互牵制。下一节转向 \texttt{INT4-RoleAlign}，把两类差异交给分开的 K/V 量化路径处理。
 
 \subsection{INT4-RoleAlign 的角色感知非对称量化}
 \label{subsec:ch3-rolealign}
@@ -283,7 +283,7 @@ m_{l,j}^{K}-q_{\min}s_{l,j}^{K}.
 \end{equation}
 分位数沿序列维度统计，每个通道各有一组 $(s,\zeta)$，在粗 \texttt{INT4} 网格下保留不同特征方向的取值范围，减少通道差异被同一尺度抹平后对 $qK^\top$ 排序的影响。
 
-Value 侧逐 token 建立非对称量化参数。设第 $l$ 层 Value 矩阵为 $V^{(l)}\in\mathbb{R}^{S\times d_v}$；对第 $t$ 个 token，分位数裁剪边界定义为
+Value 侧逐 token 建立非对称量化参数。设第 $l$ 层 Value 矩阵为 $V^{(l)}\in\mathbb{R}^{S\times d_v}$。对第 $t$ 个 token，分位数裁剪边界定义为
 \begin{equation}
 m_{l,t}^{V}
 =
@@ -316,17 +316,17 @@ q_{\min},\,q_{\max}
 \qquad
 \hat x = q\,s+\zeta,
 \end{equation}
-其中 \texttt{INT4} 非对称网格取 $q_{\min}=-8, q_{\max}=7$（共 16 个量化等级）。$\zeta$ 为浮点仿射偏移，与整数 zero-point $z$ 的关系为 $\zeta = -s\cdot z$；以浮点 $\zeta$ 存储可在反量化路径中省去额外整数偏移操作。$(p_K, p_V)$ 的来源按角色拆开：$p_K$ 由 per-channel Key 路径的注意力分布 KL 搜索确定，$p_V$ 由 per-token Value 路径的输出扰动代理 $R_V(p_V)$ 确定，其形式为
+其中 \texttt{INT4} 非对称网格取 $q_{\min}=-8, q_{\max}=7$（共 16 个量化等级）。$\zeta$ 为浮点仿射偏移，与整数 zero-point $z$ 的关系为 $\zeta = -s\cdot z$。以浮点 $\zeta$ 存储可在反量化路径中省去额外整数偏移操作。$(p_K, p_V)$ 的来源按角色拆开：$p_K$ 由 per-channel Key 路径的注意力分布 KL 搜索确定，$p_V$ 由 per-token Value 路径的输出扰动代理 $R_V(p_V)$ 确定，其形式为
 \begin{equation}
 R_V(p_V) = \mathbb{E}_{\mathcal D_{\mathrm{calib}}}\sum_{h=1}^{H}\sum_{r=1}^{S}\Bigl\|\sum_{t=1}^{S} a_{h,r,t}\bigl(V_{t,:} - \tilde V_{p_V,\,t,:}\bigr)\Bigr\|^2,
 \end{equation}
-其中 $a_{h,r,t}$ 是第 $h$ 个注意力头从 query 位置 $r$ 到 key 位置 $t$ 的注意力权重，由 FP16 参考路径在校准样本上单独前向得到；$\tilde V_{p_V}$ 为按候选 $p_V$ 反量化后的 Value。内层求和把 V 量化误差按 attention 加权聚合得到 query $r$ 在头 $h$ 上的输出扰动向量，外层在头与 query 位置上累加，期望在校准集 $\mathcal D_{\mathrm{calib}}$ 与各层上取均值。该代理把 V 量化误差经注意力权重加权后聚合再取二范数平方，与第~\ref{sec:ch3-paths}~节扰动分解中的 V 主导路径形式一致；$a_{h,r,t}$ 的快照来自 FP16 参考路径的独立前向，不与量化路径共享中间状态，保证代理的独立性。$(p_K, p_V)$ 候选网格为 $\{95.0, 97.0, 99.0, 99.5, 99.9, 100.0\}$，由第~\ref{subsec:ch3-two-stage}~节的稳健选择规则筛选；K 侧以注意力分布 KL 为目标，V 侧以 $R_V$ 为目标，两侧目标函数独立，仅在网格采样上保持一致。
+其中 $a_{h,r,t}$ 是第 $h$ 个注意力头从 query 位置 $r$ 到 key 位置 $t$ 的注意力权重，由 FP16 参考路径在校准样本上单独前向得到。$\tilde V_{p_V}$ 为按候选 $p_V$ 反量化后的 Value。内层求和把 V 量化误差按 attention 加权聚合得到 query $r$ 在头 $h$ 上的输出扰动向量，外层在头与 query 位置上累加，期望在校准集 $\mathcal D_{\mathrm{calib}}$ 与各层上取均值。该代理把 V 量化误差经注意力权重加权后聚合再取二范数平方，与第~\ref{sec:ch3-paths}~节扰动分解中的 V 主导路径形式一致。$a_{h,r,t}$ 的快照来自 FP16 参考路径的独立前向，不与量化路径共享中间状态，保证代理的独立性。$(p_K, p_V)$ 候选网格为 $\{95.0, 97.0, 99.0, 99.5, 99.9, 100.0\}$，由第~\ref{subsec:ch3-two-stage}~节的稳健选择规则筛选。K 侧以注意力分布 KL 为目标，V 侧以 $R_V$ 为目标，两侧目标函数独立，仅在网格采样上保持一致。
 
 由于 $\operatorname{Percentile}(\cdot; 100)=\max$ 且 $\operatorname{Percentile}(\cdot; 0)=\min$，当
 \begin{equation}
 (p_K, p_V) = (100, 100)
 \end{equation}
-时，K 路径与 V 路径退化为各自的 min-max 仿射端点。这一设置可以作为 \texttt{KIVI-style} 对照的参照点。\texttt{KIVI-style} 运行时直接用 min/max 统计确定逐通道 Key 端点和逐 token Value 端点；\texttt{INT4-RoleAlign} 则先在离线校准中选出百分位参数 $(p_K,p_V)$，运行时再按这组百分位读取当前张量的端点，并分别沿 K 的通道方向和 V 的 token 方向计算 $(s,\zeta)$。RoleAlign 固定的是端点统计口径，而不是每次写入时的实际数值范围。两者的可控差异因此落在端点规则上，前者使用运行时 min/max，后者使用离线搜索得到的百分位。
+时，K 路径与 V 路径退化为各自的 min-max 仿射端点。这一设置可以作为 \texttt{KIVI-style} 对照的参照点。\texttt{KIVI-style} 运行时直接用 min/max 统计确定逐通道 Key 端点和逐 token Value 端点。\texttt{INT4-RoleAlign} 则先在离线校准中选出百分位参数 $(p_K,p_V)$，运行时再按这组百分位读取当前张量的端点，并分别沿 K 的通道方向和 V 的 token 方向计算 $(s,\zeta)$。RoleAlign 固定的是端点统计口径，而不是每次写入时的实际数值范围。两者的可控差异因此落在端点规则上，前者使用运行时 min/max，后者使用离线搜索得到的百分位。
 
 在 $(50,100]$ 的候选区间内，\texttt{INT4-RoleAlign} 搜索相对 min-max 更稳健的百分位端点，受控比较见第~\ref{subsec:ch3-rolealign-vs-kivi}~节。K 侧沿 token 维度聚合，再按通道独立确定 $(s_K,\zeta_K)$；V 侧沿通道维度聚合，再按 token 独立确定 $(s_V,\zeta_V)$。双轴非对称布局见图~\ref{fig:ch3-rolealign-axis}。
 
@@ -343,8 +343,8 @@ R_V(p_V) = \mathbb{E}_{\mathcal D_{\mathrm{calib}}}\sum_{h=1}^{H}\sum_{r=1}^{S}\
     \toprule
     路径 & 量化轴 & 参数 & 离线选择读数 & 运行时载荷 \\
     \midrule
-    K-path & per-channel 非对称 & $p_K$ & 注意力分布 KL 与尾部稳定性检查 & 冻结的 $p_K$；运行时计算每通道 $(s,\zeta)$ \\
-    V-path & per-token 非对称 & $p_V$ & 注意力权重加权 V 重建代理 $R_V$ 与边界记录 & 冻结的 $p_V$；运行时计算每 token $(s,\zeta)$ \\
+    K-path & per-channel 非对称 & $p_K$ & 注意力分布 KL 与尾部稳定性检查 & 冻结的 $p_K$。运行时计算每通道 $(s,\zeta)$ \\
+    V-path & per-token 非对称 & $p_V$ & 注意力权重加权 V 重建代理 $R_V$ 与边界记录 & 冻结的 $p_V$。运行时计算每 token $(s,\zeta)$ \\
     补充诊断 & per-head temperature & $\tau_h^{-1}$ & 非对称格式下未作为主线收益来源 & 不进入默认运行时载荷 \\
     \bottomrule
   \end{tabularx}
@@ -372,17 +372,17 @@ R_V(p_V) = \mathbb{E}_{\mathcal D_{\mathrm{calib}}}\sum_{h=1}^{H}\sum_{r=1}^{S}\
     参数来源 & 运行时 min/max 统计 & \makecell[l]{离线 K/V\\分路径搜索} & 比较锚定在参数来源与冻结时刻 \\
     行为代理 & 仅运行时统计驱动 & \makecell[l]{K: 注意力分布 KL\\V: 输出扰动代理 $R_V$} & 两侧代理分开定义，校准逻辑可独立追溯 \\
     离线产物 & \makecell[l]{结构超参数固定 \\（chunk size 等），\\无固化校准文件} & 固化 K/V 校准产物 & 同一接口下可复核参数、轴与 percentile 边界 \\
-    分配读数 & \makecell[l]{设计上不输出\\共享画像} & 可输出共享读数 & 校准产物兼容第~\ref{sec:ch3-allocator}~节分配器接口；KIVI 路径下的画像化为后续工作 \\
+    分配读数 & \makecell[l]{设计上不输出\\共享画像} & 可输出共享读数 & 校准产物兼容第~\ref{sec:ch3-allocator}~节分配器接口。KIVI 路径下的画像化为后续工作 \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-定量比较与跨模型表现见第四章第~\ref{subsec:exp-int4-cross-model}~节；本节只在方法层面厘清两者在 KV Cache 量化中的可控变量。
+定量比较与跨模型表现见第四章第~\ref{subsec:exp-int4-cross-model}~节。本节只在方法层面厘清两者在 KV Cache 量化中的可控变量。
 
 \section{行为敏感度驱动的层间预算分配与 AutoK}
 \label{sec:ch3-allocator}
 
-本节讨论预算选择问题——给定位宽约束下，由分配器决定哪些层或角色应被优先保护。校准层回答“如何量化”，分配层回答“哪里优先保护”；行为引导分配是校准产物的下游接口，不与校准路径竞争主轴。
+本节讨论预算选择问题——给定位宽约束下，由分配器决定哪些层或角色应被优先保护。校准层回答“如何量化”，分配层回答“哪里优先保护”。行为引导分配是校准产物的下游接口，不与校准路径竞争主轴。
 
 为了统一记号，设共有 $L$ 层，第 $l$ 层的 Key 与 Value 位宽分别记为 $b_K^{(l)}$ 和 $b_V^{(l)}$，则平均 KV bit 预算可写为
 \begin{equation}
@@ -500,7 +500,7 @@ b_\mathrm{lo}+(b_\mathrm{hi}-b_\mathrm{lo})\,\mathbf 1\!\left[l\in\mathcal P_V^{
 =
 b_\mathrm{lo}+\frac{k_K+k_V}{2L}\bigl(b_\mathrm{hi}-b_\mathrm{lo}\bigr),
 \end{equation}
-即角色感知扩展用 $(k_K+k_V)$ 替代 BA-$k$ 中的单一保护层数 $k$。当 $k_K=k_V=k$ 时退化为 BA-$k$ 主线分配器；当 $k_K\neq k_V$ 时分配器可在不增加平均预算的前提下，把保护名额按 K/V 角色重新分配。
+即角色感知扩展用 $(k_K+k_V)$ 替代 BA-$k$ 中的单一保护层数 $k$。当 $k_K=k_V=k$ 时退化为 BA-$k$ 主线分配器。当 $k_K\neq k_V$ 时分配器可在不增加平均预算的前提下，把保护名额按 K/V 角色重新分配。
 
 \texttt{INT4-RoleAlign} 的离线校准产物中已同时记录 $\sigma_K^{(l)}$ 与 $\sigma_V^{(l)}$，因此本节的角色感知预算可直接由现有产物驱动，无需额外校准开销。第四章的主线实验固定 $k_K=k_V=k$ 与 BA-$k$ 一致，角色感知扩展作为接口预留进入第~\ref{subsec:ch3-deployment-calibration}~节的产物清单。
 
@@ -534,7 +534,7 @@ s^{(l)}
 \qquad
 \tilde s_{(i)}\equiv \tilde s^{(\pi(i))},
 \end{equation}
-其中 $\pi$ 是把序数 $i$ 映回原层索引的排列；并列值的内部排序按层索引升序确定，与第~\ref{subsec:ch3-baseline-bak}~节的 $\operatorname{TopK}$ 平局规则一致。累计覆盖度函数定义在 $k\in\{0,1,\dots,L\}$ 上：
+其中 $\pi$ 是把序数 $i$ 映回原层索引的排列。并列值的内部排序按层索引升序确定，与第~\ref{subsec:ch3-baseline-bak}~节的 $\operatorname{TopK}$ 平局规则一致。累计覆盖度函数定义在 $k\in\{0,1,\dots,L\}$ 上：
 \begin{equation}
 \Gamma(k)
 =
@@ -557,7 +557,7 @@ k^\star(\rho)
 =
 \min\bigl\{k\in\{1,\dots,L\}:\Gamma(k)\ge \rho\bigr\}.
 \end{equation}
-由 $\Gamma(0)=0$ 与 $\Gamma(L)=1$，集合非空，$k^\star(\rho)$ 在 $\{1,\dots,L\}$ 上唯一存在；由于 $\Gamma$ 是单调阶梯函数，$k^\star(\rho)$ 满足 $\Gamma(k^\star)\ge\rho>\Gamma(k^\star-1)$，即 $\rho$ 不要求被等号命中。$\rho=1$ 退化为全层保护 $k^\star=L$，$\rho\to 0^+$ 退化为单层保护 $k^\star=1$，故实践中 $\rho$ 取自 $(0,1)$ 的开区间，并在每个模型上按校准画像单独选定。\texttt{AutoK} 对应的保护集合写为
+由 $\Gamma(0)=0$ 与 $\Gamma(L)=1$，集合非空，$k^\star(\rho)$ 在 $\{1,\dots,L\}$ 上唯一存在。由于 $\Gamma$ 是单调阶梯函数，$k^\star(\rho)$ 满足 $\Gamma(k^\star)\ge\rho>\Gamma(k^\star-1)$，即 $\rho$ 不要求被等号命中。$\rho=1$ 退化为全层保护 $k^\star=L$，$\rho\to 0^+$ 退化为单层保护 $k^\star=1$，故实践中 $\rho$ 取自 $(0,1)$ 的开区间，并在每个模型上按校准画像单独选定。\texttt{AutoK} 对应的保护集合写为
 \begin{equation}
 \mathcal P_{\mathrm{AutoK}}^{(\alpha,\rho)}
 =
@@ -569,7 +569,7 @@ b_{\mathrm{AutoK}}^{(l)}
 =
 b_\mathrm{lo}+\bigl(b_\mathrm{hi}-b_\mathrm{lo}\bigr)\,\mathbf 1\!\left[l\in \mathcal P_{\mathrm{AutoK}}^{(\alpha,\rho)}\right].
 \end{equation}
-\texttt{AutoK} 与 BA-$k$ 共享同一离线画像入口与同一保护规则；二者只在 $k$ 的来源上不同，BA-$k$ 取人工指定的整数，\texttt{AutoK} 取由 $\rho$ 与 $\Gamma$ 反推的最小整数。第四章主线实验取 $\rho\in\{0.80, 0.90\}$，每个模型按画像选定单值。
+\texttt{AutoK} 与 BA-$k$ 共享同一离线画像入口与同一保护规则。二者只在 $k$ 的来源上不同，BA-$k$ 取人工指定的整数，\texttt{AutoK} 取由 $\rho$ 与 $\Gamma$ 反推的最小整数。第四章主线实验取 $\rho\in\{0.80, 0.90\}$，每个模型按画像选定单值。
 
 \begin{table}[!htbp]
   \centering
@@ -590,7 +590,7 @@ b_\mathrm{lo}+\bigl(b_\mathrm{hi}-b_\mathrm{lo}\bigr)\,\mathbf 1\!\left[l\in \ma
   \end{tabularx}
 \end{table}
 
-表~\ref{tab:ch3-allocator-policies}~中 $S_{K,\alpha}=(s^{(l)})_{l=1}^{L}$ 为第~\ref{subsec:ch3-baseline-bak}~节定义的逐层 K 侧敏感度序列；Heuristic-$k$ 作为 BA-$k$ 的强基线对照在第~\ref{subsec:exp-int4-cross-model}~节定义具体位置规则。\texttt{AutoK} 的"无需扫描整数 $k$"与 BA-$k$ 的"按 $k$ 网格扫描"在工程粒度上有数量级差异：BA-$k$ 在第四章按 $k\in\{1,3,5,7,11\}$ 等离散采样点逐点跑实验，\texttt{AutoK} 仅在校准期一次写入 $\rho$，$k^\star(\rho)$ 由画像曲线确定。该粒度差异不等同于完全无超参；\texttt{AutoK} 仍以 $\rho$ 作为部署侧外部超参，整体定位为画像驱动的候选生成器，而非端到端自动决策。
+表~\ref{tab:ch3-allocator-policies}~中 $S_{K,\alpha}=(s^{(l)})_{l=1}^{L}$ 为第~\ref{subsec:ch3-baseline-bak}~节定义的逐层 K 侧敏感度序列。Heuristic-$k$ 作为 BA-$k$ 的强基线对照在第~\ref{subsec:exp-int4-cross-model}~节定义具体位置规则。\texttt{AutoK} 的"无需扫描整数 $k$"与 BA-$k$ 的"按 $k$ 网格扫描"在工程粒度上有数量级差异：BA-$k$ 在第四章按 $k\in\{1,3,5,7,11\}$ 等离散采样点逐点跑实验，\texttt{AutoK} 仅在校准期一次写入 $\rho$，$k^\star(\rho)$ 由画像曲线确定。该粒度差异不等同于完全无超参。\texttt{AutoK} 仍以 $\rho$ 作为部署侧外部超参，整体定位为画像驱动的候选生成器，而非端到端自动决策。
 
 \section{系统级部署实现与开销分析}
 \label{sec:ch3-deployment}
@@ -626,14 +626,14 @@ m_{\mathrm{path}}^{(l)}
     字段组 & 典型字段 & 读取模块 & 边界说明 \\
     \midrule
     路径索引 & model id、layer id、K/V role & 路径选择 & 决定缓存写入与解码路径的路由 \\
-    量化参数 & 逐组 scale、percentile 选择记录（保护裕度由运行时配置提供） & 缓存写入 & 评测前冻结离线规则；\texttt{INT4-RoleAlign} 的 K 侧 per-channel scale/zero-point 在 prefill 阶段一次性按数据现场计算后冻结复用，V 侧 per-token scale/zero-point 随每个新 token 写入时按 per-token 数据现场计算并入缓存 \\
+    量化参数 & 逐组 scale、percentile 选择记录（保护裕度由运行时配置提供） & 缓存写入 & 评测前冻结离线规则。\texttt{INT4-RoleAlign} 的 K 侧 per-channel scale/zero-point 在 prefill 阶段一次性按数据现场计算后冻结复用，V 侧 per-token scale/zero-point 随每个新 token 写入时按 per-token 数据现场计算并入缓存 \\
     轴元数据 & group size、per-channel/per-token 标记、KV head 数 & 参考/融合后端 & 定义布局与 GQA 头数关系，作为接口契约存在 \\
-    诊断记录 & 候选网格、保护触发标记、画像读数 $\sigma_K^{(l)}/\sigma_V^{(l)}$ & 复核脚本、第~\ref{sec:ch3-allocator}~节分配器 & 分配器仅读敏感度统计行；其余字段供溯源使用 \\
+    诊断记录 & 候选网格、保护触发标记、画像读数 $\sigma_K^{(l)}/\sigma_V^{(l)}$ & 复核脚本、第~\ref{sec:ch3-allocator}~节分配器 & 分配器仅读敏感度统计行。其余字段供溯源使用 \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-三条路径写入 $\mathcal A_{\mathrm{path}}$ 的字段并不相同，具体对照见表~\ref{tab:ch3-runtime-paths}。\texttt{INT8} 基准路径保存逐组静态 scale 与分组元数据，inv\_tau 字段保留在产物中，但主线运行时将 \texttt{use\_attn\_temperature} 设为 \texttt{false}。对称 \texttt{INT4} 沿用这一组织，只把量化网格降为 4-bit。\texttt{INT4-RoleAlign} 则在量化参数字段中增加 K/V 两侧的 percentile 选择记录与轴向元数据。运行时再按 K/V 角色生成仿射参数。K 侧在预填充阶段依据冻结 percentile，用逐通道数据一次性计算 $(s_K,\zeta_K)$，之后保持不变并复用；V 侧在每个新 token 写入时，用逐 token 数据即时计算 $(s_V,\zeta_V)$。
+三条路径写入 $\mathcal A_{\mathrm{path}}$ 的字段并不相同，具体对照见表~\ref{tab:ch3-runtime-paths}。\texttt{INT8} 基准路径保存逐组静态 scale 与分组元数据，inv\_tau 字段保留在产物中，但主线运行时将 \texttt{use\_attn\_temperature} 设为 \texttt{false}。对称 \texttt{INT4} 沿用这一组织，只把量化网格降为 4-bit。\texttt{INT4-RoleAlign} 则在量化参数字段中增加 K/V 两侧的 percentile 选择记录与轴向元数据。运行时再按 K/V 角色生成仿射参数。K 侧在预填充阶段依据冻结 percentile，用逐通道数据一次性计算 $(s_K,\zeta_K)$，之后保持不变并复用。V 侧在每个新 token 写入时，用逐 token 数据即时计算 $(s_V,\zeta_V)$。
 
 在线推理接收第 $t$ 个新 token 时，第 $l$ 层的量化写入统一记作
 \begin{equation}
@@ -648,9 +648,9 @@ g_t(\theta_{\mathrm{path}}^{(l)}, x_t^{(l)}), & \text{\texttt{INT8} 自适应保
 h^{K/V}(\theta_{\mathrm{path}}^{(l)}, x_t^{(l)}), & \text{\texttt{INT4-RoleAlign}}
 \end{cases}
 \end{equation}
-其中 $\theta_{\mathrm{path}}^{(l)}$ 表示评测前固化的路径参数。对称路径读取逐组静态 scale，\texttt{INT4-RoleAlign} 读取已选定的 percentile 参数 $(p_K,p_V)$、K/V 轴标记与边界记录。$g_t$ 对应 \texttt{INT8-Canonical} 的写入保护逻辑，只查看第 $l$ 层当前 token 待写入的张量和离线参数，并按第~\ref{subsec:ch3-int8-baseline}~节的逐 token 最大值触发规则决定当前组是否改用动态 scale。$h^{K/V}$ 则对应 \texttt{INT4-RoleAlign} 的 K/V 分路映射。K 侧在预填充阶段依据冻结 percentile 计算逐通道 $(s_K,\zeta_K)$，解码时复用这组参数；V 侧随每个新 token 写入，根据该 token 的内容即时计算逐 token $(s_V,\zeta_V)$。
+其中 $\theta_{\mathrm{path}}^{(l)}$ 表示评测前固化的路径参数。对称路径读取逐组静态 scale，\texttt{INT4-RoleAlign} 读取已选定的 percentile 参数 $(p_K,p_V)$、K/V 轴标记与边界记录。$g_t$ 对应 \texttt{INT8-Canonical} 的写入保护逻辑，只查看第 $l$ 层当前 token 待写入的张量和离线参数，并按第~\ref{subsec:ch3-int8-baseline}~节的逐 token 最大值触发规则决定当前组是否改用动态 scale。$h^{K/V}$ 则对应 \texttt{INT4-RoleAlign} 的 K/V 分路映射。K 侧在预填充阶段依据冻结 percentile 计算逐通道 $(s_K,\zeta_K)$，解码时复用这组参数。V 侧随每个新 token 写入，根据该 token 的内容即时计算逐 token $(s_V,\zeta_V)$。
 
-缓存写入保持按时间追加的语义。对任意 $t'<t$，第 $t$ 步只追加当前缓存项 $\hat x_t^{(l)}$，不回写已经存在的历史缓存 $\hat x_{t'}^{(l)}$。多随机种子复现中的逐位一致结果，间接核验了这一写入过程的确定性和历史缓存封闭性。第四章第~\ref{subsec:ch4-int8-canonical}~节给出固定协议下的 \texttt{INT8-Canonical} 主线读数。自适应保护只在主线实验的 \texttt{INT8-Canonical} 路径中开启，其余对称路径沿用常量 $\theta_{\mathrm{path}}^{(l)}$。\texttt{INT4-RoleAlign} 按 $h^{K/V}$ 生成仿射参数，K 侧预填充后复用，V 侧随新 token 写入即时计算，不依赖自适应保护。
+缓存写入保持按时间追加的语义。对任意 $t'<t$，第 $t$ 步只追加当前缓存项 $\hat x_t^{(l)}$，不回写已经存在的历史缓存 $\hat x_{t'}^{(l)}$。多随机种子复现中的逐位一致结果，间接核验了这一写入过程的确定性和历史缓存封闭性。第四章第~\ref{sec:ch4-rq1}~节给出固定协议下的 \texttt{INT8-Canonical} 主线读数。自适应保护只在主线实验的 \texttt{INT8-Canonical} 路径中开启，其余对称路径沿用常量 $\theta_{\mathrm{path}}^{(l)}$。\texttt{INT4-RoleAlign} 按 $h^{K/V}$ 生成仿射参数，K 侧预填充后复用，V 侧随新 token 写入即时计算，不依赖自适应保护。
 
 预填充阶段，当前块的 K/V 按各自路径规则量化后写入缓存。进入解码阶段后，注意力后端只从已经写入的量化历史缓存中读取 K/V。Decode 路径的输入被限制为离线产物和历史缓存两类对象。后续融合解码核也可以直接消费量化缓存，在接口层面避开反量化后中间张量的显式物化。
 
@@ -691,11 +691,11 @@ o^{(r+1)}
 \ell^{(r+1)}
 },
 \end{equation}
-这里 $v_i$ 表示反量化后的第 $i$ 个 Value 行向量。上述递推与 FlashAttention 的 online softmax 等价；实现中保留非归一化累加器 $\tilde o^{(r+1)} = \ell^{(r+1)}\,o^{(r+1)}$，待全部块处理完后再除以 $\ell^{(\mathrm{final})}$，从而避免逐步重复除法。
+这里 $v_i$ 表示反量化后的第 $i$ 个 Value 行向量。上述递推与 FlashAttention 的 online softmax 等价。实现中保留非归一化累加器 $\tilde o^{(r+1)} = \ell^{(r+1)}\,o^{(r+1)}$，待全部块处理完后再除以 $\ell^{(\mathrm{final})}$，从而避免逐步重复除法。
 
-\texttt{INT4} 的表示形式减少了存储字节数，但解包开销也进入运行路径。nibble packing 将两个 4-bit 整数放入一个 8-bit 字节。写入 packed 缓存时，整数码值先平移到无符号 $[0,15]$ 域再存入 nibble；非对称 \texttt{INT4} 使用 $[-8,7]$ 的 16 级码本，对称诊断路径仍按前文 $q_{\max}=7$ 的 $[-7,7]$ 网格产生码值。读取时，核函数用位移和掩码拆出半字节，再还原为路径对应的有符号整数，并按对应参数反量化；对称路径使用 scale，\texttt{INT4-RoleAlign} 使用 $(s,\zeta)$。执行路径上，本文保留两种 \texttt{INT4} 实现口径。对称 \texttt{INT4} 诊断路径采用 wrapper 方式，先把 nibble 缓存批量反打包为 INT8 张量，再复用 \texttt{INT8} 融合核完成片上反量化、点积、online softmax 和输出累加。这一路径便于把格式诊断接到已有核函数上，但仍会显式产生 INT8 中间载荷。\texttt{INT4-RoleAlign} 的非对称融合扩展则把解包放进核内，核函数直接读取 K 侧逐通道和 V 侧逐 token 的 $(s,\zeta)$，在片上存储中完成 nibble 解包与非对称反量化，从而避开显式 INT8 中间张量物化。4-bit 载荷降低了全局读取字节数，反打包和寄存器压力则会反映到每输出 token 的 TPOT 中。
+\texttt{INT4} 的表示形式减少了存储字节数，但解包开销也进入运行路径。nibble packing 将两个 4-bit 整数放入一个 8-bit 字节。写入 packed 缓存时，整数码值先平移到无符号 $[0,15]$ 域再存入 nibble。非对称 \texttt{INT4} 使用 $[-8,7]$ 的 16 级码本，对称诊断路径仍按前文 $q_{\max}=7$ 的 $[-7,7]$ 网格产生码值。读取时，核函数用位移和掩码拆出半字节，再还原为路径对应的有符号整数，并按对应参数反量化。对称路径使用 scale，\texttt{INT4-RoleAlign} 使用 $(s,\zeta)$。执行路径上，本文保留两种 \texttt{INT4} 实现口径。对称 \texttt{INT4} 诊断路径采用 wrapper 方式，先把 nibble 缓存批量反打包为 INT8 张量，再复用 \texttt{INT8} 融合核完成片上反量化、点积、online softmax 和输出累加。这一路径便于把格式诊断接到已有核函数上，但仍会显式产生 INT8 中间载荷。\texttt{INT4-RoleAlign} 的非对称融合扩展则把解包放进核内，核函数直接读取 K 侧逐通道和 V 侧逐 token 的 $(s,\zeta)$，在片上存储中完成 nibble 解包与非对称反量化，从而避开显式 INT8 中间张量物化。4-bit 载荷降低了全局读取字节数，反打包和寄存器压力则会反映到每输出 token 的 TPOT 中。
 
-为兼容 GQA~\cite{ainslie2023gqa}，融合核需要把 Query 头映射到共享的 KV 头。记 Query 头数为 $H_q$、KV 头数为 $H_{kv}$；本文涉及的 GQA 模型均满足 $H_{kv}\mid H_q$。重复因子定义为
+为兼容 GQA~\cite{ainslie2023gqa}，融合核需要把 Query 头映射到共享的 KV 头。记 Query 头数为 $H_q$、KV 头数为 $H_{kv}$。本文涉及的 GQA 模型均满足 $H_{kv}\mid H_q$。重复因子定义为
 \begin{equation}
 N_{\mathrm{rep}}=\frac{H_q}{H_{kv}},
 \qquad
@@ -703,7 +703,7 @@ h_{kv}
 =
 \bigl\lfloor h_q / N_{\mathrm{rep}} \bigr\rfloor.
 \end{equation}
-并行组织按 $(B,H_q)$ 展开，其中 $B$ 表示序列块，$H_q$ 表示 Query 头维度。每个 Query 头通过上式映射到对应的 $h_{kv}$ 切片，直接读取共享 KV 头，而不在内存中复制出 $H_q$ 份 K/V。这样可以保持 GQA 的缓存布局，但访存合并、元数据广播和寄存器占用都会受映射关系影响；这些开销会和 \texttt{INT4} 反打包一起体现在 TPOT 读数中。
+并行组织按 $(B,H_q)$ 展开，其中 $B$ 表示序列块，$H_q$ 表示 Query 头维度。每个 Query 头通过上式映射到对应的 $h_{kv}$ 切片，直接读取共享 KV 头，而不在内存中复制出 $H_q$ 份 K/V。这样可以保持 GQA 的缓存布局，但访存合并、元数据广播和寄存器占用都会受映射关系影响。这些开销会和 \texttt{INT4} 反打包一起体现在 TPOT 读数中。
 
 \texttt{INT8-Canonical} 由 \texttt{INT8} 融合核支撑，用来检验保守位宽下的行为校准闭环。\texttt{INT4-RoleAlign} 的质量评估主线采用参考解码实现，重点核验非对称格式的语义一致性，系统边界测量另设 \texttt{INT4} 扩展路径，用于拆分格式对照和后端实现，并覆盖 \texttt{KIVI-style} 对照与 Triton 融合后端读数。下一节在这三类路径的基础上比较访存、存储与算力开销。
 
@@ -782,7 +782,7 @@ AI_{\mathrm{INT4}}
 \begin{equation}
 \mathcal O\!\bigl(L H_{kv} d_k/g\bigr),
 \end{equation}
-\texttt{INT4-RoleAlign} 产物由层级分位数参数与量化轴元数据构成；K 侧 per-channel scale/zero-point 在 prefill 阶段由数据现场计算后冻结复用，V 侧 per-token scale/zero-point 随追加 token 现场计算后入缓存，二者均不持久化到校准文件，因此离线产物规模量级与对称 INT8 同阶。第四章在上述公式基础上给出部署效率边界与跨硬件读数。
+\texttt{INT4-RoleAlign} 产物由层级分位数参数与量化轴元数据构成。K 侧 per-channel scale/zero-point 在 prefill 阶段由数据现场计算后冻结复用，V 侧 per-token scale/zero-point 随追加 token 现场计算后入缓存，二者均不持久化到校准文件，因此离线产物规模量级与对称 INT8 同阶。第四章在上述公式基础上给出部署效率边界与跨硬件读数。
 
 \section{本章小结}
 \label{sec:ch3-summary}

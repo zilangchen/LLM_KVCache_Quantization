@@ -77,7 +77,7 @@
     \node[statebox, fill=safeGreenFill, draw=safeGreen, text=safeGreen!65!black] at (6.78,1.62) {保留};
 
     \node[font=\tiny, text=black!62, align=left, anchor=west] at (0.65,0.48)
-      {代表性检索观察（Needle）：K8V8 与 K8V4 未进入归零式失稳；\\Qwen 系列在 4bit K 下更易崩塌；LLaMA-3.1-8B 保留较高通过率，\\说明强度受架构调制。};
+      {代表性检索观察（Needle）：K8V8 与 K8V4 未进入归零式失稳。\\Qwen 系列在 4bit K 下更易崩塌。LLaMA-3.1-8B 保留较高通过率，\\说明强度受架构调制。};
 
     % panel (b)
     \node[title] at (9.25,5.30) {（b）设计启示链};
@@ -97,6 +97,6 @@
     \draw[arr] (c3.south) -- (c4.north);
   \end{tikzpicture}%
   }
-  \caption{K/V 位宽落点诊断与设计启示。左侧压缩展示 \texttt{K8V8}、\texttt{K8V4}/\texttt{K4V8} 与 \texttt{K4V4} 的代表性 Needle 观察，突出 Qwen 系列在 4bit K 下的崩塌风险及 LLaMA-3.1-8B 的不同表现；右侧将该观察收束为低比特路径约束。完整 Needle、RULER 与 LongBench 风格证据见第~\ref{subsec:ch4-kv-diagnosis}~节。}
+  \caption{K/V 位宽落点诊断与设计启示。左侧压缩展示 \texttt{K8V8}、\texttt{K8V4}/\texttt{K4V8} 与 \texttt{K4V4} 的代表性 Needle 观察，突出 Qwen 系列在 4bit K 下的崩塌风险及 LLaMA-3.1-8B 的不同表现。右侧将该观察收束为低比特路径约束。完整 Needle、RULER 与 LongBench 风格证据见第~\ref{subsec:ch4-kv-diagnosis}~节。}
   \label{fig:ch3-kv-asymmetry}
 \end{figure}

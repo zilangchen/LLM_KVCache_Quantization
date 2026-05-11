@@ -65,7 +65,7 @@
 
   \end{tikzpicture}
   \caption{行为引导离线校准流程。两条路径（INT8 对称 / INT4-RoleAlign 非对称）
-  共用 KL 散度作为校准目标——对注意力分布偏移度取最小；搜索空间的差异
+  共用 KL 散度作为校准目标——对注意力分布偏移度取最小。搜索空间的差异
   （$(p_c, g)$ 对称 per-group \textit{vs.} $(p_K, p_V)$ 非对称 per-channel/per-token）
   来自量化格式本身，而非目标函数。校准产物为推理时只读的离线参数集。}
   \label{fig:calib-pipeline}

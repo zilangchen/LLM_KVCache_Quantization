@@ -77,7 +77,7 @@
   \caption{行为引导量化框架两层总览。顶层的注意力行为保持度以 KL 散度作为统一度量：
   在校准层（§\ref{sec:ch3-calibration}）作为目标函数搜索最优量化参数，
   在分配层（§\ref{sec:ch3-allocator}）作为逐层敏感度驱动预算决策。
-  校准层落成两条实例化路径——INT8 对称与 INT4-RoleAlign 非对称；
+  校准层落成两条实例化路径——INT8 对称与 INT4-RoleAlign 非对称。
   INT8 路径进一步由 Triton 融合解码核承担系统落地。}
   \label{fig:ch3-framework-overview}
 \end{figure}

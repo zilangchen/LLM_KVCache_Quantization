@@ -15,7 +15,7 @@
     \textit{平均} & \textit{14.16} & \textit{14.58} & \textit{14.42} & \textit{\textbf{15.14}} \\
     \bottomrule
   \end{tabular}
-  \caption{Mistral-7B-v0.3 上 INT4 预算下的五任务细节。\textbf{BA-AutoK}（80\% 覆盖率）在五个任务中取得最多最高读数，构成 AutoK 的清晰单模型支持证据；该表支撑第~\ref{subsec:exp-per-model-mistral}~节的分析。}
+  \caption{Mistral-7B-v0.3 上 INT4 预算下的五任务细节。\textbf{BA-AutoK}（80\% 覆盖率）在五个任务中取得最多最高读数，构成 AutoK 的清晰单模型支持证据。该表支撑第~\ref{subsec:exp-per-model-mistral}~节的分析。}
   \label{tab:t4-mistral-autok}
   \par\smallskip\noindent{\footnotesize 平均行为五任务均值。Uniform 指所有层 K/V 统一 INT4；BA-$k_3$ 指行为引导分配器保护 top-3 层；Heur-$k_3$ 指等距位置启发式保护 3 层；BA-AutoK 指基于敏感度画像覆盖率自动确定预算。}
 \end{table}

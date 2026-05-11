@@ -132,11 +132,13 @@ def main():
     if cjk_font is None:
         raise RuntimeError("No CJK-capable font found for fig7_pareto.")
 
+    legend_font = FontProperties(fname=cjk_font.get_file(), size=9.4)
+
     rows = load_pareto_rows(PARETO_CSV)
     print(f"\n[data] loaded {len(rows)} rows from {PARETO_CSV.name}")
     print(f"[data] models: {sorted({row['model_key'] for row in rows})}")
 
-    fig, axes = plt.subplots(1, 3, figsize=(13.6, 4.6), sharey=False)
+    fig, axes = plt.subplots(1, 3, figsize=(12.0, 4.6), sharey=False)
     legend_handles = []
     legend_labels = []
 
@@ -205,7 +207,7 @@ def main():
                     xy=(worst["avg_bits"], worst["quality_core"]),
                     xytext=(0.24, 0.2), textcoords="axes fraction",
                     arrowprops=dict(arrowstyle="->", color="#D55E00", lw=1.1),
-                    fontsize=9, color="#D55E00", fontproperties=cjk_font,
+                    fontsize=10.0, color="#D55E00", fontproperties=cjk_font,
                 )
         elif mkey == "mistral7b":
             auto_pts = [row for row in sub if row["family"] == "bakv_auto_cov80"]
@@ -216,18 +218,19 @@ def main():
                     xy=(best["avg_bits"], best["quality_core"]),
                     xytext=(0.18, 0.8), textcoords="axes fraction",
                     arrowprops=dict(arrowstyle="->", color="#009E73", lw=1.1),
-                    fontsize=9, color="#009E73", fontproperties=cjk_font,
+                    fontsize=10.0, color="#009E73", fontproperties=cjk_font,
                 )
 
         ax.set_xlabel(r"平均 KV bit budget ($\bar{b}$)", fontproperties=cjk_font)
         if mkey == SUBPLOT_MODELS[0]:
             ax.set_ylabel("任务核心平均质量", fontproperties=cjk_font)
-        ax.set_title(MODEL_TITLES[mkey], fontsize=10)
+        ax.set_title(MODEL_TITLES[mkey], fontsize=11.0)
+        ax.tick_params(axis="both", labelsize=9.8)
         ax.grid(True, alpha=0.3)
 
     fig.suptitle(
         r"质量-预算 Pareto 视图",
-        fontsize=11, y=1.02, fontproperties=cjk_font,
+        fontsize=12.2, y=1.02, fontproperties=cjk_font,
     )
     fig.legend(
         legend_handles,
@@ -237,8 +240,7 @@ def main():
         bbox_to_anchor=(0.5, -0.03),
         frameon=True,
         framealpha=0.92,
-        fontsize=8,
-        prop=cjk_font,
+        prop=legend_font,
     )
     plt.tight_layout(rect=(0, 0.08, 1, 1))
     pdf_path = save_figure_pdf(fig, FIG_ID)

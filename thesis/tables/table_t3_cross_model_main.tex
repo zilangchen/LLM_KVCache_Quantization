@@ -27,7 +27,7 @@
      & \textit{平均} & \textit{14.02} & \textit{14.05} & \textit{14.60} & \textit{\textbf{14.76}} \\
     \bottomrule
   \end{tabular}
-  \caption{同量级 INT4 预算带内的跨模型策略对比。\textbf{加粗}标注每个模型与任务下的最优策略；平均行为三项任务均值。各模型的 best-$k$ 动态选择为：3B 用 $k{=}1$、Llama-3.1-8B 用 $k{=}11$、14B 用 $k{=}7$、Mistral-7B 用 $k{=}3$；AutoK 的覆盖阈值为：14B 用 90\%，其余用 80\%。四模型的最优策略分布呈现异质性，支持按模型族、规模与任务条件解释策略适用区间。}
+  \caption{同量级 INT4 预算带内的跨模型策略对比。\textbf{加粗}标注每个模型与任务下的最优策略。平均行为三项任务均值。各模型的 best-$k$ 动态选择中，3B 用 $k{=}1$、Llama-3.1-8B 用 $k{=}11$、14B 用 $k{=}7$、Mistral-7B 用 $k{=}3$。AutoK 覆盖阈值中，14B 用 90\%，其余用 80\%。四模型的最优策略分布呈现异质性，支持按模型族、规模与任务条件解释策略适用区间。}
   \label{tab:t3-cross-model-main}
-  \par\smallskip\noindent{\footnotesize 预算带定义见第~\ref{para:ch4-budget-band}~节；质量--显存 Pareto 视图见图~\ref{fig:t7-pareto}。Uniform 指所有层 K/V 统一 INT4；BA-$k$ 指行为引导分配器保护 top-$k$ 高敏感层；Heuristic-$k$ 指等距位置启发式保护 $k$ 层；BA-AutoK 指基于敏感度画像覆盖率自动确定预算。}
+  \par\smallskip\noindent{\footnotesize 预算带定义见第~\ref{para:ch4-budget-band}~节，质量--显存 Pareto 视图见图~\ref{fig:t7-pareto}。Uniform 指所有层 K/V 统一 INT4；BA-$k$ 指行为引导分配器保护 top-$k$ 高敏感层；Heuristic-$k$ 指等距位置启发式保护 $k$ 层；BA-AutoK 指基于敏感度画像覆盖率自动确定预算。}
 \end{table}

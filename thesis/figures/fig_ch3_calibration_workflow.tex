@@ -82,6 +82,6 @@
     \draw[arrGreen] (select.east) -- node[above, font=\tiny, text=greenTone!62!black] {冻结} (out.west);
   \end{tikzpicture}%
   }
-  \caption{行为引导离线校准的统一工作流。校准样本先经过 FP16 前向得到参考行为；每条量化路径据此实例化候选网格 \(\Theta_{\mathrm{path}}\)，并计算路径相关风险 \(R_{\mathrm{path}}(\theta)\)。稳健选择阶段根据可行域、P95 尾部读数与裁剪率审计确定 \(\theta_{\mathrm{path}}^\star\)，同时保留行为读数 \(\mathcal S\) 与在线接口。RoleAlign 中，K 侧使用注意力分布 KL，V 侧使用输出扰动代理。}
+  \caption{行为引导离线校准的统一工作流。校准样本先经过 FP16 前向得到参考行为。每条量化路径据此实例化候选网格 \(\Theta_{\mathrm{path}}\)，并计算路径相关风险 \(R_{\mathrm{path}}(\theta)\)。稳健选择阶段根据可行域、P95 尾部读数与裁剪率审计确定 \(\theta_{\mathrm{path}}^\star\)，同时保留行为读数 \(\mathcal S\) 与在线接口。RoleAlign 中，K 侧使用注意力分布 KL，V 侧使用输出扰动代理。}
   \label{fig:ch3-calibration-workflow}
 \end{figure}

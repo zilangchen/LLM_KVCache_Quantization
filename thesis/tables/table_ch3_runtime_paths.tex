@@ -10,8 +10,8 @@
     路径 & 离线产物 & 追加写入 & 解码后端 & 边界说明 \\
     \midrule
     INT8 & scale、保护裕度、轴元数据 & INT8 K/V 与 scale & Triton 融合后端 & 主部署路径 \\
-    对称 INT4 & scale、轴元数据 & packed INT4 K/V & 参考实现或 Triton 试探 & 压力测试；解包计入成本 \\
-    RoleAlign & $(p_K,p_V)$、K/V 轴、头数 & K per-channel；V per-token & 参考实现；融合扩展 & 质量核对优先；速度见第四章 \\
+    对称 INT4 & scale、轴元数据 & packed INT4 K/V & 参考实现或 Triton 试探 & 压力测试，解包计入成本 \\
+    RoleAlign & $(p_K,p_V)$、K/V 轴、头数 & K per-channel；V per-token & 参考实现；融合扩展 & 质量核对优先，速度见第四章 \\
     \bottomrule
   \end{tabularx}
 \end{table}
