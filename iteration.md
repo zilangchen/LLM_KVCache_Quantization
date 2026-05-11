@@ -969,6 +969,30 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - 摘要仍可能需要后续独立重写，但本轮先执行“改后仍疑似则恢复”的原则。
   - 下一步单独处理第五章高疑似率。
+- Commit: pending at log-write time; committed as `docs: restore non-ch5 aigc polish`
+
+### 2026-05-11 10:02 | AIGC 报告 main(4): 第五章恢复到重构前版本
+- Goal: 处理新报告中第五章 39% 的高疑似率，优先恢复到整体重构前、此前检测风险更低的第五章版本。
+- Changed files:
+  - `thesis/chapters/ch5_conclusion.tex`
+  - `thesis/main.pdf`
+  - `iteration.md`
+- Commands:
+  - `git restore --source=ef35e73 -- thesis/chapters/ch5_conclusion.tex`
+  - `git diff --check -- thesis/chapters/ch5_conclusion.tex`
+  - `latexmk -xelatex -halt-on-error main.tex`
+  - `rg -n "undefined|Reference.*undefined|Label.*multiply|Rerun to get cross-references" thesis/main.log || true`
+  - `pdfinfo thesis/main.pdf | rg 'Pages|File size'`
+- Outputs:
+  - 第五章恢复到 `ef35e73` 中的重构前版本，保留原有研究结论、创新点、局限、未来工作和结语结构。
+  - 关键数字与结论仍覆盖 \texttt{INT8-Canonical} mean $\Delta=+0.02$、Qwen2.5-3B BA-k1 6.90、Qwen2.5-14B Uniform 7.23 vs BA-AutoK 7.15、Mistral-7B BA-AutoK core mean 14.76 / extend mean 15.69 / five-task mean 15.14。
+- Validation:
+  - `git diff --check -- thesis/chapters/ch5_conclusion.tex`: PASS.
+  - `latexmk -xelatex -halt-on-error main.tex`: PASS.
+  - Cross-reference log check: PASS.
+  - PDF: 95 pages, 1,444,305 bytes.
+- Risks / follow-ups:
+  - 该处理优先解决“后续重构导致第五章高疑似”的问题。若下一次检测第五章仍被标高，再基于旧版逐段做更小粒度重构。
 - Commit: pending at log-write time.
 
 ### 2026-05-11 09:21 | AIGC 方案收尾模板词清理
