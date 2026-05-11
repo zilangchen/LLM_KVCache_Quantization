@@ -92,6 +92,6 @@
     \draw[red!18, line width=0.6pt] (1.05,2.75) -- (1.05,-1.25);
 
   \end{tikzpicture}
-  \caption{注意力误差的两条传播路径及其代数分解。FP16 attention 给出参考分布 \(a\) 与输出 \(o\)，量化后的 Key 误差经 logits 与 softmax 改变注意力分布，Value 误差在量化后权重下进入加权聚合。底部公式给出式~\eqref{eq:ch3-error-decomp} 的最终分解形式。}
+  \caption{注意力误差的两条传播路径及其代数分解。}
   \label{fig:error-decomposition}
 \end{figure}

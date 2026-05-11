@@ -36,6 +36,39 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-11 12:44 | 参考文献正式来源审计与修正
+- Goal: 按已批准计划审计全文 citation，区分正式论文、技术来源和临时导出引用，并修正文献来源不准确或 arXiv-only 的主文引用。
+- Scope: 主编译路径 citation、`thesis/references.bib`、第二章相关工作引用链、参考文献审计表。
+- Changed files:
+  - `thesis/references.bib`
+  - `thesis/chapters/ch2_related_work.tex`
+  - `docs/reference_audit_20260511.md`
+  - `thesis/main.pdf`
+  - `iteration.md`
+- Commands:
+  - `python - <<'PY' ...` citation closure scan over `thesis/main.tex`, `thesis/chapters/`, `thesis/figures/`, `thesis/tables/`, `thesis/setup/`
+  - `git diff --check -- thesis/references.bib thesis/chapters/ch2_related_work.tex docs/reference_audit_20260511.md`
+  - `latexmk -xelatex -halt-on-error main.tex`
+  - `rg -n "undefined|Citation.*undefined|There were undefined citations|I didn't find a database entry|Rerun to get citations" thesis/main.log thesis/main.blg || true`
+  - `pdfinfo thesis/main.pdf | rg 'Pages|File size'`
+- Outputs:
+  - 主编译路径 citation 从 46 个收敛为 43 个，缺失 BibTeX 为 0。
+  - 将 `nagel2021whitepaper` 替换为正式书章 `gholami2022survey`。
+  - 将 `PyramidKV` 的 arXiv-only 主文位置替换为 ACL 2025 `ClusterAttn`。
+  - 更新 `GEAR`、`SKVQ`、`QJL`、`AQUA-KV`、`KVTuner`、`RULER` 等条目的正式来源信息。
+  - 将 Qwen2.5、Llama 3、Mistral 7B 标为技术来源类 `@misc`，不再包装为正式期刊论文。
+  - 新增 `docs/reference_audit_20260511.md` 记录来源、处理结论和保留的技术来源例外。
+- Validation:
+  - Citation closure: PASS, missing `[]`.
+  - `git diff --check`: PASS.
+  - `latexmk -xelatex -halt-on-error main.tex`: PASS.
+  - Log check: PASS, no undefined citation or missing database entry after final run.
+  - PDF: 96 pages, 1,445,629 bytes.
+- Risks / follow-ups:
+  - `references.bib` 仍保留 14 个当前未进入 `main.bbl` 的本地库条目，审计表已标注为未引用库条目。
+  - `thesis/_pandoc_tmp` 中的 14 个缺失 key 属于临时导出路径，未补进正式 bibliography。
+- Commit: pending at log-write time.
+
 ### 2026-05-11 09:20 | AIGC 重构第三组：Chapter 4 实验叙述
 - Goal: 按检测报告处理 Chapter 4 中指标总述、INT4 cliff、Qwen2.5-3B 剖面、KL/MSE 机制辨析和本章小结的高疑似 AIGC 表达。
 - Scope: Chapter 4 evaluation metrics, INT4 cliff explanation, K/V diagnostic figure interpretation, Qwen2.5-3B early-layer protection, regime heatmap interpretation, KL/MSE discussion, chapter summary.

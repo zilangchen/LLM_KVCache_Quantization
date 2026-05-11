@@ -133,9 +133,9 @@
 @inproceedings{hsieh2024ruler,
   title     = {{RULER}: What's the Real Context Size of Your Long-Context Language Models?},
   author    = {Hsieh, Cheng-Ping and Sun, Simeng and Kriman, Samuel and Acharya, Shantanu and Rekesh, Dima and Jia, Fei and Ginsburg, Boris},
-  booktitle = {Conference on Language Modeling (COLM)},
+  booktitle = {First Conference on Language Modeling},
+  url       = {https://openreview.net/forum?id=kIoBbc76Sy},
   year      = {2024},
-  note      = {arXiv:2404.06654},
 }
 
 @misc{kamradt2023needle,
@@ -147,18 +147,18 @@
 }
 
 % === 模型 ===
-@article{qwen2025qwen25,
-  title   = {Qwen2.5 Technical Report},
-  author  = {Yang, An and Yang, Baosong and Zhang, Beichen and others},
-  journal = {arXiv preprint arXiv:2412.15115},
-  year    = {2024},
+@misc{qwen2025qwen25,
+  title        = {Qwen2.5 Technical Report},
+  author       = {Yang, An and Yang, Baosong and Zhang, Beichen and others},
+  howpublished = {arXiv preprint arXiv:2412.15115},
+  year         = {2024},
 }
 
-@article{grattafiori2024llama3,
-  title   = {The {Llama 3} Herd of Models},
-  author  = {Grattafiori, Aaron and Dubey, Abhimanyu and Jauhri, Abhinav and others},
-  journal = {arXiv preprint arXiv:2407.21783},
-  year    = {2024},
+@misc{grattafiori2024llama3,
+  title        = {The {Llama 3} Herd of Models},
+  author       = {Grattafiori, Aaron and Dubey, Abhimanyu and Jauhri, Abhinav and others},
+  howpublished = {arXiv preprint arXiv:2407.21783},
+  year         = {2024},
 }
 
 % === 统计方法 ===
@@ -225,11 +225,16 @@
 }
 
 % === KV Cache 量化（补充） ===
-@article{kang2024gear,
-  title   = {{GEAR}: An Efficient {KV} Cache Compression Recipe for Near-Lossless Generative Inference of {LLM}},
-  author  = {Kang, Hao and Zhang, Qingru and Kundu, Souvik and Jeong, Geonhwa and Liu, Zaoxing and Krishna, Tushar and Zhao, Tuo},
-  journal = {International Conference on Learning Representations},
-  year    = {2025},
+@inproceedings{kang2024gear,
+  title     = {{GEAR}: An Efficient Error Reduction Framework for {KV} Cache Compression in {LLM} Inference},
+  author    = {Kang, Hao and Zhang, Qingru and Kundu, Souvik and Jeong, Geonhwa and Liu, Zaoxing and Krishna, Tushar and Zhao, Tuo},
+  booktitle = {Proceedings of The 4th NeurIPS Efficient Natural Language and Speech Processing Workshop},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {262},
+  pages     = {305--321},
+  publisher = {PMLR},
+  url       = {https://proceedings.mlr.press/v262/kang24a.html},
+  year      = {2024},
 }
 
 @inproceedings{lin2024qserve,
@@ -259,11 +264,14 @@
 
 % === 模型量化（补充） ===
 % === 量化理论综述 ===
-@article{nagel2021whitepaper,
-  title   = {A White Paper on Neural Network Quantization},
-  author  = {Nagel, Markus and Fournarakis, Marios and Amjad, Rana Ali and Bondarenko, Yelysei and van Baalen, Mart and Blankevoort, Tijmen},
-  journal = {arXiv preprint arXiv:2106.08295},
-  year    = {2021},
+@incollection{gholami2022survey,
+  title     = {A Survey of Quantization Methods for Efficient Neural Network Inference},
+  author    = {Gholami, Amir and Kim, Sehoon and Dong, Zhen and Yao, Zhewei and Mahoney, Michael W. and Keutzer, Kurt},
+  booktitle = {Low-Power Computer Vision},
+  pages     = {291--326},
+  publisher = {Chapman and Hall/CRC},
+  doi       = {10.1201/9781003162810-13},
+  year      = {2022},
 }
 
 @article{hubara2018quantized,
@@ -307,8 +315,8 @@
   title     = {{ThinK}: Thinner Key Cache by Query-Driven Pruning},
   author    = {Xu, Yuhui and Jie, Zhanming and Dong, Hanze and Wang, Lei and Lu, Xudong and Zhou, Aojun and Saha, Amrita and Xiong, Caiming and Sahoo, Doyen},
   booktitle = {International Conference on Learning Representations},
+  url       = {https://openreview.net/forum?id=n0OtGl6VGb},
   year      = {2025},
-  note      = {arXiv:2407.21018},
 }
 
 @inproceedings{liu2024intactkv,
@@ -336,25 +344,35 @@
   year    = {2024},
 }
 
-@article{cai2024pyramidkv,
-  title   = {{PyramidKV}: Dynamic {KV} Cache Compression based on Pyramidal Information Funneling},
-  author  = {Cai, Zefan and Zhang, Yichi and Gao, Bofei and Liu, Yuliang and Liu, Tianyu and Lu, Keming and Xiong, Wayne and Dong, Yue and Chang, Baobao and Hu, Junjie and Xiao, Wen},
-  journal = {arXiv preprint arXiv:2406.02069},
-  year    = {2024},
+@inproceedings{zhang2025clusterattn,
+  title     = {{ClusterAttn}: {KV} Cache Compression under Intrinsic Attention Clustering},
+  author    = {Zhang, Minwei and Sun, Haifeng and Wang, Jingyu and Li, Shaolong and Ning, Wanyi and Qi, Qi and Zhuang, Zirui and Liao, Jianxin},
+  booktitle = {Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)},
+  pages     = {14451--14473},
+  publisher = {Association for Computational Linguistics},
+  address   = {Vienna, Austria},
+  doi       = {10.18653/v1/2025.acl-long.703},
+  url       = {https://aclanthology.org/2025.acl-long.703/},
+  year      = {2025},
 }
 
-@article{zandieh2024qjl,
-  title   = {{QJL}: 1-Bit Quantized {JL} Transform for {KV} Cache Quantization with Zero Overhead},
-  author  = {Zandieh, Amir and Daliri, Majid and Han, Insu},
-  journal = {arXiv preprint arXiv:2406.03482},
-  year    = {2024},
+@inproceedings{zandieh2024qjl,
+  title     = {{QJL}: 1-Bit Quantized {JL} Transform for {KV} Cache Quantization with Zero Overhead},
+  author    = {Zandieh, Amir and Daliri, Majid and Han, Insu},
+  booktitle = {Proceedings of the AAAI Conference on Artificial Intelligence},
+  volume    = {39},
+  number    = {24},
+  pages     = {25805--25813},
+  doi       = {10.1609/aaai.v39i24.34773},
+  year      = {2025},
 }
 
-@article{duanmu2024skvq,
-  title   = {{SKVQ}: Sliding-window Key and Value Cache Quantization for Large Language Models},
-  author  = {Duanmu, Haojie and Zhong, Zhihang and Wei, Weifeng and Zhang, Xiangyu},
-  journal = {arXiv preprint arXiv:2405.06219},
-  year    = {2024},
+@inproceedings{duanmu2024skvq,
+  title     = {{SKVQ}: Sliding-window Key and Value Cache Quantization for Large Language Models},
+  author    = {Duanmu, Haojie and Yuan, Zhihang and Li, Xiuhong and Duan, Jiangfei and Zhang, Xingcheng and Lin, Dahua},
+  booktitle = {First Conference on Language Modeling},
+  url       = {https://openreview.net/forum?id=nI6JyFSnyV},
+  year      = {2024},
 }
 
 % === 量化与推理背景 (Tier 2) ===
@@ -365,11 +383,11 @@
   year    = {2025},
 }
 
-@article{jiang2023mistral,
-  title   = {Mistral {7B}},
-  author  = {Jiang, Albert Q and Sablayrolles, Alexandre and Mensch, Arthur and Bamford, Chris and Singh Chaplot, Devendra and de las Casas, Diego and Bressand, Florian and Lengyel, Gianna and Lample, Guillaume and Saulnier, Lucile and others},
-  journal = {arXiv preprint arXiv:2310.06825},
-  year    = {2023},
+@misc{jiang2023mistral,
+  title        = {Mistral {7B}},
+  author       = {Jiang, Albert Q and Sablayrolles, Alexandre and Mensch, Arthur and Bamford, Chris and Singh Chaplot, Devendra and de las Casas, Diego and Bressand, Florian and Lengyel, Gianna and Lample, Guillaume and Saulnier, Lucile and others},
+  howpublished = {arXiv preprint arXiv:2310.06825},
+  year         = {2023},
 }
 
 % === QuaRot ===
@@ -386,25 +404,13 @@
 @inproceedings{xu2025kvtuner,
   title     = {{KVTuner}: Sensitivity-Aware Layer-wise Mixed Precision {KV} Cache Quantization for Efficient and Nearly Lossless {LLM} Inference},
   author    = {Li, Xing and Xing, Zeyu and Li, Yiming and Qu, Linping and Zhen, Hui-Ling and Liu, Wulong and Yao, Yiwu and Pan, Sinno Jialin and Yuan, Mingxuan},
-  booktitle = {International Conference on Machine Learning (ICML)},
+  booktitle = {Proceedings of the 42nd International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {267},
+  pages     = {36451--36485},
+  publisher = {PMLR},
+  url       = {https://proceedings.mlr.press/v267/li25dd.html},
   year      = {2025},
-  note      = {arXiv:2502.04420},
-}
-
-% === TensorRT INT8 KL Calibration ===
-@inproceedings{migacz2017tensorrt,
-  title     = {8-bit Inference with {TensorRT}},
-  author    = {Migacz, Szymon},
-  booktitle = {GPU Technology Conference (GTC)},
-  year      = {2017},
-  note      = {NVIDIA Developer Blog},
-}
-
-@inproceedings{agarwal2025qerl,
-  title     = {{QeRL}: Beyond Efficiency -- Quantization-enhanced Reinforcement Learning for {LLMs}},
-  author    = {Huang, Wei and Ge, Yi and Yang, Shuai and Xiao, Yicheng and Mao, Huizi and Lin, Yujun and Ye, Hanrong and Liu, Sifei and Cheung, Ka Chun and Yin, Hongxu and Lu, Yao and Qi, Xiaojuan and Han, Song and Chen, Yukang},
-  booktitle = {International Conference on Learning Representations},
-  year      = {2026},
 }
 
 @article{bondarenko2023softmax,
@@ -421,18 +427,6 @@
   booktitle = {IEEE International Symposium on High-Performance Computer Architecture (HPCA)},
   year      = {2026},
   note      = {arXiv:2503.18773},
-}
-
-% ============================================================
-% Round 2 Phase 1 additions (EMNLP 2026 literature scout)
-% Added via paper-critic Phase 4 ch2 Related Work补强
-% ============================================================
-
-@article{gu2025ahakv,
-  title     = {{AhaKV}: Adaptive Holistic Attention-Driven KV Cache Eviction for Efficient Inference of Large Language Models},
-  author    = {Gu, Yifeng and Jiang, Zicong and Jin, Jianxiu and Guo, Kailing and Zhang, Ziyang and Xu, Xiangmin},
-  journal   = {arXiv preprint arXiv:2506.03762},
-  year      = {2025},
 }
 
 @inproceedings{tao2024asymkv,
@@ -452,14 +446,6 @@
   year      = {2025},
 }
 
-@inproceedings{velickovic2024softmax,
-  title     = {softmax is not enough (for sharp out-of-distribution)},
-  author    = {Veli{\v{c}}kovi{\'c}, Petar and Perivolaropoulos, Christos and Barbero, Federico and Pascanu, Razvan},
-  booktitle = {NeurIPS Workshop on Scientific Methods for Understanding Deep Learning},
-  year      = {2024},
-  note      = {arXiv:2410.01104},
-}
-
 @inproceedings{su2025outliertoken,
   title     = {Accurate {KV} Cache Quantization with Outlier Tokens Tracing},
   author    = {Su, Yi and Zhou, Yuechi and Qiu, Quantong and Li, Juntao and Xia, Qingrong and Li, Ping and Duan, Xinyu and Wang, Zhefeng and Zhang, Min},
@@ -472,8 +458,13 @@
 
 @inproceedings{shutova2025aquakv,
   title     = {Cache Me If You Must: Adaptive Key-Value Quantization for Large Language Models},
-  author    = {Shutova, Alina and Malinovskii, Vladimir and Egiazarian, Vage and Kuznedelev, Denis and Mazur, Denis and Surkov, Nikita and Ermakov, Ivan and Alistarh, Dan},
-  booktitle = {International Conference on Machine Learning (ICML)},
+  author    = {Shutova, Alina and Malinovskii, Vladimir and Egiazarian, Vage and Kuznedelev, Denis and Mazur, Denis and Nikita, Surkov and Ermakov, Ivan and Alistarh, Dan},
+  booktitle = {Proceedings of the 42nd International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {267},
+  pages     = {55451--55473},
+  publisher = {PMLR},
+  url       = {https://proceedings.mlr.press/v267/shutova25a.html},
   year      = {2025},
 }
 

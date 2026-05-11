@@ -108,10 +108,9 @@ x_q = \operatorname{clamp}\!\left(\operatorname{round}\!\left(\frac{x}{s}\right)
 \hat{x} = (x_q-z)\cdot s.
   \label{eq:asym_quant}
 \end{equation}
-当张量均值偏离零点，或不同维度的统计差异较大时，对称网格会把一部分整数等级留给样本很少落入的区间。非对称量化通过 zero-point 移动实数值与整数编码的对齐位置，使可表示区间贴近非零中心分布，在相同存储位宽下减少单侧范围浪费。这一参数入口也为后文 K/V 角色诊断提供基础。Key 侧主要暴露通道尺度差异，Value 侧主要暴露沿序列变化的动态范围，两类差异可以由各自的零点与缩放因子刻画，而不必压进一组共享参数。
+当张量均值偏离零点，或不同维度的尺度差异较明显时，对称量化仍把整数网格固定在 0 附近，某一侧的等级容易落到样本很少出现的取值区间。非对称量化把 zero-point 作为可调参数，让整数编码的对齐位置随数据分布移动，从而在相同存储位宽下减少单侧范围浪费。这个参数入口对后文的 K/V 角色诊断很关键。Key 侧的主要差异来自通道尺度，Value 侧的主要差异来自序列方向上的动态范围变化，二者需要分别用各自的 zero-point 与 scale 描述，而不宜压进同一组共享参数。
 
-量化轴决定缩放因子绑定在哪个维度。逐 channel 量化沿通道方向设置参数，更适合吸收通道间尺度差异。逐 token 量化沿时序方向设置参数，更适合刻画位置相关的动态范围变化。对 KV Cache 而言，轴向选择会进入功能角色。Key 参与 $\bq\bK^\top$，先影响 attention logits 及其相对次序，再经 softmax 转为权重分布；Value 在这些权重下被加权聚合。后文会同时说明使用多少 bit、bit 落在 K 还是 V 一侧，以及沿通道还是沿 token 分配。这样可以更清楚地呈现位宽、功能角色与量化粒度之间的关系。
-
+量化轴决定这些参数在哪个维度上共享。逐 channel 量化让参数沿通道方向设置，能够吸收通道间尺度差异。逐 token 量化让参数沿时序方向设置，能够跟随不同位置的动态范围。对 KV Cache 来说，这个选择会直接改变误差进入计算图的方式。Key 先参与 $\bq\bK^\top$，影响 attention logits 及其相对次序，再经 softmax 转成权重分布。Value 则在给定权重下被加权聚合。后文讨论低比特路径时，会同时报告存储位宽、K/V 侧别和量化轴，说明误差落入的是哪一侧、哪一维，以及对应的计算角色。
 
 \subsection{校准方法综述}
 
@@ -125,13 +124,13 @@ x_q = \operatorname{clamp}\!\left(\operatorname{round}\!\left(\frac{x}{s}\right)
 \section{KV Cache 量化与高效推理相关工作}
 % ============================================================
 
-长上下文场景下，KV Cache 压缩研究已经不只回答“能否省显存”。相邻工作大致沿三条路径展开：低比特格式如何适配 K/V 的统计结构，量化失真如何在注意力行为层被发现和恢复，以及 bit-width 节省如何在 Decode 阶段转化为实际收益。更一般的量化理论综述可参见 Nagel 等人~\cite{nagel2021whitepaper} 与 Hubara 等人~\cite{hubara2018quantized}。
+长上下文场景下，KV Cache 压缩研究已经不只回答“能否省显存”。相邻工作大致沿三条路径展开：低比特格式如何适配 K/V 的统计结构，量化失真如何在注意力行为层被发现和恢复，以及 bit-width 节省如何在 Decode 阶段转化为实际收益。更一般的量化理论综述可参见 Gholami 等人~\cite{gholami2022survey} 与 Hubara 等人~\cite{hubara2018quantized}。
 
 以下工作从不同侧面说明，KV Cache 量化不宜只按统一位宽或统一轴处理。KIVI~\cite{liu2024kivi} 采用 per-channel Key 与 per-token Value 的非对称格式，是本文低比特角色感知路径的直接参照。KVQuant~\cite{hooper2024kvquant} 通过非均匀码本与 Pre-RoPE Key 量化进一步处理 RoPE 后表示对量化网格的影响。AsymKV~\cite{tao2024asymkv} 进一步显示 K/V 敏感性沿网络深度发生迁移，AQUA-KV~\cite{shutova2025aquakv} 则将这一观察扩展到时序相关性维度。这些格式与统计差异的判断在本文中保留下来，作为低比特路径的格式约束。本文进一步把校准参数的来源问题独立出来，关注量化参数由什么行为信号选出，以及这些读数能否继续支撑跨层预算分配。
 
 低比特恢复相关工作大致可以分处理量化误差本身与从缓存内容的重要性出发，决定哪些位置或 token 值得保留更高位宽。QuaRot~\cite{ashkboos2024quarot} 通过旋转变换分散 Key 通道异常值，GEAR~\cite{kang2024gear} 用残差低秩近似补偿量化误差，QServe~\cite{lin2024qserve} 则把低比特格式接入端到端推理系统。ZipCache~\cite{he2024zipcache} 按缓存重要性组织混合精度保留，IntactKV~\cite{liu2024intactkv} 保留少量枢纽 token 的高精度表示，SKVQ~\cite{duanmu2024skvq} 利用局部窗口访问特征进行细粒度量化处理。Outlier Tokens Tracing~\cite{su2025outliertoken}、Atom~\cite{zhao2024atom} 与 QJL~\cite{zandieh2024qjl} 分别从异常 token 追踪、低比特表示和随机投影近似等方向扩展 KV Cache 压缩的边界，本文将它们列入表~\ref{tab:ch2-kv-comparison} 作为边界参考。总体来看，这些研究提示低比特 KV Cache 的性能保持不能只看平均压缩率，还需要判断哪些内容、模型层位置或访问局部性更可能在量化后引发失稳。本文沿着这一线索，将离线校准链路产生的行为敏感度画像用于失稳诊断和预算分配，使压缩目标与分配决策建立在一致的行为证据之上。
 
-缓存管理工作回答的是另一类问题：哪些历史缓存应被保留、驱逐或差异化处理。H2O~\cite{zhang2024h2o}、StreamingLLM~\cite{xiao2024efficient}、SnapKV~\cite{li2024snapkv} 与 PyramidKV~\cite{cai2024pyramidkv} 主要依据注意力重要性或层级结构压缩保留集合。DuoAttention~\cite{xiao2024duoattention}、HeadKV~\cite{fu2025headkv} 与 ChunkKV~\cite{liu2025chunkkv} 则从头级、逐头贡献或 chunk 结构组织缓存。CacheGen~\cite{liu2024cachegen} 与 ThinK~\cite{xu2024think} 分别从流式编解码和查询驱动 Key 剪枝进入这一问题。它们与本文讨论的 bit-width 压缩不是替代关系：缓存管理决定“哪些 token/head/chunk 还在”，量化决定“留下来的缓存以多少 bit 和什么格式存”。系统性的 KV Cache 压缩 benchmark 可参见~\cite{yuan2024kvcompressionbench}。因此，本文在后续章节中只把这一路线作为可组合边界，而不把缓存驱逐本身纳入当前方法贡献。
+缓存管理工作回答的是另一类问题：哪些历史缓存应被保留、驱逐或差异化处理。H2O~\cite{zhang2024h2o}、StreamingLLM~\cite{xiao2024efficient}、SnapKV~\cite{li2024snapkv} 与 ClusterAttn~\cite{zhang2025clusterattn} 主要依据注意力重要性或结构性聚类压缩保留集合。DuoAttention~\cite{xiao2024duoattention}、HeadKV~\cite{fu2025headkv} 与 ChunkKV~\cite{liu2025chunkkv} 则从头级、逐头贡献或 chunk 结构组织缓存。CacheGen~\cite{liu2024cachegen} 与 ThinK~\cite{xu2024think} 分别从流式编解码和查询驱动 Key 剪枝进入这一问题。它们与本文讨论的 bit-width 压缩不是替代关系：缓存管理决定“哪些 token/head/chunk 还在”，量化决定“留下来的缓存以多少 bit 和什么格式存”。系统性的 KV Cache 压缩 benchmark 可参见~\cite{yuan2024kvcompressionbench}。因此，本文在后续章节中只把这一路线作为可组合边界，而不把缓存驱逐本身纳入当前方法贡献。
 
 \begin{table}[H]
   \centering
@@ -167,7 +166,7 @@ x_q = \operatorname{clamp}\!\left(\operatorname{round}\!\left(\frac{x}{s}\right)
 \phantomsection
 \label{sec:ch2-quant-softmax}
 \textbf{量化对注意力行为的扰动。}
-若只看压缩率，容易漏掉量化误差进入注意力计算后的形态变化。本文的锚点有两个：Key 误差可能经 logits 与 softmax 改写概率质量，输出侧误差则要回到聚合结果中评价。KVTuner~\cite{xu2025kvtuner} 分析了 Key 量化误差在注意力得分中的放大，并观察到高误差注意力头往往不再保持稀疏结构。Softmax Bias Correction~\cite{bondarenko2023softmax} 从 softmax 量化角度指出 SQNR 劣化和近零概率问题。QeRL~\cite{agarwal2025qerl}、Softmax-Not-Enough~\cite{velickovic2024softmax} 与 AhaKV~\cite{gu2025ahakv} 提供了概率平坦化、温度和缓存重要性的相邻证据。
+若只看压缩率，容易漏掉量化误差进入注意力计算后的形态变化。本文关注的两个锚点分别是 Key 误差经 logits 与 softmax 改写概率质量，以及输出侧误差在聚合结果中的表现。KVTuner~\cite{xu2025kvtuner} 分析了 Key 量化误差在注意力得分中的放大，并观察到高误差注意力头往往不再保持稀疏结构。Bondarenko 等人~\cite{bondarenko2023softmax} 从 softmax 量化角度指出 SQNR 劣化和近零概率问题。结合 H2O~\cite{zhang2024h2o}、SnapKV~\cite{li2024snapkv} 与 HeadKV~\cite{fu2025headkv} 等缓存选择研究，可以看到低比特路径既需要读出分布侧扰动，也需要把这些读数继续连接到缓存或层级预算决策。
 
 \textbf{高效注意力与系统协同。}
 量化格式成立之后，还要经过系统路径检查。FlashAttention~\cite{dao2022flashattention} 及 FlashAttention-2~\cite{dao2024flashattention2} 通过分块计算、在线 softmax 与更高效的并行组织降低注意力计算 IO。vLLM~\cite{kwon2023vllm} 的 PagedAttention 通过分页式 KV Cache 管理减少显存碎片。Triton~\cite{tillet2019triton} 则为反量化与注意力计算融合提供 kernel 编写载体。这些工作共同说明，bit-width 降低后，若 nibble unpack、GQA head mapping 和 kernel 调度开销没有被 Decode 阶段的访存节省抵消，低比特缓存未必会转化为更低 TPOT。因此，第四章会把系统收益写成 $H_{kv}$、序列长度和后端路径共同决定的经验边界。
