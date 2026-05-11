@@ -47,7 +47,7 @@ KV Cache 量化的目标即
 
 式~\eqref{eq:ch3-error-decomp} 区分了两类误差作用于输出的路径。Key 侧扰动先改变注意力 logits，经 softmax 归一化后表现为注意力分布差异，并由分布项传到输出；Value 侧误差则以 $\hat a_i(\hat v_i-v_i)$ 的形式，在量化后权重下进入聚合。扰动对输出的影响大小取决于分布形态、logit 间隔以及权重集中程度，因此在低比特预算下，Key 与 Value 量化误差对输出的敏感性可能不同。后文通过 K/V 单侧诊断，并以对称低比特配置作为参照，检验这种不对称是否在实验中出现，为低比特路径的格式选择提供依据。
 
-后文用 \texttt{KxVy} 标记 K/V 两侧位宽，$x$ 和 $y$ 分别表示 Key 与 Value 的 bit 数。图~\ref{fig:ch3-kv-asymmetry} 按三组配置组织诊断读数。\texttt{K8V8} 作为高位宽量化参考，\texttt{K8V4}/\texttt{K4V8} 在相同 K/V 平均位宽下隔离角色差异，\texttt{K4V4} 给出对称低比特锚点。单侧 PPL 隔离还会使用 \texttt{K4V16} 与 \texttt{K16V4}，其中一侧保持 FP16。未量化 \texttt{FP16} 参考和单侧 PPL 隔离实验结果分别由第四章表~\ref{tab:ch4-kv-multitask} 与表~\ref{tab:ch4-kv-ppl} 给出。
+本节采用 \texttt{KxVy} 表示 K/V 两侧位宽组合。\texttt{K4V8} 表示 4-bit Key 与 8-bit Value。\texttt{K4V16} 表示 Key 为 4-bit、Value 保持 FP16，\texttt{K16V4} 表示 Key 保持 FP16、Value 为 4-bit，\texttt{MixedKV} 对应 \texttt{K8V4}。图~\ref{fig:ch3-kv-asymmetry} 呈现压缩诊断视图，并按三组配置组织：\texttt{K8V8} 是高位宽量化参考，\texttt{K8V4}/\texttt{K4V8} 在相同 K/V 平均位宽设置下对照 K/V 角色，\texttt{K4V4} 作为对称低比特锚点。未量化 \texttt{FP16} 参考和单侧 PPL 隔离实验结果分别由第四章表~\ref{tab:ch4-kv-multitask} 与表~\ref{tab:ch4-kv-ppl} 给出。
 
 \input{figures/fig_ch3_kv_diag_needle}
 
@@ -134,7 +134,7 @@ p_{\theta}^{(l,h,t)}
 \quad\text{与}\quad
 \sum_i\hat a_i(\hat v_i-v_i).
 \]
-两个求和式分别对应注意力质量迁移和 Value 聚合扰动。记 $a_i\equiv p_{\mathrm{ref},i}^{(l,h,t)}$，$\hat a_i\equiv p_{\theta,i}^{(l,h,t)}$，$v_i$ 与 $\hat v_i$ 分别为参考 Value 和量化 Value。分布项直接比较 $a$ 与 $\hat a$，读取 Key 扰动经 logits 与 softmax 后造成的概率质量变化。聚合项保留 Value 扰动在量化后权重 $\hat a_i$ 下进入输出的作用。attention-distribution KL 因此更适合放在 Key 路径中使用，用来补足逐元素重建距离看不到的分布偏移。
+前一项对应分布侧偏移，后一项对应 Value 聚合侧扰动。这里 $a_i\equiv p_{\mathrm{ref},i}^{(l,h,t)}$，$\hat a_i\equiv p_{\theta,i}^{(l,h,t)}$，$v_i$ 与 $\hat v_i$ 分别表示参考 Value 和量化 Value。KL 直接比较 $a$ 与 $\hat a$，因此读取的是分布侧误差。Value 侧扰动则通过量化后权重 $\hat a_i$ 进入聚合项。这个对应关系说明，attention-distribution KL 更贴近 Key 误差影响输出的路径，而不是只停留在逐元素重建距离。
 
 本文使用前向 KL $D_{\mathrm{KL}}(p_{\mathrm{ref}}\|p_\theta)$。在长上下文检索中，高概率参考位置通常对应需要保留的关键信息。若量化候选低估这些位置，前向 KL 会给出更直接的惩罚。反向 KL 更偏向量化分布自身的高概率区域，JS 散度则提供对称读数，二者在本文中保留为补充诊断。Value 路径不复用该分布代理，而采用独立的输出扰动代理，见第~\ref{sec:ch3-paths}~节。
 
@@ -208,7 +208,7 @@ q_{0.95}(\theta).
 \subsection{INT8 基准路径下的静态 Scale 与自适应保护}
 \label{subsec:ch3-int8-baseline}
 
-\texttt{INT8} 的有效整数等级为 255 级，量化网格相对细，校准层写出的 scale 参数也能按组追溯。本文先在这一设置下检查离线选择与在线执行能否稳定衔接，并在第四章将该路径记为 \texttt{INT8-Canonical}。\texttt{INT8} 还提供后续低比特路径的压缩率参照。
+\texttt{INT8} 的有效整数等级为 255 级，量化网格相对细，校准层写出的 scale 参数也能按组追溯。本文先在这一设置下检查离线选择与在线执行是否形成闭环，并在第四章将该路径记为 \texttt{INT8-Canonical}。\texttt{INT8} 还提供后续低比特路径的压缩率参照。
 
 该路径对 Key 和 Value 使用相同的静态对称逐组量化。分组沿通道维度划分，每组包含 $g=128$ 个元素并共享一个缩放参数。设第 $l$ 层第 $j$ 个分组的待量化张量为 $x_{l,j}$。给定校准百分位参数 $p_c$ 和分组大小 $g$ 后，静态缩放参数定义为
 \begin{equation}
@@ -259,7 +259,7 @@ s_{l,j}^{\mathrm{dyn}}
 \subsection{INT4-RoleAlign 的角色感知非对称量化}
 \label{subsec:ch3-rolealign}
 
-对称 \texttt{INT4} 把 Key 通道尺度和 Value token 动态范围压进同一类粗网格，失稳时很难判断误差究竟落在哪条传播路径。\texttt{INT4-RoleAlign} 将低比特格式拆成 K/V 两路。Key 先参与 $qK^\top$ 并改变 logits 相对次序，因此 Key 侧采用逐通道非对称量化，让不同特征方向保留各自的取值范围。Value 在注意力权重下被加权聚合，Value 侧则采用逐 token 非对称量化，围绕当前 token 的动态范围保留内容幅值。两条分路沿用第~\ref{sec:ch3-calibration}~节的候选搜索、稳定性筛选与边界记录流程，量化轴、参数接口和代理读数分别设置。
+\texttt{INT4-RoleAlign} 从 K/V 两条传播路径出发改写低比特格式。Key 先参与 $qK^\top$，并影响 logits 的相对次序，粗 \texttt{INT4} 网格中的通道尺度误差容易被带入注意力排序。因此Key 侧采用逐通道非对称量化，让每个特征方向保留独立的取值范围。Value 不直接决定排序，而是在注意力权重下进入加权聚合。Value 侧采用逐 token 非对称量化，用当前 token 的动态范围描述后续聚合所需的内容幅值。两条分路使用第~\ref{sec:ch3-calibration}~节的候选搜索、稳定性筛选与边界记录流程，差别只体现在量化轴、参数接口和代理读数。
 
 实际实现中的 K/V 张量形状为 $[B, H_{kv}, S, D]$，Key 的 scale 张量形状为 $[B, H_{kv}, D]$，Value 的 scale 张量形状为 $[B, H_{kv}, S]$。先看 Key 侧的逐通道非对称量化。设第 $l$ 层 Key 矩阵为 $K^{(l)}\in\mathbb{R}^{S\times d_k}$。对第 $j$ 个通道，分位数裁剪边界定义为
 \begin{equation}
@@ -281,7 +281,7 @@ s_{l,j}^{K}
 =
 m_{l,j}^{K}-q_{\min}s_{l,j}^{K}.
 \end{equation}
-这组端点沿序列维度统计，但作用在通道方向。每个通道各自得到一组 $(s,\zeta)$，通道间幅值差异不再由同一个尺度吸收，从而降低粗 \texttt{INT4} 网格对 $qK^\top$ 排序的扰动。
+分位数沿序列维度统计，每个通道各有一组 $(s,\zeta)$，在粗 \texttt{INT4} 网格下保留不同特征方向的取值范围，减少通道差异被同一尺度抹平后对 $qK^\top$ 排序的影响。
 
 Value 侧逐 token 建立非对称量化参数。设第 $l$ 层 Value 矩阵为 $V^{(l)}\in\mathbb{R}^{S\times d_v}$。对第 $t$ 个 token，分位数裁剪边界定义为
 \begin{equation}
@@ -355,7 +355,7 @@ R_V(p_V) = \mathbb{E}_{\mathcal D_{\mathrm{calib}}}\sum_{h=1}^{H}\sum_{r=1}^{S}\
 \subsection{INT4-RoleAlign 与 KIVI-style 的设计差异}
 \label{subsec:ch3-rolealign-vs-kivi}
 
-\texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 共享 per-channel Key 与 per-token Value 的低比特轴布局。二者的分叉点在端点来源。\texttt{KIVI-style} 运行时用 min/max 统计生成每个 Key 通道和每个 Value token 的仿射端点，初始化阶段只固定 chunk、residual 缓冲长度等结构性超参数。\texttt{INT4-RoleAlign} 在评测前写入离线校准产物，包括 K/V 分路径选出的百分位参数 $(p_K,p_V)$、轴元数据和边界记录。运行时仍读取当前张量，只是按这些百分位而不是 min/max 计算 $(s,\zeta)$。Key 侧百分位来自 attention-distribution KL 搜索，Value 侧百分位来自独立的输出扰动代理 $R_V$，两条路径的校准目标不合并。这些产物还会继续进入第~\ref{sec:ch3-allocator}~节的预算分配接口。
+\texttt{INT4-RoleAlign} 与 \texttt{KIVI-style} 采用相同的低比特轴布局，即 per-channel Key 与 per-token Value。\texttt{KIVI-style} 运行时根据 min/max 统计直接生成每个 Key 通道和每个 Value token 的仿射端点，初始化阶段只固定 chunk、residual 缓冲长度等结构性超参数。\texttt{INT4-RoleAlign} 则在评测前写入离线校准产物，其中包括 K/V 分路径选出的百分位参数 $(p_K,p_V)$、轴元数据和边界记录，运行时仍读取当前张量，只是按这些百分位而不是 min/max 重新计算 $(s,\zeta)$。Key 侧百分位来自 attention-distribution KL 搜索，Value 侧百分位来自独立的输出扰动代理 $R_V$，两条路径的校准目标不合并。表~\ref{tab:ch3-rolealign-vs-kivi} 从格式、参数来源、行为代理、离线产物与分配读数五个维度列出差异。
 
 \begin{table}[!htbp]
   \centering
@@ -633,7 +633,7 @@ m_{\mathrm{path}}^{(l)}
   \end{tabularx}
 \end{table}
 
-三条路径写入 $\mathcal A_{\mathrm{path}}$ 的字段并不相同，具体对照见表~\ref{tab:ch3-runtime-paths}。对称路径保存逐组 scale 和分组元数据，\texttt{INT8} 与对称 \texttt{INT4} 的区别主要来自量化网格。产物中保留 inv\_tau 字段，主线运行时将 \texttt{use\_attn\_temperature} 设为 \texttt{false}。\texttt{INT4-RoleAlign} 额外写入 K/V 两侧 percentile 选择记录与轴向元数据。K 侧在预填充阶段依据冻结 percentile 计算逐通道 $(s_K,\zeta_K)$，随后复用这组参数。V 侧随每个新 token 写入，根据该 token 的内容即时计算逐 token $(s_V,\zeta_V)$。
+三条路径写入 $\mathcal A_{\mathrm{path}}$ 的字段并不相同，具体对照见表~\ref{tab:ch3-runtime-paths}。\texttt{INT8} 基准路径保存逐组静态 scale 与分组元数据，inv\_tau 字段保留在产物中，但主线运行时将 \texttt{use\_attn\_temperature} 设为 \texttt{false}。对称 \texttt{INT4} 沿用这一组织，只把量化网格降为 4-bit。\texttt{INT4-RoleAlign} 则在量化参数字段中增加 K/V 两侧的 percentile 选择记录与轴向元数据。运行时再按 K/V 角色生成仿射参数。K 侧在预填充阶段依据冻结 percentile，用逐通道数据一次性计算 $(s_K,\zeta_K)$，之后保持不变并复用。V 侧在每个新 token 写入时，用逐 token 数据即时计算 $(s_V,\zeta_V)$。
 
 在线推理接收第 $t$ 个新 token 时，第 $l$ 层的量化写入统一记作
 \begin{equation}
@@ -648,18 +648,18 @@ g_t(\theta_{\mathrm{path}}^{(l)}, x_t^{(l)}), & \text{\texttt{INT8} 自适应保
 h^{K/V}(\theta_{\mathrm{path}}^{(l)}, x_t^{(l)}), & \text{\texttt{INT4-RoleAlign}}
 \end{cases}
 \end{equation}
-其中 $\theta_{\mathrm{path}}^{(l)}$ 表示评测前固化的路径参数。公式中的三种分支对应三类写入语义。对称路径直接读取逐组静态 scale。\texttt{INT8-Canonical} 通过 $g_t$ 引入写入保护逻辑，按第~\ref{subsec:ch3-int8-baseline}~节的逐 token 最大值触发规则决定当前组是否改用动态 scale。\texttt{INT4-RoleAlign} 通过 $h^{K/V}$ 读取 percentile 参数 $(p_K,p_V)$、K/V 轴标记与边界记录，并按 K/V 分路生成仿射参数。K 侧在预填充阶段计算逐通道 $(s_K,\zeta_K)$，解码时复用。V 侧随每个新 token 写入，即时计算逐 token $(s_V,\zeta_V)$。
+其中 $\theta_{\mathrm{path}}^{(l)}$ 表示评测前固化的路径参数。对称路径读取逐组静态 scale，\texttt{INT4-RoleAlign} 读取已选定的 percentile 参数 $(p_K,p_V)$、K/V 轴标记与边界记录。$g_t$ 对应 \texttt{INT8-Canonical} 的写入保护逻辑，只查看第 $l$ 层当前 token 待写入的张量和离线参数，并按第~\ref{subsec:ch3-int8-baseline}~节的逐 token 最大值触发规则决定当前组是否改用动态 scale。$h^{K/V}$ 则对应 \texttt{INT4-RoleAlign} 的 K/V 分路映射。K 侧在预填充阶段依据冻结 percentile 计算逐通道 $(s_K,\zeta_K)$，解码时复用这组参数。V 侧随每个新 token 写入，根据该 token 的内容即时计算逐 token $(s_V,\zeta_V)$。
 
-缓存写入按时间追加。对任意 $t'<t$，第 $t$ 步写入当前缓存项 $\hat x_t^{(l)}$ 后，历史缓存 $\hat x_{t'}^{(l)}$ 保持原值。多随机种子复现中的逐位一致结果，间接核验了写入过程的确定性和历史缓存封闭性。第四章第~\ref{sec:ch4-rq1}~节给出固定协议下的 \texttt{INT8-Canonical} 主线读数。自适应保护用于主线实验的 \texttt{INT8-Canonical} 路径，其余对称路径沿用常量 $\theta_{\mathrm{path}}^{(l)}$。\texttt{INT4-RoleAlign} 由 $h^{K/V}$ 生成 K/V 两侧仿射参数。
+缓存写入保持按时间追加的语义。对任意 $t'<t$，第 $t$ 步只追加当前缓存项 $\hat x_t^{(l)}$，不回写已经存在的历史缓存 $\hat x_{t'}^{(l)}$。多随机种子复现中的逐位一致结果，间接核验了这一写入过程的确定性和历史缓存封闭性。第四章第~\ref{sec:ch4-rq1}~节给出固定协议下的 \texttt{INT8-Canonical} 主线读数。自适应保护只在主线实验的 \texttt{INT8-Canonical} 路径中开启，其余对称路径沿用常量 $\theta_{\mathrm{path}}^{(l)}$。\texttt{INT4-RoleAlign} 按 $h^{K/V}$ 生成仿射参数，K 侧预填充后复用，V 侧随新 token 写入即时计算，不依赖自适应保护。
 
-预填充阶段，当前块的 K/V 按各自路径规则量化后写入缓存。进入解码阶段后，注意力后端从已经写入的量化历史缓存中读取 K/V。Decode 路径的输入由离线产物和历史缓存共同确定。后续融合解码核可以直接消费量化缓存，在接口层面避开反量化后中间张量的显式物化。
+预填充阶段，当前块的 K/V 按各自路径规则量化后写入缓存。进入解码阶段后，注意力后端只从已经写入的量化历史缓存中读取 K/V。Decode 路径的输入被限制为离线产物和历史缓存两类对象。后续融合解码核也可以直接消费量化缓存，在接口层面避开反量化后中间张量的显式物化。
 
 \input{tables/table_ch3_runtime_paths}
 
 \subsection{Triton 融合解码核函数设计}
 \label{subsec:ch3-triton-int4-asym}
 
-自回归解码每生成一步，只新增一个 query token，历史 K/V 却要被完整访问一次。序列变长后，主要开销落到 KV Cache 的读取、解包和反量化路径。若先把低比特 K/V 完整还原为 FP16 中间张量，再交给标准注意力实现，额外显存读写会随序列长度增长。\texttt{INT8} 路径采用 Triton~\cite{tillet2019triton} 融合解码核，把反量化、点积、online softmax 和输出累加放入同一条片上流水线，减少低比特缓存与全局内存之间的往返。
+自回归解码每生成一步，只新增一个 query token，历史 K/V 却要被完整访问一次。序列变长后，瓶颈自然落到 KV Cache 的读取和反量化路径。最直接的做法是从低比特缓存读出 K/V，先完整反量化成 FP16 中间张量，再交给标准注意力实现。这条路径语义清楚，但会额外产生一份随序列长度增长的中间张量，显存读写也随之放大。\texttt{INT8} 路径采用 Triton~\cite{tillet2019triton} 融合解码核，把反量化、点积、online softmax 和输出累加放入同一条片上流水线，减少低比特缓存与全局内存之间的往返。
 
 融合核沿序列维度分块处理历史缓存。每个块从量化缓存中读取低比特 $K_B,V_B$ 及其缩放参数和元数据，在 SRAM 与寄存器中完成解包和反量化，然后直接计算当前 query 与该块 Key 的点积 $z_i = q k_i^\top / \sqrt{d_k}$，其中 $k_i$ 表示反量化后的第 $i$ 个 Key 行向量。后续递推只保存跨块 softmax 所需的行最大值、归一化因子和输出累加器，而不需要把整段历史 K/V 先还原成完整 FP16 张量。随后，核函数用在线 softmax 维护跨块递推状态~\cite{dao2022flashattention}。设第 $r$ 个块的状态包含行最大值 $m^{(r)}$、归一化因子 $\ell^{(r)}$ 和归一化输出累加器 $o^{(r)}$，并令
 \begin{equation}
@@ -693,9 +693,7 @@ o^{(r+1)}
 \end{equation}
 这里 $v_i$ 表示反量化后的第 $i$ 个 Value 行向量。上述递推与 FlashAttention 的 online softmax 等价。实现中保留非归一化累加器 $\tilde o^{(r+1)} = \ell^{(r+1)}\,o^{(r+1)}$，待全部块处理完后再除以 $\ell^{(\mathrm{final})}$，从而避免逐步重复除法。
 
-\texttt{INT4} 通过 nibble packing 减少存储字节数。写入 packed 缓存时，两个 4-bit 整数存入一个 8-bit 字节，码值先平移到无符号 $[0,15]$ 域。非对称 \texttt{INT4} 使用 $[-8,7]$ 的 16 级码本，对称诊断路径仍按前文 $q_{\max}=7$ 的 $[-7,7]$ 网格产生码值。读取时，核函数用位移和掩码拆出半字节，再还原为路径对应的有符号整数。对称路径按 scale 反量化，\texttt{INT4-RoleAlign} 按 $(s,\zeta)$ 反量化。
-
-执行路径保留两种 \texttt{INT4} 口径。对称 \texttt{INT4} 诊断路径采用 wrapper 方式，先把 nibble 缓存批量反打包为 INT8 张量，再复用 \texttt{INT8} 融合核完成片上反量化、点积、online softmax 和输出累加。\texttt{INT4-RoleAlign} 的非对称融合扩展把解包放进核内，核函数直接读取 K 侧逐通道和 V 侧逐 token 的 $(s,\zeta)$，在片上存储中完成 nibble 解包与非对称反量化，避开显式 INT8 中间张量物化。4-bit 载荷降低全局读取字节数，反打包和寄存器压力则会体现在每输出 token 的 TPOT 中。
+\texttt{INT4} 的表示形式减少了存储字节数，但解包开销也进入运行路径。nibble packing 将两个 4-bit 整数放入一个 8-bit 字节。写入 packed 缓存时，整数码值先平移到无符号 $[0,15]$ 域再存入 nibble。非对称 \texttt{INT4} 使用 $[-8,7]$ 的 16 级码本，对称诊断路径仍按前文 $q_{\max}=7$ 的 $[-7,7]$ 网格产生码值。读取时，核函数用位移和掩码拆出半字节，再还原为路径对应的有符号整数，并按对应参数反量化。对称路径使用 scale，\texttt{INT4-RoleAlign} 使用 $(s,\zeta)$。执行路径上，本文保留两种 \texttt{INT4} 实现口径。对称 \texttt{INT4} 诊断路径采用 wrapper 方式，先把 nibble 缓存批量反打包为 INT8 张量，再复用 \texttt{INT8} 融合核完成片上反量化、点积、online softmax 和输出累加。这一路径便于把格式诊断接到已有核函数上，但仍会显式产生 INT8 中间载荷。\texttt{INT4-RoleAlign} 的非对称融合扩展则把解包放进核内，核函数直接读取 K 侧逐通道和 V 侧逐 token 的 $(s,\zeta)$，在片上存储中完成 nibble 解包与非对称反量化，从而避开显式 INT8 中间张量物化。4-bit 载荷降低了全局读取字节数，反打包和寄存器压力则会反映到每输出 token 的 TPOT 中。
 
 为兼容 GQA~\cite{ainslie2023gqa}，融合核需要把 Query 头映射到共享的 KV 头。记 Query 头数为 $H_q$、KV 头数为 $H_{kv}$。本文涉及的 GQA 模型均满足 $H_{kv}\mid H_q$。重复因子定义为
 \begin{equation}
@@ -705,9 +703,9 @@ h_{kv}
 =
 \bigl\lfloor h_q / N_{\mathrm{rep}} \bigr\rfloor.
 \end{equation}
-融合核按 $(B,H_q)$ 网格展开，其中 $B$ 表示序列块，$H_q$ 表示 Query 头维度。每个 Query 头通过上式映射到对应的 $h_{kv}$ 切片，并直接读取共享 KV 头，内存中无需复制出 $H_q$ 份 K/V。这个寻址关系会改变块内访存合并、元数据广播和寄存器占用，并与 \texttt{INT4} 反打包开销一起进入 TPOT 读数。
+并行组织按 $(B,H_q)$ 展开，其中 $B$ 表示序列块，$H_q$ 表示 Query 头维度。每个 Query 头通过上式映射到对应的 $h_{kv}$ 切片，直接读取共享 KV 头，而不在内存中复制出 $H_q$ 份 K/V。这样可以保持 GQA 的缓存布局，但访存合并、元数据广播和寄存器占用都会受映射关系影响。这些开销会和 \texttt{INT4} 反打包一起体现在 TPOT 读数中。
 
-\texttt{INT8-Canonical} 由 \texttt{INT8} 融合核支撑，\texttt{INT4-RoleAlign} 的质量评估主线采用参考解码实现，系统边界测量另设 \texttt{INT4} 扩展路径。三类路径共同覆盖基准保真、格式对照和后端实现读数。下一节在此基础上比较访存、存储与算力开销。
+\texttt{INT8-Canonical} 由 \texttt{INT8} 融合核支撑，用来检验保守位宽下的行为校准闭环。\texttt{INT4-RoleAlign} 的质量评估主线采用参考解码实现，重点核验非对称格式的语义一致性，系统边界测量另设 \texttt{INT4} 扩展路径，用于拆分格式对照和后端实现，并覆盖 \texttt{KIVI-style} 对照与 Triton 融合后端读数。下一节在这三类路径的基础上比较访存、存储与算力开销。
 
 \subsection{复杂度、访存与存储开销分析}
 \label{subsec:ch3-system-overhead}
@@ -756,7 +754,7 @@ M_{\mathrm{RoleAlign}}
 +
 \underbrace{8\,L H_{kv} S}_{\text{V per-token scale/zp}},
 \end{equation}
-这个估计式分出三类开销。packed payload 是 K 与 V 两份 nibble 化主载荷，每个元素占 0.5 字节，随 $L$、$H_{kv}$、$S$ 和 $d_k$ 共同增长。K 侧 scale 与 zero-point 按通道保存，不随序列长度 $S$ 增长。V 侧 scale 与 zero-point 按 token 保存，因此继续随 $S$ 线性增长。第四章表~\ref{tab:ch4-kvcache-memory}~给出端到端实测显存读数。
+其中 packed payload 由 K 与 V 各一份的 nibble 化字节构成（每元素 0.5 字节、合计 $L H_{kv} S d_k$ 字节）。K 侧 scale 与 zero-point 各占 4 字节、独立于 $S$，V 侧 scale 与 zero-point 各占 4 字节、随 $S$ 线性增长。该公式按实现口径给出方法层面的近似估计，第四章表~\ref{tab:ch4-kvcache-memory}~给出端到端实测显存读数。
 
 Decode 阶段的访存收益按 block 级字节量解释。设 block 大小为 $B_s$，每个 block 的访存量在对称 \texttt{INT8} 与 \texttt{INT4} 路径下分别近似为
 \begin{equation}
@@ -784,7 +782,7 @@ AI_{\mathrm{INT4}}
 \begin{equation}
 \mathcal O\!\bigl(L H_{kv} d_k/g\bigr),
 \end{equation}
-\texttt{INT4-RoleAlign} 产物记录层级分位数参数与量化轴元数据。K 侧 per-channel scale/zero-point 在 prefill 阶段由数据现场计算后冻结复用，V 侧 per-token scale/zero-point 随追加 token 现场计算后入缓存，二者均不持久化到校准文件，因此离线产物规模量级与对称 INT8 同阶。第四章在上述公式基础上给出部署效率边界与跨硬件读数。
+\texttt{INT4-RoleAlign} 产物由层级分位数参数与量化轴元数据构成。K 侧 per-channel scale/zero-point 在 prefill 阶段由数据现场计算后冻结复用，V 侧 per-token scale/zero-point 随追加 token 现场计算后入缓存，二者均不持久化到校准文件，因此离线产物规模量级与对称 INT8 同阶。第四章在上述公式基础上给出部署效率边界与跨硬件读数。
 
 \section{本章小结}
 \label{sec:ch3-summary}

@@ -940,6 +940,37 @@ Canonical agent workflow directory is `.agents/`.
   - Segment 28 已按三个自然段处理完成，下一轮进入报告 Segment 29。
 - Commit: pending at log-write time; committed as `docs: polish aigc ch3 prefill decode boundary`
 
+### 2026-05-11 10:01 | AIGC 报告 main(4): 非第五章回滚到上轮改写前
+- Goal: 按用户确认的质量优先原则，恢复上一轮 AIGC 改写后仍被新报告标红的非第五章文本。
+- Changed files:
+  - `thesis/chapters/abstract_zh.tex`
+  - `thesis/chapters/abstract_en.tex`
+  - `thesis/chapters/ch1_introduction.tex`
+  - `thesis/chapters/ch2_related_work.tex`
+  - `thesis/chapters/ch3_method.tex`
+  - `thesis/figures/fig1_error_decomposition.tex`
+  - `thesis/chapters/ch4_experiments.tex`
+  - `thesis/main.pdf`
+  - `iteration.md`
+- Commands:
+  - `git restore --source=e746eae -- thesis/chapters/abstract_zh.tex thesis/chapters/abstract_en.tex thesis/chapters/ch1_introduction.tex thesis/chapters/ch2_related_work.tex thesis/chapters/ch3_method.tex thesis/figures/fig1_error_decomposition.tex thesis/chapters/ch4_experiments.tex`
+  - `git diff --check -- thesis/chapters/abstract_zh.tex thesis/chapters/abstract_en.tex thesis/chapters/ch1_introduction.tex thesis/chapters/ch2_related_work.tex thesis/chapters/ch3_method.tex thesis/figures/fig1_error_decomposition.tex thesis/chapters/ch4_experiments.tex`
+  - `latexmk -xelatex -halt-on-error main.tex`
+  - `rg -n "undefined|Reference.*undefined|Label.*multiply|Rerun to get cross-references" thesis/main.log || true`
+  - `pdfinfo thesis/main.pdf | rg 'Pages|File size'`
+- Outputs:
+  - 摘要、第一章、第二章、第三章、图 3-1 caption 与第四章恢复到上一轮 AIGC 方案改写前的 `e746eae` 状态。
+  - PDF 重新生成，页数从 94 页回到 95 页。
+- Validation:
+  - `git diff --check`: PASS.
+  - `latexmk -xelatex -halt-on-error main.tex`: PASS.
+  - Cross-reference log check: PASS.
+  - PDF: 95 pages, 1,443,683 bytes.
+- Risks / follow-ups:
+  - 摘要仍可能需要后续独立重写，但本轮先执行“改后仍疑似则恢复”的原则。
+  - 下一步单独处理第五章高疑似率。
+- Commit: pending at log-write time.
+
 ### 2026-05-11 09:21 | AIGC 方案收尾模板词清理
 - Goal: 对本轮 AIGC 重构后的摘要、第一章、第二章、第三章和第四章再做一次模板词扫描，清理残留的说明书式表达。
 - Changed files:
