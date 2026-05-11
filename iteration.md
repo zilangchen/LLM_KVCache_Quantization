@@ -940,6 +940,34 @@ Canonical agent workflow directory is `.agents/`.
   - Segment 28 已按三个自然段处理完成，下一轮进入报告 Segment 29。
 - Commit: pending at log-write time; committed as `docs: polish aigc ch3 prefill decode boundary`
 
+### 2026-05-11 10:22 | 回滚后写作质量小修
+- Goal: 修复回滚后带回的局部写作质量退步，范围限定在用户点名的五处。
+- Changed files:
+  - `thesis/chapters/ch1_introduction.tex`
+  - `thesis/chapters/ch2_related_work.tex`
+  - `thesis/chapters/ch4_experiments.tex`
+  - `thesis/main.pdf`
+  - `iteration.md`
+- Commands:
+  - `rg -n "低比特路径层先在 INT8 基准路径先在|而是为|更好地解决|这个性质正好|后文不只报告|承担了全文最清晰|它揭示|本章围绕第四章|形成闭环|证据链|实证闭环" thesis/chapters/ch1_introduction.tex thesis/chapters/ch2_related_work.tex thesis/chapters/ch4_experiments.tex || true`
+  - `git diff --check -- thesis/chapters/ch1_introduction.tex thesis/chapters/ch2_related_work.tex thesis/chapters/ch4_experiments.tex`
+  - `latexmk -xelatex -halt-on-error main.tex`
+  - `rg -n "undefined|Reference.*undefined|Label.*multiply|Rerun to get cross-references" thesis/main.log || true`
+  - `pdfinfo thesis/main.pdf | rg 'Pages|File size'`
+- Outputs:
+  - 修复第一章低比特路径层病句，保留 INT8、\texttt{INT4-RoleAlign} 与 Triton Decode kernel 的贡献含义。
+  - 重写第二章非对称量化和量化轴说明，去掉口语模板和不必要分号。
+  - 重写第四章 Qwen2.5-3B 剖面开头和本章小结开头/收束句，去掉“闭环”“证据链”等高风险总括词。
+- Validation:
+  - Targeted high-risk phrase scan: PASS.
+  - `git diff --check`: PASS.
+  - `latexmk -xelatex -halt-on-error main.tex`: PASS.
+  - Cross-reference log check: PASS.
+  - PDF: 95 pages, 1,443,556 bytes.
+- Risks / follow-ups:
+  - 仅处理用户指定的五处质量问题，未扩大到摘要或第五章其他风格点。
+- Commit: pending at log-write time.
+
 ### 2026-05-11 10:01 | AIGC 报告 main(4): 非第五章回滚到上轮改写前
 - Goal: 按用户确认的质量优先原则，恢复上一轮 AIGC 改写后仍被新报告标红的非第五章文本。
 - Changed files:
@@ -993,7 +1021,7 @@ Canonical agent workflow directory is `.agents/`.
   - PDF: 95 pages, 1,444,305 bytes.
 - Risks / follow-ups:
   - 该处理优先解决“后续重构导致第五章高疑似”的问题。若下一次检测第五章仍被标高，再基于旧版逐段做更小粒度重构。
-- Commit: pending at log-write time.
+- Commit: pending at log-write time; committed as `docs: restore chapter 5 conclusion voice`
 
 ### 2026-05-11 09:21 | AIGC 方案收尾模板词清理
 - Goal: 对本轮 AIGC 重构后的摘要、第一章、第二章、第三章和第四章再做一次模板词扫描，清理残留的说明书式表达。
