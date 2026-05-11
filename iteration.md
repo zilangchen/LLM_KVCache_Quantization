@@ -36,6 +36,32 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-11 09:18 | AIGC 重构第二组：Chapter 3 方法与系统段
+- Goal: 按检测报告处理 Chapter 3 中 KL 代理、RoleAlign、运行时路径、Triton 融合核与存储公式解释的高疑似 AIGC 表达。
+- Scope: Figure 3-1 caption, K/V 位宽记法说明, KL 与误差分解解释, RoleAlign 与 KIVI-style 对比, 离线产物字段, 缓存写入语义, Triton decode kernel, INT4 nibble packing, GQA 并行组织, 存储公式解释。
+- Changed files:
+  - `thesis/chapters/ch3_method.tex`
+  - `thesis/figures/fig1_error_decomposition.tex`
+  - `thesis/main.pdf`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch3_method.tex thesis/figures/fig1_error_decomposition.tex`
+  - `rg -n "前一项对应|后一项对应|这个对应关系说明|最直接的做法|这条路径语义清楚|这样可以保持|执行路径上，本文保留|由.*构成|各占|该公式按|具体来说|形成闭环|证据链" ...`
+  - `latexmk -xelatex -halt-on-error main.tex`
+  - `rg -n "undefined|Reference.*undefined|Label.*multiply|Rerun to get cross-references" thesis/main.log || true`
+- Outputs:
+  - 将图注和 K/V 记法说明压缩为功能性说明，减少配置逐项解释。
+  - 将 KL 代理、RoleAlign、KIVI-style 对比与运行时字段改成机制推导，而不是接口清单。
+  - 将 Triton 融合核、INT4 nibble packing、GQA 并行组织和存储公式说明改成读法说明。
+- Validation:
+  - `git diff --check`: PASS.
+  - 高风险模板检索无命中。
+  - `latexmk -xelatex -halt-on-error main.tex`: PASS, generated 95-page PDF.
+  - 日志检查无 undefined references、multiply-defined labels 或 rerun 提示。
+- Risks / follow-ups:
+  - 现存 Underfull boxes 和 Chapter 3 表格处 1.5447pt Overfull hbox 为既有版面细修项，本轮不处理。
+- Intended commit: `docs: polish aigc chapter 3 method text`
+
 ### 2026-05-11 09:15 | AIGC 重构第一组：摘要、第一章与第二章
 - Goal: 按检测报告优先处理摘要、英文摘要、第一章贡献段和第二章量化基础段的高疑似 AIGC 表达。
 - Scope: 中文摘要、英文摘要、Chapter 1 研究现状与研究内容段、Chapter 2 非对称量化与量化轴说明。
