@@ -36,6 +36,33 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-11 09:20 | AIGC 重构第三组：Chapter 4 实验叙述
+- Goal: 按检测报告处理 Chapter 4 中指标总述、INT4 cliff、Qwen2.5-3B 剖面、KL/MSE 机制辨析和本章小结的高疑似 AIGC 表达。
+- Scope: Chapter 4 evaluation metrics, INT4 cliff explanation, K/V diagnostic figure interpretation, Qwen2.5-3B early-layer protection, regime heatmap interpretation, KL/MSE discussion, chapter summary.
+- Changed files:
+  - `thesis/chapters/ch4_experiments.tex`
+  - `thesis/main.pdf`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch4_experiments.tex`
+  - `rg -n "已经说明|本节进一步|本章结果显示|由此可见|闭环|证据链|承担了全文最清晰|它揭示了|接下来需要|这种阶跃形态|50\\\\%|30\\\\%|10\\\\%" thesis/chapters/ch4_experiments.tex || true`
+  - `latexmk -xelatex -halt-on-error main.tex`
+  - `rg -n "undefined|Reference.*undefined|Label.*multiply|Rerun to get cross-references" thesis/main.log || true`
+  - `pdfinfo thesis/main.pdf | rg 'Pages|File size'`
+- Outputs:
+  - 指标总述改为质量读数与系统读数两组，减少逐项定义口吻。
+  - INT4 cliff、K/V 诊断和 Qwen2.5-3B 预算剖面改为从数字和保护层位置推出判断。
+  - KL/MSE 讨论和第四章小结去掉“已经说明”“由此可见”“闭环”“证据链”等防守式模板词。
+- Validation:
+  - `git diff --check`: PASS.
+  - 高风险模板检索无命中。
+  - `latexmk -xelatex -halt-on-error main.tex`: PASS, generated 94-page PDF.
+  - 日志检查无 undefined references、multiply-defined labels 或 rerun 提示。
+- Risks / follow-ups:
+  - PDF 页数从 95 页变为 94 页，原因是第四章段落压缩后版面回收；实验数字、表格数据、公式与引用未变。
+  - 现存 Underfull boxes、Chapter 3 表格 1.5447pt Overfull hbox 和 Chapter 4 表格 underfull 为既有版面细修项。
+- Intended commit: `docs: polish aigc chapter 4 experiment text`
+
 ### 2026-05-11 09:18 | AIGC 重构第二组：Chapter 3 方法与系统段
 - Goal: 按检测报告处理 Chapter 3 中 KL 代理、RoleAlign、运行时路径、Triton 融合核与存储公式解释的高疑似 AIGC 表达。
 - Scope: Figure 3-1 caption, K/V 位宽记法说明, KL 与误差分解解释, RoleAlign 与 KIVI-style 对比, 离线产物字段, 缓存写入语义, Triton decode kernel, INT4 nibble packing, GQA 并行组织, 存储公式解释。
