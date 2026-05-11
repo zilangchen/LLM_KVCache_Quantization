@@ -348,7 +348,7 @@ Canonical agent workflow directory is `.agents/`.
   - 日志无 undefined references 或 citation warnings，仅保留既有 line 369 overfull hbox。
 - Risks / follow-ups:
   - `.agents/figure_drafts/` 中包含草案 PDF、PNG 与 LaTeX 构建产物，本次作为冻结快照保留；后续若进入正式整理，应单独清理或归档。
-- Commit: pending at log-write time.
+- Commit: pending at log-write time; committed as `docs: clean aigc template remnants`
 
 ### 2026-05-09 03:39 | AIGC 段落修订 50: 第五章机制解耦边界
 - Goal: 逐段处理 AIGC 检测报告中 Chapter 5 的高嫌疑段落，本轮处理模型族覆盖、同格式比较和机制解耦边界。
@@ -939,3 +939,24 @@ Canonical agent workflow directory is `.agents/`.
 - Risks / follow-ups:
   - Segment 28 已按三个自然段处理完成，下一轮进入报告 Segment 29。
 - Commit: pending at log-write time; committed as `docs: polish aigc ch3 prefill decode boundary`
+
+### 2026-05-11 09:21 | AIGC 方案收尾模板词清理
+- Goal: 对本轮 AIGC 重构后的摘要、第一章、第二章、第三章和第四章再做一次模板词扫描，清理残留的说明书式表达。
+- Changed files:
+  - `thesis/chapters/ch1_introduction.tex`
+  - `thesis/chapters/ch2_related_work.tex`
+  - `thesis/chapters/ch4_experiments.tex`
+  - `iteration.md`
+- Commands:
+  - `git diff --check -- thesis/chapters/ch1_introduction.tex thesis/chapters/ch2_related_work.tex thesis/chapters/ch4_experiments.tex`
+  - `rg -n "<high-risk-template-patterns>" thesis/chapters/abstract_zh.tex thesis/chapters/abstract_en.tex thesis/chapters/ch1_introduction.tex thesis/chapters/ch2_related_work.tex thesis/chapters/ch3_method.tex thesis/figures/fig1_error_decomposition.tex thesis/chapters/ch4_experiments.tex`
+- Outputs:
+  - 将“已经说明”改为更自然的结论导向表达。
+  - 将“各占一份缓存”改为“两份缓存”，并拆开一处冒号式长句。
+  - 将“由三组结果合在一起支撑”改为机制线读法，保留低比特结果含义。
+- Validation:
+  - `git diff --check`: PASS.
+  - 模板词扫描：PASS; no remaining matches in affected files.
+- Risks / follow-ups:
+  - 本轮仅做风格清理，不改实验数字、公式、表格或引用归属。
+- Commit: pending at log-write time.
