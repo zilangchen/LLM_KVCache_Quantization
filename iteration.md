@@ -36,6 +36,42 @@ Canonical agent workflow directory is `.agents/`.
 
 ## Timeline (Latest First)
 
+### 2026-05-11 13:00 | 引用归档与文献缺口补齐
+- Goal: 在已冻结的参考文献审计状态上，归档当前主编译路径未引用的本地 BibTeX 条目，并根据论文最新内容补充更贴近的正式文献。
+- Scope: `references.bib` 主编译闭环、第二章相关工作补引、第四章统计与 PPL 协议补引、引用审计与缺口报告。
+- Changed files:
+  - `thesis/references.bib`
+  - `thesis/chapters/ch2_related_work.tex`
+  - `thesis/chapters/ch4_experiments.tex`
+  - `docs/reference_audit_20260511.md`
+  - `docs/reference_gap_audit_20260511.md`
+  - `development_history/reference_archive_20260511.bib`
+  - `thesis/main.pdf`
+  - `iteration.md`
+- Commands:
+  - `python - <<'PY' ...` citation closure scan over main thesis compile inputs
+  - `rg -n "benjamini1995controlling|efron1994introduction|fang2025longppl|du2026bitdecoding|su2025rotatekv|feng2025adakv|zhou2025dynamickv|gao2025rethinkingkv" thesis/chapters thesis/references.bib`
+  - `git diff --check -- thesis/references.bib thesis/chapters/ch2_related_work.tex thesis/chapters/ch4_experiments.tex docs/reference_audit_20260511.md docs/reference_gap_audit_20260511.md development_history/reference_archive_20260511.bib iteration.md thesis/main.pdf`
+  - `latexmk -xelatex -halt-on-error main.tex`
+  - `rg -n "undefined citations|Citation .*undefined|Rerun to get citations|LaTeX Error|Emergency stop|Fatal error" thesis/main.log || true`
+  - `pdfinfo thesis/main.pdf | rg 'Pages|File size'`
+- Outputs:
+  - 主编译路径 citation 闭环更新为 51 cited keys / 51 active BibTeX entries，缺失与未引用 active 条目均为 0。
+  - 将 10 个当前未引用本地库条目归档到 `development_history/reference_archive_20260511.bib`。
+  - 第二章新增 RotateKV、Ada-KV、DynamicKV、Rethinking KV cache compression、BitDecoding 等更贴近当前主题的正式来源。
+  - 第四章为 Bootstrap、Benjamini--Hochberg FDR 和长上下文 PPL 协议敏感性补充正式引用。
+  - 新增 `docs/reference_gap_audit_20260511.md`，记录现有覆盖、补引理由和未加入候选。
+- Validation:
+  - Citation closure: PASS, missing `[]`, uncited active entries `[]`.
+  - `git diff --check`: PASS.
+  - `latexmk -xelatex -halt-on-error main.tex`: PASS.
+  - Log check: PASS, no undefined citation or fatal LaTeX error after final run.
+  - PDF: 98 pages, 1,449,745 bytes.
+- Risks / follow-ups:
+  - 仍有 5 个技术或 artifact 来源保留在 active bibliography 中，分别服务于模型、benchmark probe 或 MQA 背景，不作为正式方法证据。
+  - 未跟踪文件 `thesis/本科毕业设计.doc` 与本轮无关，未纳入提交。
+- Commit: pending at log-write time.
+
 ### 2026-05-11 12:44 | 参考文献正式来源审计与修正
 - Goal: 按已批准计划审计全文 citation，区分正式论文、技术来源和临时导出引用，并修正文献来源不准确或 arXiv-only 的主文引用。
 - Scope: 主编译路径 citation、`thesis/references.bib`、第二章相关工作引用链、参考文献审计表。

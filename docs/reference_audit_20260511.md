@@ -4,8 +4,8 @@
 
 - Main compile inputs checked: `thesis/main.tex`, `thesis/chapters/`, `thesis/figures/`, `thesis/tables/`, `thesis/setup/`.
 - Excluded generated or temporary sources: `thesis/_pandoc_tmp/`, `thesis/backups/`.
-- Main compile citation keys: 46 before this patch, 43 after this patch.
-- Missing BibTeX entries in main compile path: 0.
+- Citation closure after this update: 51 cited keys, 51 active BibTeX entries, 0 missing entries, 0 uncited active entries.
+- Source classification after this update: 46 formal publications or accepted records, 5 technical or artifact sources retained for models, benchmark probes, or foundational architecture context.
 - Temporary `_pandoc_tmp` keys not added to the formal bibliography: `aminabadi2022deepspeed`, `chen2023longlora`, `dettmers2024qlora`, `ding2024longrope`, `egiazarian2024aqlm`, `luna2024think`, `peng2023yarn`, `press2022train`, `shao2024omniquant`, `sheng2023flexgen`, `tseng2024quipsharp`, `yue2024wkvquant`, `zhang2024gear`, `zheng2024sglang`.
 
 ## Policy
@@ -31,6 +31,20 @@ Formal references use conference proceedings, journals, PMLR, ACL Anthology, Ope
 | `gu2025ahakv` | arXiv-only adjacent citation | Not needed for current Ch2 argument | Removed from active bibliography and text citation |
 | `velickovic2024softmax` | Workshop/arXiv adjacent citation | Not needed for current Ch2 argument | Removed from active bibliography and text citation |
 | `migacz2017tensorrt` | NVIDIA GTC/blog source, uncited | Not used by current main compile | Removed from active bibliography |
+| 14 uncited local-library entries | Active BibTeX but not cited by `main.tex` compile path | Mixed formal and technical sources | Archived to `development_history/reference_archive_20260511.bib` |
+
+## Gap Additions Applied
+
+| Key | Source | Why Added |
+|---|---|---|
+| `su2025rotatekv` | IJCAI 2025 proceedings, DOI `10.24963/ijcai.2025/690` | Supports the low-bit KV recovery discussion around rotations, outlier-aware processing, and 2-bit KV Cache |
+| `feng2025adakv` | NeurIPS 2025 accepted OpenReview record | Supports adaptive KV budget allocation as adjacent work to the thesis allocator line |
+| `zhou2025dynamickv` | ACL Anthology, Findings of EMNLP 2025, DOI `10.18653/v1/2025.findings-emnlp.426` | Supports task-aware adaptive KV budget adjustment |
+| `gao2025rethinkingkv` | MLSys 2025 proceedings | Supports the serving-level claim that quality, compression, and system gains must be jointly checked |
+| `du2026bitdecoding` | IEEE HPCA 2026 publication record | Supports low-bit KV decode systems and Tensor Core friendly execution paths |
+| `efron1994introduction` | Chapman and Hall/CRC book | Supports Bootstrap confidence intervals in Chapter 4 |
+| `benjamini1995controlling` | Journal of the Royal Statistical Society Series B | Supports Benjamini--Hochberg false discovery rate control in Chapter 4 |
+| `fang2025longppl` | ICLR 2025 accepted OpenReview record | Supports the long-context PPL protocol-sensitivity discussion |
 
 ## Main Cited References After Audit
 
@@ -79,18 +93,25 @@ Formal references use conference proceedings, journals, PMLR, ACL Anthology, Ope
 | `shutova2025aquakv` | Formal | PMLR ICML 2025 | Updated |
 | `liu2025chunkkv` | Formal | NeurIPS 2025 | Keep |
 | `yuan2024kvcompressionbench` | Formal | ACL Anthology, EMNLP Findings 2024, DOI `10.18653/v1/2024.findings-emnlp.266` | Keep |
+| `su2025rotatekv` | Formal | IJCAI 2025 proceedings | Added |
+| `feng2025adakv` | Formal | NeurIPS 2025 accepted OpenReview record | Added |
+| `zhou2025dynamickv` | Formal | ACL Anthology, EMNLP Findings 2025 | Added |
+| `gao2025rethinkingkv` | Formal | MLSys 2025 proceedings | Added |
+| `du2026bitdecoding` | Formal | IEEE HPCA 2026 publication record | Added |
+| `efron1994introduction` | Formal | Chapman and Hall/CRC book | Added |
+| `benjamini1995controlling` | Formal | Journal of the Royal Statistical Society Series B | Added |
+| `fang2025longppl` | Formal | ICLR 2025 accepted OpenReview record | Added |
 
-## Uncited Entries Remaining in `references.bib`
+## Archived Entries
 
-These entries do not enter `main.bbl` under the current compile path. They are retained as local bibliography library entries rather than formal thesis references unless cited later.
+The following entries are not active thesis references after this update and were moved to `development_history/reference_archive_20260511.bib`.
 
-`benjamini1995controlling`, `dao2023flashdecoding`, `dettmers2022gpt3int8`, `du2026bitdecoding`, `efron1994introduction`, `fang2025longppl`, `fogliato2024precise`, `jacob2018quantization`, `madaan2024variance`, `merity2016wikitext`, `schuirmann1987tost`, `song2025nondeterminism`, `su2024rope`, `ye2025flashinfer`.
+`dao2023flashdecoding`, `dettmers2022gpt3int8`, `schuirmann1987tost`, `jacob2018quantization`, `su2024rope`, `merity2016wikitext`, `ye2025flashinfer`, `madaan2024variance`, `fogliato2024precise`, `song2025nondeterminism`.
 
 ## Follow-Up Candidates Not Added
 
 | Candidate | Source | Decision |
 |---|---|---|
-| DynamicKV | ACL Findings 2025 | Relevant to task-aware cache compression, but not directly needed by the current Ch2 argument after adding ClusterAttn |
-| SmallKV | NeurIPS 2025 OpenReview | Recent compression work, not added because it would require expanding the related-work taxonomy |
-| BitDecoding | HPCA 2026 candidate in local BibTeX | Currently uncited, leave as local bibliography entry until the systems section needs it |
-| FlashInfer | arXiv/tooling source in local BibTeX | Currently uncited, leave as local bibliography entry unless system implementation explicitly cites it |
+| FlashInfer | arXiv/tooling source in local BibTeX | Archived because the current thesis text does not cite this backend as a source claim |
+| `fogliato2024precise` / `song2025nondeterminism` | Formal evaluation-method papers | Archived because the current statistics paragraph is already supported by standard methods and does not need broader benchmark-variance discussion |
+| `jacob2018quantization` / `dettmers2022gpt3int8` | Formal quantization references | Archived because Chapter 2 already cites a focused PTQ/LLM quantization chain through SmoothQuant, GPTQ, AWQ, Gholami and Hubara |

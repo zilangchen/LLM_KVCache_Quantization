@@ -52,7 +52,7 @@ Qwen2.5-1.5B-Instruct 用于基准路径和官方数据对照。Qwen2.5-3B-Instr
 \label{subsec:ch4-benchmarks}
 \label{subsec:exp-benchmarks}
 
-本章的评测从两类问题展开。一类关心量化后模型行为是否仍然稳定，另一类问题关心缓存变小之后，真实推理中的显存占用、访存压力和解码时间是否同步下降。PPL 检查固定窗口内语言建模概率质量的整体漂移。Needle-in-a-Haystack~\cite{kamradt2023needle} 用精确匹配通过率观察长距离目标片段是否还能被取回。LongBench 风格合成任务把比较推进到任务输出层面，并在同一数据生成与评分管线内读出方法差异。RULER~\cite{hsieh2024ruler} 则提供更高压力的组合式长上下文检查。本章的评测围绕质量侧与系统侧两条线展开。质量侧先用 PPL 观察固定窗口内语言建模概率质量是否漂移，再用 Needle-in-a-Haystack~\cite{kamradt2023needle} 检查长距离目标片段能否被取回。任务输出层面的比较由 LongBench 风格合成任务承担，所有方法在同一数据生成与评分管线内比较。RULER~\cite{hsieh2024ruler} 进一步提供组合式长上下文压力测试。官方 LongBench 真实数据对照另置于第~\ref{subsec:ch4-longbench-official}~节，用来检查主评测协议与外部真实数据的方向是否一致。系统侧报告 TPOT、KV Cache 占用，以及附录中的峰值显存和 batch 维度容量边界。
+本章的评测围绕质量侧与系统侧两条线展开。质量侧先用 PPL 观察固定窗口内语言建模概率质量是否漂移，再用 Needle-in-a-Haystack~\cite{kamradt2023needle} 检查长距离目标片段能否被取回。任务输出层面的比较由 LongBench 风格合成任务承担，所有方法在同一数据生成与评分管线内比较。RULER~\cite{hsieh2024ruler} 进一步提供组合式长上下文压力测试。官方 LongBench 真实数据对照另置于第~\ref{subsec:ch4-longbench-official}~节，用来检查主评测协议与外部真实数据的方向是否一致。系统侧报告 TPOT、KV Cache 占用，以及附录中的峰值显存和 batch 维度容量边界。
 
 PPL 统一采用 32K 上下文协议，\texttt{chunk\_size} 固定为 128。交叉熵累计时，每个位置可访问的历史窗口由该设置限定。显存充足的模型按完整测试集报告。Qwen2.5-14B 受 H20 显存约束，使用测试集固定前缀评测，因此该模型的 PPL 绝对值主要用于同模型内部对照，跨模型判断仍按同协议读数解释。
 
@@ -107,9 +107,9 @@ MixedKV 仅用于第 4.3.2 节的 K/V 角色敏感性诊断，不参与主线方
 
 随机性控制采用统一的固定种子与统一生成策略。生成式质量评测统一使用 5 个固定 seeds，吞吐量测试统一使用 8 个固定 seeds。生成式任务采用贪婪解码，从而剥离采样噪声。
 PPL 评测采用固定输入序列上的确定性 likelihood 累计。seed 用于实现路径一致性核验，不构成独立统计重复。
-在此基础上，质量指标的区间估计采用基于 10{,}000 次重采样的 95\% Bootstrap 置信区间，配对比较采用符号翻转置换检验，多重比较则使用 Benjamini--Hochberg 控制假发现率。在小样本下，Bootstrap 区间稳定性与 sign-flip 检验 power 都有限，因此正文中的“未显著”表示当前样本下不可分辨。
+在此基础上，质量指标的区间估计采用基于 10{,}000 次重采样的 95\% Bootstrap 置信区间~\cite{efron1994introduction}，配对比较采用符号翻转置换检验，多重比较则使用 Benjamini--Hochberg 方法控制假发现率~\cite{benjamini1995controlling}。在小样本下，Bootstrap 区间稳定性与 sign-flip 检验 power 都有限，因此正文中的“未显著”表示当前样本下不可分辨。
 
-PPL 使用固定输入序列、固定 tokenization、固定窗口与固定 loss mask，属于确定性 likelihood 指标。其可靠性主要来自协议一致性与效应量，正文读取数值幅度，不读取统计显著性。
+PPL 使用固定输入序列、固定 tokenization、固定窗口与固定 loss mask，属于确定性 likelihood 指标。长上下文 PPL 对窗口、聚合口径与位置设置较敏感~\cite{fang2025longppl}，因此本文主要依赖协议一致条件下的效应量，不读取统计显著性。
 任务级分数、吞吐量等会随种子或系统噪声波动的指标，才配合 Bootstrap、sign-flip 与 BH-FDR 一并解释。
 
 后文主表、主图与典型剖面均沿用上述层级。各协议的绝对分数按各自口径读取。官方 LongBench 真实数据对照服务于第~\ref{sec:ch4-rq1}~节的一致性检验。完整 LongBench-style 聚合、统计检验汇总与上下文长度质量趋势见附录第~\ref{sec:app-longbench-full}~节。部署效率读数对应当前 H20 硬件、固定软件栈与当前后端组合。
